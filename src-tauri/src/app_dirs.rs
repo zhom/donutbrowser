@@ -26,6 +26,11 @@ pub fn is_portable() -> bool {
   portable_dir().is_some()
 }
 
+/// Returns the portable install directory (folder containing `Donut.exe` and `.portable`).
+pub fn portable_install_dir() -> Option<PathBuf> {
+  portable_dir().cloned()
+}
+
 /// Optional single-root override for all on-disk state. Set
 /// `DONUTBROWSER_DATA_ROOT=/path` (e.g. a tmpfs mount) to relocate
 /// data/cache/logs under `<root>/{data,cache,logs}` without touching the real

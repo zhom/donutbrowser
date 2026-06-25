@@ -72,6 +72,16 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+enum PendingWindowsUpdate {
+  Installer(PathBuf),
+  PortableExtract {
+    payload_root: PathBuf,
+    temp_dir: PathBuf,
+  },
+}
+
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
 enum LinuxInstallationMethod {
@@ -152,6 +162,13 @@ impl AppAutoUpdater {
   pub fn get_current_version() -> String {
     // Use build-time injected version instead of CARGO_PKG_VERSION
     env!("BUILD_VERSION").to_string()
+  }
+
+  pub fn is_auto_update_disabled() -> bool {
+    crate::settings_manager::SettingsManager::instance()
+      .load_settings()
+      .map(|s| s.disable_auto_updates)
+      .unwrap_or(false)
   }
 
   /// Check for app updates
@@ -259,6 +276,25 @@ impl AppAutoUpdater {
 
           log::info!(
             "Update info prepared: {} -> {}",
+            update_info.current_version,
+            update_info.new_version
+          );
+          return Ok(Some(update_info));
+        } else if cfg!(target_os = "windows") && crate::app_dirs::is_portable() {
+          let update_info = AppUpdateInfo {
+            current_version,
+            new_version: latest_release.tag_name.clone(),
+            release_notes: latest_release.body.clone(),
+            download_url: release_page_url.clone(),
+            is_nightly,
+            published_at: latest_release.published_at.clone(),
+            manual_update_required: true,
+            release_page_url: Some(release_page_url),
+            repo_update: false,
+          };
+
+          log::info!(
+            "Portable update available but no portable zip asset: {} -> {}",
             update_info.current_version,
             update_info.new_version
           );
@@ -585,6 +621,19 @@ impl AppAutoUpdater {
 
   #[cfg(target_os = "windows")]
   fn get_windows_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
+    Self::select_windows_asset(assets, arch, crate::app_dirs::is_portable())
+  }
+
+  #[cfg(target_os = "windows")]
+  pub(crate) fn select_windows_asset(
+    assets: &[AppReleaseAsset],
+    arch: &str,
+    portable: bool,
+  ) -> Option<String> {
+    if portable {
+      return Self::select_windows_portable_asset(assets, arch);
+    }
+
     // Priority order: MSI > EXE > ZIP
     let extensions = ["msi", "exe", "zip"];
 
@@ -629,6 +678,82 @@ impl AppAutoUpdater {
     }
 
     None
+  }
+
+  #[cfg(target_os = "windows")]
+  fn select_windows_portable_asset(assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
+    for asset in assets {
+      if Self::is_windows_portable_zip_asset(&asset.name, arch) {
+        log::info!("Found Windows portable zip: {}", asset.name);
+        return Some(asset.browser_download_url.clone());
+      }
+    }
+    log::info!("No Windows portable zip asset found for arch: {arch}");
+    None
+  }
+
+  #[cfg(target_os = "windows")]
+  fn is_windows_portable_zip_asset(name: &str, arch: &str) -> bool {
+    let lower = name.to_lowercase();
+    if !lower.ends_with(".zip") || !lower.contains("portable") {
+      return false;
+    }
+
+    if lower.contains(&format!("_{arch}-portable"))
+      || lower.contains(&format!("-{arch}-portable"))
+      || lower.contains(&format!("_{arch}_portable"))
+    {
+      return true;
+    }
+
+    arch == "x64" && (lower.contains("x86_64") || lower.contains("x86-64"))
+  }
+
+  #[cfg(target_os = "windows")]
+  fn remove_zip_files_in_dir(dir: &Path) -> Result<(), std::io::Error> {
+    for entry in fs::read_dir(dir)? {
+      let entry = entry?;
+      let path = entry.path();
+      if path.is_file()
+        && path
+          .extension()
+          .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+      {
+        fs::remove_file(&path)?;
+      }
+    }
+    Ok(())
+  }
+
+  /// Locate the portable payload root inside an extracted update archive.
+  #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+  pub(crate) fn resolve_portable_payload_root(
+    extracted_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    fn is_payload_root(dir: &Path) -> bool {
+      dir.join("Donut.exe").is_file() && dir.join(".portable").is_file()
+    }
+
+    if is_payload_root(extracted_dir) {
+      return Ok(extracted_dir.to_path_buf());
+    }
+
+    if let Ok(entries) = fs::read_dir(extracted_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() && is_payload_root(&path) {
+          return Ok(path);
+        }
+      }
+    }
+
+    Err(
+      format!(
+        "Could not find portable payload root under {}",
+        extracted_dir.display()
+      )
+      .into(),
+    )
   }
 
   #[cfg(target_os = "linux")]
@@ -776,19 +901,42 @@ impl AppAutoUpdater {
     log::info!("Extracting update...");
     let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
 
-    // On Windows, MSI/EXE installers close the running app, so running them now
-    // would kill the process before the "Update ready" toast can appear. Instead,
-    // defer execution to restart_application() when the user clicks "Restart Now".
+    // On Windows, MSI/EXE installers and portable ZIP updates close or replace
+    // the running app, so defer until restart_application().
+    // Classify by the downloaded archive — extract_zip() returns an executable
+    // inside the archive (often donut-proxy.exe), not the zip path itself.
     #[cfg(target_os = "windows")]
     {
-      let ext = extracted_app_path
+      let download_ext = download_path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
-      if ext == "msi" || ext == "exe" {
+      if download_ext == "zip" && crate::app_dirs::is_portable() {
+        // flatten_single_directory_archive() treats the downloaded .zip as an
+        // archive sibling, flattens Donut-Portable/ into temp_dir, and leaves
+        // the zip next to Donut.exe — xcopy would copy it into the install dir.
+        if download_path.exists() {
+          fs::remove_file(&download_path)?;
+          log::info!(
+            "Removed downloaded portable zip from temp dir: {}",
+            download_path.display()
+          );
+        }
+        Self::remove_zip_files_in_dir(&temp_dir)?;
+        let payload_root = Self::resolve_portable_payload_root(&temp_dir)?;
+        log::info!(
+          "Deferring portable in-place update until restart (payload: {})",
+          payload_root.display()
+        );
+        *PENDING_WINDOWS_UPDATE.lock().unwrap() = Some(PendingWindowsUpdate::PortableExtract {
+          payload_root,
+          temp_dir: temp_dir.clone(),
+        });
+      } else if download_ext == "msi" || download_ext == "exe" {
         log::info!("Deferring Windows installer execution until user-initiated restart");
-        *PENDING_INSTALLER_PATH.lock().unwrap() = Some(extracted_app_path);
+        *PENDING_WINDOWS_UPDATE.lock().unwrap() =
+          Some(PendingWindowsUpdate::Installer(extracted_app_path));
       } else {
         log::info!("Installing update (overwriting binary)...");
         self.install_update(&extracted_app_path).await?;
@@ -1542,89 +1690,131 @@ rm "{}"
       use std::ffi::OsStr;
       use std::os::windows::ffi::OsStrExt;
 
-      let pending = PENDING_INSTALLER_PATH.lock().unwrap().take();
+      let pending = PENDING_WINDOWS_UPDATE.lock().unwrap().take();
 
-      if let Some(installer_path) = pending {
-        // Use ShellExecuteW to run the installer directly — no batch script,
-        // no cmd.exe console window. The NSIS/MSI installer handles killing the
-        // old process and restarting the app natively (via /UPDATE and
-        // AUTOLAUNCHAPP flags).
-        let ext = installer_path
-          .extension()
-          .and_then(|e| e.to_str())
-          .unwrap_or("")
-          .to_lowercase();
+      if let Some(pending_update) = pending {
+        match pending_update {
+          PendingWindowsUpdate::Installer(installer_path) => {
+            // Use ShellExecuteW to run the installer directly — no batch script,
+            // no cmd.exe console window. The NSIS/MSI installer handles killing the
+            // old process and restarting the app natively (via /UPDATE and
+            // AUTOLAUNCHAPP flags).
+            let ext = installer_path
+              .extension()
+              .and_then(|e| e.to_str())
+              .unwrap_or("")
+              .to_lowercase();
 
-        let (file, parameters) = match ext.as_str() {
-          "exe" => {
-            // NSIS installer: /S for silent, /UPDATE tells it this is an update
-            let file = installer_path.as_os_str().to_os_string();
-            let params = std::ffi::OsString::from("/S /UPDATE");
-            (file, params)
+            let (file, parameters) = match ext.as_str() {
+              "exe" => {
+                // NSIS installer: /S for silent, /UPDATE tells it this is an update
+                let file = installer_path.as_os_str().to_os_string();
+                let params = std::ffi::OsString::from("/S /UPDATE");
+                (file, params)
+              }
+              "msi" => {
+                // MSI: run msiexec.exe with the package
+                let msiexec = std::env::var("SYSTEMROOT")
+                  .map(|p| format!("{p}\\System32\\msiexec.exe"))
+                  .unwrap_or_else(|_| "msiexec.exe".to_string());
+                let file = std::ffi::OsString::from(msiexec);
+                let params = std::ffi::OsString::from(format!(
+                  "/i {} /quiet /norestart /promptrestart AUTOLAUNCHAPP=True",
+                  installer_path
+                    .to_str()
+                    .map(|p| format!("\"{p}\""))
+                    .unwrap_or_default()
+                ));
+                (file, params)
+              }
+              _ => {
+                return Err("Unsupported Windows installer format for restart".into());
+              }
+            };
+
+            fn encode_wide(s: impl AsRef<OsStr>) -> Vec<u16> {
+              s.as_ref().encode_wide().chain(std::iter::once(0)).collect()
+            }
+
+            let file_w = encode_wide(&file);
+            let params_w = encode_wide(&parameters);
+
+            log::info!(
+              "Running installer via ShellExecuteW: {:?} {:?}",
+              file,
+              parameters
+            );
+
+            // windows-sys is not a direct dep, so use the raw FFI via the
+            // windows crate that Tauri pulls in. ShellExecuteW returns an
+            // HINSTANCE > 32 on success.
+            #[link(name = "shell32")]
+            extern "system" {
+              fn ShellExecuteW(
+                hwnd: *mut std::ffi::c_void,
+                operation: *const u16,
+                file: *const u16,
+                parameters: *const u16,
+                directory: *const u16,
+                show_cmd: i32,
+              ) -> isize;
+            }
+            const SW_SHOWNORMAL: i32 = 1;
+            let open: Vec<u16> = "open\0".encode_utf16().collect();
+
+            let result = unsafe {
+              ShellExecuteW(
+                std::ptr::null_mut(),
+                open.as_ptr(),
+                file_w.as_ptr(),
+                params_w.as_ptr(),
+                std::ptr::null(),
+                SW_SHOWNORMAL,
+              )
+            };
+
+            if result as usize <= 32 {
+              return Err(format!("ShellExecuteW failed with code {result}").into());
+            }
           }
-          "msi" => {
-            // MSI: run msiexec.exe with the package
-            let msiexec = std::env::var("SYSTEMROOT")
-              .map(|p| format!("{p}\\System32\\msiexec.exe"))
-              .unwrap_or_else(|_| "msiexec.exe".to_string());
-            let file = std::ffi::OsString::from(msiexec);
-            let params = std::ffi::OsString::from(format!(
-              "/i {} /quiet /norestart /promptrestart AUTOLAUNCHAPP=True",
-              installer_path
-                .to_str()
-                .map(|p| format!("\"{p}\""))
-                .unwrap_or_default()
-            ));
-            (file, params)
+          PendingWindowsUpdate::PortableExtract {
+            payload_root,
+            temp_dir,
+          } => {
+            let target_dir = crate::app_dirs::portable_install_dir()
+              .ok_or("Portable install directory not found")?;
+            let current_pid = std::process::id();
+            let script_path = std::env::temp_dir().join("donut_portable_update.bat");
+
+            let script_content = format!(
+              "@echo off\n\
+               :w\n\
+               tasklist /fi \"PID eq {current_pid}\" 2>nul | find \"{current_pid}\" >nul && (timeout /t 1 /nobreak >nul & goto w)\n\
+               timeout /t 1 /nobreak >nul\n\
+               xcopy /Y /Q \"{payload}\\*\" \"{target}\\\" >nul 2>&1\n\
+               del /q \"{target}\\*-portable.zip\" 2>nul\n\
+               start \"\" \"{target}\\Donut.exe\"\n\
+               rd /s /q \"{cleanup}\" 2>nul\n\
+               del \"%~f0\"\n",
+              payload = payload_root.to_str().unwrap(),
+              target = target_dir.to_str().unwrap(),
+              cleanup = temp_dir.to_str().unwrap(),
+            );
+            fs::write(&script_path, script_content)?;
+
+            log::info!(
+              "Running portable update script: {} -> {}",
+              payload_root.display(),
+              target_dir.display()
+            );
+
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let _child = Command::new("cmd")
+              .args(["/C", script_path.to_str().unwrap()])
+              .creation_flags(CREATE_NO_WINDOW)
+              .spawn()?;
           }
-          _ => {
-            return Err("Unsupported Windows installer format for restart".into());
-          }
-        };
-
-        fn encode_wide(s: impl AsRef<OsStr>) -> Vec<u16> {
-          s.as_ref().encode_wide().chain(std::iter::once(0)).collect()
-        }
-
-        let file_w = encode_wide(&file);
-        let params_w = encode_wide(&parameters);
-
-        log::info!(
-          "Running installer via ShellExecuteW: {:?} {:?}",
-          file,
-          parameters
-        );
-
-        // windows-sys is not a direct dep, so use the raw FFI via the
-        // windows crate that Tauri pulls in. ShellExecuteW returns an
-        // HINSTANCE > 32 on success.
-        #[link(name = "shell32")]
-        extern "system" {
-          fn ShellExecuteW(
-            hwnd: *mut std::ffi::c_void,
-            operation: *const u16,
-            file: *const u16,
-            parameters: *const u16,
-            directory: *const u16,
-            show_cmd: i32,
-          ) -> isize;
-        }
-        const SW_SHOWNORMAL: i32 = 1;
-        let open: Vec<u16> = "open\0".encode_utf16().collect();
-
-        let result = unsafe {
-          ShellExecuteW(
-            std::ptr::null_mut(),
-            open.as_ptr(),
-            file_w.as_ptr(),
-            params_w.as_ptr(),
-            std::ptr::null(),
-            SW_SHOWNORMAL,
-          )
-        };
-
-        if result as usize <= 32 {
-          return Err(format!("ShellExecuteW failed with code {result}").into());
         }
       } else {
         // No pending installer — just restart the app. Use a minimal
@@ -1724,16 +1914,7 @@ rm "{}"
 
 #[tauri::command]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
-  if crate::app_dirs::is_portable() {
-    log::info!("App auto-updates disabled in portable mode");
-    return Ok(None);
-  }
-  // The disable_auto_updates setting controls app self-updates only
-  let disabled = crate::settings_manager::SettingsManager::instance()
-    .load_settings()
-    .map(|s| s.disable_auto_updates)
-    .unwrap_or(false);
-  if disabled {
+  if AppAutoUpdater::is_auto_update_disabled() {
     log::info!("App auto-updates disabled by user setting");
     return Ok(None);
   }
@@ -2134,10 +2315,140 @@ mod tests {
     let _deb = AppAutoUpdater::is_deb_repo_configured();
     let _rpm = AppAutoUpdater::is_rpm_repo_configured();
   }
+
+  #[test]
+  #[cfg(target_os = "windows")]
+  fn test_select_windows_asset_portable_prefers_portable_zip() {
+    let assets = vec![
+      AppReleaseAsset {
+        name: "Donut_0.1.0_x64-setup.exe".to_string(),
+        browser_download_url: "https://example.com/x64-setup.exe".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut_0.1.0_x64-portable.zip".to_string(),
+        browser_download_url: "https://example.com/x64-portable.zip".to_string(),
+        size: 12345,
+      },
+    ];
+
+    let portable_url = AppAutoUpdater::select_windows_asset(&assets, "x64", true);
+    assert_eq!(
+      portable_url.as_deref(),
+      Some("https://example.com/x64-portable.zip")
+    );
+
+    let installer_url = AppAutoUpdater::select_windows_asset(&assets, "x64", false);
+    assert_eq!(
+      installer_url.as_deref(),
+      Some("https://example.com/x64-setup.exe")
+    );
+  }
+
+  #[test]
+  #[cfg(target_os = "windows")]
+  fn test_is_windows_portable_zip_asset() {
+    assert!(AppAutoUpdater::is_windows_portable_zip_asset(
+      "Donut_0.1.0_x64-portable.zip",
+      "x64"
+    ));
+    assert!(AppAutoUpdater::is_windows_portable_zip_asset(
+      "Donut_x64-portable.zip",
+      "x64"
+    ));
+    assert!(!AppAutoUpdater::is_windows_portable_zip_asset(
+      "Donut_0.1.0_x64-setup.exe",
+      "x64"
+    ));
+  }
+
+  #[test]
+  #[cfg(target_os = "windows")]
+  fn test_remove_zip_files_in_dir() {
+    let base =
+      std::env::temp_dir().join(format!("donut-portable-zip-cleanup-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).expect("create temp dir");
+    fs::write(base.join("Donut.exe"), b"exe").expect("write Donut.exe");
+    fs::write(base.join("Donut_0.0.3_x64-portable.zip"), b"zip").expect("write zip");
+
+    AppAutoUpdater::remove_zip_files_in_dir(&base).expect("remove zip artifacts");
+    assert!(base.join("Donut.exe").is_file());
+    assert!(!base.join("Donut_0.0.3_x64-portable.zip").exists());
+
+    let _ = fs::remove_dir_all(&base);
+  }
+
+  #[test]
+  #[cfg(target_os = "windows")]
+  fn test_portable_zip_not_classified_as_installer_after_extract() {
+    // extract_zip() returns donut-proxy.exe inside the archive; pending-update
+    // classification must use the downloaded .zip path, not that inner exe.
+    let download = PathBuf::from("Donut_0.0.3_x64-portable.zip");
+    let extracted = PathBuf::from("Donut-Portable/donut-proxy.exe");
+
+    let download_ext = download
+      .extension()
+      .and_then(|e| e.to_str())
+      .unwrap_or("")
+      .to_lowercase();
+    let extracted_ext = extracted
+      .extension()
+      .and_then(|e| e.to_str())
+      .unwrap_or("")
+      .to_lowercase();
+
+    assert_eq!(download_ext, "zip");
+    assert_eq!(extracted_ext, "exe");
+    assert!(download_ext == "zip");
+    assert!(extracted_ext == "msi" || extracted_ext == "exe");
+  }
+
+  #[test]
+  fn test_resolve_portable_payload_root_nested() {
+    let base = std::env::temp_dir().join(format!(
+      "donut-portable-payload-test-{}",
+      std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).expect("create temp dir");
+
+    let nested = base.join("Donut-Portable");
+    fs::create_dir_all(&nested).expect("create nested dir");
+    fs::write(nested.join("Donut.exe"), b"exe").expect("write Donut.exe");
+    fs::write(nested.join(".portable"), b"").expect("write .portable");
+
+    let root = AppAutoUpdater::resolve_portable_payload_root(&base).expect("resolve root");
+    assert_eq!(root, nested);
+
+    let _ = fs::remove_dir_all(&base);
+  }
+
+  #[test]
+  fn test_resolve_portable_payload_root_flat() {
+    let base = std::env::temp_dir().join(format!(
+      "donut-portable-payload-flat-{}",
+      std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).expect("create temp dir");
+    fs::write(base.join("Donut.exe"), b"exe").expect("write Donut.exe");
+    fs::write(base.join(".portable"), b"").expect("write .portable");
+
+    let root = AppAutoUpdater::resolve_portable_payload_root(&base).expect("resolve root");
+    assert_eq!(root, base);
+
+    let _ = fs::remove_dir_all(&base);
+  }
 }
 
 // Global singleton instance
 lazy_static::lazy_static! {
   static ref APP_AUTO_UPDATER: AppAutoUpdater = AppAutoUpdater::new();
-  static ref PENDING_INSTALLER_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+}
+
+#[cfg(target_os = "windows")]
+lazy_static::lazy_static! {
+  static ref PENDING_WINDOWS_UPDATE: std::sync::Mutex<Option<PendingWindowsUpdate>> =
+    std::sync::Mutex::new(None);
 }

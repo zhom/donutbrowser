@@ -1823,6 +1823,10 @@ pub fn run() {
           interval.tick().await;
 
           log::info!("Checking for app updates...");
+          if app_auto_updater::AppAutoUpdater::is_auto_update_disabled() {
+            log::debug!("App auto-updates disabled by user setting, skipping check");
+            continue;
+          }
           match updater.check_for_updates().await {
             Ok(Some(update_info)) => {
               log::info!(
