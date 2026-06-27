@@ -693,6 +693,9 @@ impl Browser for WayfernBrowser {
       "--disable-features=DialMediaRouteProvider".to_string(),
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),
+      // Window position and size - open maximized on primary screen
+      "--start-maximized".to_string(),
+      "--window-position=0,0".to_string(),
     ];
 
     // Add remote debugging port (required for CDP fingerprint injection)
