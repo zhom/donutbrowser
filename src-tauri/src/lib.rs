@@ -72,7 +72,7 @@ use profile::manager::{
   list_browser_profiles, rename_profile, update_camoufox_config, update_profile_dns_blocklist,
   update_profile_launch_hook, update_profile_note, update_profile_proxy,
   update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_wayfern_config,
+  update_profile_window_color, update_wayfern_config,
 };
 
 use profile::password::{
@@ -1193,6 +1193,7 @@ async fn generate_sample_fingerprint(
     group_id: None,
     tags: Vec::new(),
     note: None,
+    window_color: None,
     sync_mode: crate::profile::types::SyncMode::Disabled,
     encryption_salt: None,
     last_sync: None,
@@ -1816,14 +1817,18 @@ pub fn run() {
       });
 
       tauri::async_runtime::spawn(async move {
-        let updater = app_auto_updater::AppAutoUpdater::instance();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3 * 60 * 60));
 
         loop {
           interval.tick().await;
 
           log::info!("Checking for app updates...");
-          match updater.check_for_updates().await {
+          // Route through check_for_app_updates (not the raw check_for_updates)
+          // so the background loop respects portable mode and the
+          // disable_auto_updates setting. Previously it bypassed both, so a
+          // portable install would auto-download and run the NSIS installer,
+          // clobbering the portable folder instead of updating in place (#468).
+          match app_auto_updater::check_for_app_updates().await {
             Ok(Some(update_info)) => {
               log::info!(
                 "App update available: {} -> {}",
@@ -1992,6 +1997,7 @@ pub fn run() {
             .collect();
 
           for profile in profiles_to_check {
+            let had_pid = profile.process_id.is_some();
             // Check browser status and track changes
             match runner
               .check_browser_status(app_handle_status.clone(), &profile)
@@ -2004,8 +2010,14 @@ pub fn run() {
                   .copied()
                   .unwrap_or(false);
 
-                // Only emit event if state actually changed
-                if last_state != is_running {
+                // Emit when the running state changed, or when we still had a
+                // stored PID but the browser is gone — the launch path sets the
+                // frontend to "running" immediately, and a missed transition
+                // here leaves the stop button stuck.
+                let should_emit =
+                  last_state != is_running || (!is_running && had_pid);
+
+                if should_emit {
                   log::debug!(
                     "Status checker detected change for profile {}: {} -> {}",
                     profile.name,
@@ -2055,6 +2067,16 @@ pub fn run() {
                       // Sync was queued at launch; mark_profile_stopped triggers it
                       scheduler.mark_profile_stopped(&profile_id).await;
                     }
+                  }
+
+                  // Release the cloud team lock when the browser exits naturally
+                  // (window closed by the user). The explicit kill path in
+                  // browser_runner.rs already releases it, but this branch did
+                  // not — leaking the lock, which the 30s heartbeat then renews
+                  // indefinitely (issue #474). No-op for non-sync/non-paid
+                  // profiles thanks to the guards inside the helper.
+                  if !is_running {
+                    crate::team_lock::release_team_lock_if_needed(&profile).await;
                   }
 
                   last_running_states.insert(profile_id, is_running);
@@ -2232,6 +2254,7 @@ pub fn run() {
       update_profile_tags,
       update_profile_note,
       update_profile_launch_hook,
+      update_profile_window_color,
       update_profile_proxy_bypass_rules,
       update_profile_dns_blocklist,
       check_browser_status,
