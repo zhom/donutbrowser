@@ -91,6 +91,24 @@ fn is_critical_file(path: &str) -> bool {
     .any(|pattern| path.contains(pattern))
 }
 
+/// Validate that a manifest-supplied relative file path is safe to join onto a
+/// profile directory before writing/deleting. The manifest is remote-controlled
+/// (a self-hosted or compromised sync server, a MITM on a plaintext Regular-mode
+/// manifest, or a malicious team member who shares the E2E key), so an
+/// unvalidated `path` is an arbitrary file write/delete primitive:
+/// `profile_dir.join(path)` escapes the profile dir when `path` is absolute
+/// (`join` replaces the base) or contains `..`. Accept only plain relative paths
+/// built from normal components; reject absolute paths, `..`, and root/prefix.
+fn is_safe_manifest_path(path: &str) -> bool {
+  use std::path::{Component, Path};
+  let p = Path::new(path);
+  if path.is_empty() || p.is_absolute() {
+    return false;
+  }
+  p.components()
+    .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+}
+
 /// Checkpoint all SQLite WAL files in a profile directory.
 ///
 /// When a browser crashes or is killed, SQLite WAL files may contain
@@ -656,6 +674,15 @@ impl SyncEngine {
 
     // Delete local files that don't exist remotely (when remote is newer)
     for path in &diff.files_to_delete_local {
+      // The delete list comes from the remote-controlled manifest; guard against
+      // traversal/absolute paths so it can't delete files outside the profile.
+      if !is_safe_manifest_path(path) {
+        log::warn!(
+          "Skipping local delete with unsafe relative path: {:?}",
+          path
+        );
+        continue;
+      }
       let file_path = profile_dir.join(path);
       if file_path.exists() {
         let _ = fs::remove_file(&file_path);
@@ -675,10 +702,16 @@ impl SyncEngine {
       .upload_profile_metadata(&profile_id, profile, &key_prefix)
       .await?;
 
-    // If we recovered from an empty local state (downloaded everything from remote),
-    // regenerate the manifest from the actual files now on disk so we don't
-    // overwrite the remote manifest with an empty one.
-    let final_manifest = if local_manifest.files.is_empty() && !diff.files_to_download.is_empty() {
+    // If this sync changed the local profile directory (downloaded files and/or
+    // deleted local files), the manifest generated at the START of the sync is
+    // now stale. Uploading it would advertise wrong hashes/mtimes for the files
+    // we just pulled, so the peer keeps computing a non-empty diff and the two
+    // devices ping-pong re-uploads forever (issue #470). Regenerate from the
+    // actual on-disk files before uploading. When only uploads happened, the
+    // on-disk state is unchanged and the original manifest is still accurate.
+    let local_changed =
+      !diff.files_to_download.is_empty() || !diff.files_to_delete_local.is_empty();
+    let final_manifest = if local_changed {
       let mut new_cache = HashCache::load(&cache_path);
       let mut regenerated = generate_manifest(&profile_id, &profile_dir, &mut new_cache)?;
       new_cache.save(&cache_path)?;
@@ -725,6 +758,8 @@ impl SyncEngine {
       updated_profile.proxy_id = remote_meta.proxy_id;
       updated_profile.vpn_id = remote_meta.vpn_id;
       updated_profile.group_id = remote_meta.group_id;
+      updated_profile.extension_group_id = remote_meta.extension_group_id;
+      updated_profile.window_color = remote_meta.window_color;
       updated_profile.last_sync = Some(
         std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
@@ -872,6 +907,8 @@ impl SyncEngine {
       updated.proxy_id = remote_meta.proxy_id;
       updated.vpn_id = remote_meta.vpn_id;
       updated.group_id = remote_meta.group_id;
+      updated.extension_group_id = remote_meta.extension_group_id;
+      updated.window_color = remote_meta.window_color;
       updated.last_sync = Some(
         std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
@@ -1058,6 +1095,15 @@ impl SyncEngine {
           profile_id_owned
         );
         break;
+      }
+      // Reject paths that would escape the profile dir (path traversal /
+      // absolute path). On download the manifest is remote-controlled, so this
+      // is the load-bearing containment check; on upload it is defense-in-depth.
+      // Legitimate profile files are always plain relative paths, so a real file
+      // is never skipped.
+      if !is_safe_manifest_path(&file.path) {
+        log::warn!("Skipping file with unsafe relative path: {:?}", file.path);
+        continue;
       }
       let sem = semaphore.clone();
       let file_path = profile_dir.join(&file.path);
@@ -1335,6 +1381,15 @@ impl SyncEngine {
           profile_id_owned
         );
         break;
+      }
+      // Reject paths that would escape the profile dir (path traversal /
+      // absolute path). On download the manifest is remote-controlled, so this
+      // is the load-bearing containment check; on upload it is defense-in-depth.
+      // Legitimate profile files are always plain relative paths, so a real file
+      // is never skipped.
+      if !is_safe_manifest_path(&file.path) {
+        log::warn!("Skipping file with unsafe relative path: {:?}", file.path);
+        continue;
       }
       let sem = semaphore.clone();
       let file_path = profile_dir.join(&file.path);
@@ -2341,7 +2396,16 @@ impl SyncEngine {
     }
 
     let metadata_presign = self.client.presign_download(&metadata_key).await?;
-    let metadata_data = self.client.download_bytes(&metadata_presign.url).await?;
+    let metadata_raw = self.client.download_bytes(&metadata_presign.url).await?;
+    // Unseal E2E-encrypted metadata before parsing — otherwise an encrypted
+    // envelope fails to deserialize and the missing profile never downloads to
+    // this device (issue #466). Plaintext (legacy) metadata passes through.
+    let metadata_data = encryption::maybe_unseal_after_download(&metadata_raw).map_err(|e| {
+      if e.contains("ENCRYPTION_PASSWORD_REQUIRED") {
+        let _ = events::emit("profile-sync-e2e-password-required", ());
+      }
+      SyncError::InvalidData(format!("Failed to unseal profile metadata: {e}"))
+    })?;
     let mut profile: BrowserProfile = serde_json::from_slice(&metadata_data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
 
@@ -2756,7 +2820,13 @@ impl SyncEngine {
           Ok(stat) if stat.exists => match self.client.presign_download(&metadata_key).await {
             Ok(presign) => match self.client.download_bytes(&presign.url).await {
               Ok(data) => {
-                if let Ok(mut remote_profile) = serde_json::from_slice::<BrowserProfile>(&data) {
+                // Unseal E2E metadata before parsing; keep the tolerant skip so a
+                // profile without a loaded password (or bad data) is left as-is.
+                if let Ok(mut remote_profile) = encryption::maybe_unseal_after_download(&data)
+                  .and_then(|d| {
+                    serde_json::from_slice::<BrowserProfile>(&d).map_err(|e| e.to_string())
+                  })
+                {
                   remote_profile.sync_mode = *sync_mode;
                   remote_profile.last_sync = Some(
                     std::time::SystemTime::now()
@@ -2888,6 +2958,85 @@ impl SyncEngine {
           );
           if let Err(e) = self.download_vpn(vpn_id, Some(app_handle)).await {
             log::warn!("Failed to download missing VPN {}: {}", vpn_id, e);
+          }
+        }
+      }
+    }
+
+    // Check for remote extensions not present locally. The extensions/ prefix
+    // also holds binary files under extensions/{id}/file/..., so the `/` filter
+    // keeps only the top-level extensions/{id}.json entries.
+    let remote_extensions = self.client.list("extensions/").await?;
+    for obj in &remote_extensions.objects {
+      if let Some(ext_id) = obj
+        .key
+        .strip_prefix("extensions/")
+        .and_then(|s| s.strip_suffix(".json"))
+        .filter(|s| !s.contains('/'))
+      {
+        let exists_locally = {
+          let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+          manager
+            .list_extensions()
+            .unwrap_or_default()
+            .iter()
+            .any(|e| e.id == ext_id)
+        };
+        if !exists_locally {
+          let tombstone_key = format!("tombstones/extensions/{}.json", ext_id);
+          if let Ok(stat) = self.client.stat(&tombstone_key).await {
+            if stat.exists {
+              continue;
+            }
+          }
+          log::info!(
+            "Extension {} exists remotely but not locally, downloading...",
+            ext_id
+          );
+          if let Err(e) = self.download_extension(ext_id, Some(app_handle)).await {
+            log::warn!("Failed to download missing extension {}: {}", ext_id, e);
+          }
+        }
+      }
+    }
+
+    // Check for remote extension groups not present locally
+    let remote_ext_groups = self.client.list("extension_groups/").await?;
+    for obj in &remote_ext_groups.objects {
+      if let Some(group_id) = obj
+        .key
+        .strip_prefix("extension_groups/")
+        .and_then(|s| s.strip_suffix(".json"))
+        .filter(|s| !s.contains('/'))
+      {
+        let exists_locally = {
+          let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+          manager
+            .list_groups()
+            .unwrap_or_default()
+            .iter()
+            .any(|g| g.id == group_id)
+        };
+        if !exists_locally {
+          let tombstone_key = format!("tombstones/extension_groups/{}.json", group_id);
+          if let Ok(stat) = self.client.stat(&tombstone_key).await {
+            if stat.exists {
+              continue;
+            }
+          }
+          log::info!(
+            "Extension group {} exists remotely but not locally, downloading...",
+            group_id
+          );
+          if let Err(e) = self
+            .download_extension_group(group_id, Some(app_handle))
+            .await
+          {
+            log::warn!(
+              "Failed to download missing extension group {}: {}",
+              group_id,
+              e
+            );
           }
         }
       }
@@ -3039,18 +3188,18 @@ pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> 
 
   // Cascade to every extension referenced by the group so the other device
   // has the actual extension binaries when it pulls the group.
-  for ext_id in extension_ids {
+  for ext_id in &extension_ids {
     let already_synced = {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       manager
-        .get_extension(&ext_id)
+        .get_extension(ext_id)
         .ok()
         .map(|e| e.sync_enabled)
         .unwrap_or(true)
     };
     if !already_synced {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
-      if let Ok(mut ext) = manager.get_extension(&ext_id) {
+      if let Ok(mut ext) = manager.get_extension(ext_id) {
         ext.sync_enabled = true;
         if let Err(e) = manager.update_extension_internal(&ext) {
           log::warn!("Failed to auto-enable sync for extension {}: {e}", ext_id);
@@ -3058,6 +3207,18 @@ pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> 
           log::info!("Auto-enabled sync for extension {}", ext_id);
         }
       }
+    }
+  }
+
+  // Enabling sync only flips a local flag; without queueing a sync run the
+  // group and its extensions are never uploaded, so the other device never
+  // receives them (issue #477). Queue them now.
+  if let Some(scheduler) = crate::sync::get_global_scheduler() {
+    scheduler
+      .queue_extension_group_sync(extension_group_id.to_string())
+      .await;
+    for ext_id in &extension_ids {
+      scheduler.queue_extension_sync(ext_id.clone()).await;
     }
   }
 
@@ -4030,6 +4191,28 @@ pub async fn rollover_encryption_for_all_entities(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn test_is_safe_manifest_path() {
+    // Legitimate profile-relative paths are accepted.
+    assert!(is_safe_manifest_path("Local State"));
+    assert!(is_safe_manifest_path("Default/Cookies"));
+    assert!(is_safe_manifest_path("Default/Secure Preferences"));
+    assert!(is_safe_manifest_path(
+      "Default/Extensions/abc/1.0_0/manifest.json"
+    ));
+    assert!(is_safe_manifest_path("./Default/Preferences"));
+
+    // Traversal / absolute / escaping paths are rejected.
+    assert!(!is_safe_manifest_path(""));
+    assert!(!is_safe_manifest_path("../../../.zshrc"));
+    assert!(!is_safe_manifest_path("Default/../../evil"));
+    assert!(!is_safe_manifest_path(
+      "/Users/victim/Library/LaunchAgents/evil.plist"
+    ));
+    #[cfg(windows)]
+    assert!(!is_safe_manifest_path(r"C:\Windows\System32\evil.dll"));
+  }
 
   #[test]
   fn test_checkpoint_sqlite_wal_files() {
