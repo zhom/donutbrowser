@@ -213,22 +213,24 @@ fn parse_key(key: &str) -> Result<[u8; 32], VpnError> {
   Ok(key_bytes)
 }
 
-fn parse_cidr_address(addr: &str) -> Result<(IpCidr, IpAddress), VpnError> {
-  let first_addr = addr.split(',').next().unwrap_or(addr).trim();
-
-  let parts: Vec<&str> = first_addr.split('/').collect();
-  let ip_str = parts[0];
-  let prefix = if parts.len() > 1 {
-    parts[1]
-      .parse::<u8>()
-      .map_err(|_| VpnError::InvalidWireGuard(format!("Invalid prefix length: {}", parts[1])))?
-  } else {
-    32
-  };
+fn parse_one_cidr(entry: &str) -> Result<(IpCidr, IpAddress), VpnError> {
+  let parts: Vec<&str> = entry.split('/').collect();
+  let ip_str = parts[0].trim();
 
   let ip: std::net::IpAddr = ip_str
     .parse()
     .map_err(|_| VpnError::InvalidWireGuard(format!("Invalid IP address: {ip_str}")))?;
+
+  let prefix = if parts.len() > 1 {
+    parts[1]
+      .trim()
+      .parse::<u8>()
+      .map_err(|_| VpnError::InvalidWireGuard(format!("Invalid prefix length: {}", parts[1])))?
+  } else if ip.is_ipv6() {
+    128
+  } else {
+    32
+  };
 
   match ip {
     std::net::IpAddr::V4(v4) => {
@@ -250,6 +252,35 @@ fn parse_cidr_address(addr: &str) -> Result<(IpCidr, IpAddress), VpnError> {
         IpAddress::Ipv6(smol_ip),
       ))
     }
+  }
+}
+
+/// Parse every address in a (comma-separated) WireGuard `Address` line. A
+/// dual-stack config yields both the IPv4 and IPv6 entries so the tunnel
+/// interface is addressed for each family it carries.
+fn parse_cidr_addresses(addr: &str) -> Result<Vec<(IpCidr, IpAddress)>, VpnError> {
+  let mut out = Vec::new();
+  for entry in addr.split(',') {
+    let entry = entry.trim();
+    if entry.is_empty() {
+      continue;
+    }
+    out.push(parse_one_cidr(entry)?);
+  }
+  if out.is_empty() {
+    return Err(VpnError::InvalidWireGuard(format!(
+      "No interface address in: {addr}"
+    )));
+  }
+  Ok(out)
+}
+
+/// Convert a smoltcp `IpAddress` to a std `IpAddr`. Both smoltcp address types
+/// are re-exports of `core::net`, so this is a straight variant map.
+fn smol_to_std_ip(ip: IpAddress) -> std::net::IpAddr {
+  match ip {
+    IpAddress::Ipv4(v4) => std::net::IpAddr::V4(v4),
+    IpAddress::Ipv6(v6) => std::net::IpAddr::V6(v6),
   }
 }
 
@@ -403,7 +434,7 @@ impl WireGuardSocks5Server {
 
     log::info!("[vpn-worker] WireGuard handshake completed");
 
-    let (cidr, local_ip) = parse_cidr_address(&self.config.address)?;
+    let local_addrs = parse_cidr_addresses(&self.config.address)?;
 
     let tunn_arc = Arc::new(Mutex::new(tunn));
     let udp_arc = Arc::new(udp_socket);
@@ -419,21 +450,42 @@ impl WireGuardSocks5Server {
     let iface_config = IfaceConfig::new(HardwareAddress::Ip);
     let mut iface = Interface::new(iface_config, &mut device, SmolInstant::now());
     iface.update_ip_addrs(|addrs| {
-      let _ = addrs.push(cidr);
+      for (cidr, _) in &local_addrs {
+        let _ = addrs.push(*cidr);
+      }
     });
 
-    // Set default gateway
-    match local_ip {
-      IpAddress::Ipv4(v4) => {
-        let octets = v4.octets();
-        let gw = Ipv4Address::new(octets[0], octets[1], octets[2], 1);
-        iface
-          .routes_mut()
-          .add_default_ipv4_route(gw)
-          .map_err(|e| VpnError::Tunnel(format!("Failed to add default route: {e}")))?;
-      }
-      IpAddress::Ipv6(_) => {
-        // IPv6 routing not yet implemented
+    // Install a default route for every address family the tunnel carries.
+    // WireGuard is a routed (Medium::Ip) link, so the gateway is nominal — there
+    // is no L2/neighbor resolution; smoltcp only uses it to select the default
+    // route and then hands the packet straight to the WgDevice. The gateway is
+    // derived from the interface address (x.x.x.1 / …::1) purely for form.
+    let has_ipv4 = local_addrs
+      .iter()
+      .any(|(_, ip)| matches!(ip, IpAddress::Ipv4(_)));
+    let has_ipv6 = local_addrs
+      .iter()
+      .any(|(_, ip)| matches!(ip, IpAddress::Ipv6(_)));
+    for (_, ip) in &local_addrs {
+      match ip {
+        IpAddress::Ipv4(v4) => {
+          let o = v4.octets();
+          let gw = Ipv4Address::new(o[0], o[1], o[2], 1);
+          iface
+            .routes_mut()
+            .add_default_ipv4_route(gw)
+            .map_err(|e| VpnError::Tunnel(format!("Failed to add default IPv4 route: {e}")))?;
+        }
+        IpAddress::Ipv6(v6) => {
+          let mut o = v6.octets();
+          o[14] = 0;
+          o[15] = 1;
+          let gw = smoltcp::wire::Ipv6Address::from(o);
+          iface
+            .routes_mut()
+            .add_default_ipv6_route(gw)
+            .map_err(|e| VpnError::Tunnel(format!("Failed to add default IPv6 route: {e}")))?;
+        }
       }
     }
 
@@ -522,6 +574,11 @@ impl WireGuardSocks5Server {
     struct PendingDns {
       query: dns::QueryHandle,
       port: u16,
+      domain: String,
+      // true if this is an AAAA query (resolving to IPv6); false for A.
+      want_ipv6: bool,
+      // whether we've already retried with the other address family.
+      fell_back: bool,
     }
 
     struct Connection {
@@ -581,58 +638,86 @@ impl WireGuardSocks5Server {
             let dns_sock = sockets.get_mut::<dns::Socket>(dns_handle);
             dns_sock.get_query_result(pending.query)
           };
-          match result {
+
+          // Classify: a usable address of the queried family, a clean "no such
+          // record", still-pending, or a hard failure.
+          enum DnsOutcome {
+            Resolved(IpAddress),
+            NoRecord,
+            Pending,
+            Failed,
+          }
+          let outcome = match result {
             Ok(addrs) => {
-              // Tunnel routing is IPv4-only, so take the first A record.
-              let resolved = addrs.iter().copied().find_map(|a| match a {
-                IpAddress::Ipv4(v4) => Some(v4),
-                _ => None,
-              });
-              match resolved {
-                Some(v4) => {
-                  let o = v4.octets();
-                  conn.dest_addr = Some(SocketAddr::new(
-                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(o[0], o[1], o[2], o[3])),
-                    pending.port,
-                  ));
-                  let socket = sockets.get_mut::<TcpSocket>(conn.smol_handle);
-                  let local_port = 10000 + (rand::random::<u16>() % 50000);
-                  if socket
-                    .connect(
-                      iface.context(),
-                      (IpAddress::Ipv4(v4), pending.port),
-                      local_port,
-                    )
-                    .is_err()
-                  {
-                    let _ = conn
-                      .tcp_stream
-                      .try_write(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-                    completed.push(idx);
-                    continue;
-                  }
-                  conn.connecting = true;
-                }
-                None => {
-                  // Resolved, but no usable A record — host unreachable.
-                  let _ = conn
-                    .tcp_stream
-                    .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-                  completed.push(idx);
-                  continue;
-                }
+              let want_ipv6 = pending.want_ipv6;
+              match addrs.iter().copied().find(|a| {
+                matches!(
+                  (a, want_ipv6),
+                  (IpAddress::Ipv4(_), false) | (IpAddress::Ipv6(_), true)
+                )
+              }) {
+                Some(ip) => DnsOutcome::Resolved(ip),
+                None => DnsOutcome::NoRecord,
               }
             }
-            Err(dns::GetQueryResultError::Pending) => {
+            Err(dns::GetQueryResultError::Pending) => DnsOutcome::Pending,
+            Err(_) => DnsOutcome::Failed,
+          };
+
+          match outcome {
+            DnsOutcome::Pending => {
               // Still resolving; put it back and check again next poll.
               conn.pending_dns = Some(pending);
             }
-            Err(_) => {
-              let _ = conn
-                .tcp_stream
-                .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-              completed.push(idx);
-              continue;
+            DnsOutcome::Resolved(ip) => {
+              conn.dest_addr = Some(SocketAddr::new(smol_to_std_ip(ip), pending.port));
+              let socket = sockets.get_mut::<TcpSocket>(conn.smol_handle);
+              let local_port = 10000 + (rand::random::<u16>() % 50000);
+              if socket
+                .connect(iface.context(), (ip, pending.port), local_port)
+                .is_err()
+              {
+                let _ = conn
+                  .tcp_stream
+                  .try_write(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                completed.push(idx);
+                continue;
+              }
+              conn.connecting = true;
+            }
+            DnsOutcome::NoRecord | DnsOutcome::Failed => {
+              // No record for this family (or the query failed). Retry once with
+              // the other family if the tunnel carries it — a dual-stack name
+              // that only had the other record, or an IPv4-preferred query for
+              // an IPv6-only name.
+              let other_ipv6 = !pending.want_ipv6;
+              let other_supported = if other_ipv6 { has_ipv6 } else { has_ipv4 };
+              let mut requeued = false;
+              if !pending.fell_back && other_supported {
+                let qtype = if other_ipv6 {
+                  smoltcp::wire::DnsQueryType::Aaaa
+                } else {
+                  smoltcp::wire::DnsQueryType::A
+                };
+                let dns_sock = sockets.get_mut::<dns::Socket>(dns_handle);
+                if let Ok(query) = dns_sock.start_query(iface.context(), &pending.domain, qtype) {
+                  conn.pending_dns = Some(PendingDns {
+                    query,
+                    port: pending.port,
+                    domain: pending.domain,
+                    want_ipv6: other_ipv6,
+                    fell_back: true,
+                  });
+                  requeued = true;
+                }
+              }
+              if !requeued {
+                let _ = conn
+                  .tcp_stream
+                  .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                completed.push(idx);
+                continue;
+              }
             }
           }
         } else if conn.connecting {
@@ -748,17 +833,28 @@ impl WireGuardSocks5Server {
                 } else {
                   // TCP CONNECT: resolve the domain THROUGH THE TUNNEL via the
                   // config DNS server, never the host resolver (which would leak
-                  // the query onto the local network). Start an async query and
-                  // defer the connection until it resolves.
+                  // the query onto the local network). Prefer IPv4 when the
+                  // tunnel carries it (the well-tested path) and fall back to
+                  // AAAA only for names with no A record; an IPv6-only tunnel
+                  // resolves AAAA directly. Start an async query and defer the
+                  // connection until it resolves.
                   conn.read_buf.drain(..needed);
+                  let want_ipv6 = !has_ipv4;
+                  let qtype = if want_ipv6 {
+                    smoltcp::wire::DnsQueryType::Aaaa
+                  } else {
+                    smoltcp::wire::DnsQueryType::A
+                  };
                   let dns_sock = sockets.get_mut::<dns::Socket>(dns_handle);
-                  match dns_sock.start_query(
-                    iface.context(),
-                    &domain,
-                    smoltcp::wire::DnsQueryType::A,
-                  ) {
+                  match dns_sock.start_query(iface.context(), &domain, qtype) {
                     Ok(query) => {
-                      conn.pending_dns = Some(PendingDns { query, port });
+                      conn.pending_dns = Some(PendingDns {
+                        query,
+                        port,
+                        domain,
+                        want_ipv6,
+                        fell_back: false,
+                      });
                     }
                     Err(e) => {
                       log::warn!(
@@ -776,23 +872,26 @@ impl WireGuardSocks5Server {
                 }
               }
               0x04 => {
-                // IPv6-literal CONNECT. The WireGuard tunnel is IPv4-only
-                // (parse_cidr_address keeps only the first/IPv4 address and no
-                // default IPv6 route is installed), so an IPv6 destination can
-                // never be reached. Attempting the connect would leave the
-                // smoltcp socket in SynSent until it times out — a visible hang —
-                // so fail fast with "host unreachable" instead.
-                // Normal navigation never lands here: Chromium uses remote DNS
-                // over the SOCKS proxy and domain CONNECT requests resolve A-only, so
-                // this only guards direct literal-IPv6 destinations.
+                // IPv6-literal CONNECT. Route it through the tunnel when the
+                // tunnel carries IPv6; otherwise it can never be reached (no
+                // IPv6 address/route), so fail fast with "host unreachable"
+                // rather than letting the smoltcp socket sit in SynSent until it
+                // times out (a visible hang).
                 if conn.read_buf.len() < 22 {
                   continue;
                 }
-                let _ = conn
-                  .tcp_stream
-                  .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
-                completed.push(idx);
-                continue;
+                if !has_ipv6 {
+                  let _ = conn
+                    .tcp_stream
+                    .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                  completed.push(idx);
+                  continue;
+                }
+                let mut octets = [0u8; 16];
+                octets.copy_from_slice(&conn.read_buf[4..20]);
+                let ip = std::net::Ipv6Addr::from(octets);
+                let port = u16::from_be_bytes([conn.read_buf[20], conn.read_buf[21]]);
+                (SocketAddr::new(std::net::IpAddr::V6(ip), port), 22)
               }
               _ => {
                 completed.push(idx);
@@ -1029,21 +1128,32 @@ mod tests {
 
   #[test]
   fn test_parse_cidr_ipv4() {
-    let (cidr, ip) = parse_cidr_address("10.0.0.2/24").unwrap();
+    let (cidr, ip) = parse_one_cidr("10.0.0.2/24").unwrap();
     assert_eq!(cidr.prefix_len(), 24);
     assert_eq!(ip, IpAddress::Ipv4(Ipv4Address::new(10, 0, 0, 2)));
   }
 
   #[test]
   fn test_parse_cidr_no_prefix() {
-    let (cidr, _) = parse_cidr_address("10.0.0.2").unwrap();
+    let (cidr, _) = parse_one_cidr("10.0.0.2").unwrap();
     assert_eq!(cidr.prefix_len(), 32);
   }
 
   #[test]
-  fn test_parse_cidr_multi_address() {
-    let (_, ip) = parse_cidr_address("10.0.0.2/24, fd00::2/128").unwrap();
-    assert_eq!(ip, IpAddress::Ipv4(Ipv4Address::new(10, 0, 0, 2)));
+  fn test_parse_cidr_ipv6_default_prefix() {
+    let (cidr, ip) = parse_one_cidr("fd00::2").unwrap();
+    assert_eq!(cidr.prefix_len(), 128);
+    assert!(matches!(ip, IpAddress::Ipv6(_)));
+  }
+
+  #[test]
+  fn test_parse_cidr_addresses_dual_stack() {
+    let addrs = parse_cidr_addresses("10.0.0.2/24, fd00::2/128").unwrap();
+    assert_eq!(addrs.len(), 2);
+    assert_eq!(addrs[0].1, IpAddress::Ipv4(Ipv4Address::new(10, 0, 0, 2)));
+    assert!(matches!(addrs[1].1, IpAddress::Ipv6(_)));
+    assert!(addrs.iter().any(|(_, ip)| matches!(ip, IpAddress::Ipv4(_))));
+    assert!(addrs.iter().any(|(_, ip)| matches!(ip, IpAddress::Ipv6(_))));
   }
 
   #[test]
