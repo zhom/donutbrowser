@@ -327,238 +327,290 @@ impl Downloader {
       .await?;
     log::info!("Download URL resolved: {}", download_url);
 
-    // Determine if we have a partial file to resume
-    let mut existing_size: u64 = 0;
-    if let Ok(meta) = std::fs::metadata(&file_path) {
-      existing_size = meta.len();
-    }
+    // In-session resume: a large (~1GB) download over a flaky connection can
+    // drop mid-stream. Rather than surfacing the first stall/chunk error as a
+    // terminal failure (which forces the user to re-click and risks the CDN
+    // answering 200 = full restart), re-issue a ranged GET and keep appending to
+    // the same partial file. `existing_size` is re-read from disk each pass so
+    // the Range offset always matches the bytes already flushed.
+    let max_send_retries = 5u32;
+    let max_stream_restarts = 5u32;
+    let mut stream_restarts = 0u32;
+    let start_time = std::time::Instant::now();
 
-    // Build request with retry logic for transient network errors.
-    let max_retries = 3u32;
-    let mut response: Option<reqwest::Response> = None;
-    for attempt in 0..=max_retries {
-      let mut request = self
-        .client
-        .get(&download_url)
-        .header(
-          "User-Agent",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-        );
+    use futures_util::StreamExt;
+    use std::fs::OpenOptions;
+    use std::io::Write;
 
-      if existing_size > 0 {
-        request = request.header("Range", format!("bytes={existing_size}-"));
-      }
+    loop {
+      // Determine how much of a partial file we already have on disk.
+      let mut existing_size: u64 = std::fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
 
-      log::info!("Sending download request (attempt {})...", attempt + 1);
-      match request.send().await {
-        Ok(resp) => {
-          log::info!(
-            "Download response received: status={}, content-length={:?}",
-            resp.status(),
-            resp.content_length()
+      // Build request with retry logic for transient connect/timeout errors.
+      let mut response: Option<reqwest::Response> = None;
+      for attempt in 0..=max_send_retries {
+        let mut request = self
+          .client
+          .get(&download_url)
+          .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
           );
-          if resp.status().as_u16() == 416 && existing_size > 0 {
-            let _ = std::fs::remove_file(&file_path);
-            existing_size = 0;
-            log::warn!("Download returned 416, retrying without Range header");
-            continue;
-          }
-          response = Some(resp);
-          break;
+
+        if existing_size > 0 {
+          request = request.header("Range", format!("bytes={existing_size}-"));
         }
-        Err(e) => {
-          let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
-          if is_retryable && attempt < max_retries {
-            let delay = 2u64.pow(attempt);
-            log::warn!(
-              "Download attempt {} failed ({}), retrying in {}s...",
-              attempt + 1,
-              e,
-              delay
+
+        log::info!("Sending download request (attempt {})...", attempt + 1);
+        match request.send().await {
+          Ok(resp) => {
+            log::info!(
+              "Download response received: status={}, content-length={:?}",
+              resp.status(),
+              resp.content_length()
             );
-            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
-          } else {
-            return Err(format!("Download failed after {} attempts: {}", attempt + 1, e).into());
-          }
-        }
-      }
-    }
-    let response = response.ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
-      "Download failed: no response received".into()
-    })?;
-
-    // Check if the response is successful (200 OK or 206 Partial Content)
-    if !(response.status().is_success() || response.status().as_u16() == 206) {
-      return Err(format!("Download failed with status: {}", response.status()).into());
-    }
-
-    // Determine total size
-    let mut total_size = response.content_length();
-
-    // If resuming (206) and Content-Range is present, parse total
-    if response.status().as_u16() == 206 {
-      if let Some(content_range) = response.headers().get(reqwest::header::CONTENT_RANGE) {
-        if let Ok(cr) = content_range.to_str() {
-          // Format: bytes start-end/total
-          if let Some((_, total_str)) = cr.split('/').collect::<Vec<_>>().split_first() {
-            if let Some(total_str) = total_str.first() {
-              if let Ok(total) = total_str.parse::<u64>() {
-                total_size = Some(total);
+            if resp.status().as_u16() == 416 && existing_size > 0 {
+              // The requested range is past the end of the object. Parse
+              // `Content-Range: bytes */total`: if the partial already covers the
+              // whole object it is complete (keep it); otherwise it is corrupt or
+              // oversized, so discard and restart from scratch.
+              let server_total = resp
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.rsplit('/').next())
+                .and_then(|t| t.trim().parse::<u64>().ok());
+              let partial_is_complete = match server_total {
+                Some(total) => existing_size >= total,
+                None => true,
+              };
+              if partial_is_complete {
+                log::info!(
+                  "Archive {} already complete ({} bytes), skipping download",
+                  file_path.display(),
+                  existing_size
+                );
+                return Ok(file_path);
               }
+              let _ = std::fs::remove_file(&file_path);
+              existing_size = 0;
+              log::warn!("Download returned 416 with an incomplete partial, restarting from 0");
+              continue;
+            }
+            response = Some(resp);
+            break;
+          }
+          Err(e) => {
+            let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
+            if is_retryable && attempt < max_send_retries {
+              let delay = 2u64.pow(attempt.min(4));
+              log::warn!(
+                "Download attempt {} failed ({}), retrying in {}s...",
+                attempt + 1,
+                e,
+                delay
+              );
+              tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+            } else {
+              return Err(format!("Download failed after {} attempts: {}", attempt + 1, e).into());
             }
           }
         }
-      } else if let Some(len) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
-        // Fallback: total = existing + incoming length
-        if let Ok(len_str) = len.to_str() {
-          if let Ok(incoming) = len_str.parse::<u64>() {
-            total_size = Some(existing_size + incoming);
+      }
+      let response = response.ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
+        "Download failed: no response received".into()
+      })?;
+
+      // Check if the response is successful (200 OK or 206 Partial Content)
+      if !(response.status().is_success() || response.status().as_u16() == 206) {
+        return Err(format!("Download failed with status: {}", response.status()).into());
+      }
+
+      // Determine total size
+      let mut total_size = response.content_length();
+
+      // If resuming (206) and Content-Range is present, parse total
+      if response.status().as_u16() == 206 {
+        if let Some(content_range) = response.headers().get(reqwest::header::CONTENT_RANGE) {
+          if let Ok(cr) = content_range.to_str() {
+            // Format: bytes start-end/total
+            if let Some(total) = cr
+              .rsplit('/')
+              .next()
+              .and_then(|t| t.trim().parse::<u64>().ok())
+            {
+              total_size = Some(total);
+            }
+          }
+        } else if let Some(len) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
+          // Fallback: total = existing + incoming length
+          if let Ok(len_str) = len.to_str() {
+            if let Ok(incoming) = len_str.parse::<u64>() {
+              total_size = Some(existing_size + incoming);
+            }
+          }
+        }
+      } else if existing_size > 0 && response.status().is_success() {
+        // Server ignored range or we asked from 0; if 200 and existing file has content, start fresh
+        // Truncate existing file so we don't append duplicate bytes
+        let _ = std::fs::remove_file(&file_path);
+        existing_size = 0;
+      }
+
+      // If the existing file already matches the total size, skip the download
+      if existing_size > 0 {
+        if let Some(total) = total_size {
+          if existing_size >= total {
+            log::info!(
+              "Archive {} already complete ({} bytes), skipping download",
+              file_path.display(),
+              existing_size
+            );
+            return Ok(file_path);
           }
         }
       }
-    } else if existing_size > 0 && response.status().is_success() {
-      // Server ignored range or we asked from 0; if 200 and existing file has content, start fresh
-      // Truncate existing file so we don't append duplicate bytes
-      let _ = std::fs::remove_file(&file_path);
-      existing_size = 0;
-    }
 
-    // If the existing file already matches the total size, skip the download
-    if existing_size > 0 {
-      if let Some(total) = total_size {
-        if existing_size >= total {
-          log::info!(
-            "Archive {} already complete ({} bytes), skipping download",
-            file_path.display(),
-            existing_size
-          );
-          return Ok(file_path);
-        }
-      }
-    }
+      let mut downloaded = existing_size;
+      let mut last_update = std::time::Instant::now();
 
-    let mut downloaded = existing_size;
-    let start_time = std::time::Instant::now();
-    let mut last_update = start_time;
+      // Emit initial progress AFTER we've established total size and resume state
+      let initial_percentage = match total_size {
+        Some(total) if total > 0 => (existing_size as f64 / total as f64) * 100.0,
+        _ => 0.0,
+      };
+      let _ = events::emit(
+        "download-progress",
+        &DownloadProgress {
+          browser: browser_type.as_str().to_string(),
+          version: version.to_string(),
+          downloaded_bytes: existing_size,
+          total_bytes: total_size,
+          percentage: initial_percentage,
+          speed_bytes_per_sec: 0.0,
+          eta_seconds: None,
+          stage: "downloading".to_string(),
+        },
+      );
 
-    // Emit initial progress AFTER we've established total size and resume state
-    let initial_percentage = if let Some(total) = total_size {
-      if total > 0 {
-        (existing_size as f64 / total as f64) * 100.0
-      } else {
-        0.0
-      }
-    } else {
-      0.0
-    };
+      // Open file in append mode (resuming) or create new.
+      // Wrap in BufWriter with a large buffer to reduce the number of disk writes,
+      // which dramatically improves download speed on Windows (NTFS + Defender overhead).
+      let raw_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file_path)?;
+      let mut file = io::BufWriter::with_capacity(8 * 1024 * 1024, raw_file);
+      let mut stream = response.bytes_stream();
 
-    let initial_stage = "downloading".to_string();
+      // On a mid-stream failure (idle stall or chunk error) we record it here and,
+      // after flushing what we have, decide whether to resume or give up.
+      let mut retryable_stream_err: Option<String> = None;
 
-    let progress = DownloadProgress {
-      browser: browser_type.as_str().to_string(),
-      version: version.to_string(),
-      downloaded_bytes: existing_size,
-      total_bytes: total_size,
-      percentage: initial_percentage,
-      speed_bytes_per_sec: 0.0,
-      eta_seconds: None,
-      stage: initial_stage,
-    };
-
-    let _ = events::emit("download-progress", &progress);
-
-    // Open file in append mode (resuming) or create new.
-    // Wrap in BufWriter with a large buffer to reduce the number of disk writes,
-    // which dramatically improves download speed on Windows (NTFS + Defender overhead).
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    let raw_file = OpenOptions::new()
-      .create(true)
-      .append(true)
-      .open(&file_path)?;
-    let mut file = io::BufWriter::with_capacity(8 * 1024 * 1024, raw_file);
-    let mut stream = response.bytes_stream();
-
-    use futures_util::StreamExt;
-    loop {
-      // Wrap each read in an idle timeout so a stalled connection (no bytes flowing)
-      // surfaces as a terminal error instead of awaiting forever.
-      let next = match tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
-        Ok(item) => item,
-        Err(_) => {
-          drop(file);
-          // Keep any partial bytes on disk so a later attempt can resume via Range.
-          return Err(
-            format!(
+      loop {
+        // Wrap each read in an idle timeout so a stalled connection (no bytes flowing)
+        // surfaces as a retryable error instead of awaiting forever.
+        let next = match tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
+          Ok(item) => item,
+          Err(_) => {
+            retryable_stream_err = Some(format!(
               "Download stalled: no data received for {}s",
               STREAM_IDLE_TIMEOUT.as_secs()
-            )
-            .into(),
-          );
+            ));
+            break;
+          }
+        };
+        let Some(chunk) = next else {
+          break;
+        };
+        if let Some(token) = cancel_token {
+          if token.is_cancelled() {
+            let _ = file.flush();
+            drop(file);
+            let _ = std::fs::remove_file(&file_path);
+            return Err("Download cancelled".into());
+          }
         }
+        let chunk = match chunk {
+          Ok(c) => c,
+          Err(e) => {
+            retryable_stream_err = Some(format!("Download chunk error: {e}"));
+            break;
+          }
+        };
+        file.write_all(&chunk)?;
+        downloaded += chunk.len() as u64;
+
+        let now = std::time::Instant::now();
+        // Update progress every 100ms to avoid too many events
+        if now.duration_since(last_update).as_millis() >= 100 {
+          let elapsed = start_time.elapsed().as_secs_f64();
+          // Compute speed based only on bytes downloaded in this session to avoid inflated values when resuming
+          let downloaded_since_start = downloaded.saturating_sub(existing_size);
+          let speed = if elapsed > 0.0 {
+            downloaded_since_start as f64 / elapsed
+          } else {
+            0.0
+          };
+          let percentage = match total_size {
+            Some(total) if total > 0 => (downloaded as f64 / total as f64) * 100.0,
+            _ => 0.0,
+          };
+          let eta = if speed > 0.0 {
+            total_size.map(|total| total.saturating_sub(downloaded) as f64 / speed)
+          } else {
+            None
+          };
+
+          let _ = events::emit(
+            "download-progress",
+            &DownloadProgress {
+              browser: browser_type.as_str().to_string(),
+              version: version.to_string(),
+              downloaded_bytes: downloaded,
+              total_bytes: total_size,
+              percentage,
+              speed_bytes_per_sec: speed,
+              eta_seconds: eta,
+              stage: "downloading".to_string(),
+            },
+          );
+          last_update = now;
+        }
+      }
+
+      // Always flush what we have so a resume (this pass or a later run) starts
+      // from the correct on-disk offset.
+      file.flush()?;
+      drop(file);
+
+      let Some(err) = retryable_stream_err else {
+        return Ok(file_path);
       };
-      let Some(chunk) = next else {
-        break;
-      };
+
+      // Re-check cancellation before scheduling a retry.
       if let Some(token) = cancel_token {
         if token.is_cancelled() {
-          drop(file);
           let _ = std::fs::remove_file(&file_path);
           return Err("Download cancelled".into());
         }
       }
-      let chunk = chunk?;
-      file.write_all(&chunk)?;
-      downloaded += chunk.len() as u64;
-
-      let now = std::time::Instant::now();
-      // Update progress every 100ms to avoid too many events
-      if now.duration_since(last_update).as_millis() >= 100 {
-        let elapsed = start_time.elapsed().as_secs_f64();
-        // Compute speed based only on bytes downloaded in this session to avoid inflated values when resuming
-        let downloaded_since_start = downloaded.saturating_sub(existing_size);
-        let speed = if elapsed > 0.0 {
-          downloaded_since_start as f64 / elapsed
-        } else {
-          0.0
-        };
-        let percentage = if let Some(total) = total_size {
-          if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-          } else {
-            0.0
-          }
-        } else {
-          0.0
-        };
-        let eta = if speed > 0.0 {
-          total_size.map(|total| (total - downloaded) as f64 / speed)
-        } else {
-          None
-        };
-
-        let stage_description = "downloading".to_string();
-
-        let progress = DownloadProgress {
-          browser: browser_type.as_str().to_string(),
-          version: version.to_string(),
-          downloaded_bytes: downloaded,
-          total_bytes: total_size,
-          percentage,
-          speed_bytes_per_sec: speed,
-          eta_seconds: eta,
-          stage: stage_description,
-        };
-
-        let _ = events::emit("download-progress", &progress);
-        last_update = now;
+      if stream_restarts >= max_stream_restarts {
+        // Keep the partial on disk so a later run (or app restart) can resume.
+        return Err(err.into());
       }
+      stream_restarts += 1;
+      let delay = 2u64.pow(stream_restarts.min(4));
+      log::warn!(
+        "{} — resuming from {} bytes (restart {}/{}) in {}s",
+        err,
+        std::fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0),
+        stream_restarts,
+        max_stream_restarts,
+        delay
+      );
+      tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
     }
-
-    // Flush remaining buffered data to disk
-    file.flush()?;
-
-    Ok(file_path)
   }
 
   /// Download a browser binary, verify it, and register it in the downloaded browsers registry
