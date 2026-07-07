@@ -69,6 +69,12 @@ impl VpnStorage {
     let storage_path = dir.join("vpn_configs.json");
     let key_path = dir.join(".vpn_key");
 
+    // Persist a freshly generated key with owner-only (0600) permissions so the
+    // WireGuard-key-encrypting key isn't left world-readable.
+    let write_key = |key: &[u8; 32]| {
+      let _ = fs::write(&key_path, key);
+      crate::app_dirs::restrict_to_owner(&key_path);
+    };
     let encryption_key = if key_path.exists() {
       if let Ok(key_data) = fs::read(&key_path) {
         if key_data.len() == 32 {
@@ -77,17 +83,17 @@ impl VpnStorage {
           key
         } else {
           let key: [u8; 32] = rand::rng().random();
-          let _ = fs::write(&key_path, key);
+          write_key(&key);
           key
         }
       } else {
         let key: [u8; 32] = rand::rng().random();
-        let _ = fs::write(&key_path, key);
+        write_key(&key);
         key
       }
     } else {
       let key: [u8; 32] = rand::rng().random();
-      let _ = fs::write(&key_path, key);
+      write_key(&key);
       key
     };
 
@@ -124,13 +130,7 @@ impl VpnStorage {
     // Generate a new key
     let key: [u8; 32] = rand::rng().random();
     let _ = fs::write(&key_path, key);
-
-    // Set restrictive permissions on Unix
-    #[cfg(unix)]
-    {
-      use std::os::unix::fs::PermissionsExt;
-      let _ = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600));
-    }
+    crate::app_dirs::restrict_to_owner(&key_path);
 
     key
   }

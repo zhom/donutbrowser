@@ -87,6 +87,7 @@ pub fn store_e2e_password(password: &str) -> Result<(), String> {
 
   std::fs::write(&file_path, file_data)
     .map_err(|e| format!("Failed to write e2e password file: {e}"))?;
+  crate::app_dirs::restrict_to_owner(std::path::Path::new(&file_path));
 
   Ok(())
 }

@@ -289,6 +289,7 @@ impl CloudAuthManager {
     file_data.extend_from_slice(&ciphertext);
 
     fs::write(file_path, file_data).map_err(|e| format!("Failed to write file: {e}"))?;
+    crate::app_dirs::restrict_to_owner(file_path);
     Ok(())
   }
 
@@ -409,7 +410,8 @@ impl CloudAuthManager {
     }
     let json =
       serde_json::to_string_pretty(state).map_err(|e| format!("Failed to serialize: {e}"))?;
-    fs::write(path, json).map_err(|e| format!("Failed to write auth state: {e}"))?;
+    fs::write(&path, json).map_err(|e| format!("Failed to write auth state: {e}"))?;
+    crate::app_dirs::restrict_to_owner(&path);
     Ok(())
   }
 
