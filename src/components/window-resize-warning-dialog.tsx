@@ -17,13 +17,11 @@ import { Label } from "@/components/ui/label";
 interface WindowResizeWarningDialogProps {
   isOpen: boolean;
   onResult: (proceed: boolean) => void;
-  browserType?: string;
 }
 
 export function WindowResizeWarningDialog({
   isOpen,
   onResult,
-  browserType,
 }: WindowResizeWarningDialogProps) {
   const { t } = useTranslation();
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -49,15 +47,8 @@ export function WindowResizeWarningDialog({
     onResult(false);
   };
 
-  const isCamoufox = browserType === "camoufox";
-
-  const title = isCamoufox
-    ? t("warnings.windowResizeCamoufoxTitle")
-    : t("warnings.windowResizeTitle");
-
-  const description = isCamoufox
-    ? t("warnings.windowResizeCamoufoxDescription")
-    : t("warnings.windowResizeDescription");
+  const title = t("warnings.windowResizeTitle");
+  const description = t("warnings.windowResizeDescription");
 
   return (
     <Dialog open={isOpen}>

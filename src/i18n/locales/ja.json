@@ -340,7 +340,6 @@
       "title": "アンチ検出ブラウザ",
       "description": "アンチ検出機能を持つブラウザを選択",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "アンチ検出ブラウザ"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Wayfern搭載",
-    "firefoxLabel": "Firefox",
-    "firefoxSubtitle": "Camoufox搭載",
-    "camoufoxWarning": "Firefox（Camoufox）はサードパーティの組織によって管理されています。本番環境での使用にはChromiumをご利用ください。",
     "platformUnavailable": "{{browser}} はまだお使いのプラットフォームで利用できません。",
     "passwordProtect": {
       "label": "このプロファイルをパスワードで保護",
@@ -749,42 +745,6 @@
     "error": "プロファイルのインポートに失敗しました"
   },
   "config": {
-    "camoufox": {
-      "title": "Camoufox設定",
-      "fingerprint": {
-        "title": "フィンガープリント",
-        "randomize": "起動時にランダム化",
-        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。",
-        "osCpuPlaceholder": "例: Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "例: llvmpipe など"
-      },
-      "os": {
-        "title": "オペレーティングシステム",
-        "description": "フィンガープリント生成用にエミュレートするOS。",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "画面サイズ",
-        "minWidth": "最小幅",
-        "maxWidth": "最大幅",
-        "minHeight": "最小高さ",
-        "maxHeight": "最大高さ"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "自動（プロキシに基づく）",
-        "manual": "手動",
-        "disabled": "無効"
-      },
-      "blocking": {
-        "title": "ブロック",
-        "images": "画像をブロック",
-        "webrtc": "WebRTCをブロック",
-        "webgl": "WebGLをブロック"
-      }
-    },
     "wayfern": {
       "title": "Wayfern設定",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "Cookie をコピーするプロファイルを選択",
       "running": "(実行中)",
       "targetProfiles": "対象プロファイル ({{count}})",
-      "noOtherTargets": "他に Wayfern/Camoufox プロファイルが選択されていません",
+      "noOtherTargets": "他に Wayfern プロファイルが選択されていません",
       "selectSourceFirst": "最初にソースプロファイルを選択してください",
       "selectionStatus": "({{selected}} / {{total}} 選択中)",
       "searchPlaceholder": "ドメインまたは Cookie を検索...",
@@ -968,7 +928,6 @@
     "serverError": "サーバーエラー。後でもう一度お試しください。",
     "unknownError": "不明なエラーが発生しました。もう一度お試しください。",
     "noProfilesForUrl": "利用可能なプロファイルがありません。URLを開く前にプロファイルを作成してください。",
-    "updateCamoufoxConfigFailed": "camoufox設定の更新に失敗しました: {{error}}",
     "updateWayfernConfigFailed": "wayfern設定の更新に失敗しました: {{error}}",
     "createProfileFailed": "プロファイルの作成に失敗しました: {{error}}",
     "launchBrowserFailed": "ブラウザの起動に失敗しました: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "プロファイルの名前変更に失敗しました: {{error}}",
     "killBrowserFailed": "ブラウザの停止に失敗しました: {{error}}",
     "deleteSelectedProfilesFailed": "選択したプロファイルの削除に失敗しました: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Cookieのコピーは Wayfern および Camoufox プロファイルでのみ機能します",
+    "cookieCopyUnsupportedBrowser": "Cookieのコピーは Wayfern プロファイルでのみ機能します",
     "updateSyncSettingsFailed": "同期設定の更新に失敗しました",
     "cloneProfileFailed": "プロファイルの複製に失敗しました: {{error}}",
     "loadSupportedBrowsersFailed": "サポートされているブラウザの読み込みに失敗しました",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "プロファイルのパスワード設定に失敗しました: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "カスタムウィンドウサイズ",
     "windowResizeDescription": "ブラウザウィンドウのサイズを変更すると、ブラウザ情報が偽装されていることをウェブサイトに検出される可能性が高くなります。",
-    "windowResizeCamoufoxTitle": "Camoufoxによりビューポートがロックされています",
-    "windowResizeCamoufoxDescription": "Camoufoxはアンチフィンガープリントのためにビューポートを偽装された画面サイズにロックします。ウィンドウのサイズを変更すると、切り取られた領域やグレーの領域が表示される場合があります。これは想定された動作です。",
     "dontShowAgain": "今後表示しない",
     "continue": "続行",
     "cancel": "キャンセル"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "パスワードを変更する前にプロファイルを停止してください。"
     },
     "fingerprint": {
-      "notSupported": "フィンガープリント編集は Camoufox / Wayfern プロファイルでのみ利用できます。",
+      "notSupported": "フィンガープリント編集は Wayfern プロファイルでのみ利用できます。",
       "lockedTitle": "フィンガープリントの表示と編集は Pro 機能です",
       "lockedDescription": "フィンガープリント保護はすべてのプランに含まれています。プロファイルのフィンガープリントの値を表示・編集するには、有効な有料プランが必要です。"
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "拡張機能グループ",
     "compatibility": {
       "label": "互換性",
-      "chromium": "Chromium",
-      "firefox": "Firefox",
-      "both": "Chromium & Firefox"
+      "chromium": "Chromium"
     },
     "selectedFile": "選択されたファイル",
     "namePlaceholder": "拡張機能名",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ 送信: ",
     "tooltipReceived": "↓ 受信: "
   },
-  "camoufoxDialog": {
-    "titleView": "フィンガープリント設定を表示 - {{name}} ({{browser}})",
-    "titleConfigure": "フィンガープリント設定 - {{name}} ({{browser}})",
-    "invalidFingerprint": "無効なフィンガープリント設定",
-    "invalidFingerprintDescription": "フィンガープリント設定に無効な JSON が含まれています。詳細設定を確認してください。",
-    "saveFailed": "設定の保存に失敗しました",
-    "unknownError": "不明なエラーが発生しました"
-  },
   "proxyCheck": {
     "unknownLocation": "不明",
     "locationToast": "プロキシの場所:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "メモ",
     "vpnsHeading": "VPN",
     "createByCountryHeading": "国別に作成"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "利用可能なリリースタイプがありません。",
-    "placeholder": "リリースタイプを選択...",
-    "stable": "Stable",
-    "nightly": "Nightly",
-    "downloaded": "ダウンロード済み",
-    "downloadBrowser": "ブラウザをダウンロード",
-    "downloading": "ダウンロード中..."
   },
   "dataTableActionBar": {
     "selected": "{{count}} 件選択",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "選択したプロキシが機能していないため、プロファイルは作成されませんでした。",
     "proxyPaymentRequired": "選択したプロキシは支払いが必要です（402）。サブスクリプションが期限切れの可能性があります。そのため、プロファイルは作成されませんでした。",
     "vpnNotWorking": "選択したVPNが機能していないため、プロファイルは作成されませんでした。",
-    "camoufoxImportDeprecated": "Firefox ベース（Camoufox）のプロファイルのインポートはサポートされなくなりました。Camoufox は廃止予定です。代わりに Wayfern をご利用ください。"
+    "camoufoxImportDeprecated": "Firefox ベースのプロファイルのインポートはサポートされなくなりました。Wayfern をご利用ください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1988,10 +1925,6 @@
     "show": "Donut Browser を表示",
     "quit": "終了"
   },
-  "browserSupport": {
-    "endingSoonTitle": "ブラウザのサポートが間もなく終了します",
-    "endingSoonDescription": "以下のプロファイルのサポートは 2026 年 3 月 15 日に削除されます: {{profiles}}。Wayfern プロファイルに移行してください。"
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "ブラウザの自動化が一時停止しました",
     "description": "通常は複数のデバイスで同時にサインインしたことが原因で、アカウントのProブラウザ機能が一時的に制限されました。他のデバイスからサインアウトし、プロファイルを再起動すると復元されます。"
   },
-  "camoufoxDeprecation": {
-    "title": "Camoufox のサポートが終了します",
-    "description": "Camoufox プロファイルのサポートは 2026 年 7 月 8 日に終了します。Camoufox プロファイルが 1 つ以上あります。それまでに Wayfern へ移行してください。その後、Camoufox プロファイルは動作しなくなる可能性があります。",
-    "acknowledge": "了解しました"
+  "wayfernConfigDialog": {
+    "titleView": "フィンガープリント設定を表示 - {{name}} ({{browser}})",
+    "titleConfigure": "フィンガープリント設定 - {{name}} ({{browser}})",
+    "invalidFingerprint": "無効なフィンガープリント設定",
+    "invalidFingerprintDescription": "フィンガープリント設定に無効な JSON が含まれています。詳細設定を確認してください。",
+    "saveFailed": "設定の保存に失敗しました",
+    "unknownError": "不明なエラーが発生しました"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "他に Wayfern プロファイルが選択されていません"
   }
 }

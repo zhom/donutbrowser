@@ -10,7 +10,6 @@ interface UpdateNotification {
   current_version: string;
   new_version: string;
   affected_profiles: string[];
-  is_stable_update: boolean;
   timestamp: number;
   is_rolling_release: boolean;
 }

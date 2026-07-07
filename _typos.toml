@@ -1,7 +1,6 @@
 [files]
 extend-exclude = [
-    "src-tauri/src/camoufox/data/*.json",
-    "src-tauri/src/camoufox/data/*.xml",
+    "src-tauri/src/territory_info.xml",
     "src/i18n/locales/*.json",
     # Auto-generated from commit subjects by release.yml; typos here originate
     # in commit messages, which are immutable, so don't spell-check it.

@@ -66,7 +66,7 @@ const getCurrentOS = (): WayfernOS => {
 
 import { RippleButton } from "./ui/ripple";
 
-type BrowserTypeString = "camoufox" | "wayfern";
+type BrowserTypeString = "wayfern";
 
 interface CreateProfileDialogProps {
   isOpen: boolean;
@@ -113,8 +113,8 @@ export function CreateProfileDialog({
   const proxyListboxIdAntiDetect = useId();
   const proxyListboxIdRegular = useId();
   const [profileName, setProfileName] = useState("");
-  // Camoufox is deprecated: only Wayfern profiles can be created, so the dialog
-  // opens straight into the Wayfern config step (no browser-selection screen).
+  // Only Wayfern profiles can be created, so the dialog opens straight into
+  // the Wayfern config step (no browser-selection screen).
   const [currentStep, setCurrentStep] = useState<
     "browser-selection" | "browser-config"
   >("browser-config");
@@ -139,8 +139,7 @@ export function CreateProfileDialog({
     setCurrentStep("browser-config");
   };
 
-  // Reset the form fields without leaving the Wayfern config step — Camoufox is
-  // deprecated, so there is no browser-selection screen to go back to.
+  // Reset the form fields without leaving the Wayfern config step.
   const resetForm = () => {
     setSelectedBrowser("wayfern");
     setProfileName("");
@@ -286,8 +285,7 @@ export function CreateProfileDialog({
   useEffect(() => {
     if (isOpen) {
       void loadSupportedBrowsers();
-      // Load downloaded Wayfern versions up front so the availability gate is
-      // accurate. Camoufox is deprecated and no longer creatable.
+      // Load downloaded Wayfern versions up front so the availability gate is accurate.
       void loadDownloadedVersions("wayfern");
       // Load release types when a browser is selected
       if (selectedBrowser) {
@@ -395,7 +393,7 @@ export function CreateProfileDialog({
         : undefined;
     try {
       if (activeTab === "anti-detect") {
-        // Camoufox is deprecated — only Wayfern anti-detect profiles are created.
+        // Only Wayfern anti-detect profiles are created.
         const bestWayfernVersion = getCreatableVersion("wayfern");
         if (!bestWayfernVersion) {
           console.error("No Wayfern version available");
@@ -430,7 +428,7 @@ export function CreateProfileDialog({
           return;
         }
 
-        // Use the best available version (stable preferred, nightly as fallback)
+        // Use the latest available Wayfern version
         const bestVersion = getCreatableVersion(selectedBrowser);
         if (!bestVersion) {
           console.error("No version available");
@@ -465,8 +463,7 @@ export function CreateProfileDialog({
     // Cancel any ongoing loading
     loadingBrowserRef.current = null;
 
-    // Reset all states. Stay on the Wayfern config step — Camoufox is
-    // deprecated, so the browser-selection screen is gone.
+    // Reset all states. Stay on the Wayfern config step.
     setProfileName("");
     setCurrentStep("browser-config");
     setActiveTab("anti-detect");
@@ -535,10 +532,7 @@ export function CreateProfileDialog({
             {currentStep === "browser-selection"
               ? t("createProfile.title")
               : t("createProfile.configureTitle", {
-                  browser:
-                    selectedBrowser === "wayfern"
-                      ? t("createProfile.chromiumLabel")
-                      : t("createProfile.firefoxLabel"),
+                  browser: t("createProfile.chromiumLabel"),
                 })}
           </DialogTitle>
         </DialogHeader>
@@ -591,9 +585,6 @@ export function CreateProfileDialog({
                           </div>
                         </Button>
 
-                        {/* Camoufox is deprecated — no longer offered for new
-                            profiles. Only Wayfern can be created. */}
-
                         {!getCreatableVersion("wayfern") && (
                           <p className="pt-2 text-center text-sm text-muted-foreground">
                             {t("createProfile.browsersDownloading")}
@@ -616,7 +607,6 @@ export function CreateProfileDialog({
 
                         <div className="space-y-3">
                           {regularBrowsers.map((browser) => {
-                            if (browser.value === "camoufox") return null; // Skip camoufox as it's handled in anti-detect tab
                             const IconComponent = getBrowserIcon(browser.value);
                             return (
                               <Button
@@ -904,8 +894,7 @@ export function CreateProfileDialog({
                             />
                           </div>
                         ) : (
-                          // Regular Browser Configuration (should not happen in
-                          // the anti-detect tab; Camoufox creation is removed).
+                          // Regular Browser Configuration (should not happen in the anti-detect tab).
                           <div className="space-y-4">
                             {selectedBrowser && (
                               <div className="space-y-3">

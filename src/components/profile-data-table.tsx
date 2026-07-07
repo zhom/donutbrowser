@@ -209,7 +209,7 @@ interface TableMeta {
 
   // Overflow actions
   onAssignProfilesToGroup?: (profileIds: string[]) => void;
-  onConfigureCamoufox?: (profile: BrowserProfile) => void;
+  onConfigureWayfern?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onOpenCookieManagement?: (profile: BrowserProfile) => void;
@@ -1127,7 +1127,7 @@ interface ProfilesDataTableProps {
   onCloneProfile: (profile: BrowserProfile) => void | Promise<void>;
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;
   onRenameProfile: (profileId: string, newName: string) => Promise<void>;
-  onConfigureCamoufox: (profile: BrowserProfile) => void;
+  onConfigureWayfern: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onOpenCookieManagement?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
@@ -1177,7 +1177,7 @@ export function ProfilesDataTable({
   onCloneProfile,
   onDeleteProfile,
   onRenameProfile,
-  onConfigureCamoufox,
+  onConfigureWayfern,
   onCopyCookiesToProfile,
   onOpenCookieManagement,
   runningProfiles,
@@ -1952,7 +1952,7 @@ export function ProfilesDataTable({
             void onCloneProfile(profile);
           }
         : undefined,
-      onConfigureCamoufox,
+      onConfigureWayfern,
       onCopyCookiesToProfile,
       onOpenCookieManagement,
 
@@ -2030,7 +2030,7 @@ export function ProfilesDataTable({
       onLaunchProfile,
       onAssignProfilesToGroup,
       onCloneProfile,
-      onConfigureCamoufox,
+      onConfigureWayfern,
       onCopyCookiesToProfile,
       onOpenCookieManagement,
       syncStatuses,
@@ -2086,10 +2086,7 @@ export function ProfilesDataTable({
 
           // Cross-OS profiles: show OS icon when checkboxes aren't visible, show checkbox when they are
           if (isCrossOs && !meta.showCheckboxes && !isSelected) {
-            const resolvedOs =
-              profile.host_os ||
-              profile.camoufox_config?.os ||
-              profile.wayfern_config?.os;
+            const resolvedOs = profile.host_os || profile.wayfern_config?.os;
             const osName = resolvedOs
               ? getOSDisplayName(resolvedOs)
               : "another OS";
@@ -2128,10 +2125,7 @@ export function ProfilesDataTable({
 
           // Cross-OS profiles with checkboxes visible: show checkbox (selectable for bulk delete)
           if (isCrossOs && (meta.showCheckboxes || isSelected)) {
-            const resolvedOs =
-              profile.host_os ||
-              profile.camoufox_config?.os ||
-              profile.wayfern_config?.os;
+            const resolvedOs = profile.host_os || profile.wayfern_config?.os;
             const osName = resolvedOs
               ? getOSDisplayName(resolvedOs)
               : "another OS";
@@ -3183,7 +3177,6 @@ export function ProfilesDataTable({
                       ? t("crossOs.viewOnly", {
                           os: getOSDisplayName(
                             row.original.host_os ||
-                              row.original.camoufox_config?.os ||
                               row.original.wayfern_config?.os ||
                               "",
                           ),
@@ -3273,7 +3266,7 @@ export function ProfilesDataTable({
               }}
               onOpenProfileSyncDialog={onOpenProfileSyncDialog}
               onAssignProfilesToGroup={onAssignProfilesToGroup}
-              onConfigureCamoufox={onConfigureCamoufox}
+              onConfigureWayfern={onConfigureWayfern}
               onCopyCookiesToProfile={onCopyCookiesToProfile}
               onOpenCookieManagement={onOpenCookieManagement}
               onAssignExtensionGroup={onAssignExtensionGroup}

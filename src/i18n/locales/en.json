@@ -340,7 +340,6 @@
       "title": "Anti-Detect Browser",
       "description": "Choose a browser with anti-detection capabilities",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "Anti-Detect Browser"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Powered by Wayfern",
-    "firefoxLabel": "Firefox",
-    "firefoxSubtitle": "Powered by Camoufox",
-    "camoufoxWarning": "Firefox (Camoufox) is maintained by a third-party organization. For production use, please use Chromium.",
     "platformUnavailable": "{{browser}} is not available on your platform yet.",
     "passwordProtect": {
       "label": "Password protect this profile",
@@ -749,42 +745,6 @@
     "error": "Failed to import profile"
   },
   "config": {
-    "camoufox": {
-      "title": "Camoufox Configuration",
-      "fingerprint": {
-        "title": "Fingerprint",
-        "randomize": "Randomize on Launch",
-        "randomizeDescription": "Generate a new fingerprint each time the browser is launched.",
-        "osCpuPlaceholder": "e.g., Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "e.g., llvmpipe, or similar"
-      },
-      "os": {
-        "title": "Operating System",
-        "description": "The operating system to emulate for fingerprint generation.",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "Screen Size",
-        "minWidth": "Min Width",
-        "maxWidth": "Max Width",
-        "minHeight": "Min Height",
-        "maxHeight": "Max Height"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "Automatic (based on proxy)",
-        "manual": "Manual",
-        "disabled": "Disabled"
-      },
-      "blocking": {
-        "title": "Blocking",
-        "images": "Block Images",
-        "webrtc": "Block WebRTC",
-        "webgl": "Block WebGL"
-      }
-    },
     "wayfern": {
       "title": "Wayfern Configuration",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "Select a profile to copy cookies from",
       "running": "(running)",
       "targetProfiles": "Target Profiles ({{count}})",
-      "noOtherTargets": "No other Wayfern/Camoufox profiles selected",
+      "noOtherTargets": "No other Wayfern profiles selected",
       "selectSourceFirst": "Select a source profile first",
       "selectionStatus": "({{selected}} of {{total}} selected)",
       "searchPlaceholder": "Search domains or cookies...",
@@ -968,7 +928,6 @@
     "serverError": "Server error. Please try again later.",
     "unknownError": "An unknown error occurred. Please try again.",
     "noProfilesForUrl": "No profiles available. Please create a profile first before opening URLs.",
-    "updateCamoufoxConfigFailed": "Failed to update camoufox config: {{error}}",
     "updateWayfernConfigFailed": "Failed to update wayfern config: {{error}}",
     "createProfileFailed": "Failed to create profile: {{error}}",
     "launchBrowserFailed": "Failed to launch browser: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "Failed to rename profile: {{error}}",
     "killBrowserFailed": "Failed to kill browser: {{error}}",
     "deleteSelectedProfilesFailed": "Failed to delete selected profiles: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Cookie copy only works with Wayfern and Camoufox profiles",
+    "cookieCopyUnsupportedBrowser": "Cookie copy only works with Wayfern profiles",
     "updateSyncSettingsFailed": "Failed to update sync settings",
     "cloneProfileFailed": "Failed to clone profile: {{error}}",
     "loadSupportedBrowsersFailed": "Failed to load supported browsers",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "Failed to set profile password: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "Custom Window Dimensions",
     "windowResizeDescription": "Changing browser window dimensions may increase the chance of website detection that browser information is spoofed.",
-    "windowResizeCamoufoxTitle": "Viewport Locked by Camoufox",
-    "windowResizeCamoufoxDescription": "Camoufox locks the viewport to the spoofed screen dimensions for anti-fingerprinting. Resizing the window may cause cropped or grey areas. This is expected behavior.",
     "dontShowAgain": "Don't show this again",
     "continue": "Continue",
     "cancel": "Cancel"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "Stop the profile before changing its password."
     },
     "fingerprint": {
-      "notSupported": "Fingerprint editing is only available for Camoufox and Wayfern profiles.",
+      "notSupported": "Fingerprint editing is only available for Wayfern profiles.",
       "lockedTitle": "Viewing & editing the fingerprint is a Pro feature",
       "lockedDescription": "Fingerprint protection is included on every plan. Viewing and editing a profile's fingerprint values is what requires an active paid plan."
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "Extension Group",
     "compatibility": {
       "label": "Compatibility",
-      "chromium": "Chromium",
-      "firefox": "Firefox",
-      "both": "Chromium & Firefox"
+      "chromium": "Chromium"
     },
     "selectedFile": "Selected file",
     "namePlaceholder": "Extension name",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ Sent: ",
     "tooltipReceived": "↓ Received: "
   },
-  "camoufoxDialog": {
-    "titleView": "View Fingerprint Settings - {{name}} ({{browser}})",
-    "titleConfigure": "Configure Fingerprint Settings - {{name}} ({{browser}})",
-    "invalidFingerprint": "Invalid fingerprint configuration",
-    "invalidFingerprintDescription": "The fingerprint configuration contains invalid JSON. Please check your advanced settings.",
-    "saveFailed": "Failed to save configuration",
-    "unknownError": "Unknown error occurred"
-  },
   "proxyCheck": {
     "unknownLocation": "Unknown",
     "locationToast": "Your proxy location is:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "Note",
     "vpnsHeading": "VPNs",
     "createByCountryHeading": "Create by country"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "No release types available.",
-    "placeholder": "Select release type...",
-    "stable": "Stable",
-    "nightly": "Nightly",
-    "downloaded": "Downloaded",
-    "downloadBrowser": "Download Browser",
-    "downloading": "Downloading..."
   },
   "dataTableActionBar": {
     "selected": "{{count}} selected",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "The selected proxy isn't working, so the profile wasn't created.",
     "proxyPaymentRequired": "The selected proxy requires payment (402) — its subscription may have expired — so the profile wasn't created.",
     "vpnNotWorking": "The selected VPN isn't working, so the profile wasn't created.",
-    "camoufoxImportDeprecated": "Importing Firefox-based (Camoufox) profiles is no longer supported. Camoufox is being deprecated — please use Wayfern instead."
+    "camoufoxImportDeprecated": "Importing Firefox-based profiles is no longer supported. Please use Wayfern instead."
   },
   "rail": {
     "profiles": "Profiles",
@@ -1988,10 +1925,6 @@
     "show": "Show Donut Browser",
     "quit": "Quit"
   },
-  "browserSupport": {
-    "endingSoonTitle": "Browser support ending soon",
-    "endingSoonDescription": "Support for the following profiles will be removed on March 15, 2026: {{profiles}}. Please migrate to Wayfern profiles."
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "Browser automation paused",
     "description": "Your account was temporarily restricted from Pro browser features, usually from signing in on multiple devices at once. Sign out of other devices, then relaunch the profile to restore it."
   },
-  "camoufoxDeprecation": {
-    "title": "Camoufox support is ending",
-    "description": "Support for Camoufox profiles is ending on July 8, 2026. You have one or more Camoufox profiles. Please migrate them to Wayfern before then — after that date, Camoufox profiles may stop working.",
-    "acknowledge": "Got it"
+  "wayfernConfigDialog": {
+    "titleView": "View Fingerprint Settings - {{name}} ({{browser}})",
+    "titleConfigure": "Configure Fingerprint Settings - {{name}} ({{browser}})",
+    "invalidFingerprint": "Invalid fingerprint configuration",
+    "invalidFingerprintDescription": "The fingerprint configuration contains invalid JSON. Please check your advanced settings.",
+    "saveFailed": "Failed to save configuration",
+    "unknownError": "Unknown error occurred"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "No other Wayfern profiles selected"
   }
 }

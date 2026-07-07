@@ -154,7 +154,7 @@ impl WayfernManager {
   ///
   /// Keys are the camelCase fields Wayfern uses in its fingerprint
   /// (`windowOuterWidth`, `screenAvailWidth`, …) — NOT the dotted
-  /// Camoufox-style keys. Preference order, matching how the fingerprint
+  /// Preference order, matching how the fingerprint
   /// describes the window:
   /// 1. `windowOuterWidth` / `windowOuterHeight` — the real window size.
   /// 2. `screenAvailWidth` / `screenAvailHeight` — usable screen area.
@@ -325,7 +325,7 @@ impl WayfernManager {
           .await
           .map_err(|e| format!("Failed to fetch public IP: {e}"))?,
       };
-      crate::camoufox::geolocation::get_geolocation(&ip)
+      crate::geolocation::get_geolocation(&ip)
         .map_err(|e| format!("Failed to get geolocation for IP {ip}: {e}"))
     }
     .await;

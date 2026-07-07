@@ -67,17 +67,15 @@ impl Extractor {
     exe_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Determine browser type from the destination directory path
-    let browser_type = if dest_dir.to_string_lossy().contains("camoufox") {
-      "camoufox"
-    } else if dest_dir.to_string_lossy().contains("wayfern") {
+    let browser_type = if dest_dir.to_string_lossy().contains("wayfern") {
       "wayfern"
     } else {
       return Ok(());
     };
 
-    // For Camoufox and Wayfern on Linux, we expect the executable directly under version directory
-    // e.g., binaries/camoufox/<version>/camoufox, without an extra subdirectory
-    if browser_type == "camoufox" || browser_type == "wayfern" {
+    // For Wayfern on Linux, we expect the executable directly under version directory
+    // e.g., binaries/wayfern/<version>/wayfern, without an extra subdirectory
+    if browser_type == "wayfern" {
       return Ok(());
     }
 
@@ -977,13 +975,7 @@ impl Extractor {
     );
 
     // Look for .exe files, preferring main browser executables
-    let priority_exe_names = [
-      "firefox.exe",
-      "chrome.exe",
-      "chromium.exe",
-      "camoufox.exe",
-      "wayfern.exe",
-    ];
+    let priority_exe_names = ["firefox.exe", "chrome.exe", "chromium.exe", "wayfern.exe"];
 
     // First try priority executable names
     for exe_name in &priority_exe_names {
@@ -1049,7 +1041,6 @@ impl Extractor {
               || file_name.contains("chrome")
               || file_name.contains("chromium")
               || file_name.contains("browser")
-              || file_name.contains("camoufox")
               || file_name.contains("wayfern")
             {
               return Ok(path);
@@ -1098,7 +1089,7 @@ impl Extractor {
 
     // Enhanced list of common browser executable names
     let exe_names = [
-      // Firefox variants (used by Camoufox)
+      // Firefox variants
       "firefox",
       "firefox-bin",
       // Chrome/Chromium variants (used by Wayfern)
@@ -1106,10 +1097,6 @@ impl Extractor {
       "chromium",
       "chromium-browser",
       "chromium-bin",
-      // Camoufox variants
-      "camoufox",
-      "camoufox-bin",
-      "camoufox-browser",
       // Wayfern variants
       "wayfern",
       "wayfern-bin",
@@ -1136,16 +1123,13 @@ impl Extractor {
       "firefox",
       "chrome",
       "chromium",
-      "camoufox",
       "wayfern",
       ".",
       "./",
       "Browser",
       "browser",
-      "opt/camoufox",
       "usr/lib/firefox",
       "usr/lib/chromium",
-      "usr/lib/camoufox",
       "usr/share/applications",
       "usr/bin",
       "AppRun",
@@ -1239,7 +1223,6 @@ impl Extractor {
               || name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
-              || name_lower.contains("camoufox")
               || name_lower.contains("wayfern")
               || name_lower.ends_with(".appimage")
               || !name_lower.contains('.')
@@ -1295,7 +1278,6 @@ impl Extractor {
               || name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
-              || name_lower.contains("camoufox")
               || name_lower.contains("wayfern")
               || file_name.ends_with(".AppImage")
             {

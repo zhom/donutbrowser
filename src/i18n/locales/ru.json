@@ -340,7 +340,6 @@
       "title": "Антидетект браузер",
       "description": "Выберите браузер с возможностями защиты от обнаружения",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "Антидетект браузер"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "На базе Wayfern",
-    "firefoxLabel": "Firefox",
-    "firefoxSubtitle": "На базе Camoufox",
-    "camoufoxWarning": "Firefox (Camoufox) поддерживается сторонней организацией. Для промышленного использования используйте Chromium.",
     "platformUnavailable": "{{browser}} пока недоступен на вашей платформе.",
     "passwordProtect": {
       "label": "Защитить этот профиль паролем",
@@ -749,42 +745,6 @@
     "error": "Ошибка импорта профиля"
   },
   "config": {
-    "camoufox": {
-      "title": "Настройки Camoufox",
-      "fingerprint": {
-        "title": "Отпечаток",
-        "randomize": "Случайный при запуске",
-        "randomizeDescription": "Генерировать новый отпечаток при каждом запуске браузера.",
-        "osCpuPlaceholder": "напр., Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "напр., llvmpipe или похожее"
-      },
-      "os": {
-        "title": "Операционная система",
-        "description": "Операционная система для эмуляции при генерации отпечатка.",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "Размер экрана",
-        "minWidth": "Мин. ширина",
-        "maxWidth": "Макс. ширина",
-        "minHeight": "Мин. высота",
-        "maxHeight": "Макс. высота"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "Автоматически (на основе прокси)",
-        "manual": "Вручную",
-        "disabled": "Выключено"
-      },
-      "blocking": {
-        "title": "Блокировка",
-        "images": "Блокировать изображения",
-        "webrtc": "Блокировать WebRTC",
-        "webgl": "Блокировать WebGL"
-      }
-    },
     "wayfern": {
       "title": "Настройки Wayfern",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "Выберите профиль для копирования cookies",
       "running": "(запущен)",
       "targetProfiles": "Целевые профили ({{count}})",
-      "noOtherTargets": "Других выбранных Wayfern/Camoufox профилей нет",
+      "noOtherTargets": "Других выбранных Wayfern профилей нет",
       "selectSourceFirst": "Сначала выберите исходный профиль",
       "selectionStatus": "(выбрано {{selected}} из {{total}})",
       "searchPlaceholder": "Поиск доменов или cookies...",
@@ -968,7 +928,6 @@
     "serverError": "Ошибка сервера. Попробуйте позже.",
     "unknownError": "Произошла неизвестная ошибка. Попробуйте снова.",
     "noProfilesForUrl": "Нет доступных профилей. Сначала создайте профиль, прежде чем открывать URL.",
-    "updateCamoufoxConfigFailed": "Не удалось обновить настройки camoufox: {{error}}",
     "updateWayfernConfigFailed": "Не удалось обновить настройки wayfern: {{error}}",
     "createProfileFailed": "Не удалось создать профиль: {{error}}",
     "launchBrowserFailed": "Не удалось запустить браузер: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "Не удалось переименовать профиль: {{error}}",
     "killBrowserFailed": "Не удалось остановить браузер: {{error}}",
     "deleteSelectedProfilesFailed": "Не удалось удалить выбранные профили: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Копирование cookies работает только с профилями Wayfern и Camoufox",
+    "cookieCopyUnsupportedBrowser": "Копирование cookies работает только с профилями Wayfern",
     "updateSyncSettingsFailed": "Не удалось обновить параметры синхронизации",
     "cloneProfileFailed": "Не удалось клонировать профиль: {{error}}",
     "loadSupportedBrowsersFailed": "Не удалось загрузить поддерживаемые браузеры",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "Не удалось установить пароль профиля: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "Пользовательские размеры окна",
     "windowResizeDescription": "Изменение размеров окна браузера может повысить вероятность обнаружения сайтами того, что информация браузера подменена.",
-    "windowResizeCamoufoxTitle": "Viewport заблокирован Camoufox",
-    "windowResizeCamoufoxDescription": "Camoufox блокирует viewport на подменённых размерах экрана для защиты от фингерпринтинга. Изменение размера окна может вызвать обрезанные или серые области. Это ожидаемое поведение.",
     "dontShowAgain": "Больше не показывать",
     "continue": "Продолжить",
     "cancel": "Отмена"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "Остановите профиль перед сменой пароля."
     },
     "fingerprint": {
-      "notSupported": "Редактирование отпечатков доступно только для профилей Camoufox и Wayfern.",
+      "notSupported": "Редактирование отпечатков доступно только для профилей Wayfern.",
       "lockedTitle": "Просмотр и редактирование отпечатка — функция Pro",
       "lockedDescription": "Защита от отпечатков включена во все планы. Активный платный план требуется именно для просмотра и редактирования значений отпечатка профиля."
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "Группа расширений",
     "compatibility": {
       "label": "Совместимость",
-      "chromium": "Chromium",
-      "firefox": "Firefox",
-      "both": "Chromium и Firefox"
+      "chromium": "Chromium"
     },
     "selectedFile": "Выбранный файл",
     "namePlaceholder": "Название расширения",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ Отправлено: ",
     "tooltipReceived": "↓ Получено: "
   },
-  "camoufoxDialog": {
-    "titleView": "Просмотр настроек отпечатка - {{name}} ({{browser}})",
-    "titleConfigure": "Настроить отпечаток - {{name}} ({{browser}})",
-    "invalidFingerprint": "Неверная конфигурация отпечатка",
-    "invalidFingerprintDescription": "Конфигурация отпечатка содержит недопустимый JSON. Проверьте расширенные настройки.",
-    "saveFailed": "Не удалось сохранить конфигурацию",
-    "unknownError": "Произошла неизвестная ошибка"
-  },
   "proxyCheck": {
     "unknownLocation": "Неизвестно",
     "locationToast": "Местоположение вашего прокси:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "Заметка",
     "vpnsHeading": "VPN",
     "createByCountryHeading": "Создать по стране"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "Нет доступных типов выпусков.",
-    "placeholder": "Выберите тип выпуска...",
-    "stable": "Стабильный",
-    "nightly": "Nightly",
-    "downloaded": "Загружено",
-    "downloadBrowser": "Загрузить браузер",
-    "downloading": "Загрузка..."
   },
   "dataTableActionBar": {
     "selected": "Выбрано: {{count}}",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "Выбранный прокси не работает, поэтому профиль не создан.",
     "proxyPaymentRequired": "Выбранный прокси требует оплаты (402) — возможно, его подписка истекла — поэтому профиль не создан.",
     "vpnNotWorking": "Выбранный VPN не работает, поэтому профиль не создан.",
-    "camoufoxImportDeprecated": "Импорт профилей на основе Firefox (Camoufox) больше не поддерживается. Camoufox выводится из эксплуатации — используйте Wayfern."
+    "camoufoxImportDeprecated": "Импорт профилей на основе Firefox больше не поддерживается. Используйте Wayfern."
   },
   "rail": {
     "profiles": "Профили",
@@ -1988,10 +1925,6 @@
     "show": "Показать Donut Browser",
     "quit": "Выход"
   },
-  "browserSupport": {
-    "endingSoonTitle": "Поддержка браузера скоро завершится",
-    "endingSoonDescription": "Поддержка следующих профилей будет прекращена 15 марта 2026 года: {{profiles}}. Перейдите на профили Wayfern."
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "Автоматизация браузера приостановлена",
     "description": "Доступ вашей учётной записи к Pro-функциям браузера временно ограничен — обычно из-за входа сразу на нескольких устройствах. Выйдите из аккаунта на других устройствах и перезапустите профиль, чтобы восстановить доступ."
   },
-  "camoufoxDeprecation": {
-    "title": "Поддержка Camoufox прекращается",
-    "description": "Поддержка профилей Camoufox прекращается 8 июля 2026 года. У вас есть один или несколько профилей Camoufox. Перенесите их на Wayfern до этой даты — после неё профили Camoufox могут перестать работать.",
-    "acknowledge": "Понятно"
+  "wayfernConfigDialog": {
+    "titleView": "Просмотр настроек отпечатка - {{name}} ({{browser}})",
+    "titleConfigure": "Настроить отпечаток - {{name}} ({{browser}})",
+    "invalidFingerprint": "Неверная конфигурация отпечатка",
+    "invalidFingerprintDescription": "Конфигурация отпечатка содержит недопустимый JSON. Проверьте расширенные настройки.",
+    "saveFailed": "Не удалось сохранить конфигурацию",
+    "unknownError": "Произошла неизвестная ошибка"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "Других выбранных Wayfern профилей нет"
   }
 }

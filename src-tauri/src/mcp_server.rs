@@ -507,7 +507,7 @@ impl McpServer {
     vec![
       McpTool {
         name: "list_profiles".to_string(),
-        description: "List all Wayfern and Camoufox browser profiles".to_string(),
+        description: "List all Wayfern browser profiles".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {},
@@ -614,7 +614,7 @@ impl McpServer {
             },
             "browser": {
               "type": "string",
-              "enum": ["wayfern", "camoufox"],
+              "enum": ["wayfern"],
               "description": "Browser engine to use"
             },
             "proxy_id": {
@@ -1049,7 +1049,7 @@ impl McpServer {
       // Fingerprint management tools
       McpTool {
         name: "get_profile_fingerprint".to_string(),
-        description: "Get the fingerprint configuration for a Wayfern or Camoufox profile"
+        description: "Get the fingerprint configuration for a Wayfern profile"
           .to_string(),
         input_schema: serde_json::json!({
           "type": "object",
@@ -1065,7 +1065,7 @@ impl McpServer {
       McpTool {
         name: "update_profile_fingerprint".to_string(),
         description:
-          "Update the fingerprint configuration for a Wayfern or Camoufox profile. Requires an active Pro subscription."
+          "Update the fingerprint configuration for a Wayfern profile. Requires an active Pro subscription."
             .to_string(),
         input_schema: serde_json::json!({
           "type": "object",
@@ -1208,7 +1208,7 @@ impl McpServer {
       // Cookie management tools
       McpTool {
         name: "import_profile_cookies".to_string(),
-        description: "Import cookies into a Wayfern or Camoufox profile from a JSON array (Puppeteer / EditThisCookie format) or a Netscape cookies.txt. Format is auto-detected. The browser must not be running.".to_string(),
+        description: "Import cookies into a Wayfern profile from a JSON array (Puppeteer / EditThisCookie format) or a Netscape cookies.txt. Format is auto-detected. The browser must not be running.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -1902,11 +1902,9 @@ impl McpServer {
         message: format!("Failed to list profiles: {e}"),
       })?;
 
-    // Filter to only Wayfern and Camoufox profiles
-    let filtered: Vec<&BrowserProfile> = profiles
-      .iter()
-      .filter(|p| p.browser == "wayfern" || p.browser == "camoufox")
-      .collect();
+    // Filter to only Wayfern profiles
+    let filtered: Vec<&BrowserProfile> =
+      profiles.iter().filter(|p| p.browser == "wayfern").collect();
 
     Ok(serde_json::json!({
       "content": [{
@@ -1943,11 +1941,11 @@ impl McpServer {
         message: format!("Profile not found: {profile_id}"),
       })?;
 
-    // Check if it's a Wayfern or Camoufox profile
-    if profile.browser != "wayfern" && profile.browser != "camoufox" {
+    // Check if it's a Wayfern profile
+    if profile.browser != "wayfern" {
       return Err(McpError {
         code: -32000,
-        message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        message: "MCP only supports Wayfern profiles".to_string(),
       });
     }
 
@@ -2000,11 +1998,11 @@ impl McpServer {
         message: format!("Profile not found: {profile_id}"),
       })?;
 
-    // Check if it's a Wayfern or Camoufox profile
-    if profile.browser != "wayfern" && profile.browser != "camoufox" {
+    // Check if it's a Wayfern profile
+    if profile.browser != "wayfern" {
       return Err(McpError {
         code: -32000,
-        message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        message: "MCP only supports Wayfern profiles".to_string(),
       });
     }
 
@@ -2082,11 +2080,11 @@ impl McpServer {
         message: format!("Profile not found: {profile_id}"),
       })?;
 
-    // Check if it's a Wayfern or Camoufox profile
-    if profile.browser != "wayfern" && profile.browser != "camoufox" {
+    // Check if it's a Wayfern profile
+    if profile.browser != "wayfern" {
       return Err(McpError {
         code: -32000,
-        message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        message: "MCP only supports Wayfern profiles".to_string(),
       });
     }
 
@@ -2173,9 +2171,9 @@ impl McpServer {
         lines.push(format!("{profile_id}: not found"));
         continue;
       };
-      if profile.browser != "wayfern" && profile.browser != "camoufox" {
+      if profile.browser != "wayfern" {
         lines.push(format!(
-          "{profile_id}: unsupported browser (MCP supports Wayfern/Camoufox)"
+          "{profile_id}: unsupported browser (MCP supports Wayfern)"
         ));
         continue;
       }
@@ -2298,10 +2296,10 @@ impl McpServer {
         message: "Missing browser".to_string(),
       })?;
 
-    if browser != "wayfern" && browser != "camoufox" {
+    if browser != "wayfern" {
       return Err(McpError {
         code: -32602,
-        message: "browser must be 'wayfern' or 'camoufox'".to_string(),
+        message: "browser must be 'wayfern'".to_string(),
       });
     }
 
@@ -2348,7 +2346,6 @@ impl McpServer {
         version,
         "stable",
         proxy_id,
-        None,
         None,
         None,
         group_id,
@@ -2594,11 +2591,11 @@ impl McpServer {
         message: format!("Profile not found: {profile_id}"),
       })?;
 
-    // Check if it's a Wayfern or Camoufox profile
-    if profile.browser != "wayfern" && profile.browser != "camoufox" {
+    // Check if it's a Wayfern profile
+    if profile.browser != "wayfern" {
       return Err(McpError {
         code: -32000,
-        message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        message: "MCP only supports Wayfern profiles".to_string(),
       });
     }
 
@@ -3507,23 +3504,6 @@ impl McpServer {
       })?;
 
     let fingerprint_info = match profile.browser.as_str() {
-      "camoufox" => {
-        let config = profile
-          .camoufox_config
-          .as_ref()
-          .cloned()
-          .unwrap_or_default();
-        serde_json::json!({
-          "browser": "camoufox",
-          "fingerprint": config.fingerprint,
-          "os": config.os,
-          "randomize_fingerprint_on_launch": config.randomize_fingerprint_on_launch,
-          "screen_max_width": config.screen_max_width,
-          "screen_max_height": config.screen_max_height,
-          "screen_min_width": config.screen_min_width,
-          "screen_min_height": config.screen_min_height,
-        })
-      }
       "wayfern" => {
         let config = profile.wayfern_config.as_ref().cloned().unwrap_or_default();
         serde_json::json!({
@@ -3540,7 +3520,7 @@ impl McpServer {
       _ => {
         return Err(McpError {
           code: -32000,
-          message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+          message: "MCP only supports Wayfern profiles".to_string(),
         })
       }
     };
@@ -3612,29 +3592,6 @@ impl McpServer {
     })?;
 
     match profile.browser.as_str() {
-      "camoufox" => {
-        let mut config = profile
-          .camoufox_config
-          .as_ref()
-          .cloned()
-          .unwrap_or_default();
-        if let Some(fp) = fingerprint {
-          config.fingerprint = Some(fp.to_string());
-        }
-        if let Some(os_val) = os {
-          config.os = Some(os_val.to_string());
-        }
-        if let Some(r) = randomize {
-          config.randomize_fingerprint_on_launch = Some(r);
-        }
-        ProfileManager::instance()
-          .update_camoufox_config(app_handle.clone(), profile_id, config)
-          .await
-          .map_err(|e| McpError {
-            code: -32000,
-            message: format!("Failed to update camoufox config: {e}"),
-          })?;
-      }
       "wayfern" => {
         let mut config = profile.wayfern_config.as_ref().cloned().unwrap_or_default();
         if let Some(fp) = fingerprint {
@@ -3657,7 +3614,7 @@ impl McpServer {
       _ => {
         return Err(McpError {
           code: -32000,
-          message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+          message: "MCP only supports Wayfern profiles".to_string(),
         })
       }
     }
@@ -4005,10 +3962,6 @@ impl McpServer {
       }
       let port = if profile.browser == "wayfern" {
         crate::wayfern_manager::WayfernManager::instance()
-          .get_cdp_port(&profile_path_str)
-          .await
-      } else if profile.browser == "camoufox" {
-        crate::camoufox_manager::CamoufoxManager::instance()
           .get_cdp_port(&profile_path_str)
           .await
       } else {
@@ -4409,10 +4362,10 @@ impl McpServer {
         message: format!("Profile not found: {profile_id}"),
       })?;
 
-    if profile.browser != "wayfern" && profile.browser != "camoufox" {
+    if profile.browser != "wayfern" {
       return Err(McpError {
         code: -32000,
-        message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        message: "MCP only supports Wayfern profiles".to_string(),
       });
     }
 

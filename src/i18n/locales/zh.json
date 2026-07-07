@@ -340,7 +340,6 @@
       "title": "防检测浏览器",
       "description": "选择具有防检测功能的浏览器",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "防检测浏览器"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "由 Wayfern 驱动",
-    "firefoxLabel": "Firefox",
-    "firefoxSubtitle": "由 Camoufox 驱动",
-    "camoufoxWarning": "Firefox（Camoufox）由第三方组织维护。在生产环境中，请使用 Chromium。",
     "platformUnavailable": "{{browser}} 在您的平台上尚不可用。",
     "passwordProtect": {
       "label": "为此配置文件设置密码保护",
@@ -749,42 +745,6 @@
     "error": "导入配置文件失败"
   },
   "config": {
-    "camoufox": {
-      "title": "Camoufox 配置",
-      "fingerprint": {
-        "title": "指纹",
-        "randomize": "启动时随机化",
-        "randomizeDescription": "每次启动浏览器时生成新的指纹。",
-        "osCpuPlaceholder": "例如: Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "例如: llvmpipe 或类似"
-      },
-      "os": {
-        "title": "操作系统",
-        "description": "用于生成指纹的模拟操作系统。",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "屏幕尺寸",
-        "minWidth": "最小宽度",
-        "maxWidth": "最大宽度",
-        "minHeight": "最小高度",
-        "maxHeight": "最大高度"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "自动（基于代理）",
-        "manual": "手动",
-        "disabled": "禁用"
-      },
-      "blocking": {
-        "title": "阻止",
-        "images": "阻止图片",
-        "webrtc": "阻止 WebRTC",
-        "webgl": "阻止 WebGL"
-      }
-    },
     "wayfern": {
       "title": "Wayfern 配置",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "选择要复制 Cookie 的配置文件",
       "running": "(运行中)",
       "targetProfiles": "目标配置文件 ({{count}})",
-      "noOtherTargets": "未选择其他 Wayfern/Camoufox 配置文件",
+      "noOtherTargets": "未选择其他 Wayfern 配置文件",
       "selectSourceFirst": "请先选择源配置文件",
       "selectionStatus": "(已选择 {{selected}} / {{total}})",
       "searchPlaceholder": "搜索域名或 Cookie...",
@@ -968,7 +928,6 @@
     "serverError": "服务器错误。请稍后重试。",
     "unknownError": "发生未知错误。请重试。",
     "noProfilesForUrl": "没有可用的配置文件。请先创建配置文件再打开 URL。",
-    "updateCamoufoxConfigFailed": "更新 camoufox 配置失败: {{error}}",
     "updateWayfernConfigFailed": "更新 wayfern 配置失败: {{error}}",
     "createProfileFailed": "创建配置文件失败: {{error}}",
     "launchBrowserFailed": "启动浏览器失败: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "重命名配置文件失败: {{error}}",
     "killBrowserFailed": "终止浏览器失败: {{error}}",
     "deleteSelectedProfilesFailed": "删除所选配置文件失败: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Cookie 复制仅适用于 Wayfern 和 Camoufox 配置文件",
+    "cookieCopyUnsupportedBrowser": "Cookie 复制仅适用于 Wayfern 配置文件",
     "updateSyncSettingsFailed": "更新同步设置失败",
     "cloneProfileFailed": "克隆配置文件失败: {{error}}",
     "loadSupportedBrowsersFailed": "加载受支持的浏览器失败",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "设置配置文件密码失败: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "自定义窗口尺寸",
     "windowResizeDescription": "更改浏览器窗口尺寸可能会增加网站检测到浏览器信息被伪装的概率。",
-    "windowResizeCamoufoxTitle": "视口已被 Camoufox 锁定",
-    "windowResizeCamoufoxDescription": "Camoufox 将视口锁定为伪装的屏幕尺寸以防止指纹识别。调整窗口大小可能会导致内容被裁剪或出现灰色区域。这是预期行为。",
     "dontShowAgain": "不再显示",
     "continue": "继续",
     "cancel": "取消"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "更改密码前请先停止此配置文件。"
     },
     "fingerprint": {
-      "notSupported": "指纹编辑仅适用于 Camoufox 和 Wayfern 配置文件。",
+      "notSupported": "指纹编辑仅适用于 Wayfern 配置文件。",
       "lockedTitle": "查看和编辑指纹是 Pro 功能",
       "lockedDescription": "所有方案都包含指纹保护。查看和编辑配置文件的指纹数值才需要有效的付费方案。"
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "扩展程序组",
     "compatibility": {
       "label": "兼容性",
-      "chromium": "Chromium",
-      "firefox": "Firefox",
-      "both": "Chromium 和 Firefox"
+      "chromium": "Chromium"
     },
     "selectedFile": "已选文件",
     "namePlaceholder": "扩展程序名称",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ 已发送: ",
     "tooltipReceived": "↓ 已接收: "
   },
-  "camoufoxDialog": {
-    "titleView": "查看指纹设置 - {{name}} ({{browser}})",
-    "titleConfigure": "配置指纹设置 - {{name}} ({{browser}})",
-    "invalidFingerprint": "无效的指纹配置",
-    "invalidFingerprintDescription": "指纹配置包含无效的 JSON。请检查高级设置。",
-    "saveFailed": "保存配置失败",
-    "unknownError": "发生未知错误"
-  },
   "proxyCheck": {
     "unknownLocation": "未知",
     "locationToast": "你的代理位置:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "备注",
     "vpnsHeading": "VPN",
     "createByCountryHeading": "按国家创建"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "没有可用的发布类型。",
-    "placeholder": "选择发布类型...",
-    "stable": "Stable",
-    "nightly": "Nightly",
-    "downloaded": "已下载",
-    "downloadBrowser": "下载浏览器",
-    "downloading": "正在下载..."
   },
   "dataTableActionBar": {
     "selected": "已选择 {{count}}",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "所选代理无法使用，因此未创建配置文件。",
     "proxyPaymentRequired": "所选代理需要付费（402），其订阅可能已过期，因此未创建配置文件。",
     "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。",
-    "camoufoxImportDeprecated": "不再支持导入基于 Firefox 的 (Camoufox) 配置文件。Camoufox 即将停用——请改用 Wayfern。"
+    "camoufoxImportDeprecated": "不再支持导入基于 Firefox 的配置文件。请改用 Wayfern。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -1988,10 +1925,6 @@
     "show": "显示 Donut Browser",
     "quit": "退出"
   },
-  "browserSupport": {
-    "endingSoonTitle": "浏览器支持即将结束",
-    "endingSoonDescription": "以下配置文件的支持将于 2026 年 3 月 15 日移除：{{profiles}}。请迁移到 Wayfern 配置文件。"
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "浏览器自动化已暂停",
     "description": "您的账户暂时被限制使用 Pro 浏览器功能，通常是因为同时在多台设备上登录。请退出其他设备的登录，然后重新启动配置文件即可恢复。"
   },
-  "camoufoxDeprecation": {
-    "title": "Camoufox 支持即将结束",
-    "description": "Camoufox 配置文件的支持将于 2026 年 7 月 8 日结束。您有一个或多个 Camoufox 配置文件。请在此之前迁移到 Wayfern——之后 Camoufox 配置文件可能会停止工作。",
-    "acknowledge": "知道了"
+  "wayfernConfigDialog": {
+    "titleView": "查看指纹设置 - {{name}} ({{browser}})",
+    "titleConfigure": "配置指纹设置 - {{name}} ({{browser}})",
+    "invalidFingerprint": "无效的指纹配置",
+    "invalidFingerprintDescription": "指纹配置包含无效的 JSON。请检查高级设置。",
+    "saveFailed": "保存配置失败",
+    "unknownError": "发生未知错误"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "未选择其他 Wayfern 配置文件"
   }
 }

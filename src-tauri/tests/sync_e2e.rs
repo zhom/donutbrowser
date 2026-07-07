@@ -246,7 +246,7 @@ fn create_test_profile_bundle_with_bypass_rules(temp_dir: &Path, bypass_rules: &
   let metadata = json!({
     "id": "test-bypass-profile-id",
     "name": "Bypass Rules Profile",
-    "browser": "camoufox",
+    "browser": "wayfern",
     "version": "120.0.0",
     "release_type": "stable",
     "sync_enabled": true,
@@ -802,7 +802,7 @@ async fn test_profile_bypass_rules_sync() {
   let metadata = extract_bundle(&downloaded, &extract_dir);
 
   assert_eq!(metadata["name"], "Bypass Rules Profile");
-  assert_eq!(metadata["browser"], "camoufox");
+  assert_eq!(metadata["browser"], "wayfern");
 
   let synced_rules = metadata["proxy_bypass_rules"]
     .as_array()

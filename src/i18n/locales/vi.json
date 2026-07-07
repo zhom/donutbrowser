@@ -340,7 +340,6 @@
       "title": "Trình duyệt chống phát hiện",
       "description": "Chọn trình duyệt có khả năng chống phát hiện",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "Trình duyệt chống phát hiện"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Dựa trên Wayfern",
-    "firefoxLabel": "Firefox",
-    "firefoxSubtitle": "Dựa trên Camoufox",
-    "camoufoxWarning": "Firefox (Camoufox) được duy trì bởi bên thứ ba. Đối với sử dụng trong môi trường sản xuất, vui lòng dùng Chromium.",
     "platformUnavailable": "{{browser}} chưa khả dụng trên nền tảng của bạn.",
     "passwordProtect": {
       "label": "Bảo vệ hồ sơ bằng mật khẩu",
@@ -749,42 +745,6 @@
     "error": "Nhập profile thất bại"
   },
   "config": {
-    "camoufox": {
-      "title": "Cấu hình Camoufox",
-      "fingerprint": {
-        "title": "Vân tay",
-        "randomize": "Tạo ngẫu nhiên khi khởi chạy",
-        "randomizeDescription": "Tạo vân tay mới mỗi khi khởi chạy trình duyệt.",
-        "osCpuPlaceholder": "ví dụ: Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "ví dụ: llvmpipe, hoặc tương tự"
-      },
-      "os": {
-        "title": "Hệ điều hành",
-        "description": "Hệ điều hành mô phỏng để tạo vân tay.",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "Kích thước màn hình",
-        "minWidth": "Chiều rộng tối thiểu",
-        "maxWidth": "Chiều rộng tối đa",
-        "minHeight": "Chiều cao tối thiểu",
-        "maxHeight": "Chiều cao tối đa"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "Tự động (dựa trên proxy)",
-        "manual": "Thủ công",
-        "disabled": "Tắt"
-      },
-      "blocking": {
-        "title": "Chặn",
-        "images": "Chặn hình ảnh",
-        "webrtc": "Chặn WebRTC",
-        "webgl": "Chặn WebGL"
-      }
-    },
     "wayfern": {
       "title": "Cấu hình Wayfern",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "Chọn profile để sao chép cookie từ",
       "running": "(đang chạy)",
       "targetProfiles": "Profile đích ({{count}})",
-      "noOtherTargets": "Chưa chọn profile Wayfern/Camoufox nào khác",
+      "noOtherTargets": "Chưa chọn profile Wayfern nào khác",
       "selectSourceFirst": "Hãy chọn profile nguồn trước",
       "selectionStatus": "(đã chọn {{selected}}/{{total}})",
       "searchPlaceholder": "Tìm kiếm tên miền hoặc cookie...",
@@ -968,7 +928,6 @@
     "serverError": "Lỗi máy chủ. Vui lòng thử lại sau.",
     "unknownError": "Đã xảy ra lỗi không xác định. Vui lòng thử lại.",
     "noProfilesForUrl": "Không có profile nào. Vui lòng tạo profile trước khi mở URL.",
-    "updateCamoufoxConfigFailed": "Cập nhật cấu hình camoufox thất bại: {{error}}",
     "updateWayfernConfigFailed": "Cập nhật cấu hình wayfern thất bại: {{error}}",
     "createProfileFailed": "Tạo profile thất bại: {{error}}",
     "launchBrowserFailed": "Khởi chạy trình duyệt thất bại: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "Đổi tên profile thất bại: {{error}}",
     "killBrowserFailed": "Dừng trình duyệt thất bại: {{error}}",
     "deleteSelectedProfilesFailed": "Xóa các profile đã chọn thất bại: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Sao chép cookie chỉ hoạt động với profile Wayfern và Camoufox",
+    "cookieCopyUnsupportedBrowser": "Sao chép cookie chỉ hoạt động với profile Wayfern",
     "updateSyncSettingsFailed": "Cập nhật cài đặt đồng bộ thất bại",
     "cloneProfileFailed": "Nhân bản profile thất bại: {{error}}",
     "loadSupportedBrowsersFailed": "Tải danh sách trình duyệt hỗ trợ thất bại",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "Đặt mật khẩu profile thất bại: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "Kích thước cửa sổ tùy chỉnh",
     "windowResizeDescription": "Thay đổi kích thước cửa sổ trình duyệt có thể tăng khả năng bị trang web phát hiện thông tin trình duyệt bị giả mạo.",
-    "windowResizeCamoufoxTitle": "Cửa sổ xem bị khóa bởi Camoufox",
-    "windowResizeCamoufoxDescription": "Camoufox khóa cửa sổ xem theo kích thước màn hình giả mạo để chống vân tay. Thay đổi kích thước cửa sổ có thể gây ra vùng bị cắt xén hoặc xám. Đây là hành vi bình thường.",
     "dontShowAgain": "Không hiển thị lại",
     "continue": "Tiếp tục",
     "cancel": "Hủy"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "Dừng profile trước khi thay đổi mật khẩu."
     },
     "fingerprint": {
-      "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Camoufox và Wayfern.",
+      "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Wayfern.",
       "lockedTitle": "Xem và chỉnh sửa vân tay là tính năng Pro",
       "lockedDescription": "Bảo vệ vân tay được bao gồm trong mọi gói. Việc xem và chỉnh sửa các giá trị vân tay của profile mới là phần yêu cầu gói trả phí đang hoạt động."
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "Nhóm tiện ích",
     "compatibility": {
       "label": "Tương thích",
-      "chromium": "Chromium",
-      "firefox": "Firefox",
-      "both": "Chromium và Firefox"
+      "chromium": "Chromium"
     },
     "selectedFile": "Tệp đã chọn",
     "namePlaceholder": "Tên tiện ích",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ Đã gửi: ",
     "tooltipReceived": "↓ Đã nhận: "
   },
-  "camoufoxDialog": {
-    "titleView": "Xem cài đặt vân tay - {{name}} ({{browser}})",
-    "titleConfigure": "Cấu hình cài đặt vân tay - {{name}} ({{browser}})",
-    "invalidFingerprint": "Cấu hình vân tay không hợp lệ",
-    "invalidFingerprintDescription": "Cấu hình vân tay chứa JSON không hợp lệ. Vui lòng kiểm tra cài đặt nâng cao.",
-    "saveFailed": "Lưu cấu hình thất bại",
-    "unknownError": "Đã xảy ra lỗi không xác định"
-  },
   "proxyCheck": {
     "unknownLocation": "Không xác định",
     "locationToast": "Vị trí proxy của bạn là:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "Ghi chú",
     "vpnsHeading": "VPN",
     "createByCountryHeading": "Tạo theo quốc gia"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "Không có loại phát hành nào.",
-    "placeholder": "Chọn loại phát hành...",
-    "stable": "Ổn định",
-    "nightly": "Nightly",
-    "downloaded": "Đã tải xuống",
-    "downloadBrowser": "Tải trình duyệt",
-    "downloading": "Đang tải xuống..."
   },
   "dataTableActionBar": {
     "selected": "Đã chọn {{count}}",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "Proxy đã chọn không hoạt động, nên profile chưa được tạo.",
     "proxyPaymentRequired": "Proxy đã chọn yêu cầu thanh toán (402) — gói đăng ký của nó có thể đã hết hạn — nên profile chưa được tạo.",
     "vpnNotWorking": "VPN đã chọn không hoạt động, nên profile chưa được tạo.",
-    "camoufoxImportDeprecated": "Không còn hỗ trợ nhập profile dựa trên Firefox (Camoufox). Camoufox đang bị ngừng hỗ trợ — vui lòng dùng Wayfern."
+    "camoufoxImportDeprecated": "Không còn hỗ trợ nhập profile dựa trên Firefox. Vui lòng dùng Wayfern."
   },
   "rail": {
     "profiles": "Profile",
@@ -1988,10 +1925,6 @@
     "show": "Hiển thị Donut Browser",
     "quit": "Thoát"
   },
-  "browserSupport": {
-    "endingSoonTitle": "Hỗ trợ trình duyệt sắp kết thúc",
-    "endingSoonDescription": "Hỗ trợ cho các profile sau sẽ bị gỡ bỏ vào ngày 15 tháng 3 năm 2026: {{profiles}}. Vui lòng chuyển sang profile Wayfern."
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "Tự động hóa trình duyệt đã tạm dừng",
     "description": "Tài khoản của bạn tạm thời bị hạn chế các tính năng Pro của trình duyệt, thường do đăng nhập trên nhiều thiết bị cùng lúc. Hãy đăng xuất khỏi các thiết bị khác rồi khởi chạy lại profile để khôi phục."
   },
-  "camoufoxDeprecation": {
-    "title": "Hỗ trợ Camoufox sắp kết thúc",
-    "description": "Hỗ trợ cho các profile Camoufox sẽ kết thúc vào ngày 8 tháng 7 năm 2026. Bạn có một hoặc nhiều profile Camoufox. Hãy chuyển chúng sang Wayfern trước thời điểm đó — sau ngày này, các profile Camoufox có thể ngừng hoạt động.",
-    "acknowledge": "Đã hiểu"
+  "wayfernConfigDialog": {
+    "titleView": "Xem cài đặt vân tay - {{name}} ({{browser}})",
+    "titleConfigure": "Cấu hình cài đặt vân tay - {{name}} ({{browser}})",
+    "invalidFingerprint": "Cấu hình vân tay không hợp lệ",
+    "invalidFingerprintDescription": "Cấu hình vân tay chứa JSON không hợp lệ. Vui lòng kiểm tra cài đặt nâng cao.",
+    "saveFailed": "Lưu cấu hình thất bại",
+    "unknownError": "Đã xảy ra lỗi không xác định"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "Chưa chọn profile Wayfern nào khác"
   }
 }

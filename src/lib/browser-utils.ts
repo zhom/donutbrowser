@@ -3,12 +3,7 @@
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
-import {
-  FaChrome,
-  FaExclamationTriangle,
-  FaFire,
-  FaFirefox,
-} from "react-icons/fa";
+import { FaChrome, FaExclamationTriangle, FaFire } from "react-icons/fa";
 import { LuLock } from "react-icons/lu";
 
 /**
@@ -16,7 +11,6 @@ import { LuLock } from "react-icons/lu";
  */
 export function getBrowserDisplayName(browserType: string): string {
   const browserNames: Record<string, string> = {
-    camoufox: "Camoufox",
     wayfern: "Wayfern",
   };
 
@@ -30,12 +24,9 @@ export function getBrowserDisplayName(browserType: string): string {
  */
 export function getBrowserIcon(browserType: string) {
   switch (browserType) {
-    case "camoufox":
-      return FaFirefox; // Firefox-based anti-detect browser
     case "wayfern":
-      return FaChrome; // Chromium-based anti-detect browser
+      return FaChrome;
     default:
-      // All other browsers get a warning icon
       return FaExclamationTriangle;
   }
 }
@@ -66,13 +57,9 @@ export const getCurrentOS = () => {
 
 export function isCrossOsProfile(profile: {
   host_os?: string;
-  camoufox_config?: { os?: string };
   wayfern_config?: { os?: string };
 }): boolean {
-  const profileOs =
-    profile.host_os ||
-    profile.camoufox_config?.os ||
-    profile.wayfern_config?.os;
+  const profileOs = profile.host_os || profile.wayfern_config?.os;
   if (!profileOs) return false;
   return profileOs !== getCurrentOS();
 }

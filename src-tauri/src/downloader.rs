@@ -41,7 +41,6 @@ pub struct Downloader {
   registry: &'static crate::downloaded_browsers_registry::DownloadedBrowsersRegistry,
   version_service: &'static crate::browser_version_manager::BrowserVersionManager,
   extractor: &'static crate::extraction::Extractor,
-  geoip_downloader: &'static crate::geoip_downloader::GeoIPDownloader,
 }
 
 impl Downloader {
@@ -60,7 +59,6 @@ impl Downloader {
       registry: crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance(),
       version_service: crate::browser_version_manager::BrowserVersionManager::instance(),
       extractor: crate::extraction::Extractor::instance(),
-      geoip_downloader: crate::geoip_downloader::GeoIPDownloader::instance(),
     }
   }
 
@@ -76,7 +74,6 @@ impl Downloader {
       registry: crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance(),
       version_service: crate::browser_version_manager::BrowserVersionManager::instance(),
       extractor: crate::extraction::Extractor::instance(),
-      geoip_downloader: crate::geoip_downloader::GeoIPDownloader::instance(),
     }
   }
 
@@ -127,34 +124,6 @@ impl Downloader {
     _download_info: &DownloadInfo,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     match browser_type {
-      BrowserType::Camoufox => {
-        // For Camoufox, verify the asset exists and find the correct download URL
-        let releases = self
-          .api_client
-          .fetch_camoufox_releases_with_caching(true)
-          .await?;
-
-        let release = releases
-          .iter()
-          .find(|r| r.tag_name == version)
-          .or_else(|| {
-            log::info!("Camoufox: requested version {version} not found, using latest available");
-            releases.first()
-          })
-          .ok_or("No Camoufox releases found".to_string())?;
-
-        // Get platform and architecture info
-        let (os, arch) = Self::get_platform_info();
-
-        // Find the appropriate asset
-        let asset_url = self
-          .find_camoufox_asset(&release.assets, &os, &arch)
-          .ok_or(format!(
-            "No compatible asset found for Camoufox version {version} on {os}/{arch}"
-          ))?;
-
-        Ok(asset_url)
-      }
       BrowserType::Wayfern => {
         // For Wayfern, get the download URL from version.json
         let version_info = self
@@ -212,97 +181,6 @@ impl Downloader {
     };
 
     (os.to_string(), arch.to_string())
-  }
-
-  /// Find the appropriate Camoufox asset for the current platform and architecture
-  fn find_camoufox_asset(
-    &self,
-    assets: &[crate::browser::GithubAsset],
-    os: &str,
-    arch: &str,
-  ) -> Option<String> {
-    // Camoufox asset naming pattern: camoufox-{version}-beta.{number}-{os}.{arch}.zip
-    // Example: camoufox-135.0.1-beta.24-lin.x86_64.zip
-    let (os_name, arch_name) = match (os, arch) {
-      ("windows", "x64") => ("win", "x86_64"),
-      ("windows", "arm64") => ("win", "arm64"),
-      ("linux", "x64") => ("lin", "x86_64"),
-      ("linux", "arm64") => ("lin", "arm64"),
-      ("macos", "x64") => ("mac", "x86_64"),
-      ("macos", "arm64") => ("mac", "arm64"),
-      _ => return None,
-    };
-
-    // Use ends_with for precise matching to avoid false positives
-    // The separator before OS is a dash: -lin.x86_64.zip, -mac.arm64.zip, etc.
-    let pattern = format!("-{os_name}.{arch_name}.zip");
-    let asset = assets.iter().find(|asset| {
-      let name = asset.name.to_lowercase();
-      name.starts_with("camoufox-") && name.ends_with(&pattern)
-    });
-
-    if let Some(asset) = asset {
-      log::info!(
-        "Selected Camoufox asset for {}/{}: {}",
-        os,
-        arch,
-        asset.name
-      );
-      Some(asset.browser_download_url.clone())
-    } else {
-      log::warn!(
-        "No matching Camoufox asset found for {}/{} with pattern '{}'. Available assets: {:?}",
-        os,
-        arch,
-        pattern,
-        assets.iter().map(|a| &a.name).collect::<Vec<_>>()
-      );
-      None
-    }
-  }
-
-  /// Ensure version.json exists in the Camoufox installation directory.
-  /// Creates the file if it doesn't exist, using the version from the tag name.
-  async fn ensure_camoufox_version_json(
-    &self,
-    browser_dir: &Path,
-    version: &str,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // The browser_dir is typically: binaries/camoufox/<version>/
-    // Find the executable directory within it
-    let version_json_locations = vec![
-      browser_dir.join("version.json"),
-      browser_dir.join("camoufox").join("version.json"),
-    ];
-
-    // Check if version.json already exists in any expected location
-    for location in &version_json_locations {
-      if location.exists() {
-        log::info!("version.json already exists at: {}", location.display());
-        return Ok(());
-      }
-    }
-
-    // Parse the Firefox version from the Camoufox version tag
-    // Format: "135.0.1-beta.24" -> Firefox version is "135.0.1" (or just "135.0")
-    let firefox_version = version.split('-').next().unwrap_or(version);
-
-    // Create version.json in the browser directory
-    let version_json_path = browser_dir.join("version.json");
-    let version_data = serde_json::json!({
-      "version": firefox_version
-    });
-
-    let version_json_str = serde_json::to_string_pretty(&version_data)?;
-    tokio::fs::write(&version_json_path, version_json_str).await?;
-
-    log::info!(
-      "Created version.json at {} with Firefox version: {}",
-      version_json_path.display(),
-      firefox_version
-    );
-
-    Ok(())
   }
 
   pub async fn download_browser<R: tauri::Runtime>(
@@ -626,7 +504,7 @@ impl Downloader {
       return Err("Please accept Wayfern Terms and Conditions before downloading browsers".into());
     }
 
-    // For Wayfern/Camoufox, resolve the actual available version from the API
+    // For Wayfern, resolve the actual available version from the API
     let version = if browser_str == "wayfern" {
       match self
         .api_client
@@ -639,21 +517,6 @@ impl Downloader {
             info.version
           );
           info.version
-        }
-        _ => version,
-      }
-    } else if browser_str == "camoufox" {
-      match self
-        .api_client
-        .fetch_camoufox_releases_with_caching(true)
-        .await
-      {
-        Ok(releases) if !releases.is_empty() && releases[0].tag_name != version => {
-          log::info!(
-            "Camoufox: requested {version}, using available {}",
-            releases[0].tag_name
-          );
-          releases[0].tag_name.clone()
         }
         _ => version,
       }
@@ -680,8 +543,6 @@ impl Downloader {
     let browser_type =
       BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
     let browser = create_browser(browser_type.clone());
-
-    // Use injected registry instance
 
     let binaries_dir = crate::app_dirs::binaries_dir();
 
@@ -899,34 +760,6 @@ impl Downloader {
         error_details.push_str("\nDirectory does not exist!");
       }
 
-      // For Camoufox on Linux, provide specific expected files
-      if browser_str == "camoufox" && cfg!(target_os = "linux") {
-        let camoufox_subdir = browser_dir.join("camoufox");
-        error_details.push_str("\nExpected Camoufox executable locations:");
-        error_details.push_str(&format!("\n  {}/camoufox-bin", camoufox_subdir.display()));
-        error_details.push_str(&format!("\n  {}/camoufox", camoufox_subdir.display()));
-
-        if camoufox_subdir.exists() {
-          error_details.push_str(&format!(
-            "\nCamoufox subdirectory exists: {}",
-            camoufox_subdir.display()
-          ));
-          if let Ok(entries) = std::fs::read_dir(&camoufox_subdir) {
-            error_details.push_str("\nFiles in camoufox subdirectory:");
-            for entry in entries.flatten() {
-              let path = entry.path();
-              let file_type = if path.is_dir() { "DIR" } else { "FILE" };
-              error_details.push_str(&format!("\n  {} {}", file_type, path.display()));
-            }
-          }
-        } else {
-          error_details.push_str(&format!(
-            "\nCamoufox subdirectory does not exist: {}",
-            camoufox_subdir.display()
-          ));
-        }
-      }
-
       // Do not delete files on verification failure; keep archive for manual retry.
       let _ = self.registry.remove_browser(&browser_str, &version);
       let _ = self.registry.save();
@@ -976,38 +809,6 @@ impl Downloader {
         if let Err(e) = std::fs::remove_file(&archive_path) {
           log::warn!("Warning: Could not delete archive file after verification: {e}");
         }
-      }
-    }
-
-    // If this is Camoufox, automatically download GeoIP database and create version.json
-    if browser_str == "camoufox" {
-      // Check if GeoIP database is already available
-      if !crate::geoip_downloader::GeoIPDownloader::is_geoip_database_available() {
-        log::info!("Downloading GeoIP database for Camoufox...");
-
-        match self
-          .geoip_downloader
-          .download_geoip_database(app_handle)
-          .await
-        {
-          Ok(_) => {
-            log::info!("GeoIP database downloaded successfully");
-          }
-          Err(e) => {
-            log::error!("Failed to download GeoIP database: {e}");
-            // Don't fail the browser download if GeoIP download fails
-          }
-        }
-      } else {
-        log::info!("GeoIP database already available");
-      }
-
-      // Create version.json if it doesn't exist
-      if let Err(e) = self
-        .ensure_camoufox_version_json(&browser_dir, &version)
-        .await
-      {
-        log::warn!("Failed to create version.json for Camoufox: {e}");
       }
     }
 
@@ -1245,7 +1046,7 @@ mod tests {
     }
 
     // A different browser's in-progress state must be left untouched.
-    let other = "camoufox-9.9.9".to_string();
+    let other = "chromium-9.9.9".to_string();
     {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
       downloading.insert(other.clone());
@@ -1265,12 +1066,13 @@ mod tests {
       );
     }
     assert!(
-      is_downloading("camoufox", "9.9.9"),
+      is_downloading("chromium", "9.9.9"),
       "unrelated browser's download state must be preserved"
     );
 
     // Cleanup so we don't leak global state into other tests.
-    clear_download_state_for_browser("camoufox");
+    clear_download_state_for_browser("wayfern");
+    clear_download_state_for_browser("chromium");
   }
 }
 

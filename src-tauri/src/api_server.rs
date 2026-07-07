@@ -1,5 +1,4 @@
 use crate::browser::ProxySettings;
-use crate::camoufox_manager::CamoufoxConfig;
 use crate::events;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::manager::ProfileManager;
@@ -35,7 +34,6 @@ pub struct ApiProfile {
   pub last_launch: Option<u64>,
   pub release_type: String,
   #[schema(value_type = Object)]
-  pub camoufox_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Vec<String>,
   pub is_running: bool,
@@ -57,7 +55,7 @@ pub struct ApiProfileResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateProfileRequest {
   pub name: String,
-  /// Browser engine. Must be `"wayfern"` (anti-detect Chromium) or `"camoufox"`
+  /// Browser engine. Must be `"wayfern"` (anti-detect Chromium)
   /// (anti-detect Firefox). Any other value (e.g. `"chromium"`) is rejected with
   /// 400.
   pub browser: String,
@@ -70,12 +68,11 @@ pub struct CreateProfileRequest {
   pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
-  /// Camoufox fingerprint/config. Send only when `browser` is `"camoufox"`.
+  /// Wayfern fingerprint/config. Send only when `browser` is `"wayfern"`.
   /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
   /// generated automatically at creation. Provide a `fingerprint` field to
   /// pin a specific one.
   #[schema(value_type = Object)]
-  pub camoufox_config: Option<serde_json::Value>,
   /// Wayfern fingerprint/config. Send only when `browser` is `"wayfern"`.
   /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
   /// generated automatically at creation. Provide a `fingerprint` field to
@@ -98,7 +95,6 @@ pub struct UpdateProfileRequest {
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
   #[schema(value_type = Object)]
-  pub camoufox_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
   pub extension_group_id: Option<String>,
@@ -682,14 +678,6 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
   Ok(server_guard.get_port())
 }
 
-/// Serialize a browser config (camoufox/wayfern) to JSON for an API response.
-/// Viewing a profile's fingerprint is available to every API caller; only
-/// editing it (via `update_profile`) and launching/killing profiles
-/// programmatically require an active paid plan.
-fn config_to_api_value<T: serde::Serialize>(config: Option<&T>) -> Option<serde_json::Value> {
-  serde_json::to_value(config?).ok()
-}
-
 // API Handlers - Profiles
 #[utoipa::path(
   get,
@@ -720,7 +708,6 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type.clone(),
-          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref()),
           group_id: profile.group_id.clone(),
           tags: profile.tags.clone(),
           is_running: profile.process_id.is_some(), // Simple check based on process_id
@@ -774,7 +761,6 @@ async fn get_profile(
             process_id: profile.process_id,
             last_launch: profile.last_launch,
             release_type: profile.release_type.clone(),
-            camoufox_config: config_to_api_value(profile.camoufox_config.as_ref()),
             group_id: profile.group_id.clone(),
             tags: profile.tags.clone(),
             is_running: profile.process_id.is_some(), // Simple check based on process_id
@@ -792,12 +778,12 @@ async fn get_profile(
 
 /// Create a profile.
 ///
-/// - `browser` must be `"wayfern"` or `"camoufox"`; any other value is rejected
+/// - `browser` must be `"wayfern"`; any other value is rejected
 ///   with 400.
 /// - `version` is optional: omit it or pass `"latest"` to use the newest
 ///   already-downloaded version of that browser. The version must be present
 ///   locally (this endpoint does not download new versions); 400 if none is.
-/// - Omitting the matching `wayfern_config`/`camoufox_config`, or passing an
+/// - Omitting the matching `wayfern_config`, or passing an
 ///   empty object `{}`, generates a fresh fingerprint automatically.
 #[utoipa::path(
   post,
@@ -821,16 +807,16 @@ async fn create_profile(
 ) -> Result<Json<ApiProfileResponse>, (StatusCode, String)> {
   let profile_manager = ProfileManager::instance();
 
-  // Only Wayfern and Camoufox profiles are launchable; the rest of the system
+  // Only Wayfern profiles are launchable; the rest of the system
   // (fingerprint generation, launch, run) supports nothing else. Reject anything
   // else up front — otherwise the profile is created with no fingerprint and an
   // unrecognized browser, then crashes with a 500 on /run. Mirrors the MCP
   // create_profile validation.
-  if request.browser != "wayfern" && request.browser != "camoufox" {
+  if request.browser != "wayfern" {
     return Err((
       StatusCode::BAD_REQUEST,
       format!(
-        "Invalid browser \"{}\". Must be \"wayfern\" (anti-detect Chromium) or \"camoufox\" (anti-detect Firefox).",
+        "Invalid browser \"{}\". Must be \"wayfern\" (anti-detect Chromium).",
         request.browser
       ),
     ));
@@ -861,13 +847,6 @@ async fn create_profile(
         }
       }
     }
-  };
-
-  // Parse camoufox config if provided
-  let camoufox_config = if let Some(config) = &request.camoufox_config {
-    serde_json::from_value(config.clone()).ok()
-  } else {
-    None
   };
 
   // Parse wayfern config if provided
@@ -905,7 +884,6 @@ async fn create_profile(
       request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
       request.vpn_id.clone(),
-      camoufox_config,
       wayfern_config,
       request.group_id.clone(),
       false,
@@ -947,7 +925,6 @@ async fn create_profile(
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type,
-          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref()),
           group_id: profile.group_id,
           tags: profile.tags,
           is_running: false,
@@ -1051,30 +1028,6 @@ async fn update_profile(
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
-    }
-  }
-
-  if let Some(camoufox_config) = request.camoufox_config {
-    // Editing a profile's fingerprint config is part of the cross-OS fingerprint
-    // capability (GUI, API, MCP). Viewing it is free; mutating it is not.
-    if !crate::cloud_auth::CLOUD_AUTH
-      .can_use_cross_os_fingerprints()
-      .await
-    {
-      return Err(StatusCode::PAYMENT_REQUIRED);
-    }
-    let config: Result<CamoufoxConfig, _> = serde_json::from_value(camoufox_config);
-    match config {
-      Ok(config) => {
-        if profile_manager
-          .update_camoufox_config(state.app_handle.clone(), &id, config)
-          .await
-          .is_err()
-        {
-          return Err(StatusCode::BAD_REQUEST);
-        }
-      }
-      Err(_) => return Err(StatusCode::BAD_REQUEST),
     }
   }
 
@@ -2444,7 +2397,7 @@ mod tests {
 
   #[test]
   fn create_profile_request_allows_omitting_version_and_configs() {
-    // Minimal body: no version, no wayfern_config/camoufox_config. Must
+    // Minimal body: no version, no wayfern_config. Must
     // deserialize (version resolves to latest-downloaded at the handler; an
     // absent config triggers fresh-fingerprint generation).
     let json = r#"{"name": "p", "browser": "wayfern"}"#;
@@ -2453,16 +2406,14 @@ mod tests {
     assert_eq!(parsed.browser, "wayfern");
     assert!(parsed.version.is_none());
     assert!(parsed.wayfern_config.is_none());
-    assert!(parsed.camoufox_config.is_none());
   }
 
   #[test]
   fn create_profile_browser_validation_matches_supported_engines() {
     // The handler rejects anything that isn't a launchable engine; this is the
     // same predicate it uses, kept in lockstep with MCP's create_profile.
-    let is_valid = |b: &str| b == "wayfern" || b == "camoufox";
+    let is_valid = |b: &str| b == "wayfern";
     assert!(is_valid("wayfern"));
-    assert!(is_valid("camoufox"));
     assert!(!is_valid("chromium"));
     assert!(!is_valid("firefox"));
     assert!(!is_valid(""));

@@ -16,8 +16,7 @@ pub struct ProxyConfig {
   pub bypass_rules: Vec<String>,
   #[serde(default)]
   pub blocklist_file: Option<String>,
-  /// Protocol the local worker serves to the browser: "http" (default, used
-  /// by Camoufox/Firefox) or "socks5" (used by Wayfern/Chromium so QUIC and
+  /// Protocol the local worker serves to the browser: "socks5" (Wayfern/Chromium so QUIC and
   /// WebRTC UDP can be proxied without leaking the real IP). Independent of
   /// `upstream_url`, which is the real upstream proxy/VPN this worker dials.
   #[serde(default)]

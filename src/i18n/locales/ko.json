@@ -340,7 +340,6 @@
       "title": "안티-디텍트 브라우저",
       "description": "안티-디텍트 기능을 갖춘 브라우저를 선택하세요",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "안티-디텍트 브라우저"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "크로미움",
     "chromiumSubtitle": "Wayfern 기반",
-    "firefoxLabel": "파이어폭스",
-    "firefoxSubtitle": "Camoufox 기반",
-    "camoufoxWarning": "파이어폭스(Camoufox)는 제3자 조직에서 유지 관리합니다. 프로덕션 용도로는 크로미움을 사용하세요.",
     "platformUnavailable": "{{browser}}는 아직 이 플랫폼에서 사용할 수 없습니다.",
     "passwordProtect": {
       "label": "이 프로필을 비밀번호로 보호",
@@ -749,42 +745,6 @@
     "error": "프로필 가져오기 실패"
   },
   "config": {
-    "camoufox": {
-      "title": "Camoufox 구성",
-      "fingerprint": {
-        "title": "핑거프린트",
-        "randomize": "실행 시 무작위화",
-        "randomizeDescription": "브라우저가 실행될 때마다 새 핑거프린트를 생성합니다.",
-        "osCpuPlaceholder": "예: Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "예: llvmpipe 또는 유사"
-      },
-      "os": {
-        "title": "운영 체제",
-        "description": "핑거프린트 생성을 위해 에뮬레이트할 운영 체제입니다.",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "화면 크기",
-        "minWidth": "최소 너비",
-        "maxWidth": "최대 너비",
-        "minHeight": "최소 높이",
-        "maxHeight": "최대 높이"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "자동 (프록시 기반)",
-        "manual": "수동",
-        "disabled": "사용 안 함"
-      },
-      "blocking": {
-        "title": "차단",
-        "images": "이미지 차단",
-        "webrtc": "WebRTC 차단",
-        "webgl": "WebGL 차단"
-      }
-    },
     "wayfern": {
       "title": "Wayfern 구성",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "쿠키를 복사할 원본 프로필 선택",
       "running": "(실행 중)",
       "targetProfiles": "대상 프로필 ({{count}})",
-      "noOtherTargets": "선택된 다른 Wayfern/Camoufox 프로필이 없습니다",
+      "noOtherTargets": "선택된 다른 Wayfern 프로필이 없습니다",
       "selectSourceFirst": "먼저 원본 프로필을 선택하세요",
       "selectionStatus": "({{total}}개 중 {{selected}}개 선택됨)",
       "searchPlaceholder": "도메인 또는 쿠키 검색...",
@@ -968,7 +928,6 @@
     "serverError": "서버 오류. 나중에 다시 시도하세요.",
     "unknownError": "알 수 없는 오류가 발생했습니다. 다시 시도하세요.",
     "noProfilesForUrl": "사용할 수 있는 프로필이 없습니다. URL을 열기 전에 먼저 프로필을 생성하세요.",
-    "updateCamoufoxConfigFailed": "Camoufox 구성 업데이트 실패: {{error}}",
     "updateWayfernConfigFailed": "Wayfern 구성 업데이트 실패: {{error}}",
     "createProfileFailed": "프로필 생성 실패: {{error}}",
     "launchBrowserFailed": "브라우저 실행 실패: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "프로필 이름 변경 실패: {{error}}",
     "killBrowserFailed": "브라우저 종료 실패: {{error}}",
     "deleteSelectedProfilesFailed": "선택한 프로필 삭제 실패: {{error}}",
-    "cookieCopyUnsupportedBrowser": "쿠키 복사는 Wayfern 및 Camoufox 프로필에서만 작동합니다",
+    "cookieCopyUnsupportedBrowser": "쿠키 복사는 Wayfern 프로필에서만 작동합니다",
     "updateSyncSettingsFailed": "동기화 설정 업데이트 실패",
     "cloneProfileFailed": "프로필 복제 실패: {{error}}",
     "loadSupportedBrowsersFailed": "지원되는 브라우저 불러오기 실패",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "프로필 비밀번호 설정 실패: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "사용자 지정 창 크기",
     "windowResizeDescription": "브라우저 창 크기를 변경하면 브라우저 정보가 스푸핑된 것으로 웹사이트에서 감지될 가능성이 높아질 수 있습니다.",
-    "windowResizeCamoufoxTitle": "Camoufox에서 잠긴 뷰포트",
-    "windowResizeCamoufoxDescription": "Camoufox는 안티-핑거프린팅을 위해 뷰포트를 스푸핑된 화면 크기로 잠급니다. 창 크기를 조정하면 잘리거나 회색 영역이 발생할 수 있습니다. 이는 예상된 동작입니다.",
     "dontShowAgain": "다시 표시하지 않음",
     "continue": "계속",
     "cancel": "취소"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "비밀번호를 변경하기 전에 프로필을 중지하세요."
     },
     "fingerprint": {
-      "notSupported": "핑거프린트 편집은 Camoufox 및 Wayfern 프로필에서만 사용할 수 있습니다.",
+      "notSupported": "핑거프린트 편집은 Wayfern 프로필에서만 사용할 수 있습니다.",
       "lockedTitle": "핑거프린트 보기 및 편집은 Pro 기능입니다",
       "lockedDescription": "핑거프린트 보호는 모든 요금제에 포함되어 있습니다. 프로필의 핑거프린트 값을 보고 편집하려면 활성 유료 요금제가 필요합니다."
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "확장 프로그램 그룹",
     "compatibility": {
       "label": "호환성",
-      "chromium": "크로미움",
-      "firefox": "파이어폭스",
-      "both": "크로미움 및 파이어폭스"
+      "chromium": "크로미움"
     },
     "selectedFile": "선택된 파일",
     "namePlaceholder": "확장 프로그램 이름",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ 보냄: ",
     "tooltipReceived": "↓ 받음: "
   },
-  "camoufoxDialog": {
-    "titleView": "핑거프린트 설정 보기 - {{name}} ({{browser}})",
-    "titleConfigure": "핑거프린트 설정 구성 - {{name}} ({{browser}})",
-    "invalidFingerprint": "잘못된 핑거프린트 구성",
-    "invalidFingerprintDescription": "핑거프린트 구성에 잘못된 JSON이 포함되어 있습니다. 고급 설정을 확인하세요.",
-    "saveFailed": "구성 저장 실패",
-    "unknownError": "알 수 없는 오류가 발생했습니다"
-  },
   "proxyCheck": {
     "unknownLocation": "알 수 없음",
     "locationToast": "프록시 위치:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "메모",
     "vpnsHeading": "VPN",
     "createByCountryHeading": "국가별 생성"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "사용 가능한 릴리스 유형이 없습니다.",
-    "placeholder": "릴리스 유형 선택...",
-    "stable": "안정",
-    "nightly": "나이틀리",
-    "downloaded": "다운로드됨",
-    "downloadBrowser": "브라우저 다운로드",
-    "downloading": "다운로드 중..."
   },
   "dataTableActionBar": {
     "selected": "{{count}}개 선택됨",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "선택한 프록시가 작동하지 않아 프로필이 생성되지 않았습니다.",
     "proxyPaymentRequired": "선택한 프록시는 결제가 필요합니다(402). 구독이 만료되었을 수 있어 프로필이 생성되지 않았습니다.",
     "vpnNotWorking": "선택한 VPN이 작동하지 않아 프로필이 생성되지 않았습니다.",
-    "camoufoxImportDeprecated": "Firefox 기반(Camoufox) 프로필 가져오기는 더 이상 지원되지 않습니다. Camoufox는 지원 종료 예정입니다. 대신 Wayfern을 사용하세요."
+    "camoufoxImportDeprecated": "Firefox 기반 프로필 가져오기는 더 이상 지원되지 않습니다. Wayfern을 사용하세요."
   },
   "rail": {
     "profiles": "프로필",
@@ -1988,10 +1925,6 @@
     "show": "Donut Browser 표시",
     "quit": "종료"
   },
-  "browserSupport": {
-    "endingSoonTitle": "브라우저 지원이 곧 종료됩니다",
-    "endingSoonDescription": "다음 프로필에 대한 지원이 2026년 3월 15일에 제거됩니다: {{profiles}}. Wayfern 프로필로 이전하세요."
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "브라우저 자동화가 일시 중지됨",
     "description": "보통 여러 기기에서 동시에 로그인하여 계정의 Pro 브라우저 기능이 일시적으로 제한되었습니다. 다른 기기에서 로그아웃한 후 프로필을 다시 실행하면 복원됩니다."
   },
-  "camoufoxDeprecation": {
-    "title": "Camoufox 지원이 종료됩니다",
-    "description": "Camoufox 프로필 지원이 2026년 7월 8일에 종료됩니다. Camoufox 프로필이 하나 이상 있습니다. 그 전에 Wayfern으로 이전하세요. 이후에는 Camoufox 프로필이 작동하지 않을 수 있습니다.",
-    "acknowledge": "확인"
+  "wayfernConfigDialog": {
+    "titleView": "핑거프린트 설정 보기 - {{name}} ({{browser}})",
+    "titleConfigure": "핑거프린트 설정 구성 - {{name}} ({{browser}})",
+    "invalidFingerprint": "잘못된 핑거프린트 구성",
+    "invalidFingerprintDescription": "핑거프린트 구성에 잘못된 JSON이 포함되어 있습니다. 고급 설정을 확인하세요.",
+    "saveFailed": "구성 저장 실패",
+    "unknownError": "알 수 없는 오류가 발생했습니다"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "선택된 다른 Wayfern 프로필이 없습니다"
   }
 }

@@ -41,15 +41,12 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: browser
+  - type: input
+    id: wayfern_version
     attributes:
-      label: Which browser is affected?
-      options:
-        - Wayfern
-        - Camoufox
-        - Both
-        - Not browser-specific
+      label: Wayfern version
+      description: Settings → About, or the version shown when creating a profile. Use "unknown" if not browser-specific.
+      placeholder: e.g. 138.0.7204.50 or unknown
     validations:
       required: true
 

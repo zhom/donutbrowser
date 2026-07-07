@@ -13,7 +13,6 @@ pub struct UpdateNotification {
   pub current_version: String,
   pub new_version: String,
   pub affected_profiles: Vec<String>,
-  pub is_stable_update: bool,
   pub timestamp: u64,
 }
 
@@ -231,18 +230,10 @@ impl AutoUpdater {
     available_versions: &[BrowserVersionInfo],
   ) -> Result<Option<UpdateNotification>, Box<dyn std::error::Error + Send + Sync>> {
     let current_version = &profile.version;
-    let is_current_nightly =
-      crate::api_client::is_browser_version_nightly(&profile.browser, current_version, None);
 
-    // Find the best available update
     let best_update = available_versions
       .iter()
-      .filter(|v| {
-        // Only consider versions newer than current
-        self.is_version_newer(&v.version, current_version)
-          && crate::api_client::is_browser_version_nightly(&profile.browser, &v.version, None)
-            == is_current_nightly
-      })
+      .filter(|v| self.is_version_newer(&v.version, current_version))
       .max_by(|a, b| self.compare_versions(&a.version, &b.version));
 
     if let Some(update_version) = best_update {
@@ -255,7 +246,6 @@ impl AutoUpdater {
         current_version: current_version.clone(),
         new_version: update_version.version.clone(),
         affected_profiles: vec![profile.name.clone()],
-        is_stable_update: !update_version.is_prerelease,
         timestamp: std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
           .unwrap()
@@ -291,12 +281,7 @@ impl AutoUpdater {
 
     let mut result: Vec<UpdateNotification> = grouped.into_values().collect();
 
-    // Sort by priority: stable updates first, then by timestamp
-    result.sort_by(|a, b| match (a.is_stable_update, b.is_stable_update) {
-      (true, false) => std::cmp::Ordering::Less,
-      (false, true) => std::cmp::Ordering::Greater,
-      _ => b.timestamp.cmp(&a.timestamp),
-    });
+    result.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
     result
   }
@@ -338,7 +323,6 @@ impl AutoUpdater {
             current_version: profile.version.clone(),
             new_version: new_version.to_string(),
             affected_profiles: vec![profile.name.clone()],
-            is_stable_update: true,
             timestamp: std::time::SystemTime::now()
               .duration_since(std::time::UNIX_EPOCH)
               .unwrap_or_default()
@@ -510,15 +494,6 @@ impl AutoUpdater {
       return None;
     }
 
-    // Only update stable->stable and nightly->nightly
-    let is_profile_nightly =
-      crate::api_client::is_browser_version_nightly(&profile.browser, &profile.version, None);
-    let is_latest_nightly =
-      crate::api_client::is_browser_version_nightly(&profile.browser, &latest, None);
-    if is_profile_nightly != is_latest_nightly {
-      return None;
-    }
-
     match self
       .profile_manager
       .update_profile_version(app_handle, &profile.id.to_string(), &latest)
@@ -592,15 +567,6 @@ impl AutoUpdater {
         }
 
         if !self.is_version_newer(&latest_version, &profile.version) {
-          continue;
-        }
-
-        // Only update stable->stable and nightly->nightly
-        let is_profile_nightly =
-          crate::api_client::is_browser_version_nightly(&browser, &profile.version, None);
-        let is_latest_nightly =
-          crate::api_client::is_browser_version_nightly(&browser, &latest_version, None);
-        if is_profile_nightly != is_latest_nightly {
           continue;
         }
 
@@ -686,7 +652,6 @@ mod tests {
       launch_hook: None,
       last_launch: None,
       release_type: "stable".to_string(),
-      camoufox_config: None,
       wayfern_config: None,
       group_id: None,
       tags: Vec::new(),
@@ -708,10 +673,9 @@ mod tests {
     }
   }
 
-  fn create_test_version_info(version: &str, is_prerelease: bool) -> BrowserVersionInfo {
+  fn create_test_version_info(version: &str) -> BrowserVersionInfo {
     BrowserVersionInfo {
       version: version.to_string(),
-      is_prerelease,
       date: "2024-01-01".to_string(),
     }
   }
@@ -753,111 +717,26 @@ mod tests {
   }
 
   #[test]
-  fn test_camoufox_beta_version_comparison() {
+  fn test_check_profile_update_picks_newer_wayfern_version() {
     let updater = AutoUpdater::instance();
-
-    // Test the exact user-reported scenario: 135.0.1beta24 vs 135.0beta22
-    assert!(
-      updater.is_version_newer("135.0.1beta24", "135.0beta22"),
-      "135.0.1beta24 should be newer than 135.0beta22"
-    );
-
-    assert_eq!(
-      updater.compare_versions("135.0.1beta24", "135.0beta22"),
-      std::cmp::Ordering::Greater,
-      "135.0.1beta24 should compare as greater than 135.0beta22"
-    );
-
-    // Test other camoufox beta version combinations
-    assert!(
-      updater.is_version_newer("135.0.5beta24", "135.0.5beta22"),
-      "135.0.5beta24 should be newer than 135.0.5beta22"
-    );
-
-    assert!(
-      updater.is_version_newer("135.0.1beta1", "135.0beta1"),
-      "135.0.1beta1 should be newer than 135.0beta1 due to patch version"
-    );
-
-    // Test that older versions are not considered newer
-    assert!(
-      !updater.is_version_newer("135.0beta22", "135.0.1beta24"),
-      "135.0beta22 should NOT be newer than 135.0.1beta24"
-    );
-  }
-
-  #[test]
-  fn test_beta_version_ordering_comprehensive() {
-    let updater = AutoUpdater::instance();
-
-    // Test various beta version patterns that could appear in camoufox
-    let test_cases = vec![
-      ("135.0.1beta24", "135.0beta22", true),   // User reported case
-      ("135.0.5beta24", "135.0.5beta22", true), // Same patch, different beta
-      ("135.1beta1", "135.0beta99", true),      // Higher minor beats beta number
-      ("136.0beta1", "135.9.9beta99", true),    // Higher major beats everything
-      ("135.0.1beta1", "135.0beta1", true),     // Patch version matters
-      ("135.0beta22", "135.0.1beta24", false),  // Reverse of user case
-    ];
-
-    for (newer, older, should_be_newer) in test_cases {
-      let result = updater.is_version_newer(newer, older);
-      assert_eq!(
-        result,
-        should_be_newer,
-        "Expected {} {} {} but got {}",
-        newer,
-        if should_be_newer { ">" } else { "<=" },
-        older,
-        if result { "true" } else { "false" }
-      );
-    }
-  }
-
-  #[test]
-  fn test_check_profile_update_stable_to_stable() {
-    let updater = AutoUpdater::instance();
-    let profile = create_test_profile("test", "firefox", "1.0.0");
+    let profile = create_test_profile("test", "wayfern", "138.0.7204.49");
     let versions = vec![
-      create_test_version_info("1.0.1", false), // stable, newer
-      create_test_version_info("1.1.0-alpha", true), // alpha, should be ignored
-      create_test_version_info("0.9.0", false), // stable, older
+      create_test_version_info("138.0.7204.50"),
+      create_test_version_info("138.0.7204.48"),
     ];
 
     let result = updater.check_profile_update(&profile, &versions).unwrap();
     assert!(result.is_some());
-
-    let update = result.unwrap();
-    assert_eq!(update.new_version, "1.0.1");
-    assert!(update.is_stable_update);
-  }
-
-  #[test]
-  fn test_check_profile_update_alpha_to_alpha() {
-    let updater = AutoUpdater::instance();
-    let profile = create_test_profile("test", "firefox", "1.0.0-alpha");
-    let versions = vec![
-      create_test_version_info("1.0.1", false), // stable, should be included
-      create_test_version_info("1.1.0-alpha", true), // alpha, newer
-      create_test_version_info("0.9.0-alpha", true), // alpha, older
-    ];
-
-    let result = updater.check_profile_update(&profile, &versions).unwrap();
-    assert!(result.is_some());
-
-    let update = result.unwrap();
-    // Should pick the newest version (alpha user can upgrade to stable or newer alpha)
-    assert_eq!(update.new_version, "1.1.0-alpha");
-    assert!(!update.is_stable_update);
+    assert_eq!(result.unwrap().new_version, "138.0.7204.50");
   }
 
   #[test]
   fn test_check_profile_update_no_update_available() {
     let updater = AutoUpdater::instance();
-    let profile = create_test_profile("test", "firefox", "1.0.0");
+    let profile = create_test_profile("test", "wayfern", "138.0.7204.50");
     let versions = vec![
-      create_test_version_info("0.9.0", false), // older
-      create_test_version_info("1.0.0", false), // same version
+      create_test_version_info("138.0.7204.49"),
+      create_test_version_info("138.0.7204.50"),
     ];
 
     let result = updater.check_profile_update(&profile, &versions).unwrap();
@@ -869,50 +748,27 @@ mod tests {
     let updater = AutoUpdater::instance();
     let notifications = vec![
       UpdateNotification {
-        id: "firefox_1.0.0_to_1.1.0_profile1".to_string(),
-        browser: "firefox".to_string(),
-        current_version: "1.0.0".to_string(),
-        new_version: "1.1.0".to_string(),
+        id: "wayfern_138.0.7204.49_to_138.0.7204.50_profile1".to_string(),
+        browser: "wayfern".to_string(),
+        current_version: "138.0.7204.49".to_string(),
+        new_version: "138.0.7204.50".to_string(),
         affected_profiles: vec!["profile1".to_string()],
-        is_stable_update: true,
         timestamp: 1000,
       },
       UpdateNotification {
-        id: "firefox_1.0.0_to_1.1.0_profile2".to_string(),
-        browser: "firefox".to_string(),
-        current_version: "1.0.0".to_string(),
-        new_version: "1.1.0".to_string(),
+        id: "wayfern_138.0.7204.49_to_138.0.7204.50_profile2".to_string(),
+        browser: "wayfern".to_string(),
+        current_version: "138.0.7204.49".to_string(),
+        new_version: "138.0.7204.50".to_string(),
         affected_profiles: vec!["profile2".to_string()],
-        is_stable_update: true,
         timestamp: 1001,
-      },
-      UpdateNotification {
-        id: "chrome_1.0.0_to_1.1.0-alpha".to_string(),
-        browser: "chrome".to_string(),
-        current_version: "1.0.0".to_string(),
-        new_version: "1.1.0-alpha".to_string(),
-        affected_profiles: vec!["profile3".to_string()],
-        is_stable_update: false,
-        timestamp: 1002,
       },
     ];
 
     let grouped = updater.group_update_notifications(notifications);
 
-    assert_eq!(grouped.len(), 2);
-
-    // Find the Firefox notification
-    let firefox_notification = grouped.iter().find(|n| n.browser == "firefox").unwrap();
-    assert_eq!(firefox_notification.affected_profiles.len(), 2);
-    assert!(firefox_notification
-      .affected_profiles
-      .contains(&"profile1".to_string()));
-    assert!(firefox_notification
-      .affected_profiles
-      .contains(&"profile2".to_string()));
-
-    // Stable updates should come first
-    assert!(grouped[0].is_stable_update);
+    assert_eq!(grouped.len(), 1);
+    assert_eq!(grouped[0].affected_profiles.len(), 2);
   }
 
   #[test]
@@ -956,7 +812,6 @@ mod tests {
       current_version: "1.0.0".to_string(),
       new_version: "1.1.0".to_string(),
       affected_profiles: vec!["profile1".to_string()],
-      is_stable_update: true,
       timestamp: 1000,
     });
 
@@ -1094,7 +949,6 @@ mod tests {
       current_version: "1.0.0".to_string(),
       new_version: "1.1.0".to_string(),
       affected_profiles: vec!["profile1".to_string()],
-      is_stable_update: true,
       timestamp: 1000,
     });
 

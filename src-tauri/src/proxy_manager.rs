@@ -1487,9 +1487,8 @@ impl ProxyManager {
     profile_id: Option<&str>,
     bypass_rules: Vec<String>,
     blocklist_file: Option<String>,
-    // Protocol the local worker serves the browser: "http" (Camoufox) or
-    // "socks5" (Wayfern). Reflected in the returned ProxySettings.proxy_type
-    // so the caller formats the right local proxy URL scheme.
+    // Protocol the local worker serves the browser: "socks5" (Wayfern). Reflected in
+    // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
     local_protocol: &str,
   ) -> Result<ProxySettings, String> {
     if let Some(name) = profile_id {

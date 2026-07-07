@@ -22,8 +22,6 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
-pub mod camoufox;
-mod camoufox_manager;
 mod default_browser;
 pub mod dns_blocklist;
 mod downloaded_browsers_registry;
@@ -32,6 +30,7 @@ mod ephemeral_dirs;
 mod extension_manager;
 mod extraction;
 mod geoip_downloader;
+mod geolocation;
 mod group_manager;
 mod human_typing;
 mod ip_utils;
@@ -69,10 +68,9 @@ use browser_runner::{
 
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
-  list_browser_profiles, rename_profile, update_camoufox_config, update_profile_dns_blocklist,
-  update_profile_launch_hook, update_profile_note, update_profile_proxy,
-  update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_profile_window_color, update_wayfern_config,
+  list_browser_profiles, rename_profile, update_profile_dns_blocklist, update_profile_launch_hook,
+  update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
+  update_profile_tags, update_profile_vpn, update_profile_window_color, update_wayfern_config,
 };
 
 use profile::password::{
@@ -1188,7 +1186,6 @@ async fn generate_sample_fingerprint(
     launch_hook: None,
     last_launch: None,
     release_type: "stable".to_string(),
-    camoufox_config: None,
     wayfern_config: None,
     group_id: None,
     tags: Vec::new(),
@@ -1209,15 +1206,7 @@ async fn generate_sample_fingerprint(
     updated_at: None,
   };
 
-  if browser == "camoufox" {
-    let config: crate::camoufox_manager::CamoufoxConfig =
-      serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse config: {e}"))?;
-    let manager = crate::camoufox_manager::CamoufoxManager::instance();
-    manager
-      .generate_fingerprint_config(&app_handle, &temp_profile, &config)
-      .await
-      .map_err(|e| format!("Failed to generate fingerprint: {e}"))
-  } else if browser == "wayfern" {
+  if browser == "wayfern" {
     let config: crate::wayfern_manager::WayfernConfig =
       serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse config: {e}"))?;
     let manager = crate::wayfern_manager::WayfernManager::instance();
@@ -1849,26 +1838,6 @@ pub fn run() {
         }
       });
 
-      // Start Camoufox cleanup task
-      let _app_handle_cleanup = app.handle().clone();
-      tauri::async_runtime::spawn(async move {
-        let camoufox_manager = crate::camoufox_manager::CamoufoxManager::instance();
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
-
-        loop {
-          interval.tick().await;
-
-          match camoufox_manager.cleanup_dead_instances().await {
-            Ok(_) => {
-              // Cleanup completed silently
-            }
-            Err(e) => {
-              log::error!("Error during Camoufox cleanup: {e}");
-            }
-          }
-        }
-      });
-
       // Check and download GeoIP database at startup if needed
       let app_handle_geoip = app.handle().clone();
       tauri::async_runtime::spawn(async move {
@@ -1879,7 +1848,7 @@ pub fn run() {
         match geoip_downloader.check_missing_geoip_database() {
           Ok(true) => {
             log::info!(
-              "GeoIP database is missing for Camoufox profiles, downloading at startup..."
+              "GeoIP database is missing for Wayfern profiles, downloading at startup..."
             );
             let geoip_downloader = GeoIPDownloader::instance();
             if let Err(e) = geoip_downloader
@@ -1892,7 +1861,7 @@ pub fn run() {
             }
           }
           Ok(false) => {
-            // No Camoufox profiles or GeoIP database already available
+            // No Wayfern profiles or GeoIP database already available
           }
           Err(e) => {
             log::error!("Failed to check GeoIP database status at startup: {e}");
@@ -2301,7 +2270,6 @@ pub fn run() {
       import_proxies_json,
       parse_txt_proxies,
       import_proxies_from_parsed,
-      update_camoufox_config,
       update_wayfern_config,
       generate_sample_fingerprint,
       get_profile_groups,

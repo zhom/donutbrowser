@@ -340,7 +340,6 @@
       "title": "Navegador Anti-Detección",
       "description": "Elige un navegador con capacidades anti-detección",
       "chromium": "Wayfern",
-      "firefox": "Camoufox",
       "badge": "Navegador Anti-Detección"
     },
     "regular": {
@@ -376,9 +375,6 @@
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Impulsado por Wayfern",
-    "firefoxLabel": "Firefox",
-    "firefoxSubtitle": "Impulsado por Camoufox",
-    "camoufoxWarning": "Firefox (Camoufox) está mantenido por una organización de terceros. Para uso en producción, utilice Chromium.",
     "platformUnavailable": "{{browser}} aún no está disponible en tu plataforma.",
     "passwordProtect": {
       "label": "Proteger este perfil con contraseña",
@@ -749,42 +745,6 @@
     "error": "Error al importar perfil"
   },
   "config": {
-    "camoufox": {
-      "title": "Configuración de Camoufox",
-      "fingerprint": {
-        "title": "Huella Digital",
-        "randomize": "Aleatorizar al Iniciar",
-        "randomizeDescription": "Genera una nueva huella digital cada vez que se inicia el navegador.",
-        "osCpuPlaceholder": "p. ej., Intel Mac OS X 10.15",
-        "webglRendererPlaceholder": "p. ej., llvmpipe, o similar"
-      },
-      "os": {
-        "title": "Sistema Operativo",
-        "description": "El sistema operativo a emular para la generación de huellas digitales.",
-        "windows": "Windows",
-        "macos": "macOS",
-        "linux": "Linux"
-      },
-      "screen": {
-        "title": "Tamaño de Pantalla",
-        "minWidth": "Ancho Mín",
-        "maxWidth": "Ancho Máx",
-        "minHeight": "Alto Mín",
-        "maxHeight": "Alto Máx"
-      },
-      "geoip": {
-        "title": "GeoIP",
-        "auto": "Automático (basado en proxy)",
-        "manual": "Manual",
-        "disabled": "Deshabilitado"
-      },
-      "blocking": {
-        "title": "Bloqueo",
-        "images": "Bloquear Imágenes",
-        "webrtc": "Bloquear WebRTC",
-        "webgl": "Bloquear WebGL"
-      }
-    },
     "wayfern": {
       "title": "Configuración de Wayfern",
       "fingerprint": {
@@ -839,7 +799,7 @@
       "sourcePlaceholder": "Selecciona un perfil del que copiar cookies",
       "running": "(en ejecución)",
       "targetProfiles": "Perfiles de destino ({{count}})",
-      "noOtherTargets": "No hay otros perfiles Wayfern/Camoufox seleccionados",
+      "noOtherTargets": "No hay otros perfiles Wayfern seleccionados",
       "selectSourceFirst": "Selecciona primero un perfil de origen",
       "selectionStatus": "({{selected}} de {{total}} seleccionadas)",
       "searchPlaceholder": "Buscar dominios o cookies...",
@@ -968,7 +928,6 @@
     "serverError": "Error del servidor. Por favor intenta de nuevo más tarde.",
     "unknownError": "Ocurrió un error desconocido. Por favor intenta de nuevo.",
     "noProfilesForUrl": "No hay perfiles disponibles. Crea un perfil antes de abrir URLs.",
-    "updateCamoufoxConfigFailed": "Error al actualizar la configuración de camoufox: {{error}}",
     "updateWayfernConfigFailed": "Error al actualizar la configuración de wayfern: {{error}}",
     "createProfileFailed": "Error al crear el perfil: {{error}}",
     "launchBrowserFailed": "Error al iniciar el navegador: {{error}}",
@@ -977,7 +936,7 @@
     "renameProfileFailed": "Error al renombrar el perfil: {{error}}",
     "killBrowserFailed": "Error al detener el navegador: {{error}}",
     "deleteSelectedProfilesFailed": "Error al eliminar los perfiles seleccionados: {{error}}",
-    "cookieCopyUnsupportedBrowser": "La copia de cookies sólo funciona con perfiles Wayfern y Camoufox",
+    "cookieCopyUnsupportedBrowser": "La copia de cookies solo funciona con perfiles Wayfern",
     "updateSyncSettingsFailed": "Error al actualizar los ajustes de sincronización",
     "cloneProfileFailed": "Error al clonar el perfil: {{error}}",
     "loadSupportedBrowsersFailed": "Error al cargar los navegadores compatibles",
@@ -994,7 +953,6 @@
     "setProfilePasswordFailed": "Error al establecer la contraseña del perfil: {{error}}"
   },
   "browser": {
-    "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },
   "fingerprint": {
@@ -1105,8 +1063,6 @@
   "warnings": {
     "windowResizeTitle": "Dimensiones de ventana personalizadas",
     "windowResizeDescription": "Cambiar las dimensiones de la ventana del navegador puede aumentar la posibilidad de que los sitios web detecten que la información del navegador está falsificada.",
-    "windowResizeCamoufoxTitle": "Viewport bloqueado por Camoufox",
-    "windowResizeCamoufoxDescription": "Camoufox bloquea el viewport a las dimensiones de pantalla falsificadas para anti-fingerprinting. Redimensionar la ventana puede causar áreas recortadas o grises. Este es el comportamiento esperado.",
     "dontShowAgain": "No mostrar esto de nuevo",
     "continue": "Continuar",
     "cancel": "Cancelar"
@@ -1237,7 +1193,7 @@
       "cannotWhileRunning": "Detén el perfil antes de cambiar su contraseña."
     },
     "fingerprint": {
-      "notSupported": "La edición de huellas digitales solo está disponible para perfiles Camoufox y Wayfern.",
+      "notSupported": "La edición de huellas digitales solo está disponible para perfiles Wayfern.",
       "lockedTitle": "Ver y editar la huella digital es una función Pro",
       "lockedDescription": "La protección de huella digital está incluida en todos los planes. Ver y editar los valores de la huella digital de un perfil es lo que requiere un plan de pago activo."
     },
@@ -1267,9 +1223,7 @@
     "extensionGroup": "Grupo de Extensiones",
     "compatibility": {
       "label": "Compatibilidad",
-      "chromium": "Chromium",
-      "firefox": "Firefox",
-      "both": "Chromium y Firefox"
+      "chromium": "Chromium"
     },
     "selectedFile": "Archivo seleccionado",
     "namePlaceholder": "Nombre de la extensión",
@@ -1656,14 +1610,6 @@
     "tooltipSent": "↑ Enviado: ",
     "tooltipReceived": "↓ Recibido: "
   },
-  "camoufoxDialog": {
-    "titleView": "Ver configuración de huella - {{name}} ({{browser}})",
-    "titleConfigure": "Configurar huella - {{name}} ({{browser}})",
-    "invalidFingerprint": "Configuración de huella inválida",
-    "invalidFingerprintDescription": "La configuración de huella contiene JSON inválido. Revisa la configuración avanzada.",
-    "saveFailed": "Error al guardar la configuración",
-    "unknownError": "Ocurrió un error desconocido"
-  },
   "proxyCheck": {
     "unknownLocation": "Desconocido",
     "locationToast": "La ubicación de tu proxy es:",
@@ -1702,15 +1648,6 @@
     "noteHeader": "Nota",
     "vpnsHeading": "VPN",
     "createByCountryHeading": "Crear por país"
-  },
-  "releaseTypeSelector": {
-    "noReleaseTypes": "No hay tipos de versión disponibles.",
-    "placeholder": "Selecciona el tipo de versión...",
-    "stable": "Estable",
-    "nightly": "Nightly",
-    "downloaded": "Descargado",
-    "downloadBrowser": "Descargar navegador",
-    "downloading": "Descargando..."
   },
   "dataTableActionBar": {
     "selected": "{{count}} seleccionados",
@@ -1861,7 +1798,7 @@
     "proxyNotWorking": "El proxy seleccionado no funciona, por lo que no se creó el perfil.",
     "proxyPaymentRequired": "El proxy seleccionado requiere pago (402) —su suscripción puede haber vencido— por lo que no se creó el perfil.",
     "vpnNotWorking": "La VPN seleccionada no funciona, por lo que no se creó el perfil.",
-    "camoufoxImportDeprecated": "La importación de perfiles basados en Firefox (Camoufox) ya no es compatible. Camoufox está en desuso; usa Wayfern en su lugar."
+    "camoufoxImportDeprecated": "La importación de perfiles basados en Firefox ya no está soportada. Utilice Wayfern en su lugar."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -1988,10 +1925,6 @@
     "show": "Mostrar Donut Browser",
     "quit": "Salir"
   },
-  "browserSupport": {
-    "endingSoonTitle": "El soporte del navegador finalizará pronto",
-    "endingSoonDescription": "El soporte para los siguientes perfiles se eliminará el 15 de marzo de 2026: {{profiles}}. Migra a perfiles de Wayfern."
-  },
   "onboarding": {
     "steps": {
       "createProfile": {
@@ -2073,9 +2006,15 @@
     "title": "Automatización del navegador en pausa",
     "description": "Tu cuenta fue restringida temporalmente de las funciones Pro del navegador, normalmente por iniciar sesión en varios dispositivos a la vez. Cierra sesión en los demás dispositivos y vuelve a iniciar el perfil para restaurarla."
   },
-  "camoufoxDeprecation": {
-    "title": "El soporte para Camoufox está terminando",
-    "description": "El soporte para los perfiles de Camoufox terminará el 8 de julio de 2026. Tienes uno o más perfiles de Camoufox. Migra a Wayfern antes de esa fecha; después, los perfiles de Camoufox podrían dejar de funcionar.",
-    "acknowledge": "Entendido"
+  "wayfernConfigDialog": {
+    "titleView": "Ver configuración de huella - {{name}} ({{browser}})",
+    "titleConfigure": "Configurar huella - {{name}} ({{browser}})",
+    "invalidFingerprint": "Configuración de huella inválida",
+    "invalidFingerprintDescription": "La configuración de huella contiene JSON inválido. Revisa la configuración avanzada.",
+    "saveFailed": "Error al guardar la configuración",
+    "unknownError": "Ocurrió un error desconocido"
+  },
+  "cookieCopy": {
+    "noOtherTargets": "No hay otros perfiles Wayfern seleccionados"
   }
 }

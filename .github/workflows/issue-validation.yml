@@ -68,7 +68,7 @@ jobs:
           const get = (k) => fields[k] || '';
           fs.writeFileSync('/tmp/issue-os.txt', get('Operating System'));
           fs.writeFileSync('/tmp/issue-version.txt', get('Donut Browser version'));
-          fs.writeFileSync('/tmp/issue-browser.txt', get('Which browser is affected?'));
+          fs.writeFileSync('/tmp/issue-wayfern-version.txt', get('Wayfern version'));
           fs.writeFileSync('/tmp/issue-repro.txt', get('Steps to reproduce'));
           fs.writeFileSync('/tmp/issue-logs.txt', get('Error logs or screenshots'));
           fs.writeFileSync('/tmp/issue-what.txt', get('What happened?') || get('What do you want?'));
@@ -102,17 +102,7 @@ jobs:
             its API, MCP server, and the bundled `donut-sync` self-hosted server.
           - **Wayfern** — a Chromium fork maintained by zhom (the same maintainer). Wayfern
             bugs are in-scope here unless they are obviously upstream Chromium issues.
-          - **Camoufox** — a Firefox fork by daijro, used by Donut but maintained in a
-            separate repository. Bugs about Camoufox's *internal* behavior are outside
-            the scope of this project.
-              - Bugs about Camoufox's *internal* behavior (page rendering, JS engine,
-                dropdowns, form widgets, fingerprinting *as Camoufox implements it*,
-                checkbox/radio quirks) are out of scope here. Ask the user to first
-                search https://github.com/daijro/camoufox/issues for a matching report,
-                and if they don't find one, to open it there themselves.
-              - Bugs about how Donut *launches, configures, or downloads* Camoufox are
-                in-scope here.
-          - **Forks of Wayfern or Camoufox** (e.g. CloverLabsAI, VulpineOS) are NOT
+          - **Forks of Wayfern** (e.g. CloverLabsAI, VulpineOS) are NOT
             supported. Feature requests asking for them are out of scope.
 
           # PAID vs FREE FEATURES
@@ -121,7 +111,7 @@ jobs:
 
           ## Free (no account required)
           - Unlimited local profiles
-          - Chromium (Wayfern) and Firefox (Camoufox) browser engines
+          - Chromium (Wayfern) anti-detect browser engine
           - Proxy support (HTTP/SOCKS5)
           - VPN support (WireGuard)
           - Profile Management API & MCP (list / create / launch / kill / config)
@@ -147,13 +137,8 @@ jobs:
             differently ("worked in 0.21", "went from 2 to 8 false positives"). Do NOT
             dismiss as "known issue" / "expected" / "false positive in Tauri apps". Ask
             which exact version was the last working one and what changed.
-          - **Out-of-scope (upstream Camoufox)**: report is about Camoufox's own
-            behavior. Tell the user it's outside the scope of this project and ask
-            them to search the Camoufox repo and, if no matching issue exists, file
-            one there. Do NOT say the maintainer doesn't contribute / can't fix it
-            — keep it strictly about project scope. Do not collect logs.
           - **Fork-support request**: asks the maintainer to support an alternative
-            Wayfern/Camoufox fork. Acknowledge in one neutral sentence — do NOT call it
+            Wayfern fork. Acknowledge in one neutral sentence — do NOT call it
             "clear", "reasonable", "well-thought-out", etc.
           - **AI-generated / template-violating report**: report doesn't follow the
             template, may cite "official documentation" via context7, deepwiki, or any
@@ -214,7 +199,7 @@ jobs:
           Return ONLY valid JSON. No preamble, no code fences. Schema:
           {
             "language": "en" or ISO 639-1 code,
-            "classification": one of ["bug-in-scope", "bug-upstream-camoufox", "bug-template-violation", "feature-request", "fork-request", "regression", "ai-generated-junk", "question", "other"],
+            "classification": one of ["bug-in-scope", "bug-template-violation", "feature-request", "fork-request", "regression", "ai-generated-junk", "question", "other"],
             "operating_system": "macos" | "windows" | "linux" | "unknown",
             "is_paid_feature": true | false,
             "user_followed_template": true | false,
@@ -225,13 +210,12 @@ jobs:
           }
 
           Classification guidance:
-          - "bug-upstream-camoufox": Camoufox-internal behavior (rendering, dropdowns, JS, fingerprint impl). NOT how Donut launches it.
           - "bug-template-violation": missing or filled-in nonsense for required template fields.
           - "ai-generated-junk": cites fabricated "official docs" (context7, deepwiki, non-donutbrowser URLs) or has the polished AI-spam shape (long, structured, fabricated certainty).
           - "fork-request": asks for support of CloverLabsAI/VulpineOS/etc. forks.
           - "regression": user names a prior version that worked.
 
-          File selection: pick files that an experienced reviewer would actually look at to act on this issue. If the issue is upstream-Camoufox, fork-request, or junk, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.
+          File selection: pick files that an experienced reviewer would actually look at to act on this issue. If the issue is a fork-request or junk, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.
           TRIAGE_TAIL
           } > /tmp/triage-system.txt
           wc -c /tmp/triage-system.txt
@@ -292,7 +276,7 @@ jobs:
       - name: Read files chosen by triage
         run: |
           : > /tmp/file-context.txt
-          # files_to_read may be empty (e.g. upstream Camoufox) — that's fine.
+          # files_to_read may be empty (e.g. fork-request or junk) — that's fine.
           jq -r '.files_to_read[]? // empty' /tmp/triage.json | while IFS= read -r filepath; do
             filepath=$(echo "$filepath" | xargs)
             [ -z "$filepath" ] && continue
@@ -329,7 +313,7 @@ jobs:
 
           ## Output shape
           - One sentence acknowledging the report.
-          - Then **Missing information** — only if there is anything actually missing. Skip this section if the user already provided OS, version, browser, repro steps, and any logs the situation calls for.
+          - Then **Missing information** — only if there is anything actually missing. Skip this section if the user already provided OS, Donut Browser version, Wayfern version, repro steps, and any logs the situation calls for.
           - Maximum 15 lines.
           - No labels, no `Label:` line, no markdown headings other than `**Missing information**`.
           - No closing pleasantries ("please let me know", "happy to help", etc.).
@@ -347,8 +331,7 @@ jobs:
           The triage classification (`triage.classification`) determines the response shape:
 
           - `bug-in-scope`: ask for what is missing using the user's reported OS log path. Be concrete about how to obtain logs.
-          - `bug-upstream-camoufox`: redirect ONLY. One sentence acknowledging, then say this is outside the scope of this project — ask the user to first search https://github.com/daijro/camoufox/issues for a matching report and, if none exists, to open one there themselves. Do NOT phrase it as "the maintainer does not contribute" or anything personal — keep it strictly about scope. Do NOT ask for Donut logs. Stop after that.
-          - `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Which browser, Steps to reproduce, Error logs sections). If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
+          - `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Wayfern version, Steps to reproduce, Error logs sections). If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
           - `feature-request`: one neutral sentence acknowledging, then ask only what is genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.
           - `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No "clear enhancement" language.
           - `regression`: do NOT call known/expected. Ask which exact previous version was the last working one, what changed in the user's environment between then and now, and the specific delta in symptoms.

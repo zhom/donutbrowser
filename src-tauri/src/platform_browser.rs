@@ -15,7 +15,7 @@ use std::process::Command;
 fn cmd_matches_profile_path(cmd: &[std::ffi::OsString], profile_path: &str) -> bool {
   let args: Vec<&str> = cmd.iter().filter_map(|a| a.to_str()).collect();
   for (i, arg) in args.iter().enumerate() {
-    // Exact argument equality (Firefox/Camoufox: `-profile <path>`; some launchers
+    // Exact argument equality (Firefox: `-profile <path>`; some launchers
     // pass the path as its own arg).
     if *arg == profile_path {
       return true;

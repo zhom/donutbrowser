@@ -10,32 +10,11 @@ use std::str::FromStr;
 pub enum IpError {
   #[error("Network error: {0}")]
   Network(String),
-
-  #[error("Invalid IP address: {0}")]
-  InvalidIP(String),
 }
 
 /// Validate an IP address (IPv4 or IPv6).
 pub fn validate_ip(ip: &str) -> bool {
   IpAddr::from_str(ip).is_ok()
-}
-
-/// Check if an IP is IPv4.
-pub fn is_ipv4(ip: &str) -> bool {
-  if let Ok(addr) = IpAddr::from_str(ip) {
-    addr.is_ipv4()
-  } else {
-    false
-  }
-}
-
-/// Check if an IP is IPv6.
-pub fn is_ipv6(ip: &str) -> bool {
-  if let Ok(addr) = IpAddr::from_str(ip) {
-    addr.is_ipv6()
-  } else {
-    false
-  }
 }
 
 /// Fetch public IP address, optionally through a proxy.
@@ -113,19 +92,5 @@ mod tests {
     assert!(validate_ip("2001:4860:4860::8888"));
     assert!(!validate_ip("invalid"));
     assert!(!validate_ip("256.256.256.256"));
-  }
-
-  #[test]
-  fn test_is_ipv4() {
-    assert!(is_ipv4("8.8.8.8"));
-    assert!(!is_ipv4("2001:4860:4860::8888"));
-    assert!(!is_ipv4("invalid"));
-  }
-
-  #[test]
-  fn test_is_ipv6() {
-    assert!(is_ipv6("2001:4860:4860::8888"));
-    assert!(!is_ipv6("8.8.8.8"));
-    assert!(!is_ipv6("invalid"));
   }
 }

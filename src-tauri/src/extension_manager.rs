@@ -27,11 +27,6 @@ pub struct Extension {
   pub author: Option<String>,
   #[serde(default)]
   pub homepage_url: Option<String>,
-  /// Firefox extension ID from `browser_specific_settings.gecko.id` (or
-  /// `applications.gecko.id` in old manifests). Firefox refuses to load a
-  /// sideloaded .xpi unless the filename matches this value.
-  #[serde(default)]
-  pub gecko_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,9 +64,7 @@ fn extension_groups_file() -> PathBuf {
 
 fn determine_browser_compatibility(file_type: &str) -> Vec<String> {
   match file_type {
-    "xpi" => vec!["firefox".to_string()],
-    "crx" => vec!["chromium".to_string()],
-    "zip" => vec!["chromium".to_string(), "firefox".to_string()],
+    "crx" | "zip" => vec!["chromium".to_string()],
     _ => vec![],
   }
 }
@@ -79,7 +72,7 @@ fn determine_browser_compatibility(file_type: &str) -> Vec<String> {
 fn get_file_type(file_name: &str) -> Option<String> {
   let ext = file_name.rsplit('.').next()?.to_lowercase();
   match ext.as_str() {
-    "xpi" | "crx" | "zip" => Some(ext),
+    "crx" | "zip" => Some(ext),
     _ => None,
   }
 }
@@ -160,32 +153,6 @@ fn extract_manifest_metadata(
     .map(|s| s.to_string());
 
   (name, version, description, author, homepage_url)
-}
-
-/// Read `browser_specific_settings.gecko.id` (or the legacy
-/// `applications.gecko.id`) from the extension's manifest.json. Firefox uses
-/// this value as the canonical add-on ID; sideloaded .xpi files must be named
-/// `<gecko_id>.xpi` to be picked up.
-fn extract_gecko_id(file_data: &[u8], file_type: &str) -> Option<String> {
-  let zip_start = if file_type == "crx" {
-    find_zip_start(file_data)
-  } else {
-    0
-  };
-  let cursor = std::io::Cursor::new(&file_data[zip_start..]);
-  let mut archive = zip::ZipArchive::new(cursor).ok()?;
-  let mut manifest_content = String::new();
-  std::io::Read::read_to_string(
-    &mut archive.by_name("manifest.json").ok()?,
-    &mut manifest_content,
-  )
-  .ok()?;
-  let manifest: serde_json::Value = serde_json::from_str(&manifest_content).ok()?;
-  manifest
-    .pointer("/browser_specific_settings/gecko/id")
-    .or_else(|| manifest.pointer("/applications/gecko/id"))
-    .and_then(|v| v.as_str())
-    .map(|s| s.to_string())
 }
 
 fn extract_icon_from_archive(file_data: &[u8], file_type: &str) -> Option<(Vec<u8>, String)> {
@@ -305,6 +272,9 @@ impl ExtensionManager {
       get_file_type(&file_name).ok_or_else(|| format!("Unsupported file type: {file_name}"))?;
 
     let browser_compatibility = determine_browser_compatibility(&file_type);
+    if browser_compatibility.is_empty() {
+      return Err(format!("Unsupported file type: {file_name}").into());
+    }
     let now = now_secs();
 
     let (manifest_name, version, description, author, homepage_url) =
@@ -316,7 +286,6 @@ impl ExtensionManager {
       name
     };
 
-    let gecko_id = extract_gecko_id(&file_data, &file_type);
     let ext = Extension {
       id: uuid::Uuid::new_v4().to_string(),
       name: final_name,
@@ -331,7 +300,6 @@ impl ExtensionManager {
       description,
       author,
       homepage_url,
-      gecko_id,
     };
 
     let file_dir = self.get_file_dir(&ext.id);
@@ -448,7 +416,6 @@ impl ExtensionManager {
           ext.name = mn;
         }
       }
-      ext.gecko_id = extract_gecko_id(&data, &new_file_type);
 
       if let Some((icon_data, icon_ext)) = extract_icon_from_archive(&data, &new_file_type) {
         let icon_path = self.get_extension_dir(id).join(format!("icon.{icon_ext}"));
@@ -863,7 +830,6 @@ impl ExtensionManager {
   ) -> Result<(), Box<dyn std::error::Error>> {
     let group = self.get_group(group_id)?;
     let browser_type = match browser {
-      "camoufox" => "firefox",
       "wayfern" => "chromium",
       _ => return Err(format!("Extensions are not supported for browser '{browser}'").into()),
     };
@@ -892,7 +858,7 @@ impl ExtensionManager {
   pub fn install_extensions_for_profile(
     &self,
     profile: &crate::profile::BrowserProfile,
-    profile_data_path: &std::path::Path,
+    _profile_data_path: &std::path::Path,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let group_id = match &profile.extension_group_id {
       Some(id) => id,
@@ -904,91 +870,40 @@ impl ExtensionManager {
       return Ok(Vec::new());
     }
 
-    let browser_type = match profile.browser.as_str() {
-      "camoufox" => "firefox",
-      "wayfern" => "chromium",
-      _ => return Ok(Vec::new()),
-    };
+    if profile.browser.as_str() != "wayfern" {
+      return Ok(Vec::new());
+    }
 
     let mut extension_paths = Vec::new();
 
-    match browser_type {
-      "firefox" => {
-        let extensions_dir = profile_data_path.join("extensions");
-        // Clear existing extensions
-        if extensions_dir.exists() {
-          fs::remove_dir_all(&extensions_dir)?;
+    // Unpack Chromium extensions and return paths for --load-extension
+    let unpacked_base = extensions_base_dir().join("unpacked");
+    if unpacked_base.exists() {
+      fs::remove_dir_all(&unpacked_base)?;
+    }
+    fs::create_dir_all(&unpacked_base)?;
+
+    for ext_id in &group.extension_ids {
+      if let Ok(ext) = self.get_extension(ext_id) {
+        if !ext.browser_compatibility.contains(&"chromium".to_string()) {
+          continue;
         }
-        fs::create_dir_all(&extensions_dir)?;
+        let src_file = self.get_file_dir(ext_id).join(&ext.file_name);
+        if src_file.exists() {
+          let unpack_dir = unpacked_base.join(ext_id);
+          fs::create_dir_all(&unpack_dir)?;
 
-        for ext_id in &group.extension_ids {
-          if let Ok(ext) = self.get_extension(ext_id) {
-            if !ext.browser_compatibility.contains(&"firefox".to_string()) {
-              continue;
+          // Extract .crx or .zip
+          match Self::unpack_extension(&src_file, &unpack_dir) {
+            Ok(()) => {
+              extension_paths.push(unpack_dir.to_string_lossy().to_string());
             }
-            let src_file = self.get_file_dir(ext_id).join(&ext.file_name);
-            if !src_file.exists() {
-              continue;
-            }
-
-            // Firefox/Camoufox only loads sideloaded .xpi files whose filename
-            // matches `browser_specific_settings.gecko.id` from the manifest.
-            // Prefer the cached value; fall back to reading the manifest now
-            // for extensions added before the field existed.
-            let gecko_id = if let Some(ref id) = ext.gecko_id {
-              Some(id.clone())
-            } else if let Ok(data) = fs::read(&src_file) {
-              extract_gecko_id(&data, &ext.file_type)
-            } else {
-              None
-            };
-
-            let Some(gecko_id) = gecko_id else {
-              log::warn!(
-                "Skipping Firefox extension '{}': could not determine gecko id from manifest.json",
-                ext.name
-              );
-              continue;
-            };
-
-            let dest = extensions_dir.join(format!("{gecko_id}.xpi"));
-            fs::copy(&src_file, &dest)?;
-            extension_paths.push(dest.to_string_lossy().to_string());
-          }
-        }
-      }
-      "chromium" => {
-        // For Chromium, unpack extensions and return paths for --load-extension
-        let unpacked_base = extensions_base_dir().join("unpacked");
-        if unpacked_base.exists() {
-          fs::remove_dir_all(&unpacked_base)?;
-        }
-        fs::create_dir_all(&unpacked_base)?;
-
-        for ext_id in &group.extension_ids {
-          if let Ok(ext) = self.get_extension(ext_id) {
-            if !ext.browser_compatibility.contains(&"chromium".to_string()) {
-              continue;
-            }
-            let src_file = self.get_file_dir(ext_id).join(&ext.file_name);
-            if src_file.exists() {
-              let unpack_dir = unpacked_base.join(ext_id);
-              fs::create_dir_all(&unpack_dir)?;
-
-              // Extract .crx or .zip
-              match Self::unpack_extension(&src_file, &unpack_dir) {
-                Ok(()) => {
-                  extension_paths.push(unpack_dir.to_string_lossy().to_string());
-                }
-                Err(e) => {
-                  log::warn!("Failed to unpack extension '{}': {}", ext.name, e);
-                }
-              }
+            Err(e) => {
+              log::warn!("Failed to unpack extension '{}': {}", ext.name, e);
             }
           }
         }
       }
-      _ => {}
     }
 
     Ok(extension_paths)
@@ -1066,10 +981,8 @@ impl ExtensionManager {
       }
 
       let needs_meta_backfill = ext.version.is_none() && ext.description.is_none();
-      let needs_gecko_backfill =
-        ext.gecko_id.is_none() && ext.browser_compatibility.iter().any(|b| b == "firefox");
 
-      if needs_meta_backfill || needs_gecko_backfill {
+      if needs_meta_backfill {
         let file_path = file_dir.join(&ext.file_name);
         if let Ok(file_data) = fs::read(&file_path) {
           let mut updated_ext = ext.clone();
@@ -1096,13 +1009,6 @@ impl ExtensionManager {
               if let Some(h) = homepage_url {
                 updated_ext.homepage_url = Some(h);
               }
-              changed = true;
-            }
-          }
-
-          if needs_gecko_backfill {
-            if let Some(gid) = extract_gecko_id(&file_data, &ext.file_type) {
-              updated_ext.gecko_id = Some(gid);
               changed = true;
             }
           }
@@ -1321,9 +1227,9 @@ mod tests {
 
   #[test]
   fn test_get_file_type() {
-    assert_eq!(get_file_type("ublock.xpi"), Some("xpi".to_string()));
     assert_eq!(get_file_type("ext.crx"), Some("crx".to_string()));
     assert_eq!(get_file_type("ext.zip"), Some("zip".to_string()));
+    assert_eq!(get_file_type("ublock.xpi"), None);
     assert_eq!(get_file_type("readme.txt"), None);
     assert_eq!(get_file_type("noext"), None);
   }
@@ -1331,17 +1237,14 @@ mod tests {
   #[test]
   fn test_determine_browser_compatibility() {
     assert_eq!(
-      determine_browser_compatibility("xpi"),
-      vec!["firefox".to_string()]
-    );
-    assert_eq!(
       determine_browser_compatibility("crx"),
       vec!["chromium".to_string()]
     );
     assert_eq!(
       determine_browser_compatibility("zip"),
-      vec!["chromium".to_string(), "firefox".to_string()]
+      vec!["chromium".to_string()]
     );
+    assert_eq!(determine_browser_compatibility("xpi"), Vec::<String>::new());
   }
 
   #[test]
@@ -1359,13 +1262,13 @@ mod tests {
     let ext = mgr
       .add_extension(
         "Test Ext".to_string(),
-        "test.xpi".to_string(),
+        "test.zip".to_string(),
         vec![0, 1, 2, 3],
       )
       .unwrap();
     assert_eq!(ext.name, "Test Ext");
-    assert_eq!(ext.file_type, "xpi");
-    assert_eq!(ext.browser_compatibility, vec!["firefox".to_string()]);
+    assert_eq!(ext.file_type, "zip");
+    assert_eq!(ext.browser_compatibility, vec!["chromium".to_string()]);
 
     // Get
     let fetched = mgr.get_extension(&ext.id).unwrap();
@@ -1407,7 +1310,7 @@ mod tests {
     let ext = mgr
       .add_extension(
         "Test Ext".to_string(),
-        "test.xpi".to_string(),
+        "test.zip".to_string(),
         vec![0, 1, 2, 3],
       )
       .unwrap();
@@ -1432,26 +1335,21 @@ mod tests {
 
     let mgr = ExtensionManager::new();
 
-    let ext = mgr
+    let chrome_ext = mgr
       .add_extension(
-        "Firefox Ext".to_string(),
-        "test.xpi".to_string(),
+        "Chromium Ext".to_string(),
+        "test.crx".to_string(),
         vec![0, 1, 2, 3],
       )
       .unwrap();
+    let chrome_group = mgr.create_group("Chromium Group".to_string()).unwrap();
+    mgr
+      .add_extension_to_group(&chrome_group.id, &chrome_ext.id)
+      .unwrap();
 
-    let group = mgr.create_group("Firefox Group".to_string()).unwrap();
-    mgr.add_extension_to_group(&group.id, &ext.id).unwrap();
-
-    // Compatible with camoufox (firefox-based)
     assert!(mgr
-      .validate_group_compatibility(&group.id, "camoufox")
+      .validate_group_compatibility(&chrome_group.id, "wayfern")
       .is_ok());
-
-    // Incompatible with wayfern (chromium-based)
-    assert!(mgr
-      .validate_group_compatibility(&group.id, "wayfern")
-      .is_err());
   }
 
   #[test]
@@ -1474,7 +1372,7 @@ mod tests {
     let mgr = ExtensionManager::new();
 
     let ext = mgr
-      .add_extension("Test".to_string(), "test.xpi".to_string(), vec![0, 1, 2, 3])
+      .add_extension("Test".to_string(), "test.zip".to_string(), vec![0, 1, 2, 3])
       .unwrap();
 
     let group = mgr.create_group("G1".to_string()).unwrap();

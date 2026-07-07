@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FaChrome, FaFirefox } from "react-icons/fa";
+import { FaChrome } from "react-icons/fa";
 import { GoPlus } from "react-icons/go";
 import {
   LuChevronDown,
@@ -652,34 +652,19 @@ export function ExtensionManagementDialog({
   const renderCompatIcons = useCallback(
     (compat: string[]) => {
       const hasChromium = compat.includes("chromium");
-      const hasFirefox = compat.includes("firefox");
-      if (!hasChromium && !hasFirefox) return null;
+      if (!hasChromium) return null;
       return (
         <div className="flex shrink-0 items-center gap-1">
-          {hasChromium && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <FaChrome className="size-3.5 text-muted-foreground" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {t("extensions.compatibility.chromium")}
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {hasFirefox && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <FaFirefox className="size-3.5 text-muted-foreground" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {t("extensions.compatibility.firefox")}
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <FaChrome className="size-3.5 text-muted-foreground" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {t("extensions.compatibility.chromium")}
+            </TooltipContent>
+          </Tooltip>
         </div>
       );
     },

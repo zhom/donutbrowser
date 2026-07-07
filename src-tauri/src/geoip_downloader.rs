@@ -1,7 +1,6 @@
 use crate::browser::GithubRelease;
 use crate::events;
 use crate::profile::manager::ProfileManager;
-use directories::BaseDirs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -46,30 +45,12 @@ impl GeoIPDownloader {
     Self { client }
   }
 
-  fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    let base_dirs = BaseDirs::new().ok_or("Failed to determine base directories")?;
-
-    #[cfg(target_os = "windows")]
-    let cache_dir = base_dirs
-      .data_local_dir()
-      .join("camoufox")
-      .join("camoufox")
-      .join("Cache");
-
-    #[cfg(target_os = "macos")]
-    let cache_dir = base_dirs.cache_dir().join("camoufox");
-
-    #[cfg(target_os = "linux")]
-    let cache_dir = base_dirs.cache_dir().join("camoufox");
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    let cache_dir = base_dirs.cache_dir().join("camoufox");
-
-    Ok(cache_dir)
+  fn get_cache_dir() -> PathBuf {
+    crate::app_dirs::cache_dir()
   }
 
-  fn get_mmdb_file_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    Ok(Self::get_cache_dir()?.join("GeoLite2-City.mmdb"))
+  pub fn get_mmdb_file_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(Self::get_cache_dir().join("GeoLite2-City.mmdb"))
   }
 
   pub fn is_geoip_database_available() -> bool {
@@ -100,7 +81,7 @@ impl GeoIPDownloader {
     now.saturating_sub(timestamp) > SEVEN_DAYS
   }
 
-  /// Check if GeoIP database is missing or stale for Camoufox profiles
+  /// Check if GeoIP database is missing or stale for Wayfern fingerprint geo.
   pub fn check_missing_geoip_database(
     &self,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
@@ -108,9 +89,9 @@ impl GeoIPDownloader {
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
-    let has_camoufox_profiles = profiles.iter().any(|profile| profile.browser == "camoufox");
+    let needs_geoip = profiles.iter().any(|profile| profile.browser == "wayfern");
 
-    if has_camoufox_profiles {
+    if needs_geoip {
       return Ok(!Self::is_geoip_database_available() || Self::is_geoip_stale());
     }
 
@@ -169,7 +150,7 @@ impl GeoIPDownloader {
       .ok_or("No compatible GeoIP database asset found")?;
 
     // Create cache directory
-    let cache_dir = Self::get_cache_dir()?;
+    let cache_dir = Self::get_cache_dir();
     fs::create_dir_all(&cache_dir).await?;
 
     let mmdb_path = Self::get_mmdb_file_path()?;
@@ -406,10 +387,7 @@ mod tests {
   #[test]
   fn test_get_cache_dir() {
     let cache_dir = GeoIPDownloader::get_cache_dir();
-    assert!(cache_dir.is_ok());
-
-    let path = cache_dir.unwrap();
-    assert!(path.to_string_lossy().contains("camoufox"));
+    assert!(!cache_dir.as_os_str().is_empty());
   }
 
   #[test]

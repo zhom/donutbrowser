@@ -26,7 +26,6 @@ interface GithubRelease {
 
 interface BrowserVersionInfo {
   version: string;
-  is_prerelease: boolean;
   date: string;
 }
 
@@ -100,7 +99,7 @@ export function useBrowserDownload() {
           tag_name: versionInfo.version,
           assets: [],
           published_at: versionInfo.date,
-          is_nightly: versionInfo.is_prerelease,
+          is_nightly: false,
         }),
       );
 
@@ -146,7 +145,7 @@ export function useBrowserDownload() {
           tag_name: versionInfo.version,
           assets: [],
           published_at: versionInfo.date,
-          is_nightly: versionInfo.is_prerelease,
+          is_nightly: false,
         }),
       );
 
@@ -402,15 +401,8 @@ export function useBrowserDownload() {
                 next.delete(progress.browser);
                 return next;
               });
-              // On completion, refresh the downloaded versions for this browser and also refresh camoufox,
-              // since the Create dialog implicitly uses camoufox on the anti-detect tab
               try {
-                await Promise.all([
-                  loadDownloadedVersions(progress.browser),
-                  progress.browser !== "camoufox"
-                    ? loadDownloadedVersions("camoufox")
-                    : Promise.resolve([]),
-                ]);
+                await loadDownloadedVersions(progress.browser);
               } catch {
                 /* empty */
               }

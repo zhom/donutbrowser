@@ -73,7 +73,7 @@ const CRITICAL_FILE_PATTERNS: &[&str] = &[
   "Secure Preferences",
   "Web Data",
   "Extension Cookies",
-  // Firefox/Camoufox equivalents
+  // Chromium profile equivalents
   "cookies.sqlite",
   "key4.db",
   "logins.json",

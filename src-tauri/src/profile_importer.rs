@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::fs::{self, create_dir_all};
 use std::path::Path;
 
-use crate::camoufox_manager::CamoufoxConfig;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
@@ -21,11 +20,9 @@ pub struct DetectedProfile {
 }
 
 fn map_browser_type(browser: &str) -> &str {
-  // Firefox-based sources map to the now-deprecated Camoufox. They are no longer
-  // detected for import; the mapping is kept only so the import command can
-  // recognize and REJECT them. Everything else maps to Wayfern.
+  // Legacy Firefox-family sources map to Wayfern at import time.
   match browser {
-    "firefox" | "firefox-developer" | "zen" | "camoufox" => "camoufox",
+    "firefox" | "firefox-developer" | "zen" | "camoufox" => "wayfern",
     _ => "wayfern",
   }
 }
@@ -218,7 +215,7 @@ impl ProfileImporter {
       "chromium" => "Chrome/Chromium",
       "brave" => "Brave",
       "zen" => "Zen Browser",
-      "camoufox" => "Camoufox",
+
       "wayfern" => "Wayfern",
       _ => "Unknown Browser",
     }
@@ -232,7 +229,6 @@ impl ProfileImporter {
     browser_type: &str,
     new_profile_name: &str,
     proxy_id: Option<String>,
-    _camoufox_config: Option<CamoufoxConfig>,
     wayfern_config: Option<WayfernConfig>,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let source_path = Path::new(source_path);
@@ -267,10 +263,6 @@ impl ProfileImporter {
     Self::copy_directory_recursive(source_path, &new_profile_data_dir)?;
 
     let version = self.get_default_version_for_browser(mapped)?;
-
-    // Camoufox import is removed; only Wayfern profiles are imported now, so the
-    // imported profile never carries a Camoufox config.
-    let final_camoufox_config: Option<CamoufoxConfig> = None;
 
     let final_wayfern_config = if mapped == "wayfern" {
       let mut config = wayfern_config.unwrap_or_default();
@@ -312,7 +304,6 @@ impl ProfileImporter {
           process_id: None,
           last_launch: None,
           release_type: "stable".to_string(),
-          camoufox_config: None,
           wayfern_config: None,
           group_id: None,
           tags: Vec::new(),
@@ -367,7 +358,6 @@ impl ProfileImporter {
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
-      camoufox_config: final_camoufox_config,
       wayfern_config: final_wayfern_config,
       group_id: None,
       tags: Vec::new(),
@@ -465,19 +455,9 @@ pub async fn import_browser_profile(
   browser_type: String,
   new_profile_name: String,
   proxy_id: Option<String>,
-  camoufox_config: Option<CamoufoxConfig>,
   wayfern_config: Option<WayfernConfig>,
 ) -> Result<(), String> {
-  // Camoufox is deprecated — Firefox-based profiles (which map to Camoufox) can
-  // no longer be imported. Reject them before doing any work.
-  if map_browser_type(&browser_type) == "camoufox" {
-    return Err(serde_json::json!({ "code": "CAMOUFOX_IMPORT_DEPRECATED" }).to_string());
-  }
-
-  let fingerprint_os = camoufox_config
-    .as_ref()
-    .and_then(|c| c.os.as_deref())
-    .or_else(|| wayfern_config.as_ref().and_then(|c| c.os.as_deref()));
+  let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
 
   if !crate::cloud_auth::CLOUD_AUTH
     .is_fingerprint_os_allowed(fingerprint_os)
@@ -494,7 +474,6 @@ pub async fn import_browser_profile(
       &browser_type,
       &new_profile_name,
       proxy_id,
-      camoufox_config,
       wayfern_config,
     )
     .await
@@ -546,12 +525,12 @@ mod tests {
 
   #[test]
   fn test_map_browser_type() {
-    assert_eq!(map_browser_type("firefox"), "camoufox");
-    assert_eq!(map_browser_type("firefox-developer"), "camoufox");
-    assert_eq!(map_browser_type("zen"), "camoufox");
+    assert_eq!(map_browser_type("firefox"), "wayfern");
+    assert_eq!(map_browser_type("firefox-developer"), "wayfern");
+    assert_eq!(map_browser_type("zen"), "wayfern");
     assert_eq!(map_browser_type("chromium"), "wayfern");
     assert_eq!(map_browser_type("brave"), "wayfern");
-    assert_eq!(map_browser_type("camoufox"), "camoufox");
+    assert_eq!(map_browser_type("camoufox"), "wayfern");
     assert_eq!(map_browser_type("wayfern"), "wayfern");
     assert_eq!(map_browser_type("something_else"), "wayfern");
   }

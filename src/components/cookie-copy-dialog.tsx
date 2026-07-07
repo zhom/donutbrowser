@@ -84,9 +84,7 @@ export function CookieCopyDialog({
   // dead-end state (source picked = target list empty = copy button disabled).
   const eligibleSourceProfiles = useMemo(() => {
     return profiles.filter(
-      (p) =>
-        !selectedProfiles.includes(p.id) &&
-        (p.browser === "wayfern" || p.browser === "camoufox"),
+      (p) => !selectedProfiles.includes(p.id) && p.browser === "wayfern",
     );
   }, [profiles, selectedProfiles]);
 
@@ -95,7 +93,7 @@ export function CookieCopyDialog({
       (p) =>
         selectedProfiles.includes(p.id) &&
         p.id !== sourceProfileId &&
-        (p.browser === "wayfern" || p.browser === "camoufox"),
+        p.browser === "wayfern",
     );
   }, [profiles, selectedProfiles, sourceProfileId]);
 
