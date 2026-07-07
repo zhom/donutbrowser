@@ -447,7 +447,7 @@ impl WireGuardSocks5Server {
       .port();
 
     // Update config with actual port and local_url. Prefer the explicit
-    // config path the worker was started with — see issue #287, where
+    // config path the worker was started with — a case where
     // get_storage_dir() in the worker process resolved to a different
     // directory than in the parent (Qubes/sandboxed Linux), causing the
     // write-back to land in the wrong place and the parent to time out.
@@ -776,15 +776,23 @@ impl WireGuardSocks5Server {
                 }
               }
               0x04 => {
-                // IPv6
+                // IPv6-literal CONNECT. The WireGuard tunnel is IPv4-only
+                // (parse_cidr_address keeps only the first/IPv4 address and no
+                // default IPv6 route is installed), so an IPv6 destination can
+                // never be reached. Attempting the connect would leave the
+                // smoltcp socket in SynSent until it times out — a visible hang —
+                // so fail fast with "host unreachable" instead.
+                // Normal navigation never lands here: Chromium uses remote DNS
+                // over the SOCKS proxy and domain CONNECT requests resolve A-only, so
+                // this only guards direct literal-IPv6 destinations.
                 if conn.read_buf.len() < 22 {
                   continue;
                 }
-                let mut octets = [0u8; 16];
-                octets.copy_from_slice(&conn.read_buf[4..20]);
-                let ip = std::net::Ipv6Addr::from(octets);
-                let port = u16::from_be_bytes([conn.read_buf[20], conn.read_buf[21]]);
-                (SocketAddr::new(std::net::IpAddr::V6(ip), port), 22)
+                let _ = conn
+                  .tcp_stream
+                  .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                completed.push(idx);
+                continue;
               }
               _ => {
                 completed.push(idx);

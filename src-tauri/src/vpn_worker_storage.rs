@@ -45,7 +45,7 @@ pub fn save_vpn_worker_config(config: &VpnWorkerConfig) -> Result<(), Box<dyn st
 /// `--config-path`) and must write back to the same location regardless of
 /// how `get_storage_dir()` resolves in the worker process — which can
 /// differ from the parent on Linux distros that sandbox the GUI (Qubes,
-/// flatpak, etc.) and is the cause of issue #287.
+/// flatpak, etc.).
 pub fn save_vpn_worker_config_to_path(
   config: &VpnWorkerConfig,
   path: &Path,

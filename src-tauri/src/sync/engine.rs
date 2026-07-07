@@ -706,7 +706,7 @@ impl SyncEngine {
     // deleted local files), the manifest generated at the START of the sync is
     // now stale. Uploading it would advertise wrong hashes/mtimes for the files
     // we just pulled, so the peer keeps computing a non-empty diff and the two
-    // devices ping-pong re-uploads forever (issue #470). Regenerate from the
+    // devices ping-pong re-uploads forever. Regenerate from the
     // actual on-disk files before uploading. When only uploads happened, the
     // on-disk state is unchanged and the original manifest is still accurate.
     let local_changed =
@@ -2399,7 +2399,7 @@ impl SyncEngine {
     let metadata_raw = self.client.download_bytes(&metadata_presign.url).await?;
     // Unseal E2E-encrypted metadata before parsing — otherwise an encrypted
     // envelope fails to deserialize and the missing profile never downloads to
-    // this device (issue #466). Plaintext (legacy) metadata passes through.
+    // this device. Plaintext (legacy) metadata passes through.
     let metadata_data = encryption::maybe_unseal_after_download(&metadata_raw).map_err(|e| {
       if e.contains("ENCRYPTION_PASSWORD_REQUIRED") {
         let _ = events::emit("profile-sync-e2e-password-required", ());
@@ -3212,7 +3212,7 @@ pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> 
 
   // Enabling sync only flips a local flag; without queueing a sync run the
   // group and its extensions are never uploaded, so the other device never
-  // receives them (issue #477). Queue them now.
+  // receives them. Queue them now.
   if let Some(scheduler) = crate::sync::get_global_scheduler() {
     scheduler
       .queue_extension_group_sync(extension_group_id.to_string())

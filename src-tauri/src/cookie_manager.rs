@@ -1759,8 +1759,7 @@ mod tests {
     assert_eq!(xs.value, "sessionvalue");
 
     // Raw DB checks against the Firefox schema — these would catch the bugs
-    // that caused issue #265 on the Chrome path (plaintext, correct expiry,
-    // correct schemeMap).
+    // on the Chrome path (plaintext, correct expiry, correct schemeMap).
     let conn = Connection::open(&ff_db).unwrap();
     let now = std::time::SystemTime::now()
       .duration_since(std::time::UNIX_EPOCH)

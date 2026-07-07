@@ -1050,8 +1050,7 @@ export function SettingsDialog({
                           // Await the rollover so the user sees an error if
                           // re-syncing fails. Previously the rollover was
                           // fire-and-forget (`void invoke(...)`) which left
-                          // half-removed state on screen with no feedback —
-                          // the source of issue #360 "completely bugged".
+                          // half-removed state on screen with no feedback.
                           await invoke("delete_e2e_password");
                           setHasE2ePassword(false);
                           try {

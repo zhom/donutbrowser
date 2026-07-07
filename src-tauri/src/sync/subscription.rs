@@ -146,7 +146,7 @@ impl SyncSubscription {
           // Refresh the sync token before reconnecting. The token may have
           // expired while the stream was open (tokens last ~15 min); reusing
           // the construction-time token otherwise produces an endless 401
-          // reconnect loop until the app is restarted (issue #440).
+          // reconnect loop until the app is restarted.
           match Self::fetch_sync_token(source, &app_handle).await {
             Ok(Some(fresh)) => token = fresh,
             Ok(None) => {

@@ -1827,7 +1827,7 @@ pub fn run() {
           // so the background loop respects portable mode and the
           // disable_auto_updates setting. Previously it bypassed both, so a
           // portable install would auto-download and run the NSIS installer,
-          // clobbering the portable folder instead of updating in place (#468).
+          // clobbering the portable folder instead of updating in place.
           match app_auto_updater::check_for_app_updates().await {
             Ok(Some(update_info)) => {
               log::info!(
@@ -2073,7 +2073,7 @@ pub fn run() {
                   // (window closed by the user). The explicit kill path in
                   // browser_runner.rs already releases it, but this branch did
                   // not — leaking the lock, which the 30s heartbeat then renews
-                  // indefinitely (issue #474). No-op for non-sync/non-paid
+                  // indefinitely. No-op for non-sync/non-paid
                   // profiles thanks to the guards inside the helper.
                   if !is_running {
                     crate::team_lock::release_team_lock_if_needed(&profile).await;

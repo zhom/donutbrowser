@@ -1729,8 +1729,8 @@ const DIRECT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 /// handshake). Without it, an upstream that accepts TCP but stalls before
 /// replying hangs the worker task forever and holds a connection slot; under
 /// load (e.g. two profiles sharing one proxy) the slots exhaust and the browser
-/// sees `ERR_PROXY_CONNECTION_FAILED` until the profile is restarted (issue
-/// #439). A bounded dial fails fast and releases the slot.
+/// sees `ERR_PROXY_CONNECTION_FAILED` until the profile is restarted. A
+/// bounded dial fails fast and releases the slot.
 const UPSTREAM_DIAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Per-host failure state (last failure instant, consecutive failure count) for

@@ -2395,7 +2395,7 @@ export function ProfilesDataTable({
       },
       {
         // Hidden, sort-only column so profiles can be sorted by creation date
-        // without showing a Created column in the table (issue #454). Kept
+        // without showing a Created column in the table. Kept
         // hidden via columnVisibility; sorting still works on hidden columns.
         id: "created_at",
         accessorFn: (row) => row.created_at ?? 0,
@@ -3067,7 +3067,7 @@ export function ProfilesDataTable({
       setContainerWidth(Math.round(w / 8) * 8);
       setColumnVisibility((prev) => {
         const next: VisibilityState = {
-          // Always hidden — sort-only column (issue #454).
+          // Always hidden — sort-only column.
           created_at: false,
           dns: w >= 768,
           ext: w >= 672,
