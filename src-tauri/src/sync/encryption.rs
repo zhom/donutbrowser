@@ -1,9 +1,10 @@
 use aes_gcm::{
-  aead::{Aead, AeadCore, KeyInit, OsRng},
+  aead::{Aead, KeyInit},
   Aes256Gcm, Key,
 };
 use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use rand::RngExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -55,7 +56,9 @@ pub fn store_e2e_password(password: &str) -> Result<(), String> {
   }
 
   let vault_password = get_vault_password();
-  let salt = SaltString::generate(&mut OsRng);
+  let salt_bytes: [u8; 16] = rand::rng().random();
+  let salt =
+    SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {e}"))?;
   let argon2 = Argon2::default();
   let password_hash = argon2
     .hash_password(vault_password.as_bytes(), &salt)
@@ -68,7 +71,8 @@ pub fn store_e2e_password(password: &str) -> Result<(), String> {
     .map_err(|_| "Invalid key length")?;
   let key = Key::<Aes256Gcm>::from(key_bytes);
   let cipher = Aes256Gcm::new(&key);
-  let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+  let nonce_bytes: [u8; 12] = rand::rng().random();
+  let nonce = aes_gcm::Nonce::from(nonce_bytes);
 
   let ciphertext = cipher
     .encrypt(&nonce, password.as_bytes())
@@ -230,9 +234,7 @@ pub fn derive_profile_key(user_password: &str, profile_salt: &str) -> Result<[u8
 
 /// Generate a random 16-byte salt, base64-encoded
 pub fn generate_salt() -> String {
-  let mut salt = [0u8; 16];
-  use aes_gcm::aead::rand_core::RngCore;
-  OsRng.fill_bytes(&mut salt);
+  let salt: [u8; 16] = rand::rng().random();
   BASE64.encode(salt)
 }
 
@@ -240,7 +242,8 @@ pub fn generate_salt() -> String {
 pub fn encrypt_bytes(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, String> {
   let aes_key = Key::<Aes256Gcm>::from(*key);
   let cipher = Aes256Gcm::new(&aes_key);
-  let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+  let nonce_bytes: [u8; 12] = rand::rng().random();
+  let nonce = aes_gcm::Nonce::from(nonce_bytes);
 
   let ciphertext = cipher
     .encrypt(&nonce, plaintext)

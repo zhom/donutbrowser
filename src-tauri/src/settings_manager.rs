@@ -3,10 +3,11 @@ use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
 use aes_gcm::{
-  aead::{Aead, AeadCore, KeyInit, OsRng},
+  aead::{Aead, KeyInit},
   Aes256Gcm, Key, Nonce,
 };
 use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+use rand::RngExt;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
@@ -224,7 +225,9 @@ impl SettingsManager {
     let vault_password = Self::get_vault_password();
 
     // Generate a random salt for Argon2
-    let salt = SaltString::generate(&mut OsRng);
+    let salt_bytes: [u8; 16] = rand::rng().random();
+    let salt =
+      SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {e}"))?;
 
     // Use Argon2 to derive a 32-byte key from the vault password
     let argon2 = Argon2::default();
@@ -242,7 +245,8 @@ impl SettingsManager {
     let cipher = Aes256Gcm::new(&key);
 
     // Generate a random nonce
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let nonce_bytes: [u8; 12] = rand::rng().random();
+    let nonce = Nonce::from(nonce_bytes);
 
     // Encrypt the token
     let ciphertext = cipher
@@ -408,7 +412,9 @@ impl SettingsManager {
     }
 
     let vault_password = Self::get_vault_password();
-    let salt = SaltString::generate(&mut OsRng);
+    let salt_bytes: [u8; 16] = rand::rng().random();
+    let salt =
+      SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {e}"))?;
     let argon2 = Argon2::default();
     let password_hash = argon2
       .hash_password(vault_password.as_bytes(), &salt)
@@ -420,7 +426,8 @@ impl SettingsManager {
       .map_err(|_| "Invalid key length")?;
     let key = Key::<Aes256Gcm>::from(key_bytes);
     let cipher = Aes256Gcm::new(&key);
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let nonce_bytes: [u8; 12] = rand::rng().random();
+    let nonce = Nonce::from(nonce_bytes);
     let ciphertext = cipher
       .encrypt(&nonce, token.as_bytes())
       .map_err(|e| format!("Encryption failed: {e}"))?;
@@ -548,7 +555,9 @@ impl SettingsManager {
     }
 
     let vault_password = Self::get_vault_password();
-    let salt = SaltString::generate(&mut OsRng);
+    let salt_bytes: [u8; 16] = rand::rng().random();
+    let salt =
+      SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {e}"))?;
     let argon2 = Argon2::default();
     let password_hash = argon2
       .hash_password(vault_password.as_bytes(), &salt)
@@ -560,7 +569,8 @@ impl SettingsManager {
       .map_err(|_| "Invalid key length")?;
     let key = Key::<Aes256Gcm>::from(key_bytes);
     let cipher = Aes256Gcm::new(&key);
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let nonce_bytes: [u8; 12] = rand::rng().random();
+    let nonce = Nonce::from(nonce_bytes);
     let ciphertext = cipher
       .encrypt(&nonce, token.as_bytes())
       .map_err(|e| format!("Encryption failed: {e}"))?;

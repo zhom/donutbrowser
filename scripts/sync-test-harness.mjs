@@ -28,7 +28,9 @@ const CACHE_DIR = path.join(ROOT_DIR, ".cache", "sync-test");
 const MINIO_PORT = 9876;
 const MINIO_CONSOLE_PORT = 9877;
 const SYNC_PORT = 3456;
-const SYNC_TOKEN = "test-sync-token";
+// Must be >= 24 chars and not a known default — the server's validateEnv()
+// rejects short/placeholder tokens and exits at startup otherwise.
+const SYNC_TOKEN = "test-sync-token-0123456789abcdef";
 
 const processes = [];
 

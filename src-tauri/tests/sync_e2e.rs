@@ -6,7 +6,9 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
-const TEST_TOKEN: &str = "test-sync-token";
+// Must match the harness's SYNC_TOKEN (scripts/sync-test-harness.mjs) and be
+// >= 24 chars / not a known default, or the server rejects it at startup.
+const TEST_TOKEN: &str = "test-sync-token-0123456789abcdef";
 
 fn get_sync_server_url() -> String {
   env::var("SYNC_SERVER_URL").unwrap_or_else(|_| "http://localhost:12342".to_string())

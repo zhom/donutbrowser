@@ -194,10 +194,10 @@ impl VpnStorage {
       .map_err(|e| VpnError::Encryption(format!("Failed to create cipher: {e}")))?;
 
     let nonce_bytes: [u8; 12] = rand::rng().random();
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
-      .encrypt(nonce, data.as_bytes())
+      .encrypt(&nonce, data.as_bytes())
       .map_err(|e| VpnError::Encryption(format!("Encryption failed: {e}")))?;
 
     Ok((
@@ -218,14 +218,11 @@ impl VpnStorage {
     let nonce_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, nonce_str)
       .map_err(|e| VpnError::Encryption(format!("Failed to decode nonce: {e}")))?;
 
-    if nonce_bytes.len() != 12 {
-      return Err(VpnError::Encryption("Invalid nonce length".to_string()));
-    }
-
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::try_from(nonce_bytes.as_slice())
+      .map_err(|_| VpnError::Encryption("Invalid nonce length".to_string()))?;
 
     let plaintext = cipher
-      .decrypt(nonce, ciphertext.as_ref())
+      .decrypt(&nonce, ciphertext.as_ref())
       .map_err(|e| VpnError::Encryption(format!("Decryption failed: {e}")))?;
 
     String::from_utf8(plaintext)

@@ -74,11 +74,11 @@ chrono-tz = "0.10"
 axum = { version = "0.8.9", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["cors"] }
-rand = "0.10.1"
+rand = "0.10.2"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.2"
 argon2 = "0.5"
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 aes = "0.9"
 cbc = "0.2"
 ring = "0.17"
@@ -100,8 +100,8 @@ toml = "1.1"
 thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"
-maxminddb = "0.28"
-quick-xml = { version = "0.40", features = ["serialize"] }
+maxminddb = "0.29"
+quick-xml = { version = "0.41", features = ["serialize"] }
 
 # VPN support
 boringtun = "0.7"
@@ -118,7 +118,7 @@ nix = { version = "0.31", features = ["signal", "process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
-objc2 = "0.6.3"
+objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -137,7 +137,7 @@ windows = { version = "0.62", features = [
 ] }
 
 [dev-dependencies]
-tempfile = "3.24.0"
+tempfile = "3.27.0"
 wiremock = "0.6"
 hyper = { version = "1.10", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
