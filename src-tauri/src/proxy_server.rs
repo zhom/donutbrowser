@@ -1314,6 +1314,24 @@ pub async fn handle_proxy_connection(
   }
 }
 
+/// Render an upstream proxy URL for logging with any embedded credentials
+/// stripped. `config.upstream_url` carries `scheme://user:pass@host:port`, and
+/// these logs land in a world-readable file under the system temp dir, so the
+/// userinfo must never be emitted.
+fn redacted_upstream(upstream: &str) -> String {
+  if upstream.is_empty() {
+    return "none".to_string();
+  }
+  match Url::parse(upstream) {
+    Ok(u) => match (u.host_str(), u.port()) {
+      (Some(host), Some(port)) => format!("{}://{host}:{port}", u.scheme()),
+      (Some(host), None) => format!("{}://{host}", u.scheme()),
+      _ => "<redacted>".to_string(),
+    },
+    Err(_) => "<redacted>".to_string(),
+  }
+}
+
 pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {
   log::info!(
     "Proxy worker starting, looking for config id: {}",
@@ -1333,7 +1351,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     "Found config: id={}, port={:?}, upstream={}, profile_id={:?}",
     config.id,
     config.local_port,
-    config.upstream_url,
+    redacted_upstream(&config.upstream_url),
     config.profile_id
   );
 
@@ -1512,14 +1530,21 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   // alive, and never before a PID is recorded (covers the launch window and
   // pre-upgrade configs lacking the field). A 2-miss debounce avoids exiting on
   // a transient sysinfo false-negative under load / sleep-wake.
+  //
+  // This runs on a DEDICATED OS THREAD, not a tokio task. If the worker's
+  // accept/dial path ever busy-loops (e.g. a client retry-storm against a
+  // failing upstream), it saturates the async runtime, and a tokio-based
+  // supervisor would never be scheduled — leaving the worker spinning forever
+  // even after its browser exits or its config is deleted (observed in the
+  // field as pegged-CPU orphans that survive config deletion). A real thread
+  // with a blocking sleep cannot be starved that way, so the worker always
+  // reaps itself. Every call here is synchronous and safe off the runtime.
   {
     let watch_id = config.id.clone();
-    tokio::spawn(async move {
-      let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(15));
-      interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    std::thread::spawn(move || {
       let mut consecutive_misses: u32 = 0;
       loop {
-        interval.tick().await;
+        std::thread::sleep(std::time::Duration::from_secs(15));
         match crate::proxy_storage::get_proxy_config(&watch_id) {
           Some(cfg) => match cfg.browser_pid {
             Some(bpid) if bpid != 0 => {
@@ -1660,7 +1685,10 @@ async fn handle_connect_from_buffer(
     "CONNECT {}:{} (upstream={})",
     target_host,
     target_port,
-    upstream_url.as_deref().unwrap_or("DIRECT")
+    upstream_url
+      .as_deref()
+      .map(redacted_upstream)
+      .unwrap_or_else(|| "DIRECT".to_string())
   );
 
   // Connect to target (directly or via upstream proxy).
