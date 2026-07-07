@@ -1,7 +1,10 @@
 export interface UserContext {
   mode: "self-hosted" | "cloud";
-  prefix: string; // '' for self-hosted, 'users/{id}/' for cloud
-  teamPrefix: string | null; // 'teams/{id}/' or null
-  profileLimit: number; // 0 for unlimited (self-hosted)
-  teamProfileLimit: number; // 0 for unlimited or non-team users
+  // The EFFECTIVE namespace for this request: '' for self-hosted, and for cloud
+  // either the user's own 'users/{sub}/' or, for a team member, the shared team
+  // owner's 'users/{ownerId}/' — resolved server-side by the AuthGuard from the
+  // backend (never carried in the JWT). All key scoping uses this directly.
+  prefix: string;
+  profileLimit: number; // 0 for unlimited (self-hosted); effective (team) limit for team members
+  sub?: string; // the authenticated user id (cloud only)
 }

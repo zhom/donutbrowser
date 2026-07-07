@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import {
+  BadRequestException,
   Body,
   Controller,
   Headers,
@@ -38,9 +39,18 @@ export class InternalController {
       throw new UnauthorizedException("Invalid internal key");
     }
 
-    return this.syncService.cleanupExcessProfiles(
-      body.userId,
-      body.maxProfiles,
-    );
+    // The userId is interpolated into a destructive S3 delete prefix
+    // (users/{userId}/profiles/), so constrain it to a plain id — no empty
+    // value, no slashes/dots that could widen or redirect the prefix.
+    const userId = body?.userId;
+    if (typeof userId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(userId)) {
+      throw new BadRequestException("Invalid userId");
+    }
+    const maxProfiles = body?.maxProfiles;
+    if (!Number.isInteger(maxProfiles) || maxProfiles < 0) {
+      throw new BadRequestException("Invalid maxProfiles");
+    }
+
+    return this.syncService.cleanupExcessProfiles(userId, maxProfiles);
   }
 }
