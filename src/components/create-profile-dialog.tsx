@@ -148,11 +148,6 @@ export function CreateProfileDialog({
     setLaunchHook("");
   };
 
-  // Handle back button
-  const handleBack = () => {
-    resetForm();
-  };
-
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     resetForm();
@@ -1559,8 +1554,8 @@ export function CreateProfileDialog({
         <DialogFooter className="shrink-0 border-t pt-4">
           {currentStep === "browser-config" ? (
             <>
-              <RippleButton variant="outline" onClick={handleBack}>
-                {t("common.buttons.back")}
+              <RippleButton variant="outline" onClick={handleClose}>
+                {t("common.buttons.close")}
               </RippleButton>
               <LoadingButton
                 onClick={handleCreate}
