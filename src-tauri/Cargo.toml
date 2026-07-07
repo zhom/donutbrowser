@@ -107,7 +107,7 @@ quick-xml = { version = "0.40", features = ["serialize"] }
 
 # VPN support
 boringtun = "0.7"
-smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
+smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp", "socket-dns"] }
 
 # Tray icon decoding (main-process system tray)
 image = "0.25"
