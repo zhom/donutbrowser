@@ -1156,7 +1156,8 @@
       "vpn": "VPN",
       "cookieCount": "Cookie đã lưu",
       "localDataTransfer": "Truyền dữ liệu cục bộ",
-      "created": "Đã tạo"
+      "created": "Đã tạo",
+      "windowColor": "Màu cửa sổ"
     },
     "values": {
       "none": "Không có",

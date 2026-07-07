@@ -1208,6 +1208,7 @@ mod tests {
       group_id: None,
       tags: Vec::new(),
       note: None,
+      window_color: None,
       sync_mode: crate::profile::types::SyncMode::Disabled,
       encryption_salt: None,
       last_sync: None,

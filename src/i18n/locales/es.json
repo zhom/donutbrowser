@@ -1156,7 +1156,8 @@
       "vpn": "VPN",
       "cookieCount": "Cookies guardadas",
       "localDataTransfer": "Transferencia de datos local",
-      "created": "Creado"
+      "created": "Creado",
+      "windowColor": "Color de ventana"
     },
     "values": {
       "none": "Ninguno",

@@ -27,6 +27,7 @@ export interface BrowserProfile {
   group_id?: string; // Reference to profile group
   tags?: string[];
   note?: string; // User note
+  window_color?: string; // Per-profile window frame color "#RRGGBB"; auto-derived from the id when unset
   sync_mode?: SyncMode;
   encryption_salt?: string;
   last_sync?: number; // Timestamp of last successful sync (epoch seconds)

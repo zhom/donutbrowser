@@ -1156,7 +1156,8 @@
       "vpn": "VPN",
       "cookieCount": "存储的 Cookie",
       "localDataTransfer": "本地数据传输",
-      "created": "创建时间"
+      "created": "创建时间",
+      "windowColor": "窗口颜色"
     },
     "values": {
       "none": "无",

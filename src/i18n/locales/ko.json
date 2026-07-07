@@ -1156,7 +1156,8 @@
       "vpn": "VPN",
       "cookieCount": "저장된 쿠키",
       "localDataTransfer": "로컬 데이터 전송",
-      "created": "생성일"
+      "created": "생성일",
+      "windowColor": "창 색상"
     },
     "values": {
       "none": "없음",

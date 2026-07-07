@@ -1156,7 +1156,8 @@
       "vpn": "VPN",
       "cookieCount": "Хранится Cookie",
       "localDataTransfer": "Локальный трафик",
-      "created": "Создан"
+      "created": "Создан",
+      "windowColor": "Цвет окна"
     },
     "values": {
       "none": "Нет",

@@ -188,6 +188,7 @@ impl ProfileManager {
           group_id: group_id.clone(),
           tags: Vec::new(),
           note: None,
+          window_color: None,
           sync_mode: SyncMode::Disabled,
           encryption_salt: None,
           last_sync: None,
@@ -292,6 +293,7 @@ impl ProfileManager {
           group_id: group_id.clone(),
           tags: Vec::new(),
           note: None,
+          window_color: None,
           sync_mode: SyncMode::Disabled,
           encryption_salt: None,
           last_sync: None,
@@ -363,6 +365,9 @@ impl ProfileManager {
       group_id: group_id.clone(),
       tags: Vec::new(),
       note: None,
+      // A random-looking pastel derived from the (random) profile id, so every
+      // new profile gets a distinct, stable window color it can later override.
+      window_color: Some(crate::wayfern_manager::derive_profile_color(&profile_id)),
       sync_mode: SyncMode::Disabled,
       encryption_salt: None,
       last_sync: None,
@@ -843,6 +848,38 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  pub fn update_profile_window_color(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    window_color: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    // Normalize to lowercase #RRGGBB, or clear (None) for an invalid/empty value
+    // so it reverts to the auto id-derived color at next launch.
+    profile.window_color = window_color.and_then(|c| {
+      let hex = c.trim().trim_start_matches('#');
+      (hex.len() == 6 && hex.chars().all(|ch| ch.is_ascii_hexdigit()))
+        .then(|| format!("#{}", hex.to_lowercase()))
+    });
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+
+    self.save_profile(&profile)?;
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
   pub fn update_profile_launch_hook(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -1064,6 +1101,7 @@ impl ProfileManager {
       group_id: source.group_id,
       tags: source.tags,
       note: source.note,
+      window_color: source.window_color,
       sync_mode: SyncMode::Disabled,
       encryption_salt: None,
       last_sync: None,
@@ -2385,6 +2423,17 @@ pub fn update_profile_note(
   profile_manager
     .update_profile_note(&app_handle, &profile_id, note)
     .map_err(|e| format!("Failed to update profile note: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_window_color(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  window_color: Option<String>,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_window_color(&app_handle, &profile_id, window_color)
+    .map_err(|e| format!("Failed to update profile window color: {e}"))
 }
 
 /// Validate a launch hook value. Returns `Ok(None)` for "clear the hook"

@@ -50,6 +50,8 @@ pub struct BrowserProfile {
   #[serde(default)]
   pub note: Option<String>, // User note
   #[serde(default)]
+  pub window_color: Option<String>, // Per-profile window frame color "#RRGGBB"; auto-derived from the id when unset
+  #[serde(default)]
   pub sync_mode: SyncMode,
   #[serde(default)]
   pub encryption_salt: Option<String>,

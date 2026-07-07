@@ -1156,7 +1156,8 @@
       "vpn": "VPN",
       "cookieCount": "保存された Cookie",
       "localDataTransfer": "ローカルデータ転送量",
-      "created": "作成日"
+      "created": "作成日",
+      "windowColor": "ウィンドウの色"
     },
     "values": {
       "none": "なし",

@@ -770,6 +770,39 @@ impl WayfernManager {
       args.push(format!("--load-extension={}", extension_paths.join(",")));
     }
 
+    // Per-profile window label + distinct frame color so concurrent profile
+    // windows are easy to tell apart. Wayfern reads these in
+    // BrowserView::GetWindowTitle() (label) and BrowserFrameView::GetFrameColor()
+    // (color). The label is the profile name; the color is the user's
+    // window_color when set, otherwise deterministically derived from the
+    // profile id so every profile still gets a stable, distinct color.
+    if !profile.name.is_empty() {
+      args.push(format!("--wayfern-profile-label={}", profile.name));
+    }
+    // Profiles created before this feature have no stored color; persist the
+    // id-derived one so the info dialog shows the same frame color the window
+    // uses. It's deterministic per id, so no updated_at bump/sync is needed.
+    if profile
+      .window_color
+      .as_deref()
+      .map(str::trim)
+      .unwrap_or("")
+      .is_empty()
+    {
+      let mut backfilled = profile.clone();
+      backfilled.window_color = Some(derive_profile_color(&backfilled.id));
+      let _ = crate::profile::ProfileManager::instance().save_profile(&backfilled);
+    }
+    let profile_color = profile
+      .window_color
+      .clone()
+      .filter(|c| !c.trim().is_empty())
+      .unwrap_or_else(|| derive_profile_color(&profile.id));
+    // Wayfern expects the frame color as bare RRGGBB hex, with no leading '#'
+    // (the stored/user value may include one).
+    let profile_color = profile_color.trim().trim_start_matches('#');
+    args.push(format!("--wayfern-profile-color={profile_color}"));
+
     let mut wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
     if wayfern_token.is_none()
       && crate::cloud_auth::CLOUD_AUTH
@@ -1340,6 +1373,42 @@ impl WayfernManager {
 
 lazy_static::lazy_static! {
   static ref WAYFERN_MANAGER: WayfernManager = WayfernManager::new();
+}
+
+/// Deterministically derive a pleasant, distinct window frame color from a
+/// profile id so concurrent profile windows are visually distinguishable even
+/// when the user has not picked a custom color. Stable per profile (same id
+/// always yields the same color). Returns "#RRGGBB".
+pub fn derive_profile_color(id: &uuid::Uuid) -> String {
+  // FNV-1a over the 16 id bytes -> hue in [0,360). The hue varies per profile
+  // while saturation/lightness are fixed to a pastel band (see below).
+  let mut h: u32 = 2166136261;
+  for &b in id.as_bytes() {
+    h = (h ^ u32::from(b)).wrapping_mul(16777619);
+  }
+  let hue = f64::from(h % 360);
+  // Pastel: high lightness + soft saturation so windows stay easy to tell apart
+  // without a garish frame.
+  let (r, g, b) = hsl_to_rgb(hue, 0.6, 0.8);
+  format!("#{r:02x}{g:02x}{b:02x}")
+}
+
+/// Convert HSL (h in [0,360), s/l in [0,1]) to 8-bit RGB.
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+  let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+  let hp = h / 60.0;
+  let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
+  let (r1, g1, b1) = match hp as i32 {
+    0 => (c, x, 0.0),
+    1 => (x, c, 0.0),
+    2 => (0.0, c, x),
+    3 => (0.0, x, c),
+    4 => (x, 0.0, c),
+    _ => (c, 0.0, x),
+  };
+  let m = l - c / 2.0;
+  let to_u8 = |v: f64| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+  (to_u8(r1), to_u8(g1), to_u8(b1))
 }
 
 #[cfg(test)]
