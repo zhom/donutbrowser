@@ -658,11 +658,24 @@ impl SyncScheduler {
       Ok(engine) => {
         for ext_id in extensions_to_sync {
           log::info!("Syncing extension {}", ext_id);
+          let _ = events::emit(
+            "extension-sync-status",
+            serde_json::json!({ "id": ext_id, "status": "syncing" }),
+          );
           if let Err(e) = engine
             .sync_extension_by_id_with_handle(&ext_id, app_handle)
             .await
           {
             log::error!("Failed to sync extension {}: {}", ext_id, e);
+            let _ = events::emit(
+              "extension-sync-status",
+              serde_json::json!({ "id": ext_id, "status": "error" }),
+            );
+          } else {
+            let _ = events::emit(
+              "extension-sync-status",
+              serde_json::json!({ "id": ext_id, "status": "synced" }),
+            );
           }
         }
       }
@@ -687,11 +700,24 @@ impl SyncScheduler {
       Ok(engine) => {
         for group_id in groups_to_sync {
           log::info!("Syncing extension group {}", group_id);
+          let _ = events::emit(
+            "extension-sync-status",
+            serde_json::json!({ "id": group_id, "status": "syncing" }),
+          );
           if let Err(e) = engine
             .sync_extension_group_by_id_with_handle(&group_id, app_handle)
             .await
           {
             log::error!("Failed to sync extension group {}: {}", group_id, e);
+            let _ = events::emit(
+              "extension-sync-status",
+              serde_json::json!({ "id": group_id, "status": "error" }),
+            );
+          } else {
+            let _ = events::emit(
+              "extension-sync-status",
+              serde_json::json!({ "id": group_id, "status": "synced" }),
+            );
           }
         }
       }
