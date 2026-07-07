@@ -578,12 +578,22 @@ impl CookieManager {
       .duration_since(std::time::UNIX_EPOCH)
       .unwrap()
       .as_secs() as i64;
+    // Session cookies get 30 days of persistence so they survive restart,
+    // mirroring write_firefox_cookies. A login imported from another browser is
+    // routinely exported as a session cookie; writing it as memory-only
+    // (is_persistent = 0) makes Chromium drop it on the next flush, so the
+    // imported account silently signs out on relaunch. Persisting it with a real
+    // expiry keeps it alive (expires_utc=0 would otherwise mean 1601-01-01).
+    let session_cookie_expiry = now + 30 * 86400;
 
     for cookie in cookies {
-      // Session cookies (no expiry) must have has_expires/is_persistent = 0.
-      // Otherwise Chromium interprets expires_utc=0 as 1601-01-01 (expired).
-      let has_expires = if cookie.expires > 0 { 1 } else { 0 };
-      let is_persistent = has_expires;
+      let expires = if cookie.expires > 0 {
+        cookie.expires
+      } else {
+        session_cookie_expiry
+      };
+      let has_expires = 1;
+      let is_persistent = 1;
       // HTTPS cookies use 443, HTTP uses 80. source_port participates in
       // Chromium's scheme-bound cookie enforcement.
       let source_port: i32 = if cookie.is_secure { 443 } else { 80 };
@@ -606,7 +616,7 @@ impl CookieManager {
                      WHERE host_key = ?12 AND name = ?13 AND path = ?14",
             params![
               &cookie.value,
-              Self::unix_to_chrome_time(cookie.expires),
+              Self::unix_to_chrome_time(expires),
               cookie.is_secure as i32,
               cookie.is_http_only as i32,
               cookie.same_site,
@@ -638,7 +648,7 @@ impl CookieManager {
               &cookie.name,
               &cookie.value,
               &cookie.path,
-              Self::unix_to_chrome_time(cookie.expires),
+              Self::unix_to_chrome_time(expires),
               cookie.is_secure as i32,
               cookie.is_http_only as i32,
               Self::unix_to_chrome_time(cookie.last_accessed),
@@ -1583,7 +1593,7 @@ mod tests {
   }
 
   #[test]
-  fn test_write_chrome_cookies_session_cookie_not_expired() {
+  fn test_write_chrome_cookies_session_cookie_persisted() {
     let tmp = std::env::temp_dir().join(format!("donut_cookie_test_{}.db", uuid::Uuid::new_v4()));
     create_chrome_cookies_db(&tmp);
 
@@ -1603,19 +1613,35 @@ mod tests {
     CookieManager::write_chrome_cookies(&tmp, &cookies).unwrap();
 
     let conn = Connection::open(&tmp).unwrap();
-    let (has_expires, is_persistent, source_scheme, source_port): (i32, i32, i32, i32) = conn
+    let (has_expires, is_persistent, expires_utc, source_scheme, source_port): (
+      i32,
+      i32,
+      i64,
+      i32,
+      i32,
+    ) = conn
       .query_row(
-        "SELECT has_expires, is_persistent, source_scheme, source_port
+        "SELECT has_expires, is_persistent, expires_utc, source_scheme, source_port
          FROM cookies WHERE name = ?1",
         params!["session"],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        |row| {
+          Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+          ))
+        },
       )
       .unwrap();
 
-    // Session cookie must not be persistent — otherwise Chromium treats
-    // expires_utc=0 as 1601-01-01 (immediately expired).
-    assert_eq!(has_expires, 0);
-    assert_eq!(is_persistent, 0);
+    // Imported session cookies are promoted to persistent with a far-future
+    // expiry so an imported login survives relaunch (mirrors the Firefox writer).
+    assert_eq!(has_expires, 1);
+    assert_eq!(is_persistent, 1);
+    // Must be a real future expiry, not 0 (which Chromium reads as 1601-01-01).
+    assert!(expires_utc > 0);
     // Non-secure cookie uses HTTP scheme + port 80
     assert_eq!(source_scheme, 1);
     assert_eq!(source_port, 80);
