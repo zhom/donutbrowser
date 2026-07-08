@@ -1,0 +1,17 @@
+# cargo-audit configuration
+#
+# The ignored advisories below all concern `quick-xml` 0.39.4, which is pulled in
+# ONLY by `wayland-scanner` (Linux clipboard support via arboard →
+# tauri-plugin-clipboard-manager). `wayland-scanner` pins `quick-xml ^0.39`, so
+# no patched release (>= 0.41.0) is reachable through that dependency chain.
+#
+# `wayland-scanner` uses quick-xml at build time to parse the Wayland protocol
+# XML definitions that ship inside the crate — trusted, bundled input, never
+# attacker-controlled — so the denial-of-service vectors these advisories
+# describe do not apply. Our own direct dependency is already on the patched
+# quick-xml 0.41. Remove these entries once wayland-scanner bumps its requirement.
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0194", # quick-xml: quadratic runtime on duplicate start-tag attribute names
+  "RUSTSEC-2026-0195", # quick-xml: unbounded namespace-declaration allocation in NsReader
+]

@@ -117,7 +117,6 @@ mod linux {
         install_dir.join("wayfern").join("chrome"),
         install_dir.join("chrome-linux").join("chrome"),
       ],
-      _ => vec![],
     };
 
     for executable_path in &possible_executables {
@@ -146,7 +145,6 @@ mod linux {
         install_dir.join("wayfern").join("chrome"),
         install_dir.join("chrome-linux").join("chrome"),
       ],
-      _ => vec![],
     };
 
     for exe_path in &possible_executables {
@@ -199,7 +197,6 @@ mod windows {
         install_dir.join("wayfern").join("chrome.exe"),
         install_dir.join("chrome-win").join("chrome.exe"),
       ],
-      _ => vec![],
     };
 
     for path in &possible_paths {
@@ -240,7 +237,6 @@ mod windows {
         install_dir.join("wayfern").join("chrome.exe"),
         install_dir.join("chrome-win").join("chrome.exe"),
       ],
-      _ => vec![],
     };
 
     for exe_path in &possible_executables {
