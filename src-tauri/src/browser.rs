@@ -193,7 +193,7 @@ mod windows {
   /// legacy Chromium-named build). Guards against archives wrongly given a
   /// `*.exe` name by requiring a valid PE header.
   fn is_wayfern_exe(path: &Path) -> bool {
-    if !path.extension().is_some_and(|ext| ext == "exe") || !is_pe_executable(path) {
+    if path.extension().is_none_or(|ext| ext != "exe") || !is_pe_executable(path) {
       return false;
     }
     let name = path
