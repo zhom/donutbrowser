@@ -32,7 +32,7 @@
 - **VPN support**: WireGuard configs per profile
 - **Local API & MCP**: REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
 - **Profile groups**: organize profiles and apply bulk settings
-- **Import profiles**: migrate from Chrome, Firefox, Edge, Brave, or other Chromium browsers
+- **Import profiles**: migrate from Chrome, Edge, Brave, or other Chromium browsers
 - **Cookie & extension management**: import/export cookies, manage extensions per profile
 - **Default browser**: set Donut as your default browser and choose which profile opens each link
 - **Cloud sync**: sync profiles, proxies, and groups across devices (self-hostable)
