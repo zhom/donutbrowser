@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "핑거프린트 편집은 Wayfern 프로필에서만 사용할 수 있습니다.",
       "lockedTitle": "핑거프린트 보기 및 편집은 Pro 기능입니다",
-      "lockedDescription": "핑거프린트 보호는 모든 요금제에 포함되어 있습니다. 프로필의 핑거프린트 값을 보고 편집하려면 활성 유료 요금제가 필요합니다."
+      "lockedDescription": "기기 정보는 모든 프로필에서 보호됩니다. 프로필의 핑거프린트를 보고 편집하려면 활성 유료 요금제가 필요합니다."
     },
     "syncStatusValue": {
       "waiting": "대기 중",

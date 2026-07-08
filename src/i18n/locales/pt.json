@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "A edição de impressão digital só está disponível para perfis Wayfern.",
       "lockedTitle": "Visualizar e editar a impressão digital é um recurso Pro",
-      "lockedDescription": "A proteção contra fingerprint está incluída em todos os planos. Visualizar e editar os valores da impressão digital de um perfil é o que requer um plano pago ativo."
+      "lockedDescription": "As informações do seu dispositivo estão protegidas em todos os perfis. Visualizar e editar a impressão digital de um perfil requer um plano pago ativo."
     },
     "syncStatusValue": {
       "waiting": "Aguardando",

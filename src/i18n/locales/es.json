@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "La edición de huellas digitales solo está disponible para perfiles Wayfern.",
       "lockedTitle": "Ver y editar la huella digital es una función Pro",
-      "lockedDescription": "La protección de huella digital está incluida en todos los planes. Ver y editar los valores de la huella digital de un perfil es lo que requiere un plan de pago activo."
+      "lockedDescription": "La información de tu dispositivo está protegida en cada perfil. Ver y editar la huella digital de un perfil requiere un plan de pago activo."
     },
     "syncStatusValue": {
       "waiting": "Esperando",

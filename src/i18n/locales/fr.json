@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "L'édition des empreintes n'est disponible que pour les profils Wayfern.",
       "lockedTitle": "Afficher et modifier l'empreinte est une fonctionnalité Pro",
-      "lockedDescription": "La protection contre le fingerprinting est incluse dans tous les forfaits. C'est l'affichage et la modification des valeurs de l'empreinte d'un profil qui nécessitent un forfait payant actif."
+      "lockedDescription": "Les informations de votre appareil sont protégées dans chaque profil. Afficher et modifier l'empreinte d'un profil nécessite un forfait payant actif."
     },
     "syncStatusValue": {
       "waiting": "En attente",

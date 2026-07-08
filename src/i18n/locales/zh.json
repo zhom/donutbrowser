@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "指纹编辑仅适用于 Wayfern 配置文件。",
       "lockedTitle": "查看和编辑指纹是 Pro 功能",
-      "lockedDescription": "所有方案都包含指纹保护。查看和编辑配置文件的指纹数值才需要有效的付费方案。"
+      "lockedDescription": "每个配置文件中都会保护你的设备信息。查看和编辑配置文件的指纹需要有效的付费方案。"
     },
     "syncStatusValue": {
       "waiting": "等待中",

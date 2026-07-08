@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "Fingerprint editing is only available for Wayfern profiles.",
       "lockedTitle": "Viewing & editing the fingerprint is a Pro feature",
-      "lockedDescription": "Fingerprint protection is included on every plan. Viewing and editing a profile's fingerprint values is what requires an active paid plan."
+      "lockedDescription": "Your device information is protected in every profile. Viewing and editing a profile's fingerprint requires an active paid plan."
     },
     "syncStatusValue": {
       "waiting": "Waiting",

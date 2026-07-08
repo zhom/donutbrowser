@@ -1195,7 +1195,7 @@
     "fingerprint": {
       "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Wayfern.",
       "lockedTitle": "Xem và chỉnh sửa vân tay là tính năng Pro",
-      "lockedDescription": "Bảo vệ vân tay được bao gồm trong mọi gói. Việc xem và chỉnh sửa các giá trị vân tay của profile mới là phần yêu cầu gói trả phí đang hoạt động."
+      "lockedDescription": "Thông tin thiết bị của bạn được bảo vệ trong mọi profile. Việc xem và chỉnh sửa vân tay của profile yêu cầu gói trả phí đang hoạt động."
     },
     "syncStatusValue": {
       "waiting": "Đang chờ",
