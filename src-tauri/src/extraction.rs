@@ -203,7 +203,6 @@ impl Extractor {
       }
       "exe" => {
         // For Windows EXE files, some may be self-extracting archives, others are installers
-        // For browsers like Firefox, TOR, they're typically installers that don't need extraction
         self
           .handle_exe_file(archive_path, dest_dir, browser_type.clone())
           .await
@@ -974,8 +973,9 @@ impl Extractor {
       dest_dir.display()
     );
 
-    // Look for .exe files, preferring main browser executables
-    let priority_exe_names = ["firefox.exe", "chrome.exe", "chromium.exe", "wayfern.exe"];
+    // Look for .exe files, preferring main browser executables. Wayfern is the
+    // current name; chromium/chrome cover builds extracted before the rename.
+    let priority_exe_names = ["wayfern.exe", "chromium.exe", "chrome.exe"];
 
     // First try priority executable names
     for exe_name in &priority_exe_names {
@@ -1037,8 +1037,7 @@ impl Extractor {
               .to_lowercase();
 
             // Check if it's a browser executable
-            if file_name.contains("firefox")
-              || file_name.contains("chrome")
+            if file_name.contains("chrome")
               || file_name.contains("chromium")
               || file_name.contains("browser")
               || file_name.contains("wayfern")
@@ -1087,20 +1086,19 @@ impl Extractor {
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Searching for Linux executable in: {}", dest_dir.display());
 
-    // Enhanced list of common browser executable names
+    // Enhanced list of common browser executable names, Wayfern first since it
+    // is the current name. Chrome/Chromium cover builds extracted before the
+    // rename.
     let exe_names = [
-      // Firefox variants
-      "firefox",
-      "firefox-bin",
-      // Chrome/Chromium variants (used by Wayfern)
+      // Wayfern variants (current naming)
+      "wayfern",
+      "wayfern-bin",
+      "wayfern-browser",
+      // Chrome/Chromium variants (builds extracted before the rename)
       "chrome",
       "chromium",
       "chromium-browser",
       "chromium-bin",
-      // Wayfern variants
-      "wayfern",
-      "wayfern-bin",
-      "wayfern-browser",
     ];
 
     // First, try direct lookup in the main directory
@@ -1120,15 +1118,15 @@ impl Extractor {
       "opt",
       "sbin",
       "usr/sbin",
-      "firefox",
+      "wayfern",
+      "wayfern-linux",
       "chrome",
       "chromium",
-      "wayfern",
+      "chrome-linux",
       ".",
       "./",
       "Browser",
       "browser",
-      "usr/lib/firefox",
       "usr/lib/chromium",
       "usr/share/applications",
       "usr/bin",
@@ -1219,8 +1217,7 @@ impl Extractor {
           // Check if file looks like it should be executable
           if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
             let name_lower = file_name.to_lowercase();
-            if name_lower.contains("firefox")
-              || name_lower.contains("chrome")
+            if name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
               || name_lower.contains("wayfern")
@@ -1274,8 +1271,7 @@ impl Extractor {
           // Prefer files with browser-like names
           if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
             let name_lower = file_name.to_lowercase();
-            if name_lower.contains("firefox")
-              || name_lower.contains("chrome")
+            if name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
               || name_lower.contains("wayfern")
@@ -1709,17 +1705,17 @@ mod tests {
     let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
-    // Create a Firefox.app directory
-    let firefox_app = temp_dir.path().join("Firefox.app");
-    create_dir_all(&firefox_app).unwrap();
+    // Create a Wayfern.app directory
+    let wayfern_app = temp_dir.path().join("Wayfern.app");
+    create_dir_all(&wayfern_app).unwrap();
 
     // Create the standard macOS app structure
-    let contents_dir = firefox_app.join("Contents");
+    let contents_dir = wayfern_app.join("Contents");
     let macos_dir = contents_dir.join("MacOS");
     create_dir_all(&macos_dir).unwrap();
 
     // Create the executable
-    let executable = macos_dir.join("firefox");
+    let executable = macos_dir.join("Wayfern");
     File::create(&executable).unwrap();
 
     // Test finding the app
@@ -1727,7 +1723,7 @@ mod tests {
     assert!(result.is_ok());
 
     let found_app = result.unwrap();
-    assert_eq!(found_app.file_name().unwrap(), "Firefox.app");
+    assert_eq!(found_app.file_name().unwrap(), "Wayfern.app");
     assert!(found_app.exists());
   }
 
