@@ -1,6 +1,55 @@
 # Changelog
 
 
+## v0.28.0 (2026-07-08)
+
+### Features
+
+- ipv6 support for wireguard
+- per-profile window color with id-derived default
+- emit extension sync-status events
+
+### Bug Fixes
+
+- background status/update loop and window-color command
+- sync engine correctness and manifest traversal guard
+- replace create-profile Back button with Close
+- don't start window drag on interactive controls
+- self-reap proxy worker off-runtime and redact upstream creds in logs
+- resolve VPN SOCKS5 domain CONNECT requests through the tunnel
+- persist imported session cookies so logins survive relaunch
+
+### Refactoring
+
+- handle newer wayfern versions
+- fully deprecate camoufox
+- cleanup
+- better handling of unstable connection during asset downloads
+- backend-authoritative team scope and config/input hardening
+
+### Documentation
+
+- readme
+- agents
+
+### Maintenance
+
+- chore: version bump
+- chore: rename macos artifacts in ci
+- chore: lint
+- chore: copy
+- chore: linux ci
+- chore: update dependencies
+- chore: migrate biome config and exclude build dirs
+- ci(deps): bump the github-actions group with 6 updates
+- ci(deps): bump anomalyco/opencode/github in the github-actions group (#480)
+- chore: update flake.nix for v0.27.1 [skip ci] (#464)
+
+### Other
+
+- security: restrict secret files to owner-only (0600)
+
+
 ## v0.27.1 (2026-06-24)
 
 ### Features
