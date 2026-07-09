@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.28.1 (2026-07-09)
+
+### Refactoring
+
+- do not use system proxy on windows
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.28.0 [skip ci] (#490)
+
+
 ## v0.28.0 (2026-07-08)
 
 ### Features
