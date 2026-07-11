@@ -1243,7 +1243,7 @@ impl AppAutoUpdater {
             if !log_content.is_empty() {
               log::info!(
                 "Log file content (last 500 chars): {}",
-                &log_content
+                log_content
                   .chars()
                   .rev()
                   .take(500)
