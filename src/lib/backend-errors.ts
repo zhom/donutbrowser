@@ -34,6 +34,8 @@ export type BackendErrorCode =
   | "PROXY_PAYMENT_REQUIRED"
   | "VPN_NOT_WORKING"
   | "CAMOUFOX_IMPORT_DEPRECATED"
+  | "UPDATE_CHECKSUMS_UNAVAILABLE"
+  | "UPDATE_CHECKSUM_MISMATCH"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -138,6 +140,14 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.vpnNotWorking");
     case "CAMOUFOX_IMPORT_DEPRECATED":
       return t("backendErrors.camoufoxImportDeprecated");
+    case "UPDATE_CHECKSUMS_UNAVAILABLE":
+      return t("backendErrors.updateChecksumsUnavailable", {
+        version: parsed.params?.version ?? "",
+      });
+    case "UPDATE_CHECKSUM_MISMATCH":
+      return t("backendErrors.updateChecksumMismatch", {
+        file: parsed.params?.file ?? "",
+      });
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

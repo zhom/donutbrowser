@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AppUpdateToast } from "@/components/app-update-toast";
+import { translateBackendError } from "@/lib/backend-errors";
 import { showToast } from "@/lib/toast-utils";
 import type { AppUpdateInfo, AppUpdateProgress } from "@/types";
 
@@ -82,11 +83,16 @@ export function useAppUpdateNotifications() {
         showToast({
           type: "error",
           title: t("appUpdate.toast.updateFailed"),
-          description: String(error),
+          description: translateBackendError(t, error),
           duration: 6000,
         });
         setIsUpdating(false);
         setUpdateProgress(null);
+        // Deliberately NOT resetting autoDownloadedVersion here: the
+        // auto-download effect re-runs as soon as isUpdating flips back to
+        // false, so clearing the marker now would retry in a tight loop.
+        // Retries are re-armed when the next backend check delivers a fresh
+        // update event instead.
       }
     },
     [t],
@@ -127,6 +133,12 @@ export function useAppUpdateNotifications() {
       "app-update-available",
       (event) => {
         console.log("App update available:", event.payload);
+        // A fresh backend check re-arms auto-download, so a version whose
+        // earlier attempt failed (e.g. a transient checksum-fetch error) is
+        // retried once per periodic check instead of staying blocked until
+        // restart. The effect's updateReady guard keeps an already-prepared
+        // update from being downloaded again.
+        autoDownloadedVersion.current = null;
         setUpdateInfo(event.payload);
       },
     );

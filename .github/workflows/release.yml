@@ -280,6 +280,29 @@ jobs:
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
           rm -f $RUNNER_TEMP/build_certificate.p12 || true
 
+  # Runs after every matrix leg (including the portable ZIP upload) so the
+  # sums cover the complete, final asset set. The app self-updater refuses to
+  # install a release it cannot verify against this file.
+  checksums:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate and upload SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ASSETS_DIR="/tmp/release-assets"
+          mkdir -p "$ASSETS_DIR"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$ASSETS_DIR"
+          cd "$ASSETS_DIR"
+          sha256sum Donut* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+
   changelog:
     if: github.repository == 'zhom/donutbrowser'
     needs: [release]

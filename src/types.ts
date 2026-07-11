@@ -211,6 +211,10 @@ export interface AppUpdateInfo {
   manual_update_required: boolean;
   release_page_url?: string;
   repo_update: boolean;
+  /** URL of the release's SHA256SUMS.txt; downloads are verified against it. */
+  checksums_url?: string | null;
+  /** GitHub-computed digest of the chosen asset ("sha256:<hex>"). */
+  asset_digest?: string | null;
 }
 
 export interface AppUpdateProgress {

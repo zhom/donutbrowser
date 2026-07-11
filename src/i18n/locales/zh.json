@@ -1798,7 +1798,9 @@
     "proxyNotWorking": "所选代理无法使用，因此未创建配置文件。",
     "proxyPaymentRequired": "所选代理需要付费（402），其订阅可能已过期，因此未创建配置文件。",
     "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。",
-    "camoufoxImportDeprecated": "不再支持导入基于 Firefox 的配置文件。请改用 Wayfern。"
+    "camoufoxImportDeprecated": "不再支持导入基于 Firefox 的配置文件。请改用 Wayfern。",
+    "updateChecksumsUnavailable": "无法验证更新 {{version}}：无法获取其校验和文件。更新未安装，稍后将重试。",
+    "updateChecksumMismatch": "下载的更新文件 {{file}} 未通过校验和验证，已被丢弃。请重试。"
   },
   "rail": {
     "profiles": "配置文件",
