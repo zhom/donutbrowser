@@ -45,6 +45,137 @@ fn has_quarantine_attr(path: &Path) -> bool {
   result >= 0
 }
 
+/// Best-effort recursive size of a file tree. Uses `symlink_metadata` so
+/// symlinks inside .app bundles are not followed (`cp -R` copies them as
+/// links, so following them would overcount and could loop).
+#[cfg(target_os = "macos")]
+fn dir_size(path: &Path) -> u64 {
+  let Ok(meta) = fs::symlink_metadata(path) else {
+    return 0;
+  };
+  if meta.is_file() {
+    return meta.len();
+  }
+  if !meta.is_dir() {
+    return 0;
+  }
+  let Ok(entries) = fs::read_dir(path) else {
+    return 0;
+  };
+  entries.flatten().map(|entry| dir_size(&entry.path())).sum()
+}
+
+const PROGRESS_REPORT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(150);
+
+/// Emits throttled "extracting" progress on the `download-progress` channel so
+/// the UI can render a moving bar during long extractions.
+pub struct ExtractionReporter {
+  browser: String,
+  version: String,
+  last_emit: std::sync::Mutex<std::time::Instant>,
+}
+
+impl ExtractionReporter {
+  pub fn new(browser: String, version: String) -> Self {
+    // Backdate so the first report goes out immediately.
+    let backdated = std::time::Instant::now()
+      .checked_sub(PROGRESS_REPORT_INTERVAL)
+      .unwrap_or_else(std::time::Instant::now);
+    Self {
+      browser,
+      version,
+      last_emit: std::sync::Mutex::new(backdated),
+    }
+  }
+
+  /// Report byte-level progress where bytes map linearly onto the whole job.
+  pub fn report_bytes(&self, done: u64, total: u64) {
+    if total == 0 {
+      return;
+    }
+    let done = done.min(total);
+    self.report((done as f64 / total as f64) * 100.0, done, Some(total));
+  }
+
+  /// Report a pre-computed percentage (multi-phase extractions where byte
+  /// counts don't map linearly onto overall progress).
+  pub fn report_percentage(&self, percentage: f64) {
+    self.report(percentage, 0, None);
+  }
+
+  /// Force a final 100% event so the bar lands full before the next stage.
+  pub fn finish(&self) {
+    self.emit(100.0, 0, None);
+  }
+
+  fn report(&self, percentage: f64, downloaded_bytes: u64, total_bytes: Option<u64>) {
+    {
+      let mut last = self.last_emit.lock().unwrap();
+      if last.elapsed() < PROGRESS_REPORT_INTERVAL {
+        return;
+      }
+      *last = std::time::Instant::now();
+    }
+    self.emit(percentage, downloaded_bytes, total_bytes);
+  }
+
+  fn emit(&self, percentage: f64, downloaded_bytes: u64, total_bytes: Option<u64>) {
+    let progress = DownloadProgress {
+      browser: self.browser.clone(),
+      version: self.version.clone(),
+      downloaded_bytes,
+      total_bytes,
+      percentage: percentage.clamp(0.0, 100.0),
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: None,
+      stage: "extracting".to_string(),
+    };
+    let _ = events::emit("download-progress", &progress);
+  }
+}
+
+/// A reader that passes cumulative bytes read to a callback on every read.
+/// Throttling is the reporter's job, so the callback can fire freely.
+struct ProgressReader<R, F: FnMut(u64)> {
+  inner: R,
+  bytes_read: u64,
+  on_read: F,
+}
+
+impl<R, F: FnMut(u64)> ProgressReader<R, F> {
+  fn new(inner: R, on_read: F) -> Self {
+    Self {
+      inner,
+      bytes_read: 0,
+      on_read,
+    }
+  }
+}
+
+impl<R: Read, F: FnMut(u64)> Read for ProgressReader<R, F> {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    let n = self.inner.read(buf)?;
+    self.bytes_read += n as u64;
+    (self.on_read)(self.bytes_read);
+    Ok(n)
+  }
+}
+
+/// Wrap an archive file so compressed bytes consumed report linearly against
+/// its on-disk size — shared by the streaming tar decoders, where stream
+/// position maps monotonically onto overall extraction progress.
+fn progress_file_reader(
+  file: File,
+  progress: Option<&ExtractionReporter>,
+) -> io::Result<impl Read + '_> {
+  let compressed_total = file.metadata()?.len();
+  Ok(ProgressReader::new(file, move |read| {
+    if let Some(reporter) = progress {
+      reporter.report_bytes(read, compressed_total);
+    }
+  }))
+}
+
 pub struct Extractor;
 
 impl Extractor {
@@ -145,6 +276,11 @@ impl Extractor {
     };
     let _ = events::emit("download-progress", &progress);
 
+    // Reports incremental extraction progress to the UI. Formats without a
+    // measurable byte stream (MSI, plain EXE/AppImage copies) simply never
+    // report, and the frontend falls back to an indeterminate bar.
+    let reporter = ExtractionReporter::new(browser_type.as_str().to_string(), version.to_string());
+
     log::info!(
       "Starting extraction of {} for browser {} version {}",
       archive_path.display(),
@@ -166,7 +302,7 @@ impl Extractor {
       "dmg" => {
         #[cfg(target_os = "macos")]
         {
-          self.extract_dmg(archive_path, dest_dir).await.map_err(|e| {
+          self.extract_dmg(archive_path, dest_dir, Some(&reporter)).await.map_err(|e| {
             format!("DMG extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
           })
         }
@@ -177,22 +313,22 @@ impl Extractor {
         }
       }
       "zip" => {
-        self.extract_zip(archive_path, dest_dir).await.map_err(|e| {
+        self.extract_zip(archive_path, dest_dir, Some(&reporter)).await.map_err(|e| {
           format!("ZIP extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
         })
       }
       "tar.xz" => {
-        self.extract_tar_xz(archive_path, dest_dir).await.map_err(|e| {
+        self.extract_tar_xz(archive_path, dest_dir, Some(&reporter)).await.map_err(|e| {
           format!("TAR.XZ extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
         })
       }
       "tar.bz2" => {
-        self.extract_tar_bz2(archive_path, dest_dir).await.map_err(|e| {
+        self.extract_tar_bz2(archive_path, dest_dir, Some(&reporter)).await.map_err(|e| {
           format!("TAR.BZ2 extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
         })
       }
       "tar.gz" => {
-        self.extract_tar_gz(archive_path, dest_dir).await.map_err(|e| {
+        self.extract_tar_gz(archive_path, dest_dir, Some(&reporter)).await.map_err(|e| {
           format!("TAR.GZ extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
         })
       }
@@ -237,6 +373,8 @@ impl Extractor {
 
     match extraction_result {
       Ok(path) => {
+        reporter.finish();
+
         // Remove quarantine attributes on macOS to prevent Gatekeeper prompts —
         // but only if there's actually something to remove. Calling the
         // modify-class `removexattr` syscall on a file without quarantine still
@@ -381,6 +519,7 @@ impl Extractor {
     &self,
     dmg_path: &Path,
     dest_dir: &Path,
+    progress: Option<&ExtractionReporter>,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!(
       "Extracting DMG: {} to {}",
@@ -454,20 +593,42 @@ impl Extractor {
 
     log::info!("Copying .app to: {}", app_path.display());
 
+    // The copy is the long pole of DMG extraction; size up the source once so
+    // we can report real progress by polling the destination while cp runs.
+    // report_bytes no-ops on a 0 total, so the None path skips both walks.
+    let total_size = if progress.is_some() {
+      dir_size(&app_entry)
+    } else {
+      0
+    };
+
     // `-X` strips extended attributes (notably com.apple.quarantine) during
     // the copy itself. Without it, `cp -R` preserves quarantine from the
     // mounted DMG, which then has to be removed with `xattr -dr` — and that
     // removexattr syscall on a signed .app bundle trips macOS Sequoia's App
     // Management TCC notification ("Donut.app was prevented from modifying
     // apps on your Mac"). Stripping at copy time is silent.
-    let output = Command::new("cp")
-      .args([
-        "-RX",
-        app_entry.to_str().unwrap(),
-        app_path.to_str().unwrap(),
-      ])
-      .output()
-      .await?;
+    let copy_src = app_entry.to_str().unwrap().to_string();
+    let copy_dst = app_path.to_str().unwrap().to_string();
+    let mut copy_task = tokio::spawn(async move {
+      Command::new("cp")
+        .args(["-RX", &copy_src, &copy_dst])
+        .output()
+        .await
+    });
+
+    let output = loop {
+      tokio::select! {
+        result = &mut copy_task => {
+          break result.map_err(|e| format!("Copy task failed: {e}"))??;
+        }
+        () = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
+          if let Some(reporter) = progress {
+            reporter.report_bytes(dir_size(&app_path), total_size);
+          }
+        }
+      }
+    };
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
@@ -598,6 +759,7 @@ impl Extractor {
     &self,
     zip_path: &Path,
     dest_dir: &Path,
+    progress: Option<&ExtractionReporter>,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Extracting ZIP archive: {}", zip_path.display());
     std::fs::create_dir_all(dest_dir)?;
@@ -609,6 +771,15 @@ impl Extractor {
       .map_err(|e| format!("Failed to read ZIP archive {}: {}", zip_path.display(), e))?;
 
     log::info!("ZIP archive contains {} files", archive.len());
+
+    // Total uncompressed size, known from the central directory without any
+    // decompression. None for archives using data descriptors — those get no
+    // byte progress (the UI falls back to an indeterminate bar).
+    let total_uncompressed: Option<u64> = archive
+      .decompressed_size()
+      .and_then(|total| u64::try_from(total).ok())
+      .filter(|total| *total > 0);
+    let mut extracted_bytes: u64 = 0;
 
     for i in 0..archive.len() {
       let mut entry = archive
@@ -639,8 +810,16 @@ impl Extractor {
 
         let mut outfile = File::create(&outpath)
           .map_err(|e| format!("Failed to create file {}: {}", outpath.display(), e))?;
-        io::copy(&mut entry, &mut outfile)
+        let entry_size = entry.size();
+        let already_extracted = extracted_bytes;
+        let mut reader = ProgressReader::new(&mut entry, |read| {
+          if let (Some(reporter), Some(total)) = (progress, total_uncompressed) {
+            reporter.report_bytes(already_extracted + read, total);
+          }
+        });
+        io::copy(&mut reader, &mut outfile)
           .map_err(|e| format!("Failed to extract file {}: {}", outpath.display(), e))?;
+        extracted_bytes = extracted_bytes.saturating_add(entry_size);
 
         // Set executable permissions on Unix-like systems based on stored mode
         #[cfg(unix)]
@@ -670,12 +849,14 @@ impl Extractor {
     &self,
     tar_path: &Path,
     dest_dir: &Path,
+    progress: Option<&ExtractionReporter>,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Extracting tar.gz archive: {}", tar_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
-    let gz_decoder = flate2::read::GzDecoder::new(BufReader::new(file));
+    let counted = progress_file_reader(file, progress)?;
+    let gz_decoder = flate2::read::GzDecoder::new(BufReader::new(counted));
     let mut archive = tar::Archive::new(gz_decoder);
 
     archive.unpack(dest_dir)?;
@@ -693,12 +874,14 @@ impl Extractor {
     &self,
     tar_path: &Path,
     dest_dir: &Path,
+    progress: Option<&ExtractionReporter>,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Extracting tar.bz2 archive: {}", tar_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
-    let bz2_decoder = bzip2::read::BzDecoder::new(BufReader::new(file));
+    let counted = progress_file_reader(file, progress)?;
+    let bz2_decoder = bzip2::read::BzDecoder::new(BufReader::new(counted));
     let mut archive = tar::Archive::new(bz2_decoder);
 
     archive.unpack(dest_dir)?;
@@ -716,6 +899,7 @@ impl Extractor {
     &self,
     tar_path: &Path,
     dest_dir: &Path,
+    progress: Option<&ExtractionReporter>,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Extracting tar.xz archive: {}", tar_path.display());
     std::fs::create_dir_all(dest_dir)?;
@@ -726,17 +910,34 @@ impl Extractor {
     // Read the entire file into memory for lzma-rs
     let mut compressed_data = Vec::new();
     buf_reader.read_to_end(&mut compressed_data)?;
+    let compressed_total = compressed_data.len() as u64;
 
-    // Decompress using lzma-rs
+    // Two phases with no shared byte scale: CPU-bound LZMA decompression
+    // dominates, so compressed bytes consumed map to 0–80%, and the tar
+    // unpack of the decompressed data to 80–100%.
     let mut decompressed_data = Vec::new();
-    lzma_rs::xz_decompress(
-      &mut std::io::Cursor::new(compressed_data),
-      &mut decompressed_data,
-    )?;
+    let counted_input = ProgressReader::new(std::io::Cursor::new(compressed_data), |read| {
+      if let Some(reporter) = progress {
+        if compressed_total > 0 {
+          reporter
+            .report_percentage(80.0 * read.min(compressed_total) as f64 / compressed_total as f64);
+        }
+      }
+    });
+    lzma_rs::xz_decompress(&mut BufReader::new(counted_input), &mut decompressed_data)?;
 
     // Create tar archive from decompressed data
-    let cursor = std::io::Cursor::new(decompressed_data);
-    let mut archive = tar::Archive::new(cursor);
+    let decompressed_total = decompressed_data.len() as u64;
+    let counted_tar = ProgressReader::new(std::io::Cursor::new(decompressed_data), |read| {
+      if let Some(reporter) = progress {
+        if decompressed_total > 0 {
+          reporter.report_percentage(
+            80.0 + 20.0 * read.min(decompressed_total) as f64 / decompressed_total as f64,
+          );
+        }
+      }
+    });
+    let mut archive = tar::Archive::new(counted_tar);
 
     archive.unpack(dest_dir)?;
 
@@ -1473,6 +1674,86 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn test_extract_zip_reports_progress() {
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct CapturingEmitter(Mutex<Vec<serde_json::Value>>);
+
+    impl crate::events::EventEmitter for CapturingEmitter {
+      fn emit_value(&self, event: &str, payload: serde_json::Value) -> Result<(), String> {
+        if event == "download-progress" {
+          self.0.lock().unwrap().push(payload);
+        }
+        Ok(())
+      }
+    }
+
+    let captured = Arc::new(CapturingEmitter::default());
+    // The global emitter can only be set once per process; if another test ever
+    // claims it first we lose observability, so only assert on captured events
+    // when this test's emitter actually won.
+    let emitter_installed = crate::events::set_global_emitter(captured.clone()).is_ok();
+
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dest_dir = temp_dir.path().join("extracted");
+
+    // A payload comfortably larger than io::copy's 8KB chunks so the counting
+    // reader fires multiple times.
+    let payload = vec![0x42u8; 256 * 1024];
+    let zip_path = temp_dir.path().join("test.zip");
+    {
+      let file = std::fs::File::create(&zip_path).expect("Failed to create test zip file");
+      let mut zip = zip::ZipWriter::new(file);
+      let options =
+        zip::write::FileOptions::<()>::default().compression_method(zip::CompressionMethod::Stored);
+      zip
+        .start_file("data.bin", options)
+        .expect("Failed to start zip file");
+      zip.write_all(&payload).expect("Failed to write to zip");
+      zip.finish().expect("Failed to finish zip");
+    }
+
+    let reporter =
+      ExtractionReporter::new("test-browser-zip-progress".to_string(), "1.0.0".to_string());
+    let result = extractor
+      .extract_zip(&zip_path, &dest_dir, Some(&reporter))
+      .await;
+
+    // Extraction itself must have worked even if no executable is found.
+    assert!(dest_dir.join("data.bin").exists(), "payload not extracted");
+    if let Err(e) = result {
+      assert!(
+        e.to_string().contains("executable"),
+        "unexpected extraction error: {e}"
+      );
+    }
+
+    if emitter_installed {
+      let events = captured.0.lock().unwrap();
+      let ours: Vec<_> = events
+        .iter()
+        .filter(|p| p["browser"] == "test-browser-zip-progress")
+        .collect();
+      assert!(
+        !ours.is_empty(),
+        "expected at least one extracting progress event"
+      );
+      for p in &ours {
+        assert_eq!(p["stage"], "extracting");
+        assert_eq!(p["version"], "1.0.0");
+        let pct = p["percentage"].as_f64().unwrap();
+        assert!(
+          (0.0..=100.0).contains(&pct),
+          "percentage out of range: {pct}"
+        );
+        assert_eq!(p["total_bytes"].as_u64(), Some(payload.len() as u64));
+      }
+    }
+  }
+
+  #[tokio::test]
   async fn test_extract_zip_with_test_archive() {
     let extractor = Extractor::instance();
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -1496,7 +1777,7 @@ mod tests {
       zip.finish().expect("Failed to finish zip");
     }
 
-    let result = extractor.extract_zip(&zip_path, &dest_dir).await;
+    let result = extractor.extract_zip(&zip_path, &dest_dir, None).await;
 
     // The result might fail because we're looking for executables, but the extraction should work
     // Let's check if the file was extracted regardless of the result
@@ -1545,7 +1826,9 @@ mod tests {
       tar.finish().expect("Failed to finish tar");
     }
 
-    let result = extractor.extract_tar_gz(&tar_gz_path, &dest_dir).await;
+    let result = extractor
+      .extract_tar_gz(&tar_gz_path, &dest_dir, None)
+      .await;
 
     // Check if the file was extracted
     let extracted_file = dest_dir.join("test.txt");
@@ -1596,7 +1879,9 @@ mod tests {
       tar.finish().expect("Failed to finish tar");
     }
 
-    let result = extractor.extract_tar_bz2(&tar_bz2_path, &dest_dir).await;
+    let result = extractor
+      .extract_tar_bz2(&tar_bz2_path, &dest_dir, None)
+      .await;
 
     // Check if the file was extracted
     let extracted_file = dest_dir.join("test.txt");
@@ -1657,7 +1942,9 @@ mod tests {
         .expect("Failed to write compressed data");
     }
 
-    let result = extractor.extract_tar_xz(&tar_xz_path, &dest_dir).await;
+    let result = extractor
+      .extract_tar_xz(&tar_xz_path, &dest_dir, None)
+      .await;
 
     // Check if the file was extracted
     let extracted_file = dest_dir.join("test.txt");

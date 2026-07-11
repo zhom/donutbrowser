@@ -159,6 +159,23 @@ function formatEtaCompact(seconds: number): string {
   return `${Math.round(seconds)}s`;
 }
 
+function ProgressBar({
+  percentage,
+  className = "w-full",
+}: {
+  percentage: number;
+  className?: string;
+}) {
+  return (
+    <div className={`h-1.5 rounded-full bg-muted ${className}`}>
+      <div
+        className="h-1.5 rounded-full bg-foreground transition-all duration-150"
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+}
+
 function getToastIcon(type: ToastProps["type"], stage?: string) {
   switch (type) {
     case "success":
@@ -232,12 +249,31 @@ export function UnifiedToast(props: ToastProps) {
                     ` • ${t("toasts.progress.remaining", { time: progress.eta })}`}
                 </p>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-muted">
-                <div
-                  className="h-1.5 rounded-full bg-foreground transition-all duration-150"
-                  style={{ width: `${progress.percentage}%` }}
-                />
-              </div>
+              <ProgressBar percentage={progress.percentage} />
+            </div>
+          )}
+
+        {/* Extraction / verification progress. Extraction reports a real
+            percentage for most archive formats; when none is available yet
+            (or the format can't measure progress) show an indeterminate bar. */}
+        {type === "download" &&
+          (stage === "extracting" || stage === "verifying") && (
+            <div className="mt-2 space-y-1">
+              {stage === "extracting" &&
+              progress &&
+              "percentage" in progress &&
+              progress.percentage > 0 ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    {progress.percentage.toFixed(1)}%
+                  </p>
+                  <ProgressBar percentage={progress.percentage} />
+                </>
+              ) : (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-1.5 w-1/3 animate-progress-indeterminate rounded-full bg-foreground" />
+                </div>
+              )}
             </div>
           )}
 
@@ -253,14 +289,10 @@ export function UnifiedToast(props: ToastProps) {
                   })}
               </p>
               <div className="flex items-center gap-x-2">
-                <div className="h-1.5 min-w-0 flex-1 rounded-full bg-muted">
-                  <div
-                    className="h-1.5 rounded-full bg-foreground transition-all duration-150"
-                    style={{
-                      width: `${(progress.current / progress.total) * 100}%`,
-                    }}
-                  />
-                </div>
+                <ProgressBar
+                  percentage={(progress.current / progress.total) * 100}
+                  className="min-w-0 flex-1"
+                />
                 <span className="w-8 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground">
                   {progress.current}/{progress.total}
                 </span>

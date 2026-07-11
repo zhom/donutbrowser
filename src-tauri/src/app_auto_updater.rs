@@ -825,7 +825,10 @@ impl AppAutoUpdater {
 
     // Handle compound extensions like .tar.gz
     if file_name.ends_with(".tar.gz") {
-      return self.extractor.extract_tar_gz(archive_path, dest_dir).await;
+      return self
+        .extractor
+        .extract_tar_gz(archive_path, dest_dir, None)
+        .await;
     }
 
     let extension = archive_path
@@ -837,7 +840,10 @@ impl AppAutoUpdater {
       "dmg" => {
         #[cfg(target_os = "macos")]
         {
-          self.extractor.extract_dmg(archive_path, dest_dir).await
+          self
+            .extractor
+            .extract_dmg(archive_path, dest_dir, None)
+            .await
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -901,7 +907,12 @@ impl AppAutoUpdater {
           Err("AppImage installation is only supported on Linux".into())
         }
       }
-      "zip" => self.extractor.extract_zip(archive_path, dest_dir).await,
+      "zip" => {
+        self
+          .extractor
+          .extract_zip(archive_path, dest_dir, None)
+          .await
+      }
       _ => Err(format!("Unsupported archive format: {extension}").into()),
     }
   }
@@ -1110,7 +1121,7 @@ impl AppAutoUpdater {
           // Extract ZIP file
           let extracted_path = self
             .extractor
-            .extract_zip(installer_path, &temp_extract_dir)
+            .extract_zip(installer_path, &temp_extract_dir, None)
             .await?;
 
           // Find the executable in the extracted files
@@ -1385,7 +1396,7 @@ impl AppAutoUpdater {
     // Extract tarball
     let extracted_path = self
       .extractor
-      .extract_tar_gz(tarball_path, &temp_extract_dir)
+      .extract_tar_gz(tarball_path, &temp_extract_dir, None)
       .await?;
 
     // Find the executable in the extracted files

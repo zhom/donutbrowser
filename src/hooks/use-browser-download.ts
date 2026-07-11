@@ -354,7 +354,14 @@ export function useBrowserDownload() {
               }
             } else if (progress.stage === "extracting") {
               if (!isOnboardingActive()) {
-                showDownloadToast(browserName, progress.version, "extracting");
+                showDownloadToast(
+                  browserName,
+                  progress.version,
+                  "extracting",
+                  progress.percentage > 0
+                    ? { percentage: progress.percentage }
+                    : undefined,
+                );
               }
             } else if (progress.stage === "verifying") {
               if (!isOnboardingActive()) {

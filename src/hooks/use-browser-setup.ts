@@ -27,10 +27,11 @@ export interface SetupError {
   stage: SetupErrorStage;
 }
 
-// The backend emits a real percentage only while downloading; extraction sends
-// a single "extracting" event with no incremental progress (it takes ~2 min).
-// So we estimate extraction progress from elapsed time vs. a learned average,
-// seeded at 2 minutes and refined with the real durations we record.
+// The backend reports real extraction percentages for most archive formats
+// (zip, tar.*, dmg). For formats that can't measure progress (e.g. MSI) the
+// "extracting" events carry percentage 0, so we fall back to estimating from
+// elapsed time vs. a learned average, seeded at 2 minutes and refined with
+// the real durations we record.
 const DEFAULT_EXTRACT_MS = 2 * 60 * 1000;
 const MAX_SAMPLES = 5; // the 2-min seed + up to 4 most recent real durations
 
@@ -89,8 +90,9 @@ function toErrorStage(stage: string): SetupErrorStage {
 }
 
 /**
- * Tracks first-launch setup of a browser: real download progress plus an
- * estimated extraction progress (no countdown timer, percentages only).
+ * Tracks first-launch setup of a browser: real download progress plus
+ * extraction progress — real backend percentages when the archive format
+ * supports them, otherwise a time-based estimate (percentages only).
  * `active` should be true while the owning dialog is open.
  */
 export function useBrowserSetup(browser: string, active: boolean) {
@@ -108,8 +110,12 @@ export function useBrowserSetup(browser: string, active: boolean) {
 
   const extractStartRef = useRef<number | null>(null);
   const estimateRef = useRef(DEFAULT_EXTRACT_MS);
-  // Fallback bookkeeping so a listener that mounts mid-flight (and therefore
-  // misses the single "extracting" event) can still show extraction progress.
+  // True once an "extracting" event carried a real percentage — from then on
+  // the backend drives the bar and the time-based estimate stays out of it.
+  const sawRealExtractionRef = useRef(false);
+  // Fallback bookkeeping so a listener that mounts mid-flight, or that only
+  // ever receives percentage-0 "extracting" events (formats that can't
+  // measure progress), can still show extraction progress.
   const sawDownloadingRef = useRef(false);
   const lastProgressAtRef = useRef<number | null>(null);
   const lastDownloadPercentRef = useRef(0);
@@ -133,6 +139,7 @@ export function useBrowserSetup(browser: string, active: boolean) {
       setExtractionOvertime(false);
       setError(null);
       extractStartRef.current = null;
+      sawRealExtractionRef.current = false;
       sawDownloadingRef.current = false;
       lastProgressAtRef.current = null;
       lastDownloadPercentRef.current = 0;
@@ -143,6 +150,7 @@ export function useBrowserSetup(browser: string, active: boolean) {
     let alive = true;
     estimateRef.current = average(readDurations(browser));
     extractStartRef.current = null;
+    sawRealExtractionRef.current = false;
     sawDownloadingRef.current = false;
     lastProgressAtRef.current = null;
     lastDownloadPercentRef.current = 0;
@@ -182,6 +190,11 @@ export function useBrowserSetup(browser: string, active: boolean) {
             }
             lastProgressAtRef.current = Date.now();
             setPhase("extracting");
+            if (p.percentage > 0) {
+              sawRealExtractionRef.current = true;
+              setExtractionPercent(Math.min(99, Math.round(p.percentage)));
+              setExtractionOvertime(false);
+            }
             break;
           case "verifying":
             lastStageRef.current = "verifying";
@@ -257,9 +270,9 @@ export function useBrowserSetup(browser: string, active: boolean) {
     // Drive the estimated extraction percentage while extracting.
     const tick = setInterval(() => {
       if (!alive || doneRef.current) return;
-      // If the download visibly finished but we never saw the (single)
-      // "extracting" event, start estimating extraction anyway — anchored to
-      // the last download event, which is roughly when extraction began.
+      // If the download visibly finished but we never saw any "extracting"
+      // event, start estimating extraction anyway — anchored to the last
+      // download event, which is roughly when extraction began.
       if (
         extractStartRef.current == null &&
         sawDownloadingRef.current &&
@@ -272,6 +285,9 @@ export function useBrowserSetup(browser: string, active: boolean) {
         setPhase("extracting");
       }
       if (extractStartRef.current == null) return;
+      // Real backend percentages drive the bar; the estimate would only
+      // fight them (and flag bogus "overtime" on a healthy extraction).
+      if (sawRealExtractionRef.current) return;
       const elapsed = Date.now() - extractStartRef.current;
       const est = estimateRef.current || DEFAULT_EXTRACT_MS;
       if (elapsed >= est) {
@@ -310,6 +326,7 @@ export function useBrowserSetup(browser: string, active: boolean) {
     setExtractionOvertime(false);
     setError(null);
     extractStartRef.current = null;
+    sawRealExtractionRef.current = false;
     sawDownloadingRef.current = false;
     lastProgressAtRef.current = null;
     lastDownloadPercentRef.current = 0;
