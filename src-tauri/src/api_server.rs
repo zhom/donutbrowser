@@ -55,9 +55,8 @@ pub struct ApiProfileResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateProfileRequest {
   pub name: String,
-  /// Browser engine. Must be `"wayfern"` (anti-detect Chromium)
-  /// (anti-detect Firefox). Any other value (e.g. `"chromium"`) is rejected with
-  /// 400.
+  /// Browser engine. Must be `"wayfern"` (anti-detect Chromium). Any other
+  /// value (e.g. `"chromium"`) is rejected with 400.
   pub browser: String,
   /// Optional. Omit (or pass `"latest"`) to use the newest already-downloaded
   /// version of the chosen browser. A concrete version must already be
@@ -72,12 +71,7 @@ pub struct CreateProfileRequest {
   /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
   /// generated automatically at creation. Provide a `fingerprint` field to
   /// pin a specific one.
-  #[schema(value_type = Object)]
-  /// Wayfern fingerprint/config. Send only when `browser` is `"wayfern"`.
-  /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
-  /// generated automatically at creation. Provide a `fingerprint` field to
-  /// pin a specific one.
-  #[schema(value_type = Object)]
+  #[schema(value_type = Option<Object>)]
   pub wayfern_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
@@ -94,7 +88,6 @@ pub struct UpdateProfileRequest {
   pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
-  #[schema(value_type = Object)]
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
   pub extension_group_id: Option<String>,
@@ -143,7 +136,7 @@ struct CreateProxyRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 struct UpdateProxyRequest {
   name: Option<String>,
-  #[schema(value_type = Object)]
+  #[schema(value_type = Option<Object>)]
   proxy_settings: Option<ProxySettings>,
 }
 
@@ -316,10 +309,15 @@ struct BatchStopResponse {
     delete_proxy,
     get_vpns,
     get_vpn,
+    export_vpn,
     import_vpn,
     create_vpn,
     update_vpn,
     delete_vpn,
+    get_extensions,
+    get_extension_groups,
+    delete_extension_api,
+    delete_extension_group_api,
     download_browser_api,
     get_browser_versions,
     check_browser_downloaded,
@@ -337,6 +335,7 @@ struct BatchStopResponse {
     CreateProxyRequest,
     UpdateProxyRequest,
     ApiVpnResponse,
+    ApiVpnExportResponse,
     ImportVpnRequest,
     CreateVpnRequest,
     UpdateVpnRequest,
@@ -361,6 +360,7 @@ struct BatchStopResponse {
     (name = "tags", description = "Tag management endpoints"),
     (name = "proxies", description = "Proxy management endpoints"),
     (name = "vpns", description = "VPN management endpoints"),
+    (name = "extensions", description = "Extension management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
     (name = "cookies", description = "Cookie management endpoints"),
   ),
@@ -468,7 +468,6 @@ impl ApiServer {
       .routes(routes!(download_browser_api))
       .routes(routes!(get_browser_versions))
       .routes(routes!(check_browser_downloaded))
-      .routes(routes!(get_wayfern_token, refresh_wayfern_token))
       .split_for_parts();
 
     let api = ApiDoc::openapi();
@@ -679,6 +678,71 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
 }
 
 // API Handlers - Profiles
+/// Maps a manager-layer error onto a consistent HTTP status: 404 for missing
+/// entities, 400 for validation/duplicate/client-input errors, 500 for
+/// everything else (IO and other internal failures). The error text passes
+/// through as the response body so API clients get a diagnostic instead of a
+/// bare status code. Matching is on message content because the managers
+/// return plain strings (some are the JSON `{"code": ...}` strings shared
+/// with the Tauri commands).
+fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
+  let msg = err.to_string();
+
+  // Structured {"code": ...} errors from the shared managers classify exactly.
+  if let Ok(value) = serde_json::from_str::<serde_json::Value>(&msg) {
+    if let Some(code) = value.get("code").and_then(|c| c.as_str()) {
+      let status = if code.ends_with("_NOT_FOUND") {
+        StatusCode::NOT_FOUND
+      } else if code == "INTERNAL_ERROR" {
+        StatusCode::INTERNAL_SERVER_ERROR
+      } else {
+        // Validation-style codes (NAME_CANNOT_BE_EMPTY, GROUP_ALREADY_EXISTS,
+        // WAYFERN_VERSION_NOT_AVAILABLE, ...).
+        StatusCode::BAD_REQUEST
+      };
+      return (status, msg);
+    }
+  }
+
+  // Plain-text manager messages: match the known phrases narrowly so raw
+  // OS/serde/network error text (e.g. "invalid type: ..." from a corrupt
+  // store) falls through to 500 instead of masquerading as a client error.
+  let lower = msg.to_lowercase();
+  let status = if lower.contains("not found") {
+    StatusCode::NOT_FOUND
+  } else if lower.contains("already exists")
+    || lower.contains("cannot set both")
+    || lower.contains("cannot edit")
+    || lower.contains("cannot delete")
+    || lower.contains("cannot open url")
+    || lower.contains("invalid browser")
+    || lower.contains("invalid profile id")
+    || lower.contains("unsupported browser")
+    || lower.contains("not supported on your platform")
+    || lower.contains("is not downloaded")
+    || lower.contains("terms and conditions")
+  {
+    StatusCode::BAD_REQUEST
+  } else {
+    StatusCode::INTERNAL_SERVER_ERROR
+  };
+  (status, msg)
+}
+
+/// Real per-group profile counts, computed from the profile list (the same
+/// source of truth the GUI uses).
+fn group_profile_counts() -> std::collections::HashMap<String, usize> {
+  let mut counts = std::collections::HashMap::new();
+  if let Ok(profiles) = ProfileManager::instance().list_profiles() {
+    for profile in profiles {
+      if let Some(group_id) = profile.group_id {
+        *counts.entry(group_id).or_insert(0) += 1;
+      }
+    }
+  }
+  counts
+}
+
 #[utoipa::path(
   get,
   path = "/v1/profiles",
@@ -963,41 +1027,37 @@ async fn update_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProfileRequest>,
-) -> Result<Json<ApiProfileResponse>, StatusCode> {
+) -> Result<Json<ApiProfileResponse>, (StatusCode, String)> {
   let profile_manager = ProfileManager::instance();
 
   if request.proxy_id.as_deref().is_some_and(|s| !s.is_empty())
     && request.vpn_id.as_deref().is_some_and(|s| !s.is_empty())
   {
-    return Err(StatusCode::BAD_REQUEST);
+    return Err((
+      StatusCode::BAD_REQUEST,
+      "Cannot set both proxy_id and vpn_id".to_string(),
+    ));
   }
 
   // Update profile fields
   if let Some(new_name) = request.name {
-    if profile_manager
-      .rename_profile(&state.app_handle, &id, &new_name)
-      .is_err()
-    {
-      return Err(StatusCode::BAD_REQUEST);
+    if let Err(e) = profile_manager.rename_profile(&state.app_handle, &id, &new_name) {
+      return Err(manager_error_response(e));
     }
   }
 
   if let Some(version) = request.version {
-    if profile_manager
-      .update_profile_version(&state.app_handle, &id, &version)
-      .is_err()
-    {
-      return Err(StatusCode::BAD_REQUEST);
+    if let Err(e) = profile_manager.update_profile_version(&state.app_handle, &id, &version) {
+      return Err(manager_error_response(e));
     }
   }
 
   if let Some(proxy_id) = request.proxy_id {
-    if profile_manager
+    if let Err(e) = profile_manager
       .update_profile_proxy(state.app_handle.clone(), &id, Some(proxy_id))
       .await
-      .is_err()
     {
-      return Err(StatusCode::BAD_REQUEST);
+      return Err(manager_error_response(e));
     }
   }
 
@@ -1007,12 +1067,11 @@ async fn update_profile(
     } else {
       Some(vpn_id)
     };
-    if profile_manager
+    if let Err(e) = profile_manager
       .update_profile_vpn(state.app_handle.clone(), &id, normalized)
       .await
-      .is_err()
     {
-      return Err(StatusCode::BAD_REQUEST);
+      return Err(manager_error_response(e));
     }
   }
 
@@ -1023,29 +1082,22 @@ async fn update_profile(
       Some(launch_hook)
     };
 
-    if profile_manager
-      .update_profile_launch_hook(&state.app_handle, &id, normalized)
-      .is_err()
-    {
-      return Err(StatusCode::BAD_REQUEST);
+    if let Err(e) = profile_manager.update_profile_launch_hook(&state.app_handle, &id, normalized) {
+      return Err(manager_error_response(e));
     }
   }
 
   if let Some(group_id) = request.group_id {
-    if profile_manager
-      .assign_profiles_to_group(&state.app_handle, vec![id.clone()], Some(group_id))
-      .is_err()
+    if let Err(e) =
+      profile_manager.assign_profiles_to_group(&state.app_handle, vec![id.clone()], Some(group_id))
     {
-      return Err(StatusCode::BAD_REQUEST);
+      return Err(manager_error_response(e));
     }
   }
 
   if let Some(tags) = request.tags {
-    if profile_manager
-      .update_profile_tags(&state.app_handle, &id, tags)
-      .is_err()
-    {
-      return Err(StatusCode::BAD_REQUEST);
+    if let Err(e) = profile_manager.update_profile_tags(&state.app_handle, &id, tags) {
+      return Err(manager_error_response(e));
     }
 
     // Update tag manager with new tags from all profiles
@@ -1062,34 +1114,31 @@ async fn update_profile(
     } else {
       Some(extension_group_id)
     };
-    if profile_manager
-      .update_profile_extension_group(&id, ext_group)
-      .is_err()
-    {
-      return Err(StatusCode::BAD_REQUEST);
+    if let Err(e) = profile_manager.update_profile_extension_group(&id, ext_group) {
+      return Err(manager_error_response(e));
     }
   }
 
   if let Some(proxy_bypass_rules) = request.proxy_bypass_rules {
-    if profile_manager
-      .update_profile_proxy_bypass_rules(&state.app_handle, &id, proxy_bypass_rules)
-      .is_err()
+    if let Err(e) =
+      profile_manager.update_profile_proxy_bypass_rules(&state.app_handle, &id, proxy_bypass_rules)
     {
-      return Err(StatusCode::BAD_REQUEST);
+      return Err(manager_error_response(e));
     }
   }
 
   if let Some(sync_mode) = request.sync_mode {
-    if crate::sync::set_profile_sync_mode(state.app_handle.clone(), id.clone(), sync_mode)
-      .await
-      .is_err()
+    if let Err(e) =
+      crate::sync::set_profile_sync_mode(state.app_handle.clone(), id.clone(), sync_mode).await
     {
-      return Err(StatusCode::BAD_REQUEST);
+      return Err(manager_error_response(e));
     }
   }
 
   // Return updated profile
-  get_profile(Path(id), State(state)).await
+  get_profile(Path(id), State(state))
+    .await
+    .map_err(|status| (status, String::new()))
 }
 
 #[utoipa::path(
@@ -1102,6 +1151,7 @@ async fn update_profile(
     (status = 204, description = "Profile deleted successfully"),
     (status = 400, description = "Bad request"),
     (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -1112,11 +1162,11 @@ async fn update_profile(
 async fn delete_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   let profile_manager = ProfileManager::instance();
   match profile_manager.delete_profile(&state.app_handle, &id) {
     Ok(_) => Ok(StatusCode::NO_CONTENT),
-    Err(_) => Err(StatusCode::BAD_REQUEST),
+    Err(e) => Err(manager_error_response(e)),
   }
 }
 
@@ -1138,22 +1188,21 @@ async fn get_groups(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<Vec<ApiGroupResponse>>, StatusCode> {
   match GROUP_MANAGER.lock() {
-    Ok(manager) => {
-      match manager.get_all_groups() {
-        Ok(groups) => {
-          let api_groups = groups
-            .into_iter()
-            .map(|group| ApiGroupResponse {
-              id: group.id,
-              name: group.name,
-              profile_count: 0, // Would need profile list to calculate this
-            })
-            .collect();
-          Ok(Json(api_groups))
-        }
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Ok(manager) => match manager.get_all_groups() {
+      Ok(groups) => {
+        let counts = group_profile_counts();
+        let api_groups = groups
+          .into_iter()
+          .map(|group| ApiGroupResponse {
+            profile_count: counts.get(&group.id).copied().unwrap_or(0),
+            id: group.id,
+            name: group.name,
+          })
+          .collect();
+        Ok(Json(api_groups))
       }
-    }
+      Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    },
     Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
   }
 }
@@ -1184,9 +1233,9 @@ async fn get_group(
       Ok(groups) => {
         if let Some(group) = groups.into_iter().find(|g| g.id == id) {
           Ok(Json(ApiGroupResponse {
+            profile_count: group_profile_counts().get(&group.id).copied().unwrap_or(0),
             id: group.id,
             name: group.name,
-            profile_count: 0,
           }))
         } else {
           Err(StatusCode::NOT_FOUND)
@@ -1216,7 +1265,7 @@ async fn get_group(
 async fn create_group(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateGroupRequest>,
-) -> Result<Json<ApiGroupResponse>, StatusCode> {
+) -> Result<Json<ApiGroupResponse>, (StatusCode, String)> {
   match GROUP_MANAGER.lock() {
     Ok(manager) => match manager.create_group(&state.app_handle, request.name) {
       Ok(group) => Ok(Json(ApiGroupResponse {
@@ -1224,9 +1273,12 @@ async fn create_group(
         name: group.name,
         profile_count: 0,
       })),
-      Err(_) => Err(StatusCode::BAD_REQUEST),
+      Err(e) => Err(manager_error_response(e)),
     },
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Err(_) => Err((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      "group manager unavailable".to_string(),
+    )),
   }
 }
 
@@ -1253,17 +1305,20 @@ async fn update_group(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateGroupRequest>,
-) -> Result<Json<ApiGroupResponse>, StatusCode> {
+) -> Result<Json<ApiGroupResponse>, (StatusCode, String)> {
   match GROUP_MANAGER.lock() {
     Ok(manager) => match manager.update_group(&state.app_handle, id.clone(), request.name) {
       Ok(group) => Ok(Json(ApiGroupResponse {
+        profile_count: group_profile_counts().get(&group.id).copied().unwrap_or(0),
         id: group.id,
         name: group.name,
-        profile_count: 0,
       })),
-      Err(_) => Err(StatusCode::BAD_REQUEST),
+      Err(e) => Err(manager_error_response(e)),
     },
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Err(_) => Err((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      "group manager unavailable".to_string(),
+    )),
   }
 }
 
@@ -1275,8 +1330,8 @@ async fn update_group(
   ),
   responses(
     (status = 204, description = "Group deleted successfully"),
-    (status = 400, description = "Bad request"),
     (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Group not found"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -1287,13 +1342,16 @@ async fn update_group(
 async fn delete_group(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   match GROUP_MANAGER.lock() {
     Ok(manager) => match manager.delete_group(&state.app_handle, id.clone()) {
       Ok(_) => Ok(StatusCode::NO_CONTENT),
-      Err(_) => Err(StatusCode::BAD_REQUEST),
+      Err(e) => Err(manager_error_response(e)),
     },
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Err(_) => Err((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      "group manager unavailable".to_string(),
+    )),
   }
 }
 
@@ -1402,7 +1460,7 @@ async fn get_proxy(
 async fn create_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProxyRequest>,
-) -> Result<Json<ApiProxyResponse>, StatusCode> {
+) -> Result<Json<ApiProxyResponse>, (StatusCode, String)> {
   let result = PROXY_MANAGER.create_stored_proxy(
     &state.app_handle,
     request.name.clone(),
@@ -1415,7 +1473,7 @@ async fn create_proxy(
       name: proxy.name,
       proxy_settings: proxy.proxy_settings,
     })),
-    Err(_) => Err(StatusCode::BAD_REQUEST),
+    Err(e) => Err(manager_error_response(e)),
   }
 }
 
@@ -1442,7 +1500,7 @@ async fn update_proxy(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProxyRequest>,
-) -> Result<Json<ApiProxyResponse>, StatusCode> {
+) -> Result<Json<ApiProxyResponse>, (StatusCode, String)> {
   let result =
     PROXY_MANAGER.update_stored_proxy(&state.app_handle, &id, request.name, request.proxy_settings);
 
@@ -1452,7 +1510,7 @@ async fn update_proxy(
       name: proxy.name,
       proxy_settings: proxy.proxy_settings,
     })),
-    Err(_) => Err(StatusCode::NOT_FOUND),
+    Err(e) => Err(manager_error_response(e)),
   }
 }
 
@@ -1464,8 +1522,9 @@ async fn update_proxy(
   ),
   responses(
     (status = 204, description = "Proxy deleted successfully"),
-    (status = 400, description = "Bad request"),
+    (status = 400, description = "Bad request (e.g. cloud-managed proxy)"),
     (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Proxy not found"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -1476,10 +1535,10 @@ async fn update_proxy(
 async fn delete_proxy(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   match PROXY_MANAGER.delete_stored_proxy(&state.app_handle, &id) {
     Ok(_) => Ok(StatusCode::NO_CONTENT),
-    Err(_) => Err(StatusCode::BAD_REQUEST),
+    Err(e) => Err(manager_error_response(e)),
   }
 }
 
@@ -1770,6 +1829,7 @@ async fn get_extension_groups(
     (status = 204, description = "Extension deleted"),
     (status = 401, description = "Unauthorized"),
     (status = 404, description = "Extension not found"),
+    (status = 500, description = "Internal server error"),
   ),
   security(("bearer_auth" = [])),
   tag = "extensions"
@@ -1777,12 +1837,12 @@ async fn get_extension_groups(
 async fn delete_extension_api(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
   mgr
     .delete_extension(&state.app_handle, &id)
     .map(|_| StatusCode::NO_CONTENT)
-    .map_err(|_| StatusCode::NOT_FOUND)
+    .map_err(manager_error_response)
 }
 
 #[utoipa::path(
@@ -1793,6 +1853,7 @@ async fn delete_extension_api(
     (status = 204, description = "Extension group deleted"),
     (status = 401, description = "Unauthorized"),
     (status = 404, description = "Extension group not found"),
+    (status = 500, description = "Internal server error"),
   ),
   security(("bearer_auth" = [])),
   tag = "extensions"
@@ -1800,12 +1861,12 @@ async fn delete_extension_api(
 async fn delete_extension_group_api(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
   mgr
     .delete_group(&state.app_handle, &id)
     .map(|_| StatusCode::NO_CONTENT)
-    .map_err(|_| StatusCode::NOT_FOUND)
+    .map_err(manager_error_response)
 }
 
 // API Handler - Run Profile with Remote Debugging
@@ -1820,7 +1881,9 @@ async fn delete_extension_group_api(
     (status = 200, description = "Profile launched successfully", body = RunProfileResponse),
     (status = 400, description = "Cannot launch cross-OS profile"),
     (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
+    (status = 409, description = "Profile is locked by another team member"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -1905,7 +1968,9 @@ async fn run_profile(
   request_body = OpenUrlRequest,
   responses(
     (status = 200, description = "URL opened successfully"),
+    (status = 400, description = "Cannot open URL with a cross-OS profile"),
     (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
     (status = 500, description = "Internal server error")
   ),
@@ -1918,12 +1983,12 @@ async fn open_url_in_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<OpenUrlRequest>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   if !crate::cloud_auth::CLOUD_AUTH
     .can_use_browser_automation()
     .await
   {
-    return Err(StatusCode::PAYMENT_REQUIRED);
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
   }
 
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
@@ -1931,7 +1996,7 @@ async fn open_url_in_profile(
   browser_runner
     .open_url_with_profile(state.app_handle.clone(), id, request.url)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(manager_error_response)?;
 
   Ok(StatusCode::OK)
 }
@@ -2230,9 +2295,11 @@ async fn import_profile_cookies(
   path = "/v1/browsers/download",
   request_body = DownloadBrowserRequest,
   responses(
-    (status = 200, description = "Browser download initiated", body = DownloadBrowserResponse),
+    (status = 200, description = "Browser downloaded (or already present)", body = DownloadBrowserResponse),
+    (status = 400, description = "Invalid browser or version not available for download"),
     (status = 401, description = "Unauthorized"),
-    (status = 500, description = "Internal server error")
+    (status = 409, description = "This browser version is already being downloaded"),
+    (status = 500, description = "Internal server error (e.g. network failure)")
   ),
   security(
     ("bearer_auth" = [])
@@ -2242,20 +2309,27 @@ async fn import_profile_cookies(
 async fn download_browser_api(
   State(state): State<ApiServerState>,
   Json(request): Json<DownloadBrowserRequest>,
-) -> Result<Json<DownloadBrowserResponse>, StatusCode> {
+) -> Result<Json<DownloadBrowserResponse>, (StatusCode, String)> {
   match crate::downloader::download_browser(
     state.app_handle.clone(),
     request.browser.clone(),
-    request.version.clone(),
+    request.version,
   )
   .await
   {
-    Ok(_) => Ok(Json(DownloadBrowserResponse {
+    // Echo the version the downloader actually installed, not the requested one.
+    Ok(version) => Ok(Json(DownloadBrowserResponse {
       browser: request.browser,
-      version: request.version,
+      version,
       status: "downloaded".to_string(),
     })),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Err(e) => {
+      if e.contains("already being downloaded") {
+        Err((StatusCode::CONFLICT, e))
+      } else {
+        Err(manager_error_response(e))
+      }
+    }
   }
 }
 
@@ -2268,6 +2342,7 @@ async fn download_browser_api(
   ),
   responses(
     (status = 200, description = "List of available browser versions", body = Vec<String>),
+    (status = 400, description = "Unsupported browser"),
     (status = 401, description = "Unauthorized"),
     (status = 500, description = "Internal server error")
   ),
@@ -2279,7 +2354,7 @@ async fn download_browser_api(
 async fn get_browser_versions(
   Path(browser): Path<String>,
   State(_state): State<ApiServerState>,
-) -> Result<Json<Vec<String>>, StatusCode> {
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
   let version_manager = crate::browser_version_manager::BrowserVersionManager::instance();
 
   match version_manager
@@ -2287,7 +2362,7 @@ async fn get_browser_versions(
     .await
   {
     Ok(result) => Ok(Json(result.versions)),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Err(e) => Err(manager_error_response(e)),
   }
 }
 
@@ -2315,57 +2390,6 @@ async fn check_browser_downloaded(
 ) -> Result<Json<bool>, StatusCode> {
   let is_downloaded = crate::downloaded_browsers_registry::is_browser_downloaded(browser, version);
   Ok(Json(is_downloaded))
-}
-
-// API Handlers - Wayfern Token
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct WayfernTokenResponse {
-  pub token: Option<String>,
-}
-
-#[utoipa::path(
-  get,
-  path = "/v1/wayfern-token",
-  responses(
-    (status = 200, description = "Current wayfern token", body = WayfernTokenResponse),
-    (status = 401, description = "Unauthorized"),
-  ),
-  security(
-    ("bearer_auth" = [])
-  ),
-  tag = "wayfern"
-)]
-async fn get_wayfern_token(
-  State(_state): State<ApiServerState>,
-) -> Result<Json<WayfernTokenResponse>, StatusCode> {
-  let token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-  Ok(Json(WayfernTokenResponse { token }))
-}
-
-#[utoipa::path(
-  post,
-  path = "/v1/wayfern-token/refresh",
-  responses(
-    (status = 200, description = "Refreshed wayfern token", body = WayfernTokenResponse),
-    (status = 401, description = "Unauthorized"),
-    (status = 500, description = "Failed to refresh token"),
-  ),
-  security(
-    ("bearer_auth" = [])
-  ),
-  tag = "wayfern"
-)]
-async fn refresh_wayfern_token(
-  State(_state): State<ApiServerState>,
-) -> Result<Json<WayfernTokenResponse>, (StatusCode, String)> {
-  crate::cloud_auth::CLOUD_AUTH
-    .request_wayfern_token()
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-
-  let token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-  Ok(Json(WayfernTokenResponse { token }))
 }
 
 #[cfg(test)]
@@ -2415,7 +2439,68 @@ mod tests {
     let is_valid = |b: &str| b == "wayfern";
     assert!(is_valid("wayfern"));
     assert!(!is_valid("chromium"));
-    assert!(!is_valid("firefox"));
     assert!(!is_valid(""));
+  }
+
+  fn schema_required(spec: &serde_json::Value, schema: &str) -> Vec<String> {
+    spec["components"]["schemas"][schema]["required"]
+      .as_array()
+      .map(|a| {
+        a.iter()
+          .filter_map(|v| v.as_str().map(str::to_string))
+          .collect()
+      })
+      .unwrap_or_default()
+  }
+
+  // `#[schema(value_type = Object)]` on an `Option<T>` erases the optionality
+  // and marks the field required in the served spec; these fields must stay
+  // optional so generated clients aren't forced to send them.
+  #[test]
+  fn openapi_optional_fields_are_not_required() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+
+    let create_profile = schema_required(&spec, "CreateProfileRequest");
+    assert!(
+      !create_profile.iter().any(|f| f == "wayfern_config"),
+      "wayfern_config must be optional, required list: {create_profile:?}"
+    );
+
+    let update_profile = schema_required(&spec, "UpdateProfileRequest");
+    assert!(
+      !update_profile.iter().any(|f| f == "group_id"),
+      "group_id must be optional, required list: {update_profile:?}"
+    );
+
+    let update_proxy = schema_required(&spec, "UpdateProxyRequest");
+    assert!(
+      !update_proxy.iter().any(|f| f == "proxy_settings"),
+      "proxy_settings must be optional on update, required list: {update_proxy:?}"
+    );
+  }
+
+  // The served /openapi.json comes from the hand-maintained ApiDoc `paths(...)`
+  // list, not from the router — endpoints registered on the router but missing
+  // from ApiDoc silently disappear from the spec. Lock in the ones that were
+  // once dropped, and that removed endpoints stay gone.
+  #[test]
+  fn openapi_spec_covers_registered_routes() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let paths = spec["paths"].as_object().expect("paths object");
+
+    for path in [
+      "/v1/vpns/{id}/export",
+      "/v1/extensions",
+      "/v1/extension-groups",
+      "/v1/extensions/{id}",
+      "/v1/extension-groups/{id}",
+    ] {
+      assert!(paths.contains_key(path), "missing from ApiDoc: {path}");
+    }
+
+    assert!(
+      !paths.keys().any(|p| p.contains("wayfern-token")),
+      "wayfern-token endpoints were removed and must stay out of the spec"
+    );
   }
 }

@@ -109,7 +109,7 @@ impl BrowserVersionManager {
     self.api_client.is_cache_expired(browser)
   }
 
-  /// Get the latest Wayfern version (cached first)
+  /// Get the latest Wayfern version (fresh cache first)
   pub async fn get_browser_release_types(
     &self,
     browser: &str,
@@ -118,17 +118,30 @@ impl BrowserVersionManager {
       return Err(format!("Unsupported browser: {browser}").into());
     }
 
-    if let Some(cached_versions) = self.get_cached_browser_versions_detailed(browser) {
-      return Ok(BrowserReleaseTypes {
-        stable: cached_versions.first().map(|v| v.version.clone()),
-      });
+    // Only trust an unexpired cache. A stale entry can point at a version that
+    // is no longer published — the downloader rejects such requests, so serving
+    // it here would make every download started from this list fail.
+    if !self.api_client.is_cache_expired(browser) {
+      if let Some(cached_versions) = self.get_cached_browser_versions_detailed(browser) {
+        return Ok(BrowserReleaseTypes {
+          stable: cached_versions.first().map(|v| v.version.clone()),
+        });
+      }
     }
 
-    let detailed_versions = self.fetch_browser_versions_detailed(browser, false).await?;
-
-    Ok(BrowserReleaseTypes {
-      stable: detailed_versions.first().map(|v| v.version.clone()),
-    })
+    // Expired or missing cache: fetch fresh, falling back to whatever cache
+    // exists when the network is unavailable.
+    match self.fetch_browser_versions_detailed(browser, false).await {
+      Ok(detailed_versions) => Ok(BrowserReleaseTypes {
+        stable: detailed_versions.first().map(|v| v.version.clone()),
+      }),
+      Err(e) => match self.get_cached_browser_versions_detailed(browser) {
+        Some(cached_versions) => Ok(BrowserReleaseTypes {
+          stable: cached_versions.first().map(|v| v.version.clone()),
+        }),
+        None => Err(e),
+      },
+    }
   }
 
   /// Fetch browser versions with optional caching
@@ -440,7 +453,7 @@ mod tests {
 
     assert!(wayfern_info.url.contains("download.wayfern.com"));
 
-    let unsupported_result = service.get_download_info("firefox", "1.0.0");
+    let unsupported_result = service.get_download_info("testbrowser", "1.0.0");
     assert!(unsupported_result.is_err());
   }
 }

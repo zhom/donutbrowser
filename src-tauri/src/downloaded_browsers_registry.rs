@@ -1057,15 +1057,15 @@ mod tests {
   fn test_add_and_get_browser() {
     let registry = DownloadedBrowsersRegistry::new();
     let info = DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "139.0".to_string(),
       file_path: PathBuf::from("/test/path"),
     };
 
     registry.add_browser(info.clone());
 
-    assert!(registry.is_browser_registered("firefox", "139.0"));
-    assert!(!registry.is_browser_registered("firefox", "140.0"));
+    assert!(registry.is_browser_registered("testbrowser", "139.0"));
+    assert!(!registry.is_browser_registered("testbrowser", "140.0"));
     assert!(!registry.is_browser_registered("chrome", "139.0"));
   }
 
@@ -1074,19 +1074,19 @@ mod tests {
     let registry = DownloadedBrowsersRegistry::new();
 
     let info1 = DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "139.0".to_string(),
       file_path: PathBuf::from("/test/path1"),
     };
 
     let info2 = DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "140.0".to_string(),
       file_path: PathBuf::from("/test/path2"),
     };
 
     let info3 = DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "141.0".to_string(),
       file_path: PathBuf::from("/test/path3"),
     };
@@ -1095,7 +1095,7 @@ mod tests {
     registry.add_browser(info2);
     registry.add_browser(info3);
 
-    let versions = registry.get_downloaded_versions("firefox");
+    let versions = registry.get_downloaded_versions("testbrowser");
     assert_eq!(versions.len(), 3);
     assert!(versions.contains(&"139.0".to_string()));
     assert!(versions.contains(&"140.0".to_string()));
@@ -1107,22 +1107,22 @@ mod tests {
     let registry = DownloadedBrowsersRegistry::new();
 
     // Mark download started
-    registry.mark_download_started("firefox", "139.0", PathBuf::from("/test/path"));
+    registry.mark_download_started("testbrowser", "139.0", PathBuf::from("/test/path"));
 
     // Should NOT be registered until verification completes
     assert!(
-      !registry.is_browser_registered("firefox", "139.0"),
+      !registry.is_browser_registered("testbrowser", "139.0"),
       "Browser should NOT be registered after marking as started (only after verification)"
     );
 
     // Mark as completed (after verification)
     registry
-      .mark_download_completed("firefox", "139.0", PathBuf::from("/test/path"))
+      .mark_download_completed("testbrowser", "139.0", PathBuf::from("/test/path"))
       .expect("Failed to mark download as completed");
 
     // Should now be registered
     assert!(
-      registry.is_browser_registered("firefox", "139.0"),
+      registry.is_browser_registered("testbrowser", "139.0"),
       "Browser should be registered after verification completes"
     );
   }
@@ -1131,24 +1131,24 @@ mod tests {
   fn test_remove_browser() {
     let registry = DownloadedBrowsersRegistry::new();
     let info = DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "139.0".to_string(),
       file_path: PathBuf::from("/test/path"),
     };
 
     registry.add_browser(info);
     assert!(
-      registry.is_browser_registered("firefox", "139.0"),
+      registry.is_browser_registered("testbrowser", "139.0"),
       "Browser should be registered after adding"
     );
 
-    let removed = registry.remove_browser("firefox", "139.0");
+    let removed = registry.remove_browser("testbrowser", "139.0");
     assert!(
       removed.is_some(),
       "Remove operation should return the removed browser info"
     );
     assert!(
-      !registry.is_browser_registered("firefox", "139.0"),
+      !registry.is_browser_registered("testbrowser", "139.0"),
       "Browser should not be registered after removal"
     );
   }
@@ -1182,11 +1182,11 @@ mod tests {
   fn test_last_version_kept_during_cleanup() {
     let registry = DownloadedBrowsersRegistry::new();
 
-    // Add a single version for "firefox"
+    // Add a single version for "testbrowser"
     registry.add_browser(DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "139.0".to_string(),
-      file_path: PathBuf::from("/test/firefox/139.0"),
+      file_path: PathBuf::from("/test/testbrowser/139.0"),
     });
 
     // Add two versions for "chromium"
@@ -1206,11 +1206,11 @@ mod tests {
       .cleanup_unused_binaries_internal(&[], &[])
       .expect("cleanup should succeed");
 
-    // firefox 139.0 should be kept (last version), chromium should lose one but keep one
+    // testbrowser 139.0 should be kept (last version), chromium should lose one but keep one
     // The exact one kept depends on iteration order, but at least one must remain
     assert!(
-      !result.contains(&"firefox 139.0".to_string()),
-      "Last version of firefox should not be cleaned up"
+      !result.contains(&"testbrowser 139.0".to_string()),
+      "Last version of testbrowser should not be cleaned up"
     );
     // At most one chromium version should have been cleaned up
     let chromium_cleaned: Vec<_> = result
@@ -1223,10 +1223,10 @@ mod tests {
       chromium_cleaned
     );
 
-    // Verify firefox is still registered
+    // Verify testbrowser is still registered
     assert!(
-      registry.is_browser_registered("firefox", "139.0"),
-      "Last firefox version should still be registered"
+      registry.is_browser_registered("testbrowser", "139.0"),
+      "Last testbrowser version should still be registered"
     );
   }
 
@@ -1234,7 +1234,7 @@ mod tests {
   fn test_is_browser_registered_vs_downloaded() {
     let registry = DownloadedBrowsersRegistry::new();
     let info = DownloadedBrowserInfo {
-      browser: "firefox".to_string(),
+      browser: "testbrowser".to_string(),
       version: "139.0".to_string(),
       file_path: PathBuf::from("/test/path"),
     };
@@ -1244,14 +1244,14 @@ mod tests {
 
     // Should be registered (in-memory check)
     assert!(
-      registry.is_browser_registered("firefox", "139.0"),
+      registry.is_browser_registered("testbrowser", "139.0"),
       "Browser should be registered after adding to registry"
     );
 
     // is_browser_downloaded should return false in test environment because files don't exist
     // This tests the difference between registered (in registry) vs downloaded (files exist)
     assert!(
-      !registry.is_browser_downloaded("firefox", "139.0"),
+      !registry.is_browser_downloaded("testbrowser", "139.0"),
       "Browser should not be considered downloaded when files don't exist on disk"
     );
   }
@@ -1277,21 +1277,38 @@ pub async fn ensure_active_browsers_downloaded(
     }
     log::info!("ensure_active: No {browser} versions found, will download");
 
-    // Get the latest release type for this browser
-    let release_types = match version_manager.get_browser_release_types(browser).await {
-      Ok(rt) => rt,
-      Err(e) => {
-        log::warn!("Failed to get release types for {browser}: {e}");
-        continue;
+    // Resolve the version to download. For wayfern, only the currently
+    // published version is downloadable, so ask the API fresh — the release-type
+    // cache can be stale right after a new version is published, and the
+    // downloader rejects requests for versions that are no longer available.
+    let version = if *browser == "wayfern" {
+      match crate::api_client::ApiClient::instance()
+        .fetch_wayfern_version_with_caching(true)
+        .await
+      {
+        Ok(info) => info.version,
+        Err(e) => {
+          log::warn!("Failed to resolve current {browser} version: {e}");
+          continue;
+        }
       }
-    };
+    } else {
+      // Get the latest release type for this browser
+      let release_types = match version_manager.get_browser_release_types(browser).await {
+        Ok(rt) => rt,
+        Err(e) => {
+          log::warn!("Failed to get release types for {browser}: {e}");
+          continue;
+        }
+      };
 
-    // Use stable version (the only release type for these browsers)
-    let version = match release_types.stable {
-      Some(v) => v,
-      None => {
-        log::debug!("No stable version available for {browser} on this platform, skipping");
-        continue;
+      // Use stable version (the only release type for these browsers)
+      match release_types.stable {
+        Some(v) => v,
+        None => {
+          log::debug!("No stable version available for {browser} on this platform, skipping");
+          continue;
+        }
       }
     };
 
@@ -1330,8 +1347,8 @@ pub async fn ensure_active_browsers_downloaded(
         Err(_) => {
           // The download future itself hung past the overall timeout and was dropped,
           // so its own cleanup never ran. Clear any leftover in-progress bookkeeping
-          // (the future may have re-resolved to a different version, so clear by
-          // browser prefix) and emit a terminal error event so the UI stops spinning.
+          // (by browser prefix, as a catch-all for whatever key was in flight) and
+          // emit a terminal error event so the UI stops spinning.
           log::warn!(
             "Auto-download of {browser} {version} timed out after {}s (attempt {attempt}/{MAX_ATTEMPTS})",
             ATTEMPT_TIMEOUT.as_secs()

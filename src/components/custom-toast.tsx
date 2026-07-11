@@ -26,14 +26,14 @@
  *
  * Auto-update toast:
  * ```
- * showAutoUpdateToast("Firefox", "125.0.1");
+ * showAutoUpdateToast("Wayfern", "149.0.7827.116");
  * ```
  *
  * Download progress toast:
  * ```
  * showToast({
  *   type: "download",
- *   title: "Downloading Firefox 123.0",
+ *   title: "Downloading Wayfern 149.0.7827.116",
  *   progress: { percentage: 45, speed: "2.5", eta: "30s" }
  * });
  * ```

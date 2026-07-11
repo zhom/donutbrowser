@@ -280,11 +280,20 @@ impl ExtensionManager {
     let (manifest_name, version, description, author, homepage_url) =
       extract_manifest_metadata(&file_data, &file_type);
 
-    let final_name = if manifest_name.is_some() {
-      manifest_name.clone().unwrap_or(name)
-    } else {
-      name
+    // An empty/whitespace-only manifest name counts as absent so the
+    // user-provided name still applies.
+    let final_name = match manifest_name.clone() {
+      Some(n) if !n.trim().is_empty() => n,
+      _ => name,
     };
+
+    if final_name.trim().is_empty() {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
 
     let ext = Extension {
       id: uuid::Uuid::new_v4().to_string(),
@@ -510,6 +519,14 @@ impl ExtensionManager {
   }
 
   pub fn create_group(&self, name: String) -> Result<ExtensionGroup, Box<dyn std::error::Error>> {
+    if name.trim().is_empty() {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
+
     let mut data = self.load_groups_data()?;
 
     if data.groups.iter().any(|g| g.name == name) {
@@ -566,6 +583,14 @@ impl ExtensionManager {
     name: Option<String>,
     extension_ids: Option<Vec<String>>,
   ) -> Result<ExtensionGroup, Box<dyn std::error::Error>> {
+    if name.as_deref().is_some_and(|n| n.trim().is_empty()) {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
+
     let mut data = self.load_groups_data()?;
 
     if let Some(ref new_name) = name {
@@ -1080,7 +1105,7 @@ pub async fn add_extension(
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .add_extension(name, file_name, file_data)
-    .map_err(|e| format!("Failed to add extension: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to add extension"))
 }
 
 #[tauri::command]
@@ -1120,7 +1145,7 @@ pub async fn create_extension_group(name: String) -> Result<ExtensionGroup, Stri
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .create_group(name)
-    .map_err(|e| format!("Failed to create extension group: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to create extension group"))
 }
 
 #[tauri::command]
@@ -1132,7 +1157,7 @@ pub async fn update_extension_group(
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .update_group(&group_id, name, extension_ids)
-    .map_err(|e| format!("Failed to update extension group: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to update extension group"))
 }
 
 #[tauri::command]

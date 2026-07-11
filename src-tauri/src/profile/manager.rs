@@ -82,6 +82,14 @@ impl ProfileManager {
     dns_blocklist: Option<String>,
     launch_hook: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    if name.trim().is_empty() {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
+
     if proxy_id.is_some() && vpn_id.is_some() {
       return Err("Cannot set both proxy_id and vpn_id".into());
     }
@@ -399,6 +407,14 @@ impl ProfileManager {
     profile_id: &str,
     new_name: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    if new_name.trim().is_empty() {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
+
     // Check if new name already exists (case insensitive)
     let existing_profiles = self.list_profiles()?;
     if existing_profiles
@@ -1285,7 +1301,7 @@ impl ProfileManager {
         let profile_data_path_str = profile_data_path.to_string_lossy();
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
-          // For Firefox-based browsers, check for exact profile path match
+          // Match the Chromium --user-data-dir flag or an exact profile path argument
           arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
             || arg == profile_data_path_str
         });
@@ -1323,7 +1339,7 @@ impl ProfileManager {
           let profile_data_path_str = profile_data_path.to_string_lossy();
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
-            // For Firefox-based browsers, check for exact profile path match
+            // Match the Chromium --user-data-dir flag or an exact profile path argument
             arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
               || arg == profile_data_path_str
           });
@@ -1649,7 +1665,7 @@ pub async fn create_browser_profile_with_group(
       launch_hook,
     )
     .await
-    .map_err(|e| format!("Failed to create profile: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to create profile"))
 }
 
 #[tauri::command]
@@ -1799,7 +1815,7 @@ pub fn rename_profile(
   let profile_manager = ProfileManager::instance();
   profile_manager
     .rename_profile(&app_handle, &profile_id, &new_name)
-    .map_err(|e| format!("Failed to rename profile: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to rename profile"))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1427,7 +1427,7 @@ mod tests {
       .unwrap();
 
     // Imported session cookies are promoted to persistent with a far-future
-    // expiry so an imported login survives relaunch (mirrors the Firefox writer).
+    // expiry so an imported login survives relaunch.
     assert_eq!(has_expires, 1);
     assert_eq!(is_persistent, 1);
     // Must be a real future expiry, not 0 (which Chromium reads as 1601-01-01).

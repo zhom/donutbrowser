@@ -19,12 +19,9 @@ pub struct DetectedProfile {
   pub description: String,
 }
 
-fn map_browser_type(browser: &str) -> &str {
-  // Legacy Firefox-family sources map to Wayfern at import time.
-  match browser {
-    "firefox" | "firefox-developer" | "zen" | "camoufox" => "wayfern",
-    _ => "wayfern",
-  }
+fn map_browser_type(_browser: &str) -> &str {
+  // Every import source maps to Wayfern — the only launchable engine.
+  "wayfern"
 }
 
 pub struct ProfileImporter {
@@ -53,9 +50,9 @@ impl ProfileImporter {
   ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut detected_profiles = Vec::new();
 
-    // Firefox-based browsers (Firefox, Firefox Developer, Zen) map to Camoufox,
-    // which is deprecated — they can no longer be imported. Only Chromium-based
-    // sources (mapping to Wayfern) are detected.
+    // Only Chromium-based sources (mapping to Wayfern) are detected. Gecko-family
+    // sources mapped to Camoufox, which was removed, so they can no longer be
+    // imported.
     detected_profiles.extend(self.detect_chrome_profiles()?);
     detected_profiles.extend(self.detect_brave_profiles()?);
     detected_profiles.extend(self.detect_chromium_profiles()?);
@@ -210,8 +207,6 @@ impl ProfileImporter {
 
   fn get_browser_display_name(&self, browser_type: &str) -> &str {
     match browser_type {
-      "firefox" => "Firefox",
-      "firefox-developer" => "Firefox Developer",
       "chromium" => "Chrome/Chromium",
       "brave" => "Brave",
       "zen" => "Zen Browser",
@@ -508,11 +503,6 @@ mod tests {
   fn test_get_browser_display_name() {
     let (importer, _temp_dir) = create_test_profile_importer();
 
-    assert_eq!(importer.get_browser_display_name("firefox"), "Firefox");
-    assert_eq!(
-      importer.get_browser_display_name("firefox-developer"),
-      "Firefox Developer"
-    );
     assert_eq!(
       importer.get_browser_display_name("chromium"),
       "Chrome/Chromium"
@@ -527,9 +517,6 @@ mod tests {
 
   #[test]
   fn test_map_browser_type() {
-    assert_eq!(map_browser_type("firefox"), "wayfern");
-    assert_eq!(map_browser_type("firefox-developer"), "wayfern");
-    assert_eq!(map_browser_type("zen"), "wayfern");
     assert_eq!(map_browser_type("chromium"), "wayfern");
     assert_eq!(map_browser_type("brave"), "wayfern");
     assert_eq!(map_browser_type("camoufox"), "wayfern");

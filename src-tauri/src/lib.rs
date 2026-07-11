@@ -245,6 +245,18 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
   Ok(())
 }
 
+/// Prefix a command error with context, but pass structured `{"code": ...}`
+/// backend errors through untouched — the frontend can only translate a code
+/// when the JSON is the entire message (see src/lib/backend-errors.ts).
+pub(crate) fn wrap_backend_error(e: impl std::fmt::Display, context: &str) -> String {
+  let msg = e.to_string();
+  if msg.starts_with('{') {
+    msg
+  } else {
+    format!("{context}: {msg}")
+  }
+}
+
 #[tauri::command]
 async fn create_stored_proxy(
   app_handle: tauri::AppHandle,
@@ -254,7 +266,7 @@ async fn create_stored_proxy(
   if let Some(settings) = proxy_settings {
     crate::proxy_manager::PROXY_MANAGER
       .create_stored_proxy(&app_handle, name, settings)
-      .map_err(|e| format!("Failed to create stored proxy: {e}"))
+      .map_err(|e| wrap_backend_error(e, "Failed to create stored proxy"))
   } else {
     Err("proxy_settings is required".to_string())
   }
@@ -274,7 +286,7 @@ async fn update_stored_proxy(
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
   crate::proxy_manager::PROXY_MANAGER
     .update_stored_proxy(&app_handle, &proxy_id, name, proxy_settings)
-    .map_err(|e| format!("Failed to update stored proxy: {e}"))
+    .map_err(|e| wrap_backend_error(e, "Failed to update stored proxy"))
 }
 
 #[tauri::command]

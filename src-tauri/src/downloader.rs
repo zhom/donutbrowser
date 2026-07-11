@@ -23,6 +23,22 @@ lazy_static::lazy_static! {
     std::sync::Arc::new(Mutex::new(std::collections::HashMap::new()));
 }
 
+/// Clears a browser-version pair from the in-flight download maps on every
+/// exit path of `download_browser_full`. A leaked key would permanently report
+/// "already being downloaded" for that version until app restart.
+struct InFlightDownload(String);
+
+impl Drop for InFlightDownload {
+  fn drop(&mut self) {
+    if let Ok(mut downloading) = DOWNLOADING_BROWSERS.lock() {
+      downloading.remove(&self.0);
+    }
+    if let Ok(mut tokens) = DOWNLOAD_CANCELLATION_TOKENS.lock() {
+      tokens.remove(&self.0);
+    }
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadProgress {
   pub browser: String,
@@ -97,7 +113,13 @@ impl Downloader {
       .await?;
 
     if !response.status().is_success() {
-      return Err(format!("Download failed with status: {}", response.status()).into());
+      return Err(
+        format!(
+          "Download failed with HTTP status {}",
+          response.status().as_u16()
+        )
+        .into(),
+      );
     }
 
     let mut file = std::fs::OpenOptions::new()
@@ -131,10 +153,16 @@ impl Downloader {
           .fetch_wayfern_version_with_caching(true)
           .await?;
 
+        // Never substitute: downloading the current build into the requested
+        // version's directory would register a mislabeled install.
         if version_info.version != version {
-          log::info!(
-            "Wayfern: requested version {version}, using available version {}",
-            version_info.version
+          return Err(
+            serde_json::json!({
+              "code": "WAYFERN_VERSION_NOT_AVAILABLE",
+              "params": { "requested": version, "current": version_info.version }
+            })
+            .to_string()
+            .into(),
           );
         }
 
@@ -301,7 +329,13 @@ impl Downloader {
 
       // Check if the response is successful (200 OK or 206 Partial Content)
       if !(response.status().is_success() || response.status().as_u16() == 206) {
-        return Err(format!("Download failed with status: {}", response.status()).into());
+        return Err(
+          format!(
+            "Download failed with HTTP status {}",
+            response.status().as_u16()
+          )
+          .into(),
+        );
       }
 
       // Determine total size
@@ -504,25 +538,36 @@ impl Downloader {
       return Err("Please accept Wayfern Terms and Conditions before downloading browsers".into());
     }
 
-    // For Wayfern, resolve the actual available version from the API
-    let version = if browser_str == "wayfern" {
-      match self
+    // Validate the browser type before touching the in-flight maps so a bad
+    // request can't leave state behind.
+    let browser_type =
+      BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
+    let browser = create_browser(browser_type.clone());
+
+    // For Wayfern, only the currently published version can be fetched.
+    // Requesting any other not-yet-downloaded version is an error — silently
+    // substituting the latest would install a version the caller never asked
+    // for while the response still echoes the requested one. The fetch must
+    // succeed too: proceeding unverified would let resolve_download_url fetch
+    // the current build into the requested version's directory (a mislabeled
+    // install), and that URL resolution needs the same endpoint anyway.
+    if browser_str == "wayfern" && !self.registry.is_browser_downloaded(&browser_str, &version) {
+      let info = self
         .api_client
         .fetch_wayfern_version_with_caching(true)
         .await
-      {
-        Ok(info) if info.version != version => {
-          log::info!(
-            "Wayfern: requested {version}, using available {}",
-            info.version
-          );
-          info.version
-        }
-        _ => version,
+        .map_err(|e| format!("Failed to determine the current Wayfern version: {e}"))?;
+      if info.version != version {
+        return Err(
+          serde_json::json!({
+            "code": "WAYFERN_VERSION_NOT_AVAILABLE",
+            "params": { "requested": version, "current": info.version }
+          })
+          .to_string()
+          .into(),
+        );
       }
-    } else {
-      version
-    };
+    }
 
     // Check if this browser-version pair is already being downloaded
     let download_key = format!("{browser_str}-{version}");
@@ -539,10 +584,8 @@ impl Downloader {
       tokens.insert(download_key.clone(), token.clone());
       token
     };
-
-    let browser_type =
-      BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
-    let browser = create_browser(browser_type.clone());
+    // Cleared on drop, whatever exit path this function takes.
+    let _in_flight = InFlightDownload(download_key.clone());
 
     let binaries_dir = crate::app_dirs::binaries_dir();
 
@@ -551,12 +594,6 @@ impl Downloader {
       let actually_exists = browser.is_version_downloaded(&version, &binaries_dir);
 
       if actually_exists {
-        // Remove from downloading set since it's already downloaded
-        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-        downloading.remove(&download_key);
-        drop(downloading);
-        let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
-        tokens.remove(&download_key);
         return Ok(version);
       } else {
         // Registry says it's downloaded but files don't exist - clean up registry
@@ -575,12 +612,6 @@ impl Downloader {
       .is_browser_supported(&browser_str)
       .unwrap_or(false)
     {
-      // Remove from downloading set on error
-      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-      downloading.remove(&download_key);
-      drop(downloading);
-      let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
-      tokens.remove(&download_key);
       return Err(
         format!(
           "Browser '{}' is not supported on your platform ({} {}). Supported browsers: {}",
@@ -630,11 +661,6 @@ impl Downloader {
         // Clean registry entry and stop here so the UI can show a single, clear error.
         let _ = self.registry.remove_browser(&browser_str, &version);
         let _ = self.registry.save();
-        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-        downloading.remove(&download_key);
-        drop(downloading);
-        let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
-        tokens.remove(&download_key);
 
         // Emit a terminal stage so the UI stops spinning. A user cancellation maps to
         // "cancelled"; any other failure (network error, stall timeout, bad status)
@@ -687,14 +713,6 @@ impl Downloader {
 
           let _ = self.registry.remove_browser(&browser_str, &version);
           let _ = self.registry.save();
-          {
-            let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-            downloading.remove(&download_key);
-          }
-          {
-            let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
-            tokens.remove(&download_key);
-          }
 
           // Emit error stage so the UI shows a toast
           let progress = DownloadProgress {
@@ -777,15 +795,6 @@ impl Downloader {
       };
       let _ = events::emit("download-progress", &progress);
 
-      // Remove browser-version pair from downloading set on verification failure
-      {
-        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-        downloading.remove(&download_key);
-      }
-      {
-        let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
-        tokens.remove(&download_key);
-      }
       return Err(error_details.into());
     }
 
@@ -824,16 +833,6 @@ impl Downloader {
       stage: "completed".to_string(),
     };
     let _ = events::emit("download-progress", &progress);
-
-    // Remove browser-version pair from downloading set and cancel token
-    {
-      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-      downloading.remove(&download_key);
-    }
-    {
-      let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
-      tokens.remove(&download_key);
-    }
 
     // Auto-update non-running profiles to the latest installed version and cleanup unused binaries
     {
@@ -883,10 +882,9 @@ pub fn is_downloading(browser: &str, version: &str) -> bool {
 /// Clear all in-progress download bookkeeping for a browser.
 ///
 /// Used as a last-resort cleanup when a download future is abandoned (e.g. dropped
-/// by an outer timeout) before its own error path could run. Because
-/// `download_browser_full` may re-resolve to a different version than requested, this
-/// matches by the `"{browser}-"` key prefix rather than an exact version so no stuck
-/// key is left behind regardless of which version was actually in flight.
+/// by an outer timeout) before its own error path could run. Matches by the
+/// `"{browser}-"` key prefix rather than an exact version so no stuck key is left
+/// behind even when the caller doesn't know which version was actually in flight.
 pub fn clear_download_state_for_browser(browser: &str) {
   let prefix = format!("{browser}-");
   {
@@ -909,7 +907,7 @@ pub async fn download_browser(
   downloader
     .download_browser_full(&app_handle, browser_str, version)
     .await
-    .map_err(|e| format!("Failed to download browser: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to download browser"))
 }
 
 #[tauri::command]

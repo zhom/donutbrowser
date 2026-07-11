@@ -517,11 +517,11 @@ export function ImportProfileDialog({
                         {t("importProfile.examplePaths")}
                         <br />
                         macOS: ~/Library/Application
-                        Support/Firefox/Profiles/xxx.default
+                        Support/Google/Chrome/Default
                         <br />
-                        Windows: %APPDATA%\Mozilla\Firefox\Profiles\xxx.default
+                        Windows: %LOCALAPPDATA%\Google\Chrome\User Data\Default
                         <br />
-                        Linux: ~/.mozilla/firefox/xxx.default
+                        Linux: ~/.config/google-chrome/Default
                       </p>
                     </div>
 

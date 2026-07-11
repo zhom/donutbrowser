@@ -81,6 +81,14 @@ impl GroupManager {
     _app_handle: &tauri::AppHandle,
     name: String,
   ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
+    if name.trim().is_empty() {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
+
     let mut groups_data = self.load_groups_data()?;
 
     // Check if group with this name already exists
@@ -127,6 +135,14 @@ impl GroupManager {
     id: String,
     name: String,
   ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
+    if name.trim().is_empty() {
+      return Err(
+        serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
+          .to_string()
+          .into(),
+      );
+    }
+
     let mut groups_data = self.load_groups_data()?;
 
     // Check if another group with this name already exists

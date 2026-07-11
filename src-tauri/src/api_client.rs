@@ -278,7 +278,7 @@ impl ApiClient {
       {
         Ok(response) => {
           if !response.status().is_success() {
-            last_err = Some(format!("HTTP {}", response.status()));
+            last_err = Some(format!("HTTP {}", response.status().as_u16()));
           } else {
             match response.json::<WayfernVersionInfo>().await {
               Ok(info) => {

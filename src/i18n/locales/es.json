@@ -1798,9 +1798,11 @@
     "proxyNotWorking": "El proxy seleccionado no funciona, por lo que no se creó el perfil.",
     "proxyPaymentRequired": "El proxy seleccionado requiere pago (402) —su suscripción puede haber vencido— por lo que no se creó el perfil.",
     "vpnNotWorking": "La VPN seleccionada no funciona, por lo que no se creó el perfil.",
-    "camoufoxImportDeprecated": "La importación de perfiles basados en Firefox ya no está soportada. Utilice Wayfern en su lugar.",
+    "camoufoxImportDeprecated": "La importación de este tipo de perfil ya no es compatible. Utiliza Wayfern en su lugar.",
     "updateChecksumsUnavailable": "No se pudo verificar la actualización {{version}} porque no se pudo obtener su archivo de sumas de comprobación. La actualización no se instaló; se reintentará más tarde.",
-    "updateChecksumMismatch": "El archivo de actualización descargado {{file}} no superó la verificación de suma de comprobación y fue descartado. Inténtalo de nuevo."
+    "updateChecksumMismatch": "El archivo de actualización descargado {{file}} no superó la verificación de suma de comprobación y fue descartado. Inténtalo de nuevo.",
+    "nameCannotBeEmpty": "El nombre no puede estar vacío",
+    "wayfernVersionNotAvailable": "La versión {{requested}} de Wayfern no está disponible para descargar. La versión actual es {{current}}."
   },
   "rail": {
     "profiles": "Perfiles",

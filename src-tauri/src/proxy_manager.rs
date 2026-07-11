@@ -406,6 +406,10 @@ impl ProxyManager {
     name: String,
     proxy_settings: ProxySettings,
   ) -> Result<StoredProxy, String> {
+    if name.trim().is_empty() {
+      return Err(serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" }).to_string());
+    }
+
     // Check if name already exists
     {
       let stored_proxies = self.stored_proxies.lock().unwrap();
@@ -795,6 +799,10 @@ impl ProxyManager {
     name: Option<String>,
     proxy_settings: Option<ProxySettings>,
   ) -> Result<StoredProxy, String> {
+    if name.as_deref().is_some_and(|n| n.trim().is_empty()) {
+      return Err(serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" }).to_string());
+    }
+
     // First, check for conflicts without holding a mutable reference
     {
       let stored_proxies = self.stored_proxies.lock().unwrap();

@@ -15,8 +15,7 @@ use std::process::Command;
 fn cmd_matches_profile_path(cmd: &[std::ffi::OsString], profile_path: &str) -> bool {
   let args: Vec<&str> = cmd.iter().filter_map(|a| a.to_str()).collect();
   for (i, arg) in args.iter().enumerate() {
-    // Exact argument equality (Firefox: `-profile <path>`; some launchers
-    // pass the path as its own arg).
+    // Exact argument equality (some launchers pass the path as its own arg).
     if *arg == profile_path {
       return true;
     }
@@ -83,59 +82,6 @@ pub mod macos {
       // Fallback: direct spawn if this is not an app bundle
       Ok(Command::new(executable_path).args(args).spawn()?)
     }
-  }
-
-  pub async fn open_url_in_existing_browser_firefox_like(
-    profile: &BrowserProfile,
-    url: &str,
-    browser_type: BrowserType,
-    browser_dir: &Path,
-    profiles_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let pid = profile.process_id.unwrap();
-    let profile_data_path = profile.get_profile_data_path(profiles_dir);
-
-    // First try: Use Firefox remote command
-    log::info!("Trying Firefox remote command for PID: {pid}");
-    let browser = create_browser(browser_type);
-    if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
-      let remote_args = vec![
-        "-profile".to_string(),
-        profile_data_path.to_string_lossy().to_string(),
-        "-new-tab".to_string(),
-        url.to_string(),
-      ];
-
-      let remote_output = Command::new(executable_path).args(&remote_args).output();
-
-      match remote_output {
-        Ok(output) if output.status.success() => {
-          log::info!("Firefox remote command succeeded");
-          return Ok(());
-        }
-        Ok(output) => {
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          log::info!(
-            "Firefox remote command failed with stderr: {stderr}, trying AppleScript fallback"
-          );
-        }
-        Err(e) => {
-          log::info!("Firefox remote command error: {e}, trying AppleScript fallback");
-        }
-      }
-    }
-
-    // The Firefox `-new-tab` remote command failed. We intentionally do NOT
-    // fall back to an AppleScript `System Events` keystroke path: that would
-    // send Apple Events to another application and trigger the macOS TCC
-    // "<Donut> wants control of <Browser>" / "prevented from modifying other
-    // apps" prompts. Donut must never touch other apps on the user's Mac.
-    Err(
-      format!(
-        "Firefox remote command failed for PID {pid}; cannot open URL in existing window without touching other apps"
-      )
-      .into(),
-    )
   }
 
   pub async fn kill_browser_process_impl(
@@ -399,77 +345,6 @@ pub mod windows {
     Ok(child)
   }
 
-  pub async fn open_url_in_existing_browser_firefox_like(
-    profile: &BrowserProfile,
-    url: &str,
-    browser_type: BrowserType,
-    browser_dir: &Path,
-    profiles_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let browser = create_browser(browser_type);
-    let executable_path = browser
-      .get_executable_path(browser_dir)
-      .map_err(|e| format!("Failed to get executable path: {}", e))?;
-
-    let profile_data_path = profile.get_profile_data_path(profiles_dir);
-
-    // For Windows, try using the -requestPending approach for Firefox
-    let mut cmd = Command::new(executable_path);
-    cmd.args([
-      "-profile",
-      &profile_data_path.to_string_lossy(),
-      "-requestPending",
-      "-new-tab",
-      url,
-    ]);
-
-    // Set working directory
-    if let Some(parent_dir) = browser_dir
-      .parent()
-      .or_else(|| browser_dir.ancestors().nth(1))
-    {
-      cmd.current_dir(parent_dir);
-    }
-
-    let output = cmd.output()?;
-
-    if !output.status.success() {
-      // Fallback: try without -requestPending
-      let executable_path = browser
-        .get_executable_path(browser_dir)
-        .map_err(|e| format!("Failed to get executable path: {}", e))?;
-      let mut fallback_cmd = Command::new(executable_path);
-      let profile_data_path = profile.get_profile_data_path(profiles_dir);
-      fallback_cmd.args([
-        "-profile",
-        &profile_data_path.to_string_lossy(),
-        "-new-tab",
-        url,
-      ]);
-
-      if let Some(parent_dir) = browser_dir
-        .parent()
-        .or_else(|| browser_dir.ancestors().nth(1))
-      {
-        fallback_cmd.current_dir(parent_dir);
-      }
-
-      let fallback_output = fallback_cmd.output()?;
-
-      if !fallback_output.status.success() {
-        return Err(
-          format!(
-            "Failed to open URL in existing browser: {}",
-            String::from_utf8_lossy(&fallback_output.stderr)
-          )
-          .into(),
-        );
-      }
-    }
-
-    Ok(())
-  }
-
   pub async fn open_url_in_existing_browser_chromium(
     profile: &BrowserProfile,
     url: &str,
@@ -588,7 +463,7 @@ pub mod linux {
     let mut cmd = Command::new(executable_path);
     cmd.args(args);
 
-    // For Firefox-based browsers, ensure library path includes the installation directory
+    // Ensure the library path includes the installation directory
     if let Some(install_dir) = executable_path.parent() {
       let mut ld_library_path = Vec::new();
 
@@ -606,16 +481,15 @@ pub mod linux {
         }
       }
 
-      // For Firefox specifically, add common system library paths that might be needed
-      let firefox_lib_paths = [
-        "/usr/lib/firefox",
+      // Add common system library paths that might be needed
+      let system_lib_paths = [
         "/usr/lib/x86_64-linux-gnu",
         "/usr/lib/aarch64-linux-gnu",
         "/lib/x86_64-linux-gnu",
         "/lib/aarch64-linux-gnu",
       ];
 
-      for lib_path in &firefox_lib_paths {
+      for lib_path in &system_lib_paths {
         let path = std::path::Path::new(lib_path);
         if path.exists() {
           ld_library_path.push(lib_path.to_string());
@@ -684,41 +558,6 @@ pub mod linux {
         Err(format!("Failed to launch browser: {}", e).into())
       }
     }
-  }
-
-  pub async fn open_url_in_existing_browser_firefox_like(
-    profile: &BrowserProfile,
-    url: &str,
-    browser_type: BrowserType,
-    browser_dir: &Path,
-    profiles_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let browser = create_browser(browser_type);
-    let executable_path = browser
-      .get_executable_path(browser_dir)
-      .map_err(|e| format!("Failed to get executable path: {}", e))?;
-
-    let profile_data_path = profile.get_profile_data_path(profiles_dir);
-    let output = Command::new(executable_path)
-      .args([
-        "-profile",
-        &profile_data_path.to_string_lossy(),
-        "-new-tab",
-        url,
-      ])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to open URL in existing browser: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    Ok(())
   }
 
   pub async fn open_url_in_existing_browser_chromium(
