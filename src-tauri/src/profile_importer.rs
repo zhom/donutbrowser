@@ -329,7 +329,9 @@ impl ProfileImporter {
           .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
-          Ok(fp) => config.fingerprint = Some(fp),
+          // geo_proxy_signature is intentionally left unset here: the first
+          // launch's signature-mismatch refresh verifies the location either way.
+          Ok((fp, _geolocation_applied)) => config.fingerprint = Some(fp),
           Err(e) => {
             return Err(
               format!(

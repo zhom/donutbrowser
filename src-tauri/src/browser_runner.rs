@@ -294,7 +294,7 @@ impl BrowserRunner {
         config_for_generation.fingerprint = None;
 
         // Generate a new fingerprint
-        let new_fingerprint = self
+        let (new_fingerprint, geolocation_applied) = self
           .wayfern_manager
           .generate_fingerprint_config(&app_handle, profile, &config_for_generation)
           .await
@@ -318,13 +318,19 @@ impl BrowserRunner {
           updated_wayfern_config.os = wayfern_config.os.clone();
         }
         // The fresh fingerprint's location matches the current routing; record
-        // its signature so launches keep it in sync with the non-randomize path.
-        updated_wayfern_config.geo_proxy_signature =
+        // its signature so launches keep it in sync with the non-randomize
+        // path. Only when geolocation actually applied — otherwise leave it
+        // unset so the refresh path can repair the location if the user later
+        // turns randomize off.
+        updated_wayfern_config.geo_proxy_signature = if geolocation_applied {
           Some(crate::wayfern_manager::WayfernManager::geo_signature(
             upstream_proxy.as_ref(),
             profile.vpn_id.as_deref(),
             wayfern_config.geoip.as_ref(),
-          ));
+          ))
+        } else {
+          None
+        };
         updated_profile.wayfern_config = Some(updated_wayfern_config.clone());
 
         log::info!(

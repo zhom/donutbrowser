@@ -168,6 +168,11 @@ impl ProfileManager {
         }
       }
 
+      // Whether the fingerprint's location fields are known to match the
+      // profile's routing. Provided fingerprints keep the old stamping
+      // behavior; for generated ones this comes from the geolocation lookup.
+      let mut geolocation_applied = true;
+
       // Generate fingerprint if not already provided
       if config.fingerprint.is_none() {
         log::info!("Generating fingerprint for Wayfern profile: {name}");
@@ -209,8 +214,9 @@ impl ProfileManager {
           .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
-          Ok(generated_fingerprint) => {
+          Ok((generated_fingerprint, geo_applied)) => {
             config.fingerprint = Some(generated_fingerprint);
+            geolocation_applied = geo_applied;
             log::info!("Successfully generated fingerprint for Wayfern profile: {name}");
           }
           Err(e) => {
@@ -226,15 +232,27 @@ impl ProfileManager {
       // Record which proxy/geoip the fingerprint's location data was computed
       // for. On launch this is compared against the profile's current routing
       // so a proxy that was changed after creation triggers a location refresh
-      // instead of showing a stale timezone.
-      config.geo_proxy_signature = Some(crate::wayfern_manager::WayfernManager::geo_signature(
-        proxy_id
-          .as_ref()
-          .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id))
-          .as_ref(),
-        None,
-        config.geoip.as_ref(),
-      ));
+      // instead of showing a stale timezone. Only stamped when geolocation
+      // actually succeeded: on failure the fingerprint carries the HOST
+      // timezone/locale, and a stamped signature would match at launch and
+      // suppress the refresh that repairs it — latching the leak permanently.
+      config.geo_proxy_signature = if geolocation_applied {
+        Some(crate::wayfern_manager::WayfernManager::geo_signature(
+          proxy_id
+            .as_ref()
+            .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id))
+            .as_ref(),
+          None,
+          config.geoip.as_ref(),
+        ))
+      } else {
+        if !matches!(config.geoip.as_ref(), Some(serde_json::Value::Bool(false))) {
+          log::warn!(
+            "Geolocation could not be applied for Wayfern profile {name}; leaving geo signature unset so the next launch refreshes location through the profile's proxy"
+          );
+        }
+        None
+      };
 
       // Clear the proxy from config after fingerprint generation
       config.proxy = None;

@@ -284,7 +284,11 @@ impl WayfernManager {
     vpn_id: Option<&str>,
     geoip: Option<&serde_json::Value>,
   ) -> String {
-    match geoip {
+    // The "v2:" prefix invalidates every signature stamped before geolocation
+    // failures stopped being stamped: those may describe fingerprints that
+    // silently carry the host's location, so each pre-v2 profile gets one
+    // launch-time refresh and is re-stamped in the current format.
+    let base = match geoip {
       Some(serde_json::Value::Bool(false)) => "off".to_string(),
       Some(serde_json::Value::String(ip)) if !ip.is_empty() => format!("ip:{ip}"),
       _ => {
@@ -302,7 +306,8 @@ impl WayfernManager {
           "direct".to_string()
         }
       }
-    }
+    };
+    format!("v2:{base}")
   }
 
   /// Apply timezone/geolocation fields to a fingerprint object from the proxy's
@@ -397,12 +402,44 @@ impl WayfernManager {
     }
   }
 
+  /// True when `url` is a socks proxy on a remote (non-loopback) host — the
+  /// case where reqwest's SOCKS connector can't be trusted with the
+  /// geolocation fetch. Loopback socks URLs are the app's own donut-proxy
+  /// workers, whose single-segment replies don't trigger the connector bug.
+  fn is_remote_socks_url(url: &str) -> bool {
+    url.starts_with("socks")
+      && url::Url::parse(url)
+        .ok()
+        .and_then(|u| match u.host() {
+          Some(url::Host::Ipv4(ip)) => Some(!ip.is_loopback()),
+          Some(url::Host::Ipv6(ip)) => Some(!ip.is_loopback()),
+          // socks is a non-special scheme, so the url crate keeps even
+          // IP-literal hosts as Domain — parse them before comparing.
+          Some(url::Host::Domain(domain)) => Some(
+            domain != "localhost"
+              && domain
+                .parse::<std::net::IpAddr>()
+                .map(|ip| !ip.is_loopback())
+                .unwrap_or(true),
+          ),
+          None => None,
+        })
+        .unwrap_or(false)
+  }
+
+  /// Generate a fingerprint for `config`, returning the fingerprint JSON and
+  /// whether fresh geolocation was applied to it. Callers must only stamp
+  /// `geo_proxy_signature` when geolocation succeeded: the base fingerprint
+  /// comes from a headless Wayfern launched without a proxy, so on failure it
+  /// silently carries the HOST timezone/locale — stamping the signature then
+  /// would tell the launch-time refresh the location is already correct for
+  /// this proxy and permanently disable the one path that can repair it.
   pub async fn generate_fingerprint_config(
     &self,
     _app_handle: &AppHandle,
     profile: &BrowserProfile,
     config: &WayfernConfig,
-  ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<(String, bool), Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
       .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
@@ -549,7 +586,7 @@ impl WayfernManager {
       .send_cdp_command(&ws_url, "Wayfern.getFingerprint", json!({}))
       .await;
 
-    let fingerprint = match get_result {
+    let (fingerprint, geolocation_applied) = match get_result {
       Ok(result) => {
         // Wayfern.getFingerprint returns { fingerprint: {...} }
         // We need to extract just the fingerprint object
@@ -557,16 +594,57 @@ impl WayfernManager {
         // Normalize the fingerprint: convert JSON string fields to proper types
         let mut normalized = Self::normalize_fingerprint(fp);
 
+        // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
+        // when a proxy splits a handshake reply across TCP segments, so a
+        // socks upstream here can fail even though the proxy is healthy.
+        // Route the geolocation lookup through a temporary local donut-proxy
+        // worker — the same path the browser itself uses — and fall back to
+        // the upstream URL only if the worker can't start. Two exclusions:
+        // no worker when geolocation won't fetch through the proxy at all
+        // (disabled, or a fixed geoip IP), and none for loopback socks URLs —
+        // launch-time callers pass the already-running local worker's
+        // socks5://127.0.0.1 URL, whose single-segment replies don't trigger
+        // the bug, so chaining a second worker would only add latency.
+        let needs_proxied_geo_fetch = !matches!(
+          config.geoip.as_ref(),
+          Some(serde_json::Value::Bool(false)) | Some(serde_json::Value::String(_))
+        );
+        let remote_socks_upstream = config
+          .proxy
+          .as_deref()
+          .filter(|url| Self::is_remote_socks_url(url));
+        let (geo_proxy, temp_worker_id) = match remote_socks_upstream {
+          Some(url) if needs_proxied_geo_fetch => {
+            match crate::proxy_runner::start_proxy_process(Some(url.to_string()), None)
+              .await
+              .map_err(|e| e.to_string())
+            {
+              Ok(worker) => {
+                let local_url = format!("http://127.0.0.1:{}", worker.local_port.unwrap_or(0));
+                (Some(local_url), Some(worker.id))
+              }
+              Err(e) => {
+                log::warn!(
+                  "Could not start local proxy worker for geolocation ({e}); using the socks upstream directly"
+                );
+                (config.proxy.clone(), None)
+              }
+            }
+          }
+          _ => (config.proxy.clone(), None),
+        };
+
         // Apply timezone/geolocation for the proxy this fingerprint is being
         // generated against. Shared with the launch-time location refresh.
-        Self::apply_geolocation(
-          &mut normalized,
-          config.proxy.as_deref(),
-          config.geoip.as_ref(),
-        )
-        .await;
+        let geolocation_applied =
+          Self::apply_geolocation(&mut normalized, geo_proxy.as_deref(), config.geoip.as_ref())
+            .await;
 
-        normalized
+        if let Some(worker_id) = temp_worker_id {
+          let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
+        }
+
+        (normalized, geolocation_applied)
       }
       Err(e) => {
         cleanup().await;
@@ -599,7 +677,7 @@ impl WayfernManager {
       );
     }
 
-    Ok(fingerprint_json)
+    Ok((fingerprint_json, geolocation_applied))
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -1417,6 +1495,37 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn remote_socks_url_detection() {
+    // Remote socks upstreams (the hyper-util-affected case) are detected...
+    assert!(WayfernManager::is_remote_socks_url(
+      "socks5://user:pass@gw.dataimpulse.com:10000"
+    ));
+    assert!(WayfernManager::is_remote_socks_url("socks5://1.2.3.4:1080"));
+    assert!(WayfernManager::is_remote_socks_url("socks4://1.2.3.4:1080"));
+
+    // ...but the app's own loopback workers are not. socks is a non-special
+    // URL scheme, so the IP literal parses as Host::Domain — the launch-time
+    // randomize path depends on this returning false.
+    assert!(!WayfernManager::is_remote_socks_url(
+      "socks5://127.0.0.1:24001"
+    ));
+    assert!(!WayfernManager::is_remote_socks_url("socks5://[::1]:24001"));
+    assert!(!WayfernManager::is_remote_socks_url(
+      "socks5://localhost:24001"
+    ));
+
+    // Non-socks schemes and unparsable URLs never need the workaround.
+    assert!(!WayfernManager::is_remote_socks_url(
+      "http://gw.dataimpulse.com:10000"
+    ));
+    assert!(!WayfernManager::is_remote_socks_url(
+      "https://gw.dataimpulse.com:10000"
+    ));
+    assert!(!WayfernManager::is_remote_socks_url("socks5://"));
+    assert!(!WayfernManager::is_remote_socks_url("not a url"));
+  }
 
   #[test]
   fn window_size_prefers_outer_window_dimensions() {

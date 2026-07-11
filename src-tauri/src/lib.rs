@@ -1213,6 +1213,7 @@ async fn generate_sample_fingerprint(
     manager
       .generate_fingerprint_config(&app_handle, &temp_profile, &config)
       .await
+      .map(|(fingerprint, _geolocation_applied)| fingerprint)
       .map_err(|e| format!("Failed to generate fingerprint: {e}"))
   } else {
     Err(format!(
