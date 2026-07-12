@@ -1,6 +1,29 @@
 # Changelog
 
 
+## v0.28.2 (2026-07-12)
+
+### Features
+
+- sha256 checksum for self-updates
+- progress bar for extraction
+
+### Bug Fixes
+
+- properly handle location spoofing for socks5 proxies
+
+### Refactoring
+
+- api cleanup
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- ci(deps): bump the github-actions group with 2 updates
+- chore: update flake.nix for v0.28.1 [skip ci] (#493)
+
+
 ## v0.28.1 (2026-07-09)
 
 ### Refactoring
