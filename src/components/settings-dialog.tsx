@@ -490,9 +490,7 @@ export function SettingsDialog({
       }
 
       setOriginalSettings(settingsToSave);
-      if (!subPage) {
-        onClose();
-      }
+      onClose();
     } catch (error) {
       console.error("Failed to save settings:", error);
     } finally {
@@ -500,7 +498,6 @@ export function SettingsDialog({
     }
   }, [
     onClose,
-    subPage,
     setTheme,
     settings,
     customThemeState,
