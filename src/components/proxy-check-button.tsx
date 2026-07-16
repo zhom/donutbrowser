@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FiCheck } from "react-icons/fi";
@@ -13,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatRelativeTime } from "@/lib/flag-utils";
+import { MOTION_EASE_OUT } from "@/lib/motion";
 import type { ProxyCheckResult, StoredProxy } from "@/types";
 
 interface ProxyCheckButtonProps {
@@ -37,6 +39,7 @@ export function ProxyCheckButton({
   setCheckingProfileId,
 }: ProxyCheckButtonProps) {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const [localResult, setLocalResult] = React.useState<
     ProxyCheckResult | undefined
   >(cachedResult);
@@ -111,6 +114,13 @@ export function ProxyCheckButton({
 
   const isCurrentlyChecking = checkingProfileId === profileId;
   const result = localResult;
+  const statusKey = isCurrentlyChecking
+    ? "checking"
+    : result?.is_valid && result.country_code
+      ? "valid-location"
+      : result && !result.is_valid
+        ? "invalid"
+        : "idle";
 
   return (
     <Tooltip>
@@ -122,18 +132,45 @@ export function ProxyCheckButton({
           onClick={handleCheck}
           disabled={isCurrentlyChecking || disabled}
         >
-          {isCurrentlyChecking ? (
-            <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-          ) : result?.is_valid && result.country_code ? (
-            <span className="relative inline-flex items-center justify-center">
-              <FlagIcon countryCode={result.country_code} className="h-2.5" />
-              <FiCheck className="absolute right-[-4px] bottom-[-6px]" />
-            </span>
-          ) : result && !result.is_valid ? (
-            <span className="text-sm text-destructive">✕</span>
-          ) : (
-            <FiCheck className="size-3" />
-          )}
+          <AnimatePresence initial={false} mode="wait">
+            <motion.span
+              key={statusKey}
+              initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.9 }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                transition: {
+                  duration: reduceMotion ? 0.15 : 0.16,
+                  ease: MOTION_EASE_OUT,
+                },
+              }}
+              exit={{
+                opacity: 0,
+                scale: reduceMotion ? 1 : 0.9,
+                transition: {
+                  duration: reduceMotion ? 0.15 : 0.1,
+                  ease: MOTION_EASE_OUT,
+                },
+              }}
+              className="inline-flex size-3 items-center justify-center"
+            >
+              {isCurrentlyChecking ? (
+                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : result?.is_valid && result.country_code ? (
+                <span className="relative inline-flex items-center justify-center">
+                  <FlagIcon
+                    countryCode={result.country_code}
+                    className="h-2.5"
+                  />
+                  <FiCheck className="absolute right-[-4px] bottom-[-6px]" />
+                </span>
+              ) : result && !result.is_valid ? (
+                <span className="text-sm text-destructive">✕</span>
+              ) : (
+                <FiCheck className="size-3" />
+              )}
+            </motion.span>
+          </AnimatePresence>
         </Button>
       </TooltipTrigger>
       <TooltipContent>

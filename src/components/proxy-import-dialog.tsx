@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuUpload } from "react-icons/lu";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { StepTransition } from "@/components/ui/step-transition";
 import { getCurrentOS } from "@/lib/browser-utils";
 import type {
   ParsedProxyLine,
@@ -33,6 +34,25 @@ interface ProxyImportDialogProps {
 
 type ImportStep = "dropzone" | "preview" | "ambiguous" | "result";
 
+const STEP_ORDER: Record<ImportStep, number> = {
+  dropzone: 0,
+  ambiguous: 1,
+  preview: 2,
+  result: 3,
+};
+
+interface StepState {
+  step: ImportStep;
+  direction: 1 | -1;
+}
+
+function transitionStep(current: StepState, next: ImportStep): StepState {
+  return {
+    step: next,
+    direction: STEP_ORDER[next] >= STEP_ORDER[current.step] ? 1 : -1,
+  };
+}
+
 interface AmbiguousProxy {
   line: string;
   possible_formats: string[];
@@ -41,7 +61,10 @@ interface AmbiguousProxy {
 
 export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   const { t } = useTranslation();
-  const [step, setStep] = useState<ImportStep>("dropzone");
+  const [{ step, direction: stepDirection }, setStep] = useReducer(
+    transitionStep,
+    { step: "dropzone", direction: 1 },
+  );
   const [isDragOver, setIsDragOver] = useState(false);
   const [parsedProxies, setParsedProxies] = useState<ParsedProxyLine[]>([]);
   const [ambiguousProxies, setAmbiguousProxies] = useState<AmbiguousProxy[]>(
@@ -57,7 +80,6 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   const [namePrefix, setNamePrefix] = useState(
     t("proxies.importDialog.namePrefixDefault"),
   );
-
   const os = getCurrentOS();
   const modKey = os === "macos" ? "⌘" : "Ctrl";
 
@@ -283,263 +305,279 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("proxies.importDialog.title")}</DialogTitle>
-          <DialogDescription>
-            {step === "dropzone" && t("proxies.importDialog.descDropzone")}
-            {step === "preview" && t("proxies.importDialog.descPreview")}
-            {step === "ambiguous" && t("proxies.importDialog.descAmbiguous")}
-            {step === "result" && t("proxies.importDialog.descResult")}
-          </DialogDescription>
+          <StepTransition
+            transitionKey={`description-${step}`}
+            direction={stepDirection}
+          >
+            <DialogDescription>
+              {step === "dropzone" && t("proxies.importDialog.descDropzone")}
+              {step === "preview" && t("proxies.importDialog.descPreview")}
+              {step === "ambiguous" && t("proxies.importDialog.descAmbiguous")}
+              {step === "result" && t("proxies.importDialog.descResult")}
+            </DialogDescription>
+          </StepTransition>
         </DialogHeader>
 
-        {step === "dropzone" && (
-          <div className="space-y-4">
-            <div
-              role="button"
-              tabIndex={0}
-              className={`
+        <StepTransition
+          transitionKey={step}
+          direction={stepDirection}
+          className="grid gap-4"
+        >
+          {step === "dropzone" && (
+            <div className="space-y-4">
+              <div
+                role="button"
+                tabIndex={0}
+                className={`
                 flex flex-col items-center justify-center
                 border-2 border-dashed rounded-lg p-8
-                transition-colors cursor-pointer
-                ${isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"}
+                cursor-pointer transition-[color,background-color,border-color,transform]
+                duration-[160ms] ease-[var(--ease-out)] motion-reduce:transform-none
+                ${isDragOver ? "scale-[1.005] border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"}
               `}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() =>
-                document.getElementById("proxy-file-input")?.click()
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  document.getElementById("proxy-file-input")?.click();
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() =>
+                  document.getElementById("proxy-file-input")?.click()
                 }
-              }}
-            >
-              <LuUpload className="mb-4 size-10 text-muted-foreground" />
-              <p className="text-center text-sm text-muted-foreground">
-                {t("proxies.importDialog.dropzonePrompt")}
-                <br />
-                <span className="text-xs">
-                  {t("proxies.importDialog.dropzoneFormats")}
-                </span>
-              </p>
-              <input
-                id="proxy-file-input"
-                type="file"
-                accept=".json,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileRead(file);
-                  e.target.value = "";
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    document.getElementById("proxy-file-input")?.click();
+                  }
                 }}
-              />
-            </div>
-            <p className="text-center text-xs text-muted-foreground">
-              {t("proxies.importDialog.pasteHint", { modKey })}
-            </p>
-          </div>
-        )}
-
-        {step === "preview" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name-prefix">
-                {t("proxies.importDialog.namePrefix")}
-              </Label>
-              <Input
-                id="name-prefix"
-                placeholder={t("proxies.importDialog.namePrefixDefault")}
-                value={namePrefix}
-                onChange={(e) => {
-                  setNamePrefix(e.target.value);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("proxies.importDialog.namePrefixHint", {
-                  prefix:
-                    namePrefix || t("proxies.importDialog.namePrefixDefault"),
-                })}
+              >
+                <LuUpload
+                  className={`mb-4 size-10 text-muted-foreground transition-transform duration-[160ms] ease-[var(--ease-out)] motion-reduce:transform-none ${
+                    isDragOver ? "-translate-y-0.5 scale-105" : ""
+                  }`}
+                />
+                <p className="text-center text-sm text-muted-foreground">
+                  {t("proxies.importDialog.dropzonePrompt")}
+                  <br />
+                  <span className="text-xs">
+                    {t("proxies.importDialog.dropzoneFormats")}
+                  </span>
+                </p>
+                <input
+                  id="proxy-file-input"
+                  type="file"
+                  accept=".json,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileRead(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                {t("proxies.importDialog.pasteHint", { modKey })}
               </p>
             </div>
+          )}
 
-            <div className="space-y-2">
-              <Label>
-                {t("proxies.importDialog.proxiesToImport", {
-                  count: parsedProxies.length,
-                })}
-                {invalidProxies.length > 0 && (
-                  <span className="ml-2 text-muted-foreground">
-                    {t("proxies.importDialog.invalidCount", {
-                      count: invalidProxies.length,
-                    })}
-                  </span>
-                )}
-              </Label>
-              <ScrollArea className="h-[clamp(120px,30vh,400px)] rounded-md border">
-                <div className="space-y-1 p-2">
-                  {parsedProxies.map((proxy, i) => (
-                    <div
-                      key={`${proxy.original_line}-${i}`}
-                      className="rounded bg-muted/30 p-2 font-mono text-xs break-all"
-                    >
-                      <span className="text-primary">
-                        {proxy.proxy_type}://
-                      </span>
-                      {proxy.username && (
-                        <span className="text-muted-foreground">
-                          {proxy.username}:***@
-                        </span>
-                      )}
-                      <span>
-                        {proxy.host}:{proxy.port}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
-          </div>
-        )}
-
-        {step === "ambiguous" && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {t("proxies.importDialog.ambiguousIntro")}
-            </p>
-            <ScrollArea className="h-[clamp(150px,35vh,450px)] rounded-md border">
-              <div className="space-y-4 p-3">
-                {ambiguousProxies.map((proxy, i) => (
-                  <div
-                    key={`${proxy.line}-${i}`}
-                    className="space-y-2 border-b pb-3 last:border-0"
-                  >
-                    <code className="block rounded bg-muted px-2 py-1 text-xs break-all">
-                      {proxy.line}
-                    </code>
-                    <div className="flex flex-col gap-2">
-                      {proxy.possible_formats.map((format) => (
-                        <label
-                          key={format}
-                          className="flex cursor-pointer items-center gap-2"
-                        >
-                          <input
-                            type="radio"
-                            name={`format-${i}`}
-                            checked={proxy.selectedFormat === format}
-                            onChange={() => {
-                              handleAmbiguousFormatSelect(i, format);
-                            }}
-                            className="accent-primary"
-                          />
-                          <span className="text-xs">{format}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        )}
-
-        {step === "result" && importResult && (
-          <div className="space-y-4">
-            <div className="space-y-2 rounded-lg bg-muted/30 p-4">
-              <div className="flex justify-between">
-                <span className="text-sm">
-                  {t("proxies.importDialog.imported")}
-                </span>
-                <span className="text-sm font-medium text-success">
-                  {importResult.imported_count}
-                </span>
-              </div>
-              {importResult.skipped_count > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-sm">
-                    {t("proxies.importDialog.skippedDuplicates")}
-                  </span>
-                  <span className="text-sm font-medium text-warning">
-                    {importResult.skipped_count}
-                  </span>
-                </div>
-              )}
-              {importResult.errors.length > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-sm">
-                    {t("proxies.importDialog.errors")}
-                  </span>
-                  <span className="text-sm font-medium text-destructive">
-                    {importResult.errors.length}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {importResult.errors.length > 0 && (
+          {step === "preview" && (
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label>{t("proxies.importDialog.errors")}</Label>
-                <ScrollArea className="h-[100px] rounded-md border">
+                <Label htmlFor="name-prefix">
+                  {t("proxies.importDialog.namePrefix")}
+                </Label>
+                <Input
+                  id="name-prefix"
+                  placeholder={t("proxies.importDialog.namePrefixDefault")}
+                  value={namePrefix}
+                  onChange={(e) => {
+                    setNamePrefix(e.target.value);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("proxies.importDialog.namePrefixHint", {
+                    prefix:
+                      namePrefix || t("proxies.importDialog.namePrefixDefault"),
+                  })}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  {t("proxies.importDialog.proxiesToImport", {
+                    count: parsedProxies.length,
+                  })}
+                  {invalidProxies.length > 0 && (
+                    <span className="ml-2 text-muted-foreground">
+                      {t("proxies.importDialog.invalidCount", {
+                        count: invalidProxies.length,
+                      })}
+                    </span>
+                  )}
+                </Label>
+                <ScrollArea className="h-[clamp(120px,30vh,400px)] rounded-md border">
                   <div className="space-y-1 p-2">
-                    {importResult.errors.map((error, i) => (
+                    {parsedProxies.map((proxy, i) => (
                       <div
-                        key={`error-${i}`}
-                        className="text-xs text-destructive"
+                        key={`${proxy.original_line}-${i}`}
+                        className="rounded bg-muted/30 p-2 font-mono text-xs break-all"
                       >
-                        {error}
+                        <span className="text-primary">
+                          {proxy.proxy_type}://
+                        </span>
+                        {proxy.username && (
+                          <span className="text-muted-foreground">
+                            {proxy.username}:***@
+                          </span>
+                        )}
+                        <span>
+                          {proxy.host}:{proxy.port}
+                        </span>
                       </div>
                     ))}
                   </div>
                 </ScrollArea>
               </div>
-            )}
-          </div>
-        )}
-
-        <DialogFooter>
-          {step === "dropzone" && (
-            <RippleButton variant="outline" onClick={handleClose}>
-              {t("common.buttons.cancel")}
-            </RippleButton>
-          )}
-
-          {step === "preview" && (
-            <>
-              <RippleButton variant="outline" onClick={resetState}>
-                {t("common.buttons.back")}
-              </RippleButton>
-              <LoadingButton
-                isLoading={isImporting}
-                onClick={() => void handleImport()}
-                disabled={parsedProxies.length === 0}
-              >
-                {t("proxies.importDialog.importButton", {
-                  count: parsedProxies.length,
-                })}
-              </LoadingButton>
-            </>
+            </div>
           )}
 
           {step === "ambiguous" && (
-            <>
-              <RippleButton variant="outline" onClick={resetState}>
-                {t("common.buttons.back")}
-              </RippleButton>
-              <RippleButton
-                onClick={handleResolveAmbiguous}
-                disabled={ambiguousProxies.some((p) => !p.selectedFormat)}
-              >
-                {t("proxies.importDialog.continueButton")}
-              </RippleButton>
-            </>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t("proxies.importDialog.ambiguousIntro")}
+              </p>
+              <ScrollArea className="h-[clamp(150px,35vh,450px)] rounded-md border">
+                <div className="space-y-4 p-3">
+                  {ambiguousProxies.map((proxy, i) => (
+                    <div
+                      key={`${proxy.line}-${i}`}
+                      className="space-y-2 border-b pb-3 last:border-0"
+                    >
+                      <code className="block rounded bg-muted px-2 py-1 text-xs break-all">
+                        {proxy.line}
+                      </code>
+                      <div className="flex flex-col gap-2">
+                        {proxy.possible_formats.map((format) => (
+                          <label
+                            key={format}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <input
+                              type="radio"
+                              name={`format-${i}`}
+                              checked={proxy.selectedFormat === format}
+                              onChange={() => {
+                                handleAmbiguousFormatSelect(i, format);
+                              }}
+                              className="accent-primary"
+                            />
+                            <span className="text-xs">{format}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
           )}
 
-          {step === "result" && (
-            <RippleButton onClick={handleClose}>
-              {t("proxies.importDialog.doneButton")}
-            </RippleButton>
+          {step === "result" && importResult && (
+            <div className="space-y-4">
+              <div className="space-y-2 rounded-lg bg-muted/30 p-4">
+                <div className="flex justify-between">
+                  <span className="text-sm">
+                    {t("proxies.importDialog.imported")}
+                  </span>
+                  <span className="text-sm font-medium text-success">
+                    {importResult.imported_count}
+                  </span>
+                </div>
+                {importResult.skipped_count > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-sm">
+                      {t("proxies.importDialog.skippedDuplicates")}
+                    </span>
+                    <span className="text-sm font-medium text-warning">
+                      {importResult.skipped_count}
+                    </span>
+                  </div>
+                )}
+                {importResult.errors.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-sm">
+                      {t("proxies.importDialog.errors")}
+                    </span>
+                    <span className="text-sm font-medium text-destructive">
+                      {importResult.errors.length}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {importResult.errors.length > 0 && (
+                <div className="space-y-2">
+                  <Label>{t("proxies.importDialog.errors")}</Label>
+                  <ScrollArea className="h-[100px] rounded-md border">
+                    <div className="space-y-1 p-2">
+                      {importResult.errors.map((error, i) => (
+                        <div
+                          key={`error-${i}`}
+                          className="text-xs text-destructive"
+                        >
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
           )}
-        </DialogFooter>
+
+          <DialogFooter>
+            {step === "dropzone" && (
+              <RippleButton variant="outline" onClick={handleClose}>
+                {t("common.buttons.cancel")}
+              </RippleButton>
+            )}
+
+            {step === "preview" && (
+              <>
+                <RippleButton variant="outline" onClick={resetState}>
+                  {t("common.buttons.back")}
+                </RippleButton>
+                <LoadingButton
+                  isLoading={isImporting}
+                  onClick={() => void handleImport()}
+                  disabled={parsedProxies.length === 0}
+                >
+                  {t("proxies.importDialog.importButton", {
+                    count: parsedProxies.length,
+                  })}
+                </LoadingButton>
+              </>
+            )}
+
+            {step === "ambiguous" && (
+              <>
+                <RippleButton variant="outline" onClick={resetState}>
+                  {t("common.buttons.back")}
+                </RippleButton>
+                <RippleButton
+                  onClick={handleResolveAmbiguous}
+                  disabled={ambiguousProxies.some((p) => !p.selectedFormat)}
+                >
+                  {t("proxies.importDialog.continueButton")}
+                </RippleButton>
+              </>
+            )}
+
+            {step === "result" && (
+              <RippleButton onClick={handleClose}>
+                {t("proxies.importDialog.doneButton")}
+              </RippleButton>
+            )}
+          </DialogFooter>
+        </StepTransition>
       </DialogContent>
     </Dialog>
   );

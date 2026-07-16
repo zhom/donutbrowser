@@ -3,14 +3,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  LuChevronDown,
-  LuChevronRight,
-  LuCookie,
-  LuSearch,
-} from "react-icons/lu";
+import { LuChevronRight, LuCookie, LuSearch } from "react-icons/lu";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
+import {
+  AnimatedDisclosureChevron,
+  AnimatedDisclosureContent,
+  AnimatedDisclosureItem,
+} from "@/components/ui/animated-disclosure";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -546,7 +546,7 @@ function DomainRow({
     selectedCount > 0 && selectedCount < domain.cookie_count && !isAllSelected;
 
   return (
-    <div>
+    <AnimatedDisclosureItem>
       <div className="flex items-center gap-2 rounded p-2 hover:bg-accent/50">
         <Checkbox
           checked={isAllSelected || isPartial}
@@ -557,48 +557,47 @@ function DomainRow({
         />
         <button
           type="button"
+          aria-expanded={isExpanded}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-none bg-transparent text-left"
           onClick={() => {
             onToggleExpand(domain.domain);
           }}
         >
-          {isExpanded ? (
-            <LuChevronDown className="size-4" />
-          ) : (
+          <AnimatedDisclosureChevron open={isExpanded}>
             <LuChevronRight className="size-4" />
-          )}
+          </AnimatedDisclosureChevron>
           <span className="truncate font-medium">{domain.domain}</span>
           <span className="shrink-0 text-xs text-muted-foreground">
             ({domain.cookie_count})
           </span>
         </button>
       </div>
-      {isExpanded && (
-        <div className="ml-8 space-y-1 border-l pl-2">
-          {domain.cookies.map((cookie) => {
-            const isSelected =
-              domainSelection?.cookies.has(cookie.name) ?? false;
-            return (
-              <div
-                key={`${domain.domain}-${cookie.name}`}
-                className="flex items-center gap-2 rounded p-1 text-sm hover:bg-accent/30"
-              >
-                <Checkbox
-                  checked={isSelected || isAllSelected}
-                  onCheckedChange={() => {
-                    onToggleCookie(
-                      domain.domain,
-                      cookie.name,
-                      domain.cookie_count,
-                    );
-                  }}
-                />
-                <span className="truncate">{cookie.name}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+      <AnimatedDisclosureContent
+        open={isExpanded}
+        className="ml-8 space-y-1 border-l pl-2"
+      >
+        {domain.cookies.map((cookie) => {
+          const isSelected = domainSelection?.cookies.has(cookie.name) ?? false;
+          return (
+            <div
+              key={`${domain.domain}-${cookie.name}`}
+              className="flex items-center gap-2 rounded p-1 text-sm hover:bg-accent/30"
+            >
+              <Checkbox
+                checked={isSelected || isAllSelected}
+                onCheckedChange={() => {
+                  onToggleCookie(
+                    domain.domain,
+                    cookie.name,
+                    domain.cookie_count,
+                  );
+                }}
+              />
+              <span className="truncate">{cookie.name}</span>
+            </div>
+          );
+        })}
+      </AnimatedDisclosureContent>
+    </AnimatedDisclosureItem>
   );
 }
