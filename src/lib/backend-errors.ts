@@ -38,6 +38,12 @@ export type BackendErrorCode =
   | "CAMOUFOX_IMPORT_DEPRECATED"
   | "UPDATE_CHECKSUMS_UNAVAILABLE"
   | "UPDATE_CHECKSUM_MISMATCH"
+  | "PROFILE_NAME_EXISTS"
+  | "IMPORT_SOURCE_NOT_FOUND"
+  | "IMPORT_NO_ITEMS"
+  | "BROWSER_NOT_DOWNLOADED"
+  | "ARCHIVE_EXTRACTION_FAILED"
+  | "UNSUPPORTED_ARCHIVE_FORMAT"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -157,6 +163,24 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.updateChecksumMismatch", {
         file: parsed.params?.file ?? "",
       });
+    case "PROFILE_NAME_EXISTS":
+      return t("backendErrors.profileNameExists", {
+        name: parsed.params?.name ?? "",
+      });
+    case "IMPORT_SOURCE_NOT_FOUND":
+      return t("backendErrors.importSourceNotFound");
+    case "IMPORT_NO_ITEMS":
+      return t("backendErrors.importNoItems");
+    case "BROWSER_NOT_DOWNLOADED":
+      return t("backendErrors.browserNotDownloaded", {
+        browser: parsed.params?.browser ?? "",
+      });
+    case "ARCHIVE_EXTRACTION_FAILED":
+      return t("backendErrors.archiveExtractionFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "UNSUPPORTED_ARCHIVE_FORMAT":
+      return t("backendErrors.unsupportedArchiveFormat");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

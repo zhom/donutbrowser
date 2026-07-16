@@ -1,16 +1,22 @@
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fs::{self, create_dir_all};
-use std::path::Path;
+use std::fs::{self, create_dir_all, File};
+use std::io;
+use std::path::{Path, PathBuf};
 
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
+use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Prefix for temp directories that hold extracted profile archives. Cleanup
+/// refuses to delete anything outside the system temp dir with this prefix.
+const IMPORT_SCRATCH_PREFIX: &str = "donutbrowser-profile-import-";
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct DetectedProfile {
   pub browser: String,
   pub mapped_browser: String,
@@ -19,9 +25,111 @@ pub struct DetectedProfile {
   pub description: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct ImportProfileItem {
+  pub source_path: String,
+  #[serde(default = "default_import_browser_type")]
+  pub browser_type: String,
+  pub new_profile_name: String,
+  #[serde(default)]
+  pub proxy_id: Option<String>,
+}
+
+fn default_import_browser_type() -> String {
+  "chromium".to_string()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DuplicateStrategy {
+  /// Skip items whose requested name is already taken.
+  Skip,
+  /// Auto-suffix the requested name (`Name (2)`, `Name (3)`, …) until free.
+  #[default]
+  Rename,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct ProfileImportItemResult {
+  /// Final profile name (after any duplicate-rename).
+  pub name: String,
+  pub source_path: String,
+  /// "imported" | "skipped" | "failed"
+  pub status: String,
+  pub profile_id: Option<String>,
+  /// Structured `{"code": …}` error string when status is "failed".
+  pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct ProfileImportBatchResult {
+  pub imported_count: usize,
+  pub skipped_count: usize,
+  pub failed_count: usize,
+  pub results: Vec<ProfileImportItemResult>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct ArchiveScanResult {
+  /// Temp directory the archive was extracted into. Pass back to
+  /// `cleanup_profile_import_scratch` once the import is done.
+  pub extracted_dir: String,
+  pub profiles: Vec<DetectedProfile>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct ProfileImportProgress {
+  total: usize,
+  completed: usize,
+  index: usize,
+  name: String,
+  /// "importing" | "imported" | "skipped" | "failed"
+  status: String,
+}
+
 fn map_browser_type(_browser: &str) -> &str {
   // Every import source maps to Wayfern — the only launchable engine.
   "wayfern"
+}
+
+/// Convert an importer error into the structured `{"code": …}` string the
+/// frontend translates. Errors that are already structured pass through.
+pub fn error_to_code_string(e: Box<dyn std::error::Error>) -> String {
+  let msg = e.to_string();
+  if msg.starts_with('{') {
+    msg
+  } else {
+    serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": msg } }).to_string()
+  }
+}
+
+/// Resolve a requested profile name against the set of taken (lowercased)
+/// names by appending ` (2)`, ` (3)`, … . The chosen name is added to `taken`.
+fn resolve_duplicate_name(requested: &str, taken: &mut HashSet<String>) -> String {
+  if taken.insert(requested.to_lowercase()) {
+    return requested.to_string();
+  }
+  let mut n = 2usize;
+  loop {
+    let candidate = format!("{requested} ({n})");
+    if taken.insert(candidate.to_lowercase()) {
+      return candidate;
+    }
+    n += 1;
+  }
+}
+
+fn emit_import_progress(total: usize, completed: usize, index: usize, name: &str, status: &str) {
+  let _ = events::emit(
+    "profile-import-progress",
+    &ProfileImportProgress {
+      total,
+      completed,
+      index,
+      name: name.to_string(),
+      status: status.to_string(),
+    },
+  );
 }
 
 pub struct ProfileImporter {
@@ -64,6 +172,181 @@ impl ProfileImporter {
       .collect();
 
     Ok(unique_profiles)
+  }
+
+  /// Scan an arbitrary folder for importable Chromium-family profiles.
+  /// Handles three shapes: the folder itself is a profile (has `Preferences`),
+  /// the folder is a user-data dir (`Default` / `Profile N` children), or the
+  /// folder holds one profile directory per child (exported/migrated layouts,
+  /// including one nested user-data dir per child).
+  pub fn scan_folder(
+    &self,
+    folder: &Path,
+  ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
+    if !folder.exists() || !folder.is_dir() {
+      return Err(
+        serde_json::json!({ "code": "IMPORT_SOURCE_NOT_FOUND" })
+          .to_string()
+          .into(),
+      );
+    }
+
+    if folder.join("Preferences").exists() {
+      let name = folder
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Imported profile")
+        .to_string();
+      return Ok(vec![DetectedProfile {
+        browser: "chromium".to_string(),
+        mapped_browser: map_browser_type("chromium").to_string(),
+        name,
+        path: folder.to_string_lossy().to_string(),
+        description: "Chromium profile".to_string(),
+      }]);
+    }
+
+    let mut profiles = self.scan_chrome_profiles_dir(folder, "chromium")?;
+    let mut seen: HashSet<String> = profiles.iter().map(|p| p.path.clone()).collect();
+
+    if let Ok(entries) = fs::read_dir(folder) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+          continue;
+        }
+        let dir_name = path
+          .file_name()
+          .and_then(|n| n.to_str())
+          .unwrap_or("")
+          .to_string();
+
+        if path.join("Preferences").exists() {
+          let path_str = path.to_string_lossy().to_string();
+          if seen.insert(path_str.clone()) {
+            profiles.push(DetectedProfile {
+              browser: "chromium".to_string(),
+              mapped_browser: map_browser_type("chromium").to_string(),
+              name: dir_name,
+              path: path_str,
+              description: "Chromium profile".to_string(),
+            });
+          }
+        } else {
+          for nested in self.scan_chrome_profiles_dir(&path, "chromium")? {
+            if seen.insert(nested.path.clone()) {
+              profiles.push(DetectedProfile {
+                name: format!("{} - {}", dir_name, nested.description),
+                ..nested
+              });
+            }
+          }
+        }
+      }
+    }
+
+    Ok(profiles)
+  }
+
+  /// Extract a ZIP archive into a scratch temp dir and scan it for profiles.
+  pub async fn extract_archive_and_scan(
+    &self,
+    archive_path: &str,
+  ) -> Result<ArchiveScanResult, Box<dyn std::error::Error>> {
+    let path = Path::new(archive_path);
+    if !path.exists() {
+      return Err(
+        serde_json::json!({ "code": "IMPORT_SOURCE_NOT_FOUND" })
+          .to_string()
+          .into(),
+      );
+    }
+
+    let extension = path
+      .extension()
+      .and_then(|e| e.to_str())
+      .unwrap_or("")
+      .to_lowercase();
+    if extension != "zip" {
+      return Err(
+        serde_json::json!({ "code": "UNSUPPORTED_ARCHIVE_FORMAT" })
+          .to_string()
+          .into(),
+      );
+    }
+
+    let dest =
+      std::env::temp_dir().join(format!("{IMPORT_SCRATCH_PREFIX}{}", uuid::Uuid::new_v4()));
+    let archive = path.to_path_buf();
+    let dest_clone = dest.clone();
+    tokio::task::spawn_blocking(move || Self::extract_zip_archive(&archive, &dest_clone))
+      .await
+      .map_err(|e| format!("Archive extraction task failed: {e}"))?
+      .map_err(|e| {
+        let _ = fs::remove_dir_all(&dest);
+        serde_json::json!({ "code": "ARCHIVE_EXTRACTION_FAILED", "params": { "detail": e } })
+          .to_string()
+      })?;
+
+    let profiles = self.scan_folder(&dest)?;
+    Ok(ArchiveScanResult {
+      extracted_dir: dest.to_string_lossy().to_string(),
+      profiles,
+    })
+  }
+
+  fn extract_zip_archive(zip_path: &Path, dest: &Path) -> Result<(), String> {
+    create_dir_all(dest).map_err(|e| e.to_string())?;
+    let file = File::open(zip_path)
+      .map_err(|e| format!("Failed to open ZIP file {}: {}", zip_path.display(), e))?;
+    let mut archive = zip::ZipArchive::new(io::BufReader::new(file))
+      .map_err(|e| format!("Failed to read ZIP archive {}: {}", zip_path.display(), e))?;
+
+    for i in 0..archive.len() {
+      let mut entry = archive
+        .by_index(i)
+        .map_err(|e| format!("Failed to read ZIP entry at index {i}: {e}"))?;
+
+      // enclosed_name prevents path traversal via ../ entries.
+      let enclosed = entry
+        .enclosed_name()
+        .ok_or_else(|| format!("ZIP contains an invalid entry path: {}", entry.name()))?;
+      let outpath = dest.join(enclosed);
+
+      if entry.is_dir() {
+        create_dir_all(&outpath).map_err(|e| e.to_string())?;
+      } else {
+        if let Some(parent) = outpath.parent() {
+          create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut outfile = File::create(&outpath)
+          .map_err(|e| format!("Failed to create file {}: {}", outpath.display(), e))?;
+        io::copy(&mut entry, &mut outfile)
+          .map_err(|e| format!("Failed to extract file {}: {}", outpath.display(), e))?;
+      }
+    }
+
+    Ok(())
+  }
+
+  /// Remove a scratch dir created by `extract_archive_and_scan`. Refuses paths
+  /// outside the system temp dir or without the import-scratch prefix.
+  pub fn cleanup_scratch_dir(extracted_dir: &str) -> Result<(), String> {
+    let path = PathBuf::from(extracted_dir);
+    let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !path.starts_with(std::env::temp_dir()) || !dir_name.starts_with(IMPORT_SCRATCH_PREFIX) {
+      return Err(
+        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": "Refusing to remove a non-scratch directory" } })
+          .to_string(),
+      );
+    }
+    if path.exists() {
+      fs::remove_dir_all(&path).map_err(|e| {
+        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
+          .to_string()
+      })?;
+    }
+    Ok(())
   }
 
   fn detect_chrome_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
@@ -216,6 +499,139 @@ impl ProfileImporter {
     }
   }
 
+  /// Import a batch of profiles. Items are isolated: one failure doesn't stop
+  /// the rest. Emits `profile-import-progress` events around each item.
+  pub async fn import_profiles(
+    &self,
+    app_handle: &tauri::AppHandle,
+    items: Vec<ImportProfileItem>,
+    group_id: Option<String>,
+    duplicate_strategy: DuplicateStrategy,
+    wayfern_config: Option<WayfernConfig>,
+  ) -> Result<ProfileImportBatchResult, Box<dyn std::error::Error>> {
+    if items.is_empty() {
+      return Err(
+        serde_json::json!({ "code": "IMPORT_NO_ITEMS" })
+          .to_string()
+          .into(),
+      );
+    }
+
+    if let Some(ref gid) = group_id {
+      let groups = crate::group_manager::GroupManager::new().get_all_groups()?;
+      if !groups.iter().any(|g| &g.id == gid) {
+        return Err(
+          serde_json::json!({ "code": "GROUP_NOT_FOUND" })
+            .to_string()
+            .into(),
+        );
+      }
+    }
+
+    let mut taken_names: HashSet<String> = self
+      .profile_manager
+      .list_profiles()?
+      .iter()
+      .map(|p| p.name.to_lowercase())
+      .collect();
+
+    let total = items.len();
+    let mut results = Vec::with_capacity(total);
+    let mut imported_count = 0usize;
+    let mut skipped_count = 0usize;
+    let mut failed_count = 0usize;
+    let mut completed = 0usize;
+
+    for (index, item) in items.into_iter().enumerate() {
+      let requested = item.new_profile_name.trim().to_string();
+      if requested.is_empty() {
+        failed_count += 1;
+        completed += 1;
+        emit_import_progress(total, completed, index, &item.source_path, "failed");
+        results.push(ProfileImportItemResult {
+          name: requested,
+          source_path: item.source_path,
+          status: "failed".to_string(),
+          profile_id: None,
+          error: Some(serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" }).to_string()),
+        });
+        continue;
+      }
+
+      let final_name = if taken_names.contains(&requested.to_lowercase()) {
+        match duplicate_strategy {
+          DuplicateStrategy::Skip => {
+            skipped_count += 1;
+            completed += 1;
+            emit_import_progress(total, completed, index, &requested, "skipped");
+            results.push(ProfileImportItemResult {
+              name: requested,
+              source_path: item.source_path,
+              status: "skipped".to_string(),
+              profile_id: None,
+              error: None,
+            });
+            continue;
+          }
+          DuplicateStrategy::Rename => resolve_duplicate_name(&requested, &mut taken_names),
+        }
+      } else {
+        taken_names.insert(requested.to_lowercase());
+        requested
+      };
+
+      emit_import_progress(total, completed, index, &final_name, "importing");
+
+      match self
+        .import_profile(
+          app_handle,
+          &item.source_path,
+          &item.browser_type,
+          &final_name,
+          item.proxy_id.clone(),
+          group_id.clone(),
+          wayfern_config.clone(),
+        )
+        .await
+      {
+        Ok(profile) => {
+          imported_count += 1;
+          completed += 1;
+          emit_import_progress(total, completed, index, &final_name, "imported");
+          let _ = events::emit_empty("profiles-changed");
+          results.push(ProfileImportItemResult {
+            name: final_name,
+            source_path: item.source_path,
+            status: "imported".to_string(),
+            profile_id: Some(profile.id.to_string()),
+            error: None,
+          });
+        }
+        Err(e) => {
+          failed_count += 1;
+          completed += 1;
+          emit_import_progress(total, completed, index, &final_name, "failed");
+          // The name was reserved but the import failed — free it again.
+          taken_names.remove(&final_name.to_lowercase());
+          results.push(ProfileImportItemResult {
+            name: final_name,
+            source_path: item.source_path,
+            status: "failed".to_string(),
+            profile_id: None,
+            error: Some(error_to_code_string(e)),
+          });
+        }
+      }
+    }
+
+    Ok(ProfileImportBatchResult {
+      imported_count,
+      skipped_count,
+      failed_count,
+      results,
+    })
+  }
+
   #[allow(clippy::too_many_arguments)]
   pub async fn import_profile(
     &self,
@@ -224,11 +640,16 @@ impl ProfileImporter {
     browser_type: &str,
     new_profile_name: &str,
     proxy_id: Option<String>,
+    group_id: Option<String>,
     wayfern_config: Option<WayfernConfig>,
-  ) -> Result<(), Box<dyn std::error::Error>> {
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     let source_path = Path::new(source_path);
     if !source_path.exists() {
-      return Err("Source profile path does not exist".into());
+      return Err(
+        serde_json::json!({ "code": "IMPORT_SOURCE_NOT_FOUND" })
+          .to_string()
+          .into(),
+      );
     }
 
     let mapped = map_browser_type(browser_type);
@@ -244,7 +665,11 @@ impl ProfileImporter {
       .iter()
       .any(|p| p.name.to_lowercase() == new_profile_name.to_lowercase())
     {
-      return Err(format!("Profile with name '{new_profile_name}' already exists").into());
+      return Err(
+        serde_json::json!({ "code": "PROFILE_NAME_EXISTS", "params": { "name": new_profile_name } })
+          .to_string()
+          .into(),
+      );
     }
 
     let profile_id = uuid::Uuid::new_v4();
@@ -255,9 +680,30 @@ impl ProfileImporter {
     create_dir_all(&new_profile_uuid_dir)?;
     create_dir_all(&new_profile_data_dir)?;
 
-    Self::copy_directory_recursive(source_path, &new_profile_data_dir)?;
+    // Profile dirs can be multiple GB — keep the copy off the async runtime.
+    let copy_source = source_path.to_path_buf();
+    let copy_dest = new_profile_data_dir.clone();
+    let copy_result = tokio::task::spawn_blocking(move || {
+      Self::copy_directory_recursive(&copy_source, &copy_dest).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Profile copy task failed: {e}"))?;
+    if let Err(e) = copy_result {
+      let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+      return Err(
+        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e } })
+          .to_string()
+          .into(),
+      );
+    }
 
-    let version = self.get_default_version_for_browser(mapped)?;
+    let version = match self.get_default_version_for_browser(mapped) {
+      Ok(version) => version,
+      Err(e) => {
+        let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+        return Err(e);
+      }
+    };
 
     let final_wayfern_config = if mapped == "wayfern" {
       let mut config = wayfern_config.unwrap_or_default();
@@ -328,10 +774,13 @@ impl ProfileImporter {
           // launch's signature-mismatch refresh verifies the location either way.
           Ok((fp, _geolocation_applied)) => config.fingerprint = Some(fp),
           Err(e) => {
+            let _ = fs::remove_dir_all(&new_profile_uuid_dir);
             return Err(
-              format!(
-                "Failed to generate fingerprint for imported profile '{new_profile_name}': {e}"
-              )
+              serde_json::json!({
+                "code": "INTERNAL_ERROR",
+                "params": { "detail": format!("Failed to generate fingerprint for imported profile '{new_profile_name}': {e}") }
+              })
+              .to_string()
               .into(),
             );
           }
@@ -356,7 +805,7 @@ impl ProfileImporter {
       last_launch: None,
       release_type: "stable".to_string(),
       wayfern_config: final_wayfern_config,
-      group_id: None,
+      group_id,
       tags: Vec::new(),
       note: None,
       window_color: None,
@@ -388,7 +837,7 @@ impl ProfileImporter {
       source_path.display()
     );
 
-    Ok(())
+    Ok(profile)
   }
 
   fn get_default_version_for_browser(
@@ -404,11 +853,11 @@ impl ProfileImporter {
     }
 
     Err(
-      format!(
-        "No downloaded versions found for browser '{}'. Please download a version of {} first before importing profiles.",
-        browser_type,
-        self.get_browser_display_name(browser_type)
-      )
+      serde_json::json!({
+        "code": "BROWSER_NOT_DOWNLOADED",
+        "params": { "browser": self.get_browser_display_name(browser_type) }
+      })
+      .to_string()
       .into(),
     )
   }
@@ -442,39 +891,59 @@ pub async fn detect_existing_profiles() -> Result<Vec<DetectedProfile>, String> 
   let importer = ProfileImporter::instance();
   importer
     .detect_existing_profiles()
-    .map_err(|e| format!("Failed to detect existing profiles: {e}"))
+    .map_err(error_to_code_string)
 }
 
 #[tauri::command]
-pub async fn import_browser_profile(
+pub async fn scan_folder_for_profiles(folder_path: String) -> Result<Vec<DetectedProfile>, String> {
+  let importer = ProfileImporter::instance();
+  importer
+    .scan_folder(Path::new(&folder_path))
+    .map_err(error_to_code_string)
+}
+
+#[tauri::command]
+pub async fn scan_profile_archive(archive_path: String) -> Result<ArchiveScanResult, String> {
+  let importer = ProfileImporter::instance();
+  importer
+    .extract_archive_and_scan(&archive_path)
+    .await
+    .map_err(error_to_code_string)
+}
+
+#[tauri::command]
+pub async fn cleanup_profile_import_scratch(extracted_dir: String) -> Result<(), String> {
+  ProfileImporter::cleanup_scratch_dir(&extracted_dir)
+}
+
+#[tauri::command]
+pub async fn import_browser_profiles(
   app_handle: tauri::AppHandle,
-  source_path: String,
-  browser_type: String,
-  new_profile_name: String,
-  proxy_id: Option<String>,
+  items: Vec<ImportProfileItem>,
+  group_id: Option<String>,
+  duplicate_strategy: Option<DuplicateStrategy>,
   wayfern_config: Option<WayfernConfig>,
-) -> Result<(), String> {
+) -> Result<ProfileImportBatchResult, String> {
   let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
 
   if !crate::cloud_auth::CLOUD_AUTH
     .is_fingerprint_os_allowed(fingerprint_os)
     .await
   {
-    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
   }
 
   let importer = ProfileImporter::instance();
   importer
-    .import_profile(
+    .import_profiles(
       &app_handle,
-      &source_path,
-      &browser_type,
-      &new_profile_name,
-      proxy_id,
+      items,
+      group_id,
+      duplicate_strategy.unwrap_or_default(),
       wayfern_config,
     )
     .await
-    .map_err(|e| format!("Failed to import profile: {e}"))
+    .map_err(error_to_code_string)
 }
 
 lazy_static::lazy_static! {
@@ -596,8 +1065,98 @@ mod tests {
 
     let error_msg = result.unwrap_err().to_string();
     assert!(
-      error_msg.contains("No downloaded versions found"),
-      "Error should mention no versions found"
+      error_msg.contains("BROWSER_NOT_DOWNLOADED"),
+      "Error should carry the BROWSER_NOT_DOWNLOADED code"
     );
+  }
+
+  #[test]
+  fn test_resolve_duplicate_name() {
+    let mut taken: HashSet<String> = ["existing".to_string()].into_iter().collect();
+
+    assert_eq!(resolve_duplicate_name("Fresh", &mut taken), "Fresh");
+    // Case-insensitive collision gets a suffix.
+    assert_eq!(
+      resolve_duplicate_name("Existing", &mut taken),
+      "Existing (2)"
+    );
+    assert_eq!(
+      resolve_duplicate_name("Existing", &mut taken),
+      "Existing (3)"
+    );
+    // The fresh name reserved above now collides too.
+    assert_eq!(resolve_duplicate_name("fresh", &mut taken), "fresh (2)");
+  }
+
+  #[test]
+  fn test_scan_folder_single_profile() {
+    let (importer, temp_dir) = create_test_profile_importer();
+
+    let profile_dir = temp_dir.path().join("my-profile");
+    fs::create_dir_all(&profile_dir).unwrap();
+    fs::write(profile_dir.join("Preferences"), "{}").unwrap();
+
+    let profiles = importer.scan_folder(&profile_dir).unwrap();
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].name, "my-profile");
+    assert_eq!(profiles[0].mapped_browser, "wayfern");
+  }
+
+  #[test]
+  fn test_scan_folder_user_data_dir_and_children() {
+    let (importer, temp_dir) = create_test_profile_importer();
+
+    let root = temp_dir.path().join("exported");
+    // User-data-dir shape.
+    fs::create_dir_all(root.join("Default")).unwrap();
+    fs::write(root.join("Default/Preferences"), "{}").unwrap();
+    fs::create_dir_all(root.join("Profile 2")).unwrap();
+    fs::write(root.join("Profile 2/Preferences"), "{}").unwrap();
+    // Free-form exported profile dir.
+    fs::create_dir_all(root.join("account-a")).unwrap();
+    fs::write(root.join("account-a/Preferences"), "{}").unwrap();
+    // Nested user-data-dir one level down.
+    fs::create_dir_all(root.join("old-chrome/Default")).unwrap();
+    fs::write(root.join("old-chrome/Default/Preferences"), "{}").unwrap();
+    // Noise: dir without Preferences anywhere.
+    fs::create_dir_all(root.join("random")).unwrap();
+
+    let profiles = importer.scan_folder(&root).unwrap();
+    let mut names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
+    names.sort();
+    assert_eq!(profiles.len(), 4, "should find 4 profiles: {names:?}");
+    assert!(names.contains(&"account-a".to_string()));
+    assert!(names.iter().any(|n| n.contains("old-chrome")));
+  }
+
+  #[test]
+  fn test_scan_folder_missing() {
+    let (importer, temp_dir) = create_test_profile_importer();
+
+    let result = importer.scan_folder(&temp_dir.path().join("nope"));
+    assert!(result.is_err());
+    assert!(result
+      .unwrap_err()
+      .to_string()
+      .contains("IMPORT_SOURCE_NOT_FOUND"));
+  }
+
+  #[test]
+  fn test_cleanup_scratch_dir_refuses_foreign_paths() {
+    let temp_dir = TempDir::new().unwrap();
+    let foreign = temp_dir.path().join("not-scratch");
+    fs::create_dir_all(&foreign).unwrap();
+
+    let result = ProfileImporter::cleanup_scratch_dir(&foreign.to_string_lossy());
+    assert!(
+      result.is_err(),
+      "must refuse dirs without the scratch prefix"
+    );
+    assert!(foreign.exists());
+
+    let scratch = std::env::temp_dir().join(format!("{IMPORT_SCRATCH_PREFIX}test-cleanup"));
+    fs::create_dir_all(&scratch).unwrap();
+    ProfileImporter::cleanup_scratch_dir(&scratch.to_string_lossy()).unwrap();
+    assert!(!scratch.exists(), "scratch dir should be removed");
   }
 }

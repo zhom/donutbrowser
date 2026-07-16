@@ -5,7 +5,7 @@ use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
 use axum::{
-  extract::{Path, State},
+  extract::{Path, Query, State},
   http::{HeaderMap, StatusCode},
   middleware::{self, Next},
   response::{Json, Response},
@@ -282,6 +282,52 @@ struct BatchStopResponse {
   results: Vec<BatchStopResult>,
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+struct DetectedProfilesResponse {
+  profiles: Vec<crate::profile_importer::DetectedProfile>,
+  total: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct DetectImportQuery {
+  /// Optional folder to scan instead of the default browser locations.
+  folder: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct ImportProfilesRequest {
+  /// Profiles to import. Each item is isolated — one failure doesn't stop the rest.
+  items: Vec<crate::profile_importer::ImportProfileItem>,
+  /// Optional group to assign every imported profile to.
+  group_id: Option<String>,
+  /// How to handle an already-taken profile name: "skip" or "rename"
+  /// (auto-suffix). Defaults to "rename".
+  duplicate_strategy: Option<crate::profile_importer::DuplicateStrategy>,
+  /// Wayfern fingerprint/config applied to every imported profile. Omit to
+  /// have fresh fingerprints generated automatically.
+  #[schema(value_type = Option<Object>)]
+  wayfern_config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct ImportProxiesRequest {
+  /// "txt" — one proxy per line (`host:port`, `host:port:user:pass`, or URL
+  /// forms like `http://user:pass@host:port`). "json" — a Donut proxy export.
+  format: String,
+  /// Raw proxy list / export content.
+  content: String,
+  /// Name prefix for txt imports; proxies are named "{prefix} Proxy {n}".
+  name_prefix: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ImportProxiesResponse {
+  imported_count: usize,
+  skipped_count: usize,
+  errors: Vec<String>,
+  proxies: Vec<ApiProxyResponse>,
+}
+
 #[derive(OpenApi)]
 #[openapi(
   paths(
@@ -295,6 +341,8 @@ struct BatchStopResponse {
     kill_profile,
     batch_run_profiles,
     batch_stop_profiles,
+    detect_import_profiles,
+    import_profiles_api,
     import_profile_cookies,
     get_groups,
     get_group,
@@ -305,6 +353,7 @@ struct BatchStopResponse {
     get_proxies,
     get_proxy,
     create_proxy,
+    import_proxies_api,
     update_proxy,
     delete_proxy,
     get_vpns,
@@ -353,6 +402,15 @@ struct BatchStopResponse {
     ImportCookiesRequest,
     ImportCookiesResponse,
     ProxySettings,
+    DetectedProfilesResponse,
+    ImportProfilesRequest,
+    ImportProxiesRequest,
+    ImportProxiesResponse,
+    crate::profile_importer::DetectedProfile,
+    crate::profile_importer::ImportProfileItem,
+    crate::profile_importer::DuplicateStrategy,
+    crate::profile_importer::ProfileImportItemResult,
+    crate::profile_importer::ProfileImportBatchResult,
   )),
   tags(
     (name = "profiles", description = "Profile management endpoints"),
@@ -451,11 +509,14 @@ impl ApiServer {
       .routes(routes!(kill_profile))
       .routes(routes!(batch_run_profiles))
       .routes(routes!(batch_stop_profiles))
+      .routes(routes!(detect_import_profiles))
+      .routes(routes!(import_profiles_api))
       .routes(routes!(import_profile_cookies))
       .routes(routes!(get_groups, create_group))
       .routes(routes!(get_group, update_group, delete_group))
       .routes(routes!(get_tags))
       .routes(routes!(get_proxies, create_proxy))
+      .routes(routes!(import_proxies_api))
       .routes(routes!(get_proxy, update_proxy, delete_proxy))
       .routes(routes!(get_vpns, create_vpn))
       .routes(routes!(import_vpn))
@@ -1477,6 +1538,77 @@ async fn create_proxy(
   }
 }
 
+// API Handler - Bulk-import proxies from a txt list or a Donut JSON export.
+// Mirrors the MCP `import_proxies` tool.
+#[utoipa::path(
+  post,
+  path = "/v1/proxies/import",
+  request_body = ImportProxiesRequest,
+  responses(
+    (status = 200, description = "Import completed; inspect counts and per-proxy errors", body = ImportProxiesResponse),
+    (status = 400, description = "Invalid format or no valid proxies in content"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
+async fn import_proxies_api(
+  State(state): State<ApiServerState>,
+  Json(request): Json<ImportProxiesRequest>,
+) -> Result<Json<ImportProxiesResponse>, (StatusCode, String)> {
+  let result = match request.format.as_str() {
+    "json" => PROXY_MANAGER
+      .import_proxies_json(&state.app_handle, &request.content)
+      .map_err(manager_error_response)?,
+    "txt" => {
+      use crate::proxy_manager::{ProxyManager, ProxyParseResult};
+
+      let parsed: Vec<_> = ProxyManager::parse_txt_proxies(&request.content)
+        .into_iter()
+        .filter_map(|r| match r {
+          ProxyParseResult::Parsed(p) => Some(p),
+          _ => None,
+        })
+        .collect();
+
+      if parsed.is_empty() {
+        return Err((
+          StatusCode::BAD_REQUEST,
+          "No valid proxies found in content".to_string(),
+        ));
+      }
+
+      PROXY_MANAGER
+        .import_proxies_from_parsed(&state.app_handle, parsed, request.name_prefix)
+        .map_err(manager_error_response)?
+    }
+    other => {
+      return Err((
+        StatusCode::BAD_REQUEST,
+        format!("Invalid format \"{other}\", must be \"json\" or \"txt\""),
+      ))
+    }
+  };
+
+  Ok(Json(ImportProxiesResponse {
+    imported_count: result.imported_count,
+    skipped_count: result.skipped_count,
+    errors: result.errors,
+    proxies: result
+      .proxies
+      .into_iter()
+      .map(|p| ApiProxyResponse {
+        id: p.id,
+        name: p.name,
+        proxy_settings: p.proxy_settings,
+      })
+      .collect(),
+  }))
+}
+
 #[utoipa::path(
   put,
   path = "/v1/proxies/{id}",
@@ -2218,6 +2350,93 @@ async fn batch_stop_profiles(
   Ok(Json(BatchStopResponse { results }))
 }
 
+// API Handler - Detect importable browser profiles on this machine, or scan a
+// custom folder. Free: importing is not gated behind browser automation.
+#[utoipa::path(
+  get,
+  path = "/v1/profiles/import/detect",
+  params(
+    ("folder" = Option<String>, Query, description = "Optional folder to scan instead of the default browser locations. Accepts a single profile dir, a Chromium user-data dir, or a folder holding one profile dir per child.")
+  ),
+  responses(
+    (status = 200, description = "Detected importable profiles", body = DetectedProfilesResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Folder not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn detect_import_profiles(
+  Query(query): Query<DetectImportQuery>,
+  State(_state): State<ApiServerState>,
+) -> Result<Json<DetectedProfilesResponse>, (StatusCode, String)> {
+  let importer = crate::profile_importer::ProfileImporter::instance();
+  let profiles = match query.folder.as_deref() {
+    Some(folder) => importer.scan_folder(std::path::Path::new(folder)),
+    None => importer.detect_existing_profiles(),
+  }
+  .map_err(manager_error_response)?;
+  let total = profiles.len();
+  Ok(Json(DetectedProfilesResponse { profiles, total }))
+}
+
+// API Handler - Bulk-import browser profiles from on-disk profile folders.
+// Free (parity with create_profile); only fingerprint OS spoofing is Pro.
+// Items are isolated — one failure doesn't stop the rest.
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/import",
+  request_body = ImportProfilesRequest,
+  responses(
+    (status = 200, description = "Batch import completed; inspect per-item results", body = crate::profile_importer::ProfileImportBatchResult),
+    (status = 400, description = "No items, or invalid input"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Fingerprint OS spoofing requires an active Pro subscription"),
+    (status = 404, description = "Group not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn import_profiles_api(
+  State(state): State<ApiServerState>,
+  Json(request): Json<ImportProfilesRequest>,
+) -> Result<Json<crate::profile_importer::ProfileImportBatchResult>, (StatusCode, String)> {
+  let wayfern_config: Option<crate::wayfern_manager::WayfernConfig> = request
+    .wayfern_config
+    .as_ref()
+    .and_then(|config| serde_json::from_value(config.clone()).ok());
+
+  let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
+  if !crate::cloud_auth::CLOUD_AUTH
+    .is_fingerprint_os_allowed(fingerprint_os)
+    .await
+  {
+    return Err((
+      StatusCode::PAYMENT_REQUIRED,
+      "Fingerprint OS spoofing requires an active Pro subscription.".to_string(),
+    ));
+  }
+
+  let importer = crate::profile_importer::ProfileImporter::instance();
+  importer
+    .import_profiles(
+      &state.app_handle,
+      request.items,
+      request.group_id,
+      request.duplicate_strategy.unwrap_or_default(),
+      wayfern_config,
+    )
+    .await
+    .map(Json)
+    .map_err(manager_error_response)
+}
+
 #[utoipa::path(
   post,
   path = "/v1/profiles/{id}/cookies/import",
@@ -2477,6 +2696,35 @@ mod tests {
       !update_proxy.iter().any(|f| f == "proxy_settings"),
       "proxy_settings must be optional on update, required list: {update_proxy:?}"
     );
+
+    let import_profiles = schema_required(&spec, "ImportProfilesRequest");
+    for field in ["group_id", "duplicate_strategy", "wayfern_config"] {
+      assert!(
+        !import_profiles.iter().any(|f| f == field),
+        "{field} must be optional on profile import, required list: {import_profiles:?}"
+      );
+    }
+
+    let import_item = schema_required(&spec, "ImportProfileItem");
+    for field in ["proxy_id", "browser_type"] {
+      assert!(
+        !import_item.iter().any(|f| f == field),
+        "{field} must be optional on import items, required list: {import_item:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn import_profiles_request_allows_minimal_body() {
+    // Only items with source_path + new_profile_name are required; everything
+    // else has defaults.
+    let json = r#"{"items": [{"source_path": "/tmp/p", "new_profile_name": "Imported"}]}"#;
+    let parsed: ImportProfilesRequest =
+      serde_json::from_str(json).expect("minimal import body must deserialize");
+    assert_eq!(parsed.items.len(), 1);
+    assert!(parsed.group_id.is_none());
+    assert!(parsed.duplicate_strategy.is_none());
+    assert_eq!(parsed.items[0].browser_type, "chromium");
   }
 
   // The served /openapi.json comes from the hand-maintained ApiDoc `paths(...)`
@@ -2494,6 +2742,9 @@ mod tests {
       "/v1/extension-groups",
       "/v1/extensions/{id}",
       "/v1/extension-groups/{id}",
+      "/v1/profiles/import",
+      "/v1/profiles/import/detect",
+      "/v1/proxies/import",
     ] {
       assert!(paths.contains_key(path), "missing from ApiDoc: {path}");
     }

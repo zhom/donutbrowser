@@ -197,6 +197,41 @@ export interface DetectedProfile {
   mapped_browser: string;
 }
 
+export interface ImportProfileItem {
+  source_path: string;
+  browser_type?: string;
+  new_profile_name: string;
+  proxy_id?: string | null;
+}
+
+export interface ProfileImportItemResult {
+  name: string;
+  source_path: string;
+  status: "imported" | "skipped" | "failed";
+  profile_id: string | null;
+  error: string | null;
+}
+
+export interface ProfileImportBatchResult {
+  imported_count: number;
+  skipped_count: number;
+  failed_count: number;
+  results: ProfileImportItemResult[];
+}
+
+export interface ArchiveScanResult {
+  extracted_dir: string;
+  profiles: DetectedProfile[];
+}
+
+export interface ProfileImportProgress {
+  total: number;
+  completed: number;
+  index: number;
+  name: string;
+  status: "importing" | "imported" | "skipped" | "failed";
+}
+
 export interface BrowserReleaseTypes {
   stable?: string;
 }

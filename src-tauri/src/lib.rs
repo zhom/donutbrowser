@@ -125,7 +125,10 @@ use app_auto_updater::{
   restart_application,
 };
 
-use profile_importer::{detect_existing_profiles, import_browser_profile};
+use profile_importer::{
+  cleanup_profile_import_scratch, detect_existing_profiles, import_browser_profiles,
+  scan_folder_for_profiles, scan_profile_archive,
+};
 
 use extension_manager::{
   add_extension, add_extension_to_group, assign_extension_group_to_profile, create_extension_group,
@@ -2268,7 +2271,10 @@ pub fn run() {
       download_and_prepare_app_update,
       restart_application,
       detect_existing_profiles,
-      import_browser_profile,
+      import_browser_profiles,
+      scan_folder_for_profiles,
+      scan_profile_archive,
+      cleanup_profile_import_scratch,
       check_missing_binaries,
       check_missing_geoip_database,
       ensure_all_binaries_exist,

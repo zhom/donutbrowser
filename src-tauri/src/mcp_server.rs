@@ -639,6 +639,60 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "detect_browser_profiles".to_string(),
+        description: "Detect importable Chromium-family browser profiles (Chrome, Chromium, Brave) on this machine, or scan a custom folder for profile directories".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "folder": {
+              "type": "string",
+              "description": "Optional folder to scan instead of the default browser locations. Accepts a single profile dir, a Chromium user-data dir, or a folder holding one profile dir per child."
+            }
+          }
+        }),
+      },
+      McpTool {
+        name: "import_browser_profiles".to_string(),
+        description: "Bulk-import browser profiles from on-disk profile folders (e.g. paths returned by detect_browser_profiles). Each imported profile becomes a Wayfern profile; items are isolated so one failure doesn't stop the rest".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source_path": {
+                    "type": "string",
+                    "description": "Path to the source profile directory"
+                  },
+                  "new_profile_name": {
+                    "type": "string",
+                    "description": "Name for the imported profile"
+                  },
+                  "proxy_id": {
+                    "type": "string",
+                    "description": "Optional proxy UUID to assign to this profile"
+                  }
+                },
+                "required": ["source_path", "new_profile_name"]
+              },
+              "description": "Profiles to import"
+            },
+            "group_id": {
+              "type": "string",
+              "description": "Optional group UUID assigned to every imported profile"
+            },
+            "duplicate_strategy": {
+              "type": "string",
+              "enum": ["skip", "rename"],
+              "description": "How to handle an already-taken profile name (default: rename with a numeric suffix)"
+            }
+          },
+          "required": ["items"]
+        }),
+      },
+      McpTool {
         name: "update_profile".to_string(),
         description: "Update an existing browser profile's settings".to_string(),
         input_schema: serde_json::json!({
@@ -1731,6 +1785,9 @@ impl McpServer {
         self.handle_batch_stop_profiles(arguments).await
       }
       "create_profile" => self.handle_create_profile(arguments).await,
+      // Profile import (free, like create_profile — importing is not automation)
+      "detect_browser_profiles" => self.handle_detect_browser_profiles(arguments).await,
+      "import_browser_profiles" => self.handle_import_browser_profiles(arguments).await,
       "update_profile" => self.handle_update_profile(arguments).await,
       "delete_profile" => self.handle_delete_profile(arguments).await,
       "list_tags" => self.handle_list_tags().await,
@@ -3196,6 +3253,95 @@ impl McpServer {
           result.imported_count,
           result.skipped_count,
           result.errors.len()
+        )
+      }]
+    }))
+  }
+
+  // Profile import handlers
+  async fn handle_detect_browser_profiles(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let importer = crate::profile_importer::ProfileImporter::instance();
+    let profiles = match arguments.get("folder").and_then(|v| v.as_str()) {
+      Some(folder) => importer.scan_folder(std::path::Path::new(folder)),
+      None => importer.detect_existing_profiles(),
+    }
+    .map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to detect profiles: {e}"),
+    })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&profiles).unwrap_or_else(|_| "[]".to_string())
+      }]
+    }))
+  }
+
+  async fn handle_import_browser_profiles(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let items: Vec<crate::profile_importer::ImportProfileItem> = arguments
+      .get("items")
+      .cloned()
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing items".to_string(),
+      })
+      .and_then(|v| {
+        serde_json::from_value(v).map_err(|e| McpError {
+          code: -32602,
+          message: format!("Invalid items: {e}"),
+        })
+      })?;
+
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+
+    let duplicate_strategy = arguments
+      .get("duplicate_strategy")
+      .cloned()
+      .map(serde_json::from_value::<crate::profile_importer::DuplicateStrategy>)
+      .transpose()
+      .map_err(|e| McpError {
+        code: -32602,
+        message: format!("Invalid duplicate_strategy: {e}"),
+      })?
+      .unwrap_or_default();
+
+    // Clone the handle instead of holding the inner lock across a potentially
+    // multi-GB copy.
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner.app_handle.clone().ok_or_else(|| McpError {
+        code: -32000,
+        message: "MCP server not properly initialized".to_string(),
+      })?
+    };
+
+    let result = crate::profile_importer::ProfileImporter::instance()
+      .import_profiles(&app_handle, items, group_id, duplicate_strategy, None)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to import profiles: {e}"),
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Import complete: {} imported, {} skipped, {} failed\n{}",
+          result.imported_count,
+          result.skipped_count,
+          result.failed_count,
+          serde_json::to_string_pretty(&result.results).unwrap_or_default()
         )
       }]
     }))
@@ -5304,6 +5450,9 @@ mod tests {
     assert!(tool_names.contains(&"run_profile"));
     assert!(tool_names.contains(&"kill_profile"));
     assert!(tool_names.contains(&"get_profile_status"));
+    // Profile import tools
+    assert!(tool_names.contains(&"detect_browser_profiles"));
+    assert!(tool_names.contains(&"import_browser_profiles"));
     // Group tools
     assert!(tool_names.contains(&"list_groups"));
     assert!(tool_names.contains(&"get_group"));
