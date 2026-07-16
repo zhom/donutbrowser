@@ -78,7 +78,7 @@ function AnimatedTabsList({
     <TabsPrimitive.List
       data-slot="animated-tabs-list"
       className={cn(
-        "relative inline-flex max-w-full scrollbar-none items-center gap-1 overflow-x-auto rounded-md p-0",
+        "relative isolate inline-flex max-w-full scrollbar-none items-center gap-1 overflow-x-auto rounded-md p-0",
         className,
       )}
       onMouseLeave={(event) => {
@@ -120,7 +120,7 @@ function AnimatedTabsTrigger({
         onMouseEnter?.(event);
       }}
       className={cn(
-        "relative isolate inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors duration-150",
+        "relative inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors duration-150",
         "text-muted-foreground hover:text-foreground",
         isActive && "text-foreground",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none",
@@ -132,7 +132,7 @@ function AnimatedTabsTrigger({
       {showIndicator && (
         <motion.span
           layoutId={`animated-tabs-indicator-${indicatorId}`}
-          className="absolute inset-0 -z-10 rounded-md bg-accent"
+          className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-accent"
           transition={{ type: "spring", stiffness: 360, damping: 32 }}
         />
       )}

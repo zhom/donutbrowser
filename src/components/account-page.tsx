@@ -198,11 +198,11 @@ export function AccountPage({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-      <DialogContent className="flex max-h-[calc(100vh-4rem)] max-w-2xl flex-col">
+      <DialogContent className="flex max-h-[calc(100vh-5rem)] max-w-3xl flex-col">
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
-            subPage && "mx-auto w-full max-w-2xl",
+            "min-h-0 flex-1 overflow-y-auto",
+            subPage && "mx-auto w-full max-w-3xl",
           )}
         >
           <AnimatedTabs defaultValue="account">
