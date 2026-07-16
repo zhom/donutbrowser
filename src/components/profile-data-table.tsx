@@ -1665,6 +1665,30 @@ export function ProfilesDataTable({
     };
   }, [browserState.isClient, loadAllTags]);
 
+  // A running browser keeps the name it launched with, so close any inline
+  // rename that was open when the profile entered a runtime transition.
+  React.useEffect(() => {
+    if (!profileToRename) return;
+
+    const profileId = profileToRename.id;
+    const isRuntimeLocked =
+      (browserState.isClient && runningProfiles.has(profileId)) ||
+      launchingProfiles.has(profileId) ||
+      stoppingProfiles.has(profileId);
+
+    if (isRuntimeLocked) {
+      setProfileToRename(null);
+      setNewProfileName("");
+      setRenameError(null);
+    }
+  }, [
+    profileToRename,
+    runningProfiles,
+    launchingProfiles,
+    stoppingProfiles,
+    browserState.isClient,
+  ]);
+
   // Automatically deselect profiles that become running, updating, launching, or stopping
   React.useEffect(() => {
     const newSet = new Set(selectedProfiles);
@@ -2479,7 +2503,15 @@ export function ProfilesDataTable({
           const profile = row.original as BrowserProfile;
           const rawName: string = row.getValue("name");
           const name = getBrowserDisplayName(rawName);
-          const isEditing = meta.profileToRename?.id === profile.id;
+          const isRuntimeLocked =
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            meta.launchingProfiles.has(profile.id) ||
+            meta.stoppingProfiles.has(profile.id);
+          const isCrossOsBlocked = isCrossOsProfile(profile);
+          const isEditing =
+            meta.profileToRename?.id === profile.id &&
+            !isRuntimeLocked &&
+            !isCrossOsBlocked;
 
           if (isEditing) {
             return (
@@ -2530,45 +2562,44 @@ export function ProfilesDataTable({
             />
           );
 
-          const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs;
-          const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
-          const isLaunching = meta.launchingProfiles.has(profile.id);
-          const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOsBlocked;
           const lockedEmail = meta.getProfileLockEmail(profile.id);
           const isLocked = meta.isProfileLockedByAnother(profile.id);
-
-          return (
-            <div className="flex max-w-full min-w-0 items-center gap-1.5 overflow-hidden">
-              <button
-                type="button"
-                className={cn(
-                  "mr-auto h-6 max-w-full min-w-0 overflow-hidden rounded border-none bg-transparent px-2 py-1 text-left",
-                  isDisabled
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-accent/50",
-                )}
-                onClick={() => {
-                  if (isDisabled) return;
+          const nameControl = isRuntimeLocked ? (
+            <div className="mr-auto h-6 max-w-full min-w-0 cursor-text overflow-hidden rounded px-2 py-1 text-left select-text">
+              {display}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={cn(
+                "mr-auto h-6 max-w-full min-w-0 overflow-hidden rounded border-none bg-transparent px-2 py-1 text-left",
+                isCrossOsBlocked
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-pointer hover:bg-accent/50",
+              )}
+              onClick={() => {
+                if (isCrossOsBlocked) return;
+                meta.setProfileToRename(profile);
+                meta.setNewProfileName(profile.name);
+                meta.setRenameError(null);
+              }}
+              onKeyDown={(e) => {
+                if (isCrossOsBlocked) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
                   meta.setProfileToRename(profile);
                   meta.setNewProfileName(profile.name);
                   meta.setRenameError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (isDisabled) return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    meta.setProfileToRename(profile);
-                    meta.setNewProfileName(profile.name);
-                    meta.setRenameError(null);
-                  }
-                }}
-              >
-                {display}
-              </button>
+                }
+              }}
+            >
+              {display}
+            </button>
+          );
+
+          return (
+            <div className="flex max-w-full min-w-0 items-center gap-1.5 overflow-hidden">
+              {nameControl}
               {isLocked && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2595,14 +2626,7 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
-          const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs;
-          const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
-          const isLaunching = meta.launchingProfiles.has(profile.id);
-          const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOsBlocked;
+          const isDisabled = isCrossOsProfile(profile);
 
           return (
             <TagsCell
@@ -2628,14 +2652,7 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
-          const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs;
-          const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
-          const isLaunching = meta.launchingProfiles.has(profile.id);
-          const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOsBlocked;
+          const isDisabled = isCrossOsProfile(profile);
 
           return (
             <NoteCell

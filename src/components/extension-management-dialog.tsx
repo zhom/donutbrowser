@@ -1101,7 +1101,7 @@ export function ExtensionManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-        <DialogContent className="flex max-h-[90vh] max-w-[min(80rem,calc(100%-4rem))] flex-col">
+        <DialogContent className="flex max-h-[85vh] max-w-[min(80rem,calc(100%-4rem))] flex-col">
           {!subPage && (
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
