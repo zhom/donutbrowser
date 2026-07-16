@@ -8,6 +8,7 @@ import ja from "./locales/ja.json";
 import ko from "./locales/ko.json";
 import pt from "./locales/pt.json";
 import ru from "./locales/ru.json";
+import tr from "./locales/tr.json";
 import vi from "./locales/vi.json";
 import zh from "./locales/zh.json";
 
@@ -20,6 +21,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: "ja", name: "Japanese", nativeName: "日本語" },
   { code: "ko", name: "Korean", nativeName: "한국어" },
   { code: "ru", name: "Russian", nativeName: "Русский" },
+  { code: "tr", name: "Turkish", nativeName: "Türkçe" },
   { code: "vi", name: "Vietnamese", nativeName: "Tiếng Việt" },
 ] as const;
 
@@ -68,6 +70,7 @@ const resources = {
   ja: { translation: ja },
   ko: { translation: ko },
   ru: { translation: ru },
+  tr: { translation: tr },
   vi: { translation: vi },
 };
 
