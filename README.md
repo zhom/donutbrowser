@@ -136,6 +136,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/xenos1337">
+                    <img src="https://avatars.githubusercontent.com/u/66328734?v=4" width="100;" alt="xenos1337"/>
+                    <br />
+                    <sub><b>xenos</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/webees">
                     <img src="https://avatars.githubusercontent.com/u/5155291?v=4" width="100;" alt="webees"/>
                     <br />
@@ -156,6 +163,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>Huy Le</b></sub>
                 </a>
             </td>
+		</tr>
+		<tr>
             <td align="center">
                 <a href="https://github.com/drunkod">
                     <img src="https://avatars.githubusercontent.com/u/9677471?v=4" width="100;" alt="drunkod"/>
@@ -163,8 +172,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>drunkod</b></sub>
                 </a>
             </td>
-		</tr>
-		<tr>
             <td align="center">
                 <a href="https://github.com/JorySeverijnse">
                     <img src="https://avatars.githubusercontent.com/u/117462355?v=4" width="100;" alt="JorySeverijnse"/>
