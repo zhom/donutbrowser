@@ -581,11 +581,11 @@ export function GroupManagementDialog({
                   setCreateDialogOpen(true);
                 }}
                 className="flex shrink-0 items-center gap-2"
-                aria-label={t("proxies.management.create")}
+                aria-label={t("common.buttons.create")}
               >
                 <GoPlus className="size-4" />
                 <span className="hidden @2xl:inline">
-                  {t("proxies.management.create")}
+                  {t("common.buttons.create")}
                 </span>
               </RippleButton>
             </div>
