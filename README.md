@@ -187,6 +187,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/mchnkkc">
+                    <img src="https://avatars.githubusercontent.com/u/251900355?v=4" width="100;" alt="mchnkkc"/>
+                    <br />
+                    <sub><b>mchnkkc</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/liasica">
                     <img src="https://avatars.githubusercontent.com/u/671431?v=4" width="100;" alt="liasica"/>
                     <br />
