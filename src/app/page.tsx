@@ -3,14 +3,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
+import { motion } from "motion/react";
 import { useOnborda } from "onborda";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AboutDialog } from "@/components/about-dialog";
 import { AccountPage } from "@/components/account-page";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CloseConfirmDialog } from "@/components/close-confirm-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
+import {
+  type ConsistencyResult,
+  ConsistencyWarningDialog,
+  isConsistencyWarningSuppressed,
+} from "@/components/consistency-warning-dialog";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
@@ -60,6 +67,7 @@ import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getEntitlements } from "@/lib/entitlements";
+import { MOTION_EASE_OUT } from "@/lib/motion";
 import {
   ONBOARDING_TOUR_FINISHED_EVENT,
   setOnboardingActive,
@@ -324,6 +332,11 @@ export default function Home() {
   const [currentProfileForSync, setCurrentProfileForSync] =
     useState<BrowserProfile | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [consistencyWarning, setConsistencyWarning] = useState<{
+    profile: BrowserProfile;
+    result: ConsistencyResult;
+  } | null>(null);
   // Owned by page.tsx so the command palette can request opening the profile
   // info dialog. ProfilesDataTable consumes it through controlled props.
   const [profileInfoDialog, setProfileInfoDialog] =
@@ -917,6 +930,24 @@ export default function Home() {
           profile,
         });
         console.log("Successfully launched profile:", result.name);
+
+        // Non-blocking: after a successful launch, check that the proxy exit
+        // node's timezone/country agrees with the fingerprint. A mismatch is a
+        // strong anti-bot tell even though the real device never leaks.
+        if (profile.proxy_id && !isConsistencyWarningSuppressed(profile.id)) {
+          void invoke<ConsistencyResult>(
+            "check_profile_fingerprint_consistency",
+            { profileId: profile.id },
+          )
+            .then((res) => {
+              if (res.checked && !res.consistent) {
+                setConsistencyWarning({ profile, result: res });
+              }
+            })
+            .catch((e) => {
+              console.warn("Consistency check failed:", e);
+            });
+        }
       } catch (err: unknown) {
         console.error("Failed to launch browser:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1580,12 +1611,24 @@ export default function Home() {
         pageTitle={subPageTitle}
       />
       <div className="flex min-h-0 flex-1">
-        <RailNav currentPage={currentPage} onNavigate={handleRailNavigate} />
+        <RailNav
+          currentPage={currentPage}
+          onNavigate={handleRailNavigate}
+          onOpenAbout={() => {
+            setAboutDialogOpen(true);
+          }}
+        />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {currentPage === "profiles" && (
-            <div className="flex min-h-0 flex-1 flex-col px-3 pt-2.5">
-              {isLoading && groupsData.length === 0 ? null : null}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: MOTION_EASE_OUT }}
+              className="flex min-h-0 flex-1 flex-col px-3 pt-2.5"
+            >
               <ProfilesDataTable
+                isLoading={isLoading && profiles.length === 0}
+                showOnboardingEmptyState={profiles.length === 0}
                 profiles={filteredProfiles}
                 infoDialogProfile={profileInfoDialog}
                 onInfoDialogProfileChange={setProfileInfoDialog}
@@ -1626,12 +1669,25 @@ export default function Home() {
                 onLaunchWithSync={(profile) => {
                   setSyncLeaderProfile(profile);
                 }}
+                onCreateProfile={() => {
+                  setCreateProfileDialogOpen(true);
+                }}
+                onImportProfiles={() => {
+                  handleRailNavigate("import");
+                }}
               />
-            </div>
+            </motion.div>
           )}
 
           {currentPage === "shortcuts" && (
-            <ShortcutsPage groupTargets={orderedGroupTargets} />
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: MOTION_EASE_OUT }}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <ShortcutsPage groupTargets={orderedGroupTargets} />
+            </motion.div>
           )}
 
           {settingsDialogOpen && (
@@ -1760,6 +1816,29 @@ export default function Home() {
           handleRailNavigate("profiles");
           setProfileInfoDialog(profile);
         }}
+        onCreateProfile={() => {
+          setCreateProfileDialogOpen(true);
+        }}
+        onOpenAbout={() => {
+          setAboutDialogOpen(true);
+        }}
+      />
+
+      <AboutDialog
+        isOpen={aboutDialogOpen}
+        onClose={() => {
+          setAboutDialogOpen(false);
+        }}
+      />
+
+      <ConsistencyWarningDialog
+        isOpen={consistencyWarning !== null}
+        onClose={() => {
+          setConsistencyWarning(null);
+        }}
+        profileName={consistencyWarning?.profile.name ?? ""}
+        profileId={consistencyWarning?.profile.id ?? ""}
+        result={consistencyWarning?.result ?? null}
       />
 
       {pendingUrls.map((pendingUrl) => (

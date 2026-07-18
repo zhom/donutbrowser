@@ -197,7 +197,14 @@
     "disableAutoUpdates": "Disable App Auto Updates",
     "disableAutoUpdatesDescription": "Prevent the app from automatically checking and installing Donut Browser updates. Browser updates are not affected.",
     "keepDecryptedProfilesInRam": "Keep Decrypted Profiles In RAM",
-    "keepDecryptedProfilesInRamDescription": "Preserve the decrypted in-RAM copy of password-protected profiles between launches for faster startup. The on-disk copy stays encrypted regardless."
+    "keepDecryptedProfilesInRamDescription": "Preserve the decrypted in-RAM copy of password-protected profiles between launches for faster startup. The on-disk copy stays encrypted regardless.",
+    "privacy": {
+      "consistencyWarning": "Fingerprint consistency warning",
+      "consistencyWarningDescription": "Warn on launch when a profile's timezone or language doesn't match its proxy exit node.",
+      "clearTraffic": "Clear all traffic history",
+      "clearTrafficDescription": "Securely erase recorded traffic statistics for every profile.",
+      "clearTrafficSuccess": "Traffic history cleared"
+    }
   },
   "header": {
     "searchPlaceholder": "Search profiles...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "Can't modify running profile",
       "cantModifyLaunching": "Can't modify profile while launching",
       "cantModifyStopping": "Can't modify profile while stopping",
-      "cantModifyUpdating": "Can't modify profile while browser is updating"
+      "cantModifyUpdating": "Can't modify profile while browser is updating",
+      "emptyTitle": "No profiles yet",
+      "emptyHint": "Create your first profile or import existing ones from another browser.",
+      "emptyCreate": "Create profile",
+      "emptyImport": "Import profiles",
+      "emptyFilteredTitle": "No profiles found",
+      "emptyFilteredHint": "No profiles match this group or search. Try another filter or create a new one."
     },
     "actions": {
       "launch": "Launch",
@@ -1294,7 +1307,28 @@
     "domains": "domains",
     "fresh": "Fresh",
     "stale": "Stale",
-    "notCached": "Not cached"
+    "notCached": "Not cached",
+    "tabBlocklists": "Blocklists",
+    "tabCustom": "Custom lists",
+    "custom.description": "Build your own blocklist from source URLs and manual rules. Allowed domains always override blocked ones.",
+    "custom.sourcesLabel": "Blocklist source URLs",
+    "custom.sourcesPlaceholder": "One URL per line",
+    "custom.blockLabel": "Blocked domains",
+    "custom.blockPlaceholder": "One domain per line",
+    "custom.allowLabel": "Allowed domains",
+    "custom.allowPlaceholder": "One domain per line",
+    "custom.allowHint": "Allowed domains are removed from the compiled blocklist, overriding any block rule.",
+    "custom.saved": "Custom DNS rules saved",
+    "custom.imported": "Custom DNS rules imported",
+    "custom.exported": "Custom DNS rules exported",
+    "custom.exportTxt": "Export TXT",
+    "custom.exportJson": "Export JSON",
+    "customLevel": "Custom",
+    "custom.allowlistModeLabel": "Allowlist mode",
+    "custom.allowlistModeOn": "Only the domains below are reachable; everything else is blocked.",
+    "custom.allowlistModeOff": "Block listed domains; allow everything else.",
+    "custom.allowedOnlyLabel": "Allowed domains (only these)",
+    "custom.allowedOnlyHint": "Subdomains of a listed domain are allowed too. An empty list disables filtering."
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "Imported",
     "statusSkipped": "Skipped",
     "statusFailed": "Failed",
-    "importButtonCount": "Import ({{count}})"
+    "importButtonCount": "Import ({{count}})",
+    "vpnOptional": "VPN (Optional)",
+    "noVpn": "No VPN",
+    "advancedOptions": "Advanced options",
+    "configureFingerprint": "Configure fingerprint (optional)"
   },
   "syncTooltips": {
     "syncing": "Syncing...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "Sent",
     "receivedLegend": "Received",
     "tooltipSent": "↑ Sent: ",
-    "tooltipReceived": "↓ Received: "
+    "tooltipReceived": "↓ Received: ",
+    "clearHistory": "Clear history",
+    "clearHistoryTitle": "Clear traffic history",
+    "clearHistoryDescription": "Permanently and securely erase all recorded traffic history for \"{{name}}\". This can't be undone.",
+    "tabOverview": "Overview",
+    "tabTopDomains": "Top domains",
+    "searchDomains": "Search domains…",
+    "noDomainMatch": "No domains match your search."
   },
   "proxyCheck": {
     "unknownLocation": "Unknown",
@@ -1818,7 +1863,14 @@
     "importNoItems": "Nothing selected to import",
     "browserNotDownloaded": "No downloaded version of {{browser}} is available. Download it first, then retry the import.",
     "archiveExtractionFailed": "Failed to extract the archive: {{detail}}",
-    "unsupportedArchiveFormat": "Unsupported archive format. Only ZIP archives are supported."
+    "unsupportedArchiveFormat": "Unsupported archive format. Only ZIP archives are supported.",
+    "clearOnCloseUnavailable": "Clear-on-close isn't available for ephemeral or password-protected profiles.",
+    "proxyAndVpnMutuallyExclusive": "A profile can use either a proxy or a VPN, not both.",
+    "invalidDnsRulesJson": "The selected file isn't valid DNS rules JSON.",
+    "unsupportedDnsRulesFormat": "Unsupported rules format: {{format}}",
+    "dnsRulesSaveFailed": "Failed to save the DNS rules.",
+    "dnsRulesExportFailed": "Failed to export the DNS rules.",
+    "fingerprintMatchFailed": "Couldn't match the fingerprint to the proxy."
   },
   "rail": {
     "profiles": "Profiles",
@@ -1831,7 +1883,9 @@
       "importProfile": "Import profile",
       "importProfileHint": "Bring profiles from another tool",
       "keyboardShortcuts": "Keyboard shortcuts",
-      "keyboardShortcutsHint": "View all shortcuts"
+      "keyboardShortcutsHint": "View all shortcuts",
+      "about": "About Donut Browser",
+      "aboutHint": "Version and app information"
     },
     "network": "Network",
     "integrations": "Integrations",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "Launch {{name}}",
       "stopProfile": "Stop {{name}}",
-      "profileInfo": "Info — {{name}}"
+      "profileInfo": "Info — {{name}}",
+      "createProfile": "Create profile",
+      "about": "About Donut Browser"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "No other Wayfern profiles selected"
+  },
+  "about": {
+    "title": "About",
+    "version": "Version {{version}}",
+    "portableBadge": "portable",
+    "licenseNotice": "Open-source anti-detect browser, licensed under AGPL-3.0.",
+    "website": "Website"
+  },
+  "clearOnClose": {
+    "label": "Clear data on close",
+    "description": "Wipe cookies, history and cache when the browser closes. Extensions and bookmarks are kept."
+  },
+  "consistencyWarning": {
+    "title": "Fingerprint mismatch",
+    "intro": "Your proxy exit for \"{{name}}\" doesn't match this profile's fingerprint:",
+    "timezoneTitle": "Timezone mismatch",
+    "timezoneDetail": "Exit node is in {{exit}} but the fingerprint reports {{fingerprint}}.",
+    "languageTitle": "Language mismatch",
+    "languageDetail": "Exit country is {{country}} but the fingerprint language is {{fingerprint}}.",
+    "explainer": "A timezone or language that disagrees with your exit IP is a strong anti-bot signal, even though your real device never leaks. Align the fingerprint with the proxy location to reduce hostile treatment.",
+    "dontWarnAgain": "Don't warn again for this profile",
+    "matchToProxy": "Match fingerprint to proxy",
+    "matching": "Matching…",
+    "matchSuccess": "Fingerprint updated to match the proxy. Relaunch the profile to apply."
   }
 }

@@ -160,15 +160,17 @@ pub async fn start_proxy_process(
   upstream_url: Option<String>,
   port: Option<u16>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
-  start_proxy_process_with_profile(upstream_url, port, None, Vec::new(), None, None).await
+  start_proxy_process_with_profile(upstream_url, port, None, Vec::new(), None, false, None).await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_process_with_profile(
   upstream_url: Option<String>,
   port: Option<u16>,
   profile_id: Option<String>,
   bypass_rules: Vec<String>,
   blocklist_file: Option<String>,
+  dns_allowlist_mode: bool,
   local_protocol: Option<String>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
   let id = generate_proxy_id();
@@ -185,6 +187,7 @@ pub async fn start_proxy_process_with_profile(
     .with_profile_id(profile_id.clone())
     .with_bypass_rules(bypass_rules)
     .with_blocklist_file(blocklist_file)
+    .with_dns_allowlist_mode(dns_allowlist_mode)
     .with_local_protocol(local_protocol);
   save_proxy_config(&config)?;
 
@@ -370,24 +373,21 @@ pub async fn start_proxy_process_with_profile(
     attempts += 1;
     if attempts >= max_attempts {
       // Try to get the config one more time for better error message
-      if let Some(config) = get_proxy_config(&id) {
+      let detail = if let Some(config) = get_proxy_config(&id) {
         // Check if process is still running
         let process_running = config.pid.map(is_process_running).unwrap_or(false);
-        return Err(
-          format!(
-            "Proxy worker failed to start in time. Config: id={}, local_url={:?}, local_port={:?}, pid={:?}, process_running={}",
-            config.id, config.local_url, config.local_port, config.pid, process_running
-          )
-          .into(),
-        );
-      }
-      return Err(
         format!(
-          "Proxy worker failed to start in time. Config not found for id: {}",
-          id
+          "Config: id={}, local_url={:?}, local_port={:?}, pid={:?}, process_running={}",
+          config.id, config.local_url, config.local_port, config.pid, process_running
         )
-        .into(),
-      );
+      } else {
+        format!("Config not found for id: {}", id)
+      };
+      // The detached worker (if it did spawn) would otherwise outlive this
+      // failed start with nothing tracking it — callers only get an error
+      // string, so this is the last place that can still kill it.
+      let _ = stop_proxy_process(&id).await;
+      return Err(format!("Proxy worker failed to start in time. {detail}").into());
     }
   }
 }

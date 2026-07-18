@@ -197,7 +197,14 @@
     "disableAutoUpdates": "禁用应用自动更新",
     "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。",
     "keepDecryptedProfilesInRam": "在内存中保留已解密的配置文件",
-    "keepDecryptedProfilesInRamDescription": "在启动之间保留密码保护配置文件的已解密内存副本,以便更快地启动。无论如何磁盘上的副本始终保持加密。"
+    "keepDecryptedProfilesInRamDescription": "在启动之间保留密码保护配置文件的已解密内存副本,以便更快地启动。无论如何磁盘上的副本始终保持加密。",
+    "privacy": {
+      "consistencyWarning": "指纹一致性警告",
+      "consistencyWarningDescription": "当配置文件的时区或语言与其代理出口节点不匹配时,在启动时发出警告。",
+      "clearTraffic": "清除所有流量历史",
+      "clearTrafficDescription": "安全清除所有配置文件的已记录流量统计数据。",
+      "clearTrafficSuccess": "流量历史已清除"
+    }
   },
   "header": {
     "searchPlaceholder": "搜索配置文件...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "无法修改正在运行的配置文件",
       "cantModifyLaunching": "启动期间无法修改配置文件",
       "cantModifyStopping": "停止期间无法修改配置文件",
-      "cantModifyUpdating": "浏览器更新期间无法修改配置文件"
+      "cantModifyUpdating": "浏览器更新期间无法修改配置文件",
+      "emptyTitle": "暂无配置文件",
+      "emptyHint": "创建您的第一个配置文件,或从其他浏览器导入现有配置文件。",
+      "emptyCreate": "创建配置文件",
+      "emptyImport": "导入配置文件",
+      "emptyFilteredTitle": "未找到配置文件",
+      "emptyFilteredHint": "没有符合此分组或搜索的配置文件。请尝试其他筛选条件或新建一个。"
     },
     "actions": {
       "launch": "启动",
@@ -1294,7 +1307,28 @@
     "domains": "个域名",
     "fresh": "最新",
     "stale": "过期",
-    "notCached": "未缓存"
+    "notCached": "未缓存",
+    "tabBlocklists": "拦截列表",
+    "tabCustom": "自定义列表",
+    "custom.description": "通过源 URL 和手动规则构建您自己的拦截列表。允许的域名始终优先于被拦截的域名。",
+    "custom.sourcesLabel": "拦截列表源 URL",
+    "custom.sourcesPlaceholder": "每行一个 URL",
+    "custom.blockLabel": "拦截的域名",
+    "custom.blockPlaceholder": "每行一个域名",
+    "custom.allowLabel": "允许的域名",
+    "custom.allowPlaceholder": "每行一个域名",
+    "custom.allowHint": "允许的域名会从编译后的拦截列表中移除,并覆盖任何拦截规则。",
+    "custom.saved": "自定义 DNS 规则已保存",
+    "custom.imported": "自定义 DNS 规则已导入",
+    "custom.exported": "自定义 DNS 规则已导出",
+    "custom.exportTxt": "导出 TXT",
+    "custom.exportJson": "导出 JSON",
+    "customLevel": "自定义",
+    "custom.allowlistModeLabel": "允许列表模式",
+    "custom.allowlistModeOn": "仅可访问下方域名，其余全部拦截。",
+    "custom.allowlistModeOff": "拦截列表中的域名，允许其余所有域名。",
+    "custom.allowedOnlyLabel": "允许的域名（仅限这些）",
+    "custom.allowedOnlyHint": "列表中域名的子域名也会被允许。列表为空时将禁用过滤。"
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "已导入",
     "statusSkipped": "已跳过",
     "statusFailed": "失败",
-    "importButtonCount": "导入 ({{count}})"
+    "importButtonCount": "导入 ({{count}})",
+    "vpnOptional": "VPN(可选)",
+    "noVpn": "不使用 VPN",
+    "advancedOptions": "高级选项",
+    "configureFingerprint": "配置指纹(可选)"
   },
   "syncTooltips": {
     "syncing": "同步中...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "已发送",
     "receivedLegend": "已接收",
     "tooltipSent": "↑ 已发送: ",
-    "tooltipReceived": "↓ 已接收: "
+    "tooltipReceived": "↓ 已接收: ",
+    "clearHistory": "清除历史",
+    "clearHistoryTitle": "清除流量历史",
+    "clearHistoryDescription": "永久且安全地清除「{{name}}」的所有已记录流量历史。此操作无法撤销。",
+    "tabOverview": "概览",
+    "tabTopDomains": "热门域名",
+    "searchDomains": "搜索域名…",
+    "noDomainMatch": "没有与搜索匹配的域名。"
   },
   "proxyCheck": {
     "unknownLocation": "未知",
@@ -1818,7 +1863,14 @@
     "importNoItems": "未选择要导入的内容",
     "browserNotDownloaded": "没有已下载的 {{browser}} 版本。请先下载，然后重试导入。",
     "archiveExtractionFailed": "解压压缩包失败：{{detail}}",
-    "unsupportedArchiveFormat": "不支持的压缩包格式。仅支持 ZIP 压缩包。"
+    "unsupportedArchiveFormat": "不支持的压缩包格式。仅支持 ZIP 压缩包。",
+    "clearOnCloseUnavailable": "关闭时清除功能不适用于临时配置文件或受密码保护的配置文件。",
+    "proxyAndVpnMutuallyExclusive": "配置文件只能使用代理或 VPN，不能同时使用两者。",
+    "invalidDnsRulesJson": "所选文件不是有效的 DNS 规则 JSON。",
+    "unsupportedDnsRulesFormat": "不支持的规则格式：{{format}}",
+    "dnsRulesSaveFailed": "保存 DNS 规则失败。",
+    "dnsRulesExportFailed": "导出 DNS 规则失败。",
+    "fingerprintMatchFailed": "无法将指纹匹配到代理。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -1831,7 +1883,9 @@
       "importProfile": "导入配置文件",
       "importProfileHint": "从其他工具导入",
       "keyboardShortcuts": "键盘快捷键",
-      "keyboardShortcutsHint": "查看所有快捷键"
+      "keyboardShortcutsHint": "查看所有快捷键",
+      "about": "关于 Donut Browser",
+      "aboutHint": "版本和应用信息"
     },
     "network": "网络",
     "integrations": "集成",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "启动 {{name}}",
       "stopProfile": "停止 {{name}}",
-      "profileInfo": "信息 — {{name}}"
+      "profileInfo": "信息 — {{name}}",
+      "createProfile": "创建配置文件",
+      "about": "关于 Donut Browser"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "未选择其他 Wayfern 配置文件"
+  },
+  "about": {
+    "title": "关于",
+    "version": "版本 {{version}}",
+    "portableBadge": "便携版",
+    "licenseNotice": "开源反检测浏览器,基于 AGPL-3.0 许可证发布。",
+    "website": "官网"
+  },
+  "clearOnClose": {
+    "label": "关闭时清除数据",
+    "description": "浏览器关闭时清除 Cookie、历史记录和缓存。扩展和书签将被保留。"
+  },
+  "consistencyWarning": {
+    "title": "指纹不匹配",
+    "intro": "「{{name}}」的代理出口与此配置文件的指纹不匹配:",
+    "timezoneTitle": "时区不匹配",
+    "timezoneDetail": "出口节点位于 {{exit}},但指纹报告为 {{fingerprint}}。",
+    "languageTitle": "语言不匹配",
+    "languageDetail": "出口国家/地区为 {{country}},但指纹语言为 {{fingerprint}}。",
+    "explainer": "时区或语言与出口 IP 不一致是强烈的反机器人信号,即使您的真实设备信息从未泄露。请让指纹与代理位置保持一致,以减少被针对的风险。",
+    "dontWarnAgain": "不再为此配置文件发出警告",
+    "matchToProxy": "将指纹匹配到代理",
+    "matching": "匹配中…",
+    "matchSuccess": "指纹已更新以匹配代理。重新启动配置文件以生效。"
   }
 }

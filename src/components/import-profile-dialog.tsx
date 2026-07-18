@@ -3,12 +3,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FaFileArchive, FaFolder } from "react-icons/fa";
+import { LuChevronRight } from "react-icons/lu";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AnimatedDisclosureChevron,
+  AnimatedDisclosureContent,
+} from "@/components/ui/animated-disclosure";
 import {
   AnimatedTabs,
   AnimatedTabsContent,
@@ -36,8 +42,10 @@ import {
 import { WayfernConfigForm } from "@/components/wayfern-config-form";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
+import { fireSprinkleConfetti } from "@/lib/confetti";
 import { cn } from "@/lib/utils";
 import type {
   ArchiveScanResult,
@@ -89,7 +97,13 @@ export function ImportProfileDialog({
     useState<DuplicateStrategy>("rename");
   // "none" | "round-robin" | a stored proxy id
   const [proxyAssignment, setProxyAssignment] = useState<string>("none");
+  // "none" | a VPN config id (applied to every imported profile)
+  const [vpnAssignment, setVpnAssignment] = useState<string>("none");
   const [wayfernConfig, setWayfernConfig] = useState<WayfernConfig>({});
+  // Fingerprint + advanced options collapse behind disclosures — the default
+  // path is just names + proxy/VPN.
+  const [showFingerprint, setShowFingerprint] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState<ProfileImportProgress | null>(null);
@@ -97,6 +111,8 @@ export function ImportProfileDialog({
 
   const { storedProxies } = useProxyEvents();
   const { groups } = useGroupEvents();
+  const { vpnConfigs } = useVpnEvents();
+  const reducedMotion = useReducedMotion();
 
   const activeProfiles =
     importMode === "auto-detect" ? detectedProfiles : scannedProfiles;
@@ -284,6 +300,7 @@ export function ImportProfileDialog({
       browser_type: p.browser,
       new_profile_name: (profileNames[p.path] ?? p.name).trim(),
       proxy_id: proxyIdForIndex(index),
+      vpn_id: vpnAssignment === "none" ? null : vpnAssignment,
     }));
 
     setCurrentStep("importing");
@@ -308,6 +325,9 @@ export function ImportProfileDialog({
           failed: batchResult.failed_count,
         }),
       );
+      if (batchResult.imported_count > 0 && !reducedMotion) {
+        fireSprinkleConfetti();
+      }
     } catch (error) {
       console.error("Failed to import profiles:", error);
       toast.error(translateBackendError(t, error));
@@ -319,9 +339,11 @@ export function ImportProfileDialog({
     selectedProfiles,
     profileNames,
     proxyIdForIndex,
+    vpnAssignment,
     selectedGroupId,
     duplicateStrategy,
     wayfernConfig,
+    reducedMotion,
     t,
   ]);
 
@@ -339,7 +361,10 @@ export function ImportProfileDialog({
     setNewGroupName("");
     setDuplicateStrategy("rename");
     setProxyAssignment("none");
+    setVpnAssignment("none");
     setWayfernConfig({});
+    setShowFingerprint(false);
+    setShowAdvanced(false);
     setProgress(null);
     setResult(null);
     onClose();
@@ -430,365 +455,434 @@ export function ImportProfileDialog({
           </DialogHeader>
         )}
 
-        <div
-          className={cn(
-            "min-h-0 flex-1 space-y-6 overflow-y-auto",
-            subPage && "mx-auto w-full max-w-2xl",
-          )}
-        >
-          {currentStep === "select" && (
-            <AnimatedTabs
-              value={importMode}
-              onValueChange={(v) => {
-                setImportMode(v as ImportMode);
-                setSelectedPaths(new Set());
-              }}
-              className="flex flex-col gap-6"
-            >
-              <AnimatedTabsList>
-                <AnimatedTabsTrigger value="auto-detect" disabled={isLoading}>
-                  {t("importProfile.autoDetect")}
-                </AnimatedTabsTrigger>
-                <AnimatedTabsTrigger value="manual" disabled={isLoading}>
-                  {t("importProfile.manualImport")}
-                </AnimatedTabsTrigger>
-              </AnimatedTabsList>
-
-              <AnimatedTabsContent value="auto-detect">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">
-                    {t("importProfile.detectedProfilesTitle")}
-                  </h3>
-
-                  {isLoading ? (
-                    <div className="py-8 text-center">
-                      <p className="text-muted-foreground">
-                        {t("importProfile.scanning")}
-                      </p>
-                    </div>
-                  ) : detectedProfiles.length === 0 ? (
-                    <div className="py-8 text-center">
-                      <p className="text-muted-foreground">
-                        {t("importProfile.noneFound")}
-                      </p>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {t("importProfile.noneFoundHint")}
-                      </p>
-                    </div>
-                  ) : (
-                    renderProfileList(detectedProfiles)
-                  )}
-                </div>
-              </AnimatedTabsContent>
-
-              <AnimatedTabsContent value="manual">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">
-                    {t("importProfile.manualTitle")}
-                  </h3>
-
-                  <div>
-                    <Label htmlFor="manual-profile-path" className="mb-2">
-                      {t("importProfile.profileFolderPath")}
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="manual-profile-path"
-                        value={manualPath}
-                        onChange={(e) => {
-                          setManualPath(e.target.value);
-                        }}
-                        placeholder={t(
-                          "importProfile.profileFolderPlaceholder",
-                        )}
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => void handleBrowseFolder()}
-                        title={t("importProfile.browseFolderTitle")}
-                      >
-                        <FaFolder className="size-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => void handleBrowseArchive()}
-                        title={t("importProfile.selectArchiveTitle")}
-                      >
-                        <FaFileArchive className="size-4" />
-                      </Button>
-                      <LoadingButton
-                        variant="outline"
-                        isLoading={isScanning}
-                        disabled={!manualPath.trim()}
-                        onClick={() => void scanPath(manualPath.trim())}
-                      >
-                        {t("importProfile.scanButton")}
-                      </LoadingButton>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {t("importProfile.manualHint")}
-                    </p>
-                    <p className="mt-2 text-xs break-all text-muted-foreground">
-                      {t("importProfile.examplePaths")}
-                      <br />
-                      macOS: ~/Library/Application Support/Google/Chrome/Default
-                      <br />
-                      Windows: %LOCALAPPDATA%\Google\Chrome\User Data\Default
-                      <br />
-                      Linux: ~/.config/google-chrome/Default
-                    </p>
-                  </div>
-
-                  {scannedProfiles.length > 0 &&
-                    renderProfileList(scannedProfiles)}
-                </div>
-              </AnimatedTabsContent>
-            </AnimatedTabs>
-          )}
-
-          {currentStep === "configure" && (
-            <div className="space-y-4">
-              <Alert>
-                <AlertDescription>
-                  {t("importProfile.importedAs", {
-                    browser: getBrowserDisplayName("wayfern"),
-                  })}
-                </AlertDescription>
-              </Alert>
-
-              <div>
-                <Label className="mb-2">
-                  {t("importProfile.profilesToImport")}
-                </Label>
-                <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border p-2">
-                  {selectedProfiles.map((profile) => (
-                    <div key={profile.path} className="flex items-center gap-2">
-                      <span
-                        className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-                        title={profile.path}
-                      >
-                        {profile.name}
-                      </span>
-                      <Input
-                        className="flex-1"
-                        aria-label={t("importProfile.newProfileName")}
-                        value={profileNames[profile.path] ?? profile.name}
-                        onChange={(e) => {
-                          setProfileNames((prev) => ({
-                            ...prev,
-                            [profile.path]: e.target.value,
-                          }));
-                        }}
-                        placeholder={t(
-                          "importProfile.newProfileNamePlaceholder",
-                        )}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Label className="mb-2">
-                  {t("importProfile.groupOptional")}
-                </Label>
-                {isCreatingGroup ? (
-                  <div className="flex gap-2">
-                    <Input
-                      value={newGroupName}
-                      onChange={(e) => setNewGroupName(e.target.value)}
-                      placeholder={t("importProfile.newGroupNamePlaceholder")}
-                    />
-                    <Button
-                      variant="outline"
-                      disabled={!newGroupName.trim()}
-                      onClick={() => void handleCreateGroup()}
-                    >
-                      {t("common.buttons.create")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setIsCreatingGroup(false);
-                        setNewGroupName("");
-                      }}
-                    >
-                      {t("common.buttons.cancel")}
-                    </Button>
-                  </div>
-                ) : (
-                  <Select
-                    value={selectedGroupId}
-                    onValueChange={(value) => {
-                      if (value === "create-new") {
-                        setIsCreatingGroup(true);
-                      } else {
-                        setSelectedGroupId(value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t("importProfile.noGroup")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">
-                        {t("importProfile.noGroup")}
-                      </SelectItem>
-                      {groups.map((group) => (
-                        <SelectItem key={group.id} value={group.id}>
-                          {group.name}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="create-new">
-                        {t("importProfile.createNewGroup")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div>
-                <Label className="mb-2">
-                  {t("importProfile.duplicateStrategyLabel")}
-                </Label>
-                <Select
-                  value={duplicateStrategy}
-                  onValueChange={(value) => {
-                    setDuplicateStrategy(value as DuplicateStrategy);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="rename">
-                      {t("importProfile.duplicateRename")}
-                    </SelectItem>
-                    <SelectItem value="skip">
-                      {t("importProfile.duplicateSkip")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="mb-2">
-                  {t("importProfile.proxyOptional")}
-                </Label>
-                <Select
-                  value={proxyAssignment}
-                  onValueChange={setProxyAssignment}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("importProfile.noProxy")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">
-                      {t("importProfile.noProxy")}
-                    </SelectItem>
-                    {storedProxies.length > 0 && (
-                      <SelectItem value="round-robin">
-                        {t("importProfile.proxyRoundRobin")}
-                      </SelectItem>
-                    )}
-                    {storedProxies.map((proxy) => (
-                      <SelectItem key={proxy.id} value={proxy.id}>
-                        {proxy.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <WayfernConfigForm
-                config={wayfernConfig}
-                onConfigChange={(key, value) => {
-                  setWayfernConfig((prev) => ({ ...prev, [key]: value }));
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            className={cn("space-y-6", subPage && "mx-auto w-full max-w-3xl")}
+          >
+            {currentStep === "select" && (
+              <AnimatedTabs
+                value={importMode}
+                onValueChange={(v) => {
+                  setImportMode(v as ImportMode);
+                  setSelectedPaths(new Set());
                 }}
-                isCreating={true}
-                crossOsUnlocked={crossOsUnlocked}
-                limitedMode={!crossOsUnlocked}
-              />
-            </div>
-          )}
+                className="flex flex-col gap-6"
+              >
+                <AnimatedTabsList>
+                  <AnimatedTabsTrigger value="auto-detect" disabled={isLoading}>
+                    {t("importProfile.autoDetect")}
+                  </AnimatedTabsTrigger>
+                  <AnimatedTabsTrigger value="manual" disabled={isLoading}>
+                    {t("importProfile.manualImport")}
+                  </AnimatedTabsTrigger>
+                </AnimatedTabsList>
 
-          {currentStep === "importing" && (
-            <div className="space-y-4">
-              {isImporting && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-medium">
-                    {t("importProfile.importingTitle")}
-                  </h3>
-                  <Progress value={progressPercent} />
-                  {progress && (
-                    <p className="text-sm text-muted-foreground">
-                      {t("importProfile.importProgress", {
-                        completed: progress.completed,
-                        total: progress.total,
-                      })}
-                      {progress.status === "importing" && (
-                        <> — {progress.name}</>
-                      )}
-                    </p>
-                  )}
-                </div>
-              )}
+                <AnimatedTabsContent value="auto-detect">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">
+                      {t("importProfile.detectedProfilesTitle")}
+                    </h3>
 
-              {result && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-medium">
-                    {t("importProfile.resultsSummary", {
-                      imported: result.imported_count,
-                      skipped: result.skipped_count,
-                      failed: result.failed_count,
+                    {isLoading ? (
+                      <div className="py-8 text-center">
+                        <p className="text-muted-foreground">
+                          {t("importProfile.scanning")}
+                        </p>
+                      </div>
+                    ) : detectedProfiles.length === 0 ? (
+                      <div className="py-8 text-center">
+                        <p className="text-muted-foreground">
+                          {t("importProfile.noneFound")}
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {t("importProfile.noneFoundHint")}
+                        </p>
+                      </div>
+                    ) : (
+                      renderProfileList(detectedProfiles)
+                    )}
+                  </div>
+                </AnimatedTabsContent>
+
+                <AnimatedTabsContent value="manual">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">
+                      {t("importProfile.manualTitle")}
+                    </h3>
+
+                    <div>
+                      <Label htmlFor="manual-profile-path" className="mb-2">
+                        {t("importProfile.profileFolderPath")}
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="manual-profile-path"
+                          value={manualPath}
+                          onChange={(e) => {
+                            setManualPath(e.target.value);
+                          }}
+                          placeholder={t(
+                            "importProfile.profileFolderPlaceholder",
+                          )}
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => void handleBrowseFolder()}
+                          title={t("importProfile.browseFolderTitle")}
+                        >
+                          <FaFolder className="size-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => void handleBrowseArchive()}
+                          title={t("importProfile.selectArchiveTitle")}
+                        >
+                          <FaFileArchive className="size-4" />
+                        </Button>
+                        <LoadingButton
+                          variant="outline"
+                          isLoading={isScanning}
+                          disabled={!manualPath.trim()}
+                          onClick={() => void scanPath(manualPath.trim())}
+                        >
+                          {t("importProfile.scanButton")}
+                        </LoadingButton>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {t("importProfile.manualHint")}
+                      </p>
+                      <p className="mt-2 text-xs break-all text-muted-foreground">
+                        {t("importProfile.examplePaths")}
+                        <br />
+                        macOS: ~/Library/Application
+                        Support/Google/Chrome/Default
+                        <br />
+                        Windows: %LOCALAPPDATA%\Google\Chrome\User Data\Default
+                        <br />
+                        Linux: ~/.config/google-chrome/Default
+                      </p>
+                    </div>
+
+                    {scannedProfiles.length > 0 &&
+                      renderProfileList(scannedProfiles)}
+                  </div>
+                </AnimatedTabsContent>
+              </AnimatedTabs>
+            )}
+
+            {currentStep === "configure" && (
+              <div className="space-y-4">
+                <Alert>
+                  <AlertDescription>
+                    {t("importProfile.importedAs", {
+                      browser: getBrowserDisplayName("wayfern"),
                     })}
-                  </h3>
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-                    {result.results.map((item) => (
+                  </AlertDescription>
+                </Alert>
+
+                <div>
+                  <Label className="mb-2">
+                    {t("importProfile.profilesToImport")}
+                  </Label>
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border p-2">
+                    {selectedProfiles.map((profile) => (
                       <div
-                        key={item.source_path}
-                        className="flex items-center gap-2 p-1 text-sm"
+                        key={profile.path}
+                        className="flex items-center gap-2"
                       >
                         <span
-                          className={cn(
-                            "shrink-0 text-xs font-medium",
-                            item.status === "imported" && "text-success",
-                            item.status === "skipped" &&
-                              "text-muted-foreground",
-                            item.status === "failed" && "text-destructive",
-                          )}
+                          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+                          title={profile.path}
                         >
-                          {item.status === "imported" &&
-                            t("importProfile.statusImported")}
-                          {item.status === "skipped" &&
-                            t("importProfile.statusSkipped")}
-                          {item.status === "failed" &&
-                            t("importProfile.statusFailed")}
+                          {profile.name}
                         </span>
-                        <span className="min-w-0 flex-1 truncate">
-                          {item.name || item.source_path}
-                        </span>
-                        {item.error && (
-                          <span className="min-w-0 flex-1 truncate text-xs text-destructive">
-                            {translateBackendError(t, new Error(item.error))}
-                          </span>
-                        )}
+                        <Input
+                          className="flex-1"
+                          aria-label={t("importProfile.newProfileName")}
+                          value={profileNames[profile.path] ?? profile.name}
+                          onChange={(e) => {
+                            setProfileNames((prev) => ({
+                              ...prev,
+                              [profile.path]: e.target.value,
+                            }));
+                          }}
+                          placeholder={t(
+                            "importProfile.newProfileNamePlaceholder",
+                          )}
+                        />
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                <div>
+                  <Label className="mb-2">
+                    {t("importProfile.proxyOptional")}
+                  </Label>
+                  <Select
+                    value={proxyAssignment}
+                    onValueChange={setProxyAssignment}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("importProfile.noProxy")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        {t("importProfile.noProxy")}
+                      </SelectItem>
+                      {storedProxies.length > 0 && (
+                        <SelectItem value="round-robin">
+                          {t("importProfile.proxyRoundRobin")}
+                        </SelectItem>
+                      )}
+                      {storedProxies.map((proxy) => (
+                        <SelectItem key={proxy.id} value={proxy.id}>
+                          {proxy.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {vpnConfigs.length > 0 && (
+                  <div>
+                    <Label className="mb-2">
+                      {t("importProfile.vpnOptional")}
+                    </Label>
+                    <Select
+                      value={vpnAssignment}
+                      onValueChange={setVpnAssignment}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("importProfile.noVpn")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          {t("importProfile.noVpn")}
+                        </SelectItem>
+                        {vpnConfigs.map((vpn) => (
+                          <SelectItem key={vpn.id} value={vpn.id}>
+                            {vpn.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div>
+                  <button
+                    type="button"
+                    className="flex cursor-pointer items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    aria-expanded={showAdvanced}
+                  >
+                    <AnimatedDisclosureChevron open={showAdvanced}>
+                      <LuChevronRight className="size-3.5" />
+                    </AnimatedDisclosureChevron>
+                    {t("importProfile.advancedOptions")}
+                  </button>
+                  <AnimatedDisclosureContent
+                    open={showAdvanced}
+                    className="mt-3 space-y-4"
+                  >
+                    <div>
+                      <Label className="mb-2">
+                        {t("importProfile.groupOptional")}
+                      </Label>
+                      {isCreatingGroup ? (
+                        <div className="flex gap-2">
+                          <Input
+                            value={newGroupName}
+                            onChange={(e) => setNewGroupName(e.target.value)}
+                            placeholder={t(
+                              "importProfile.newGroupNamePlaceholder",
+                            )}
+                          />
+                          <Button
+                            variant="outline"
+                            disabled={!newGroupName.trim()}
+                            onClick={() => void handleCreateGroup()}
+                          >
+                            {t("common.buttons.create")}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => {
+                              setIsCreatingGroup(false);
+                              setNewGroupName("");
+                            }}
+                          >
+                            {t("common.buttons.cancel")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Select
+                          value={selectedGroupId}
+                          onValueChange={(value) => {
+                            if (value === "create-new") {
+                              setIsCreatingGroup(true);
+                            } else {
+                              setSelectedGroupId(value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={t("importProfile.noGroup")}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">
+                              {t("importProfile.noGroup")}
+                            </SelectItem>
+                            {groups.map((group) => (
+                              <SelectItem key={group.id} value={group.id}>
+                                {group.name}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="create-new">
+                              {t("importProfile.createNewGroup")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label className="mb-2">
+                        {t("importProfile.duplicateStrategyLabel")}
+                      </Label>
+                      <Select
+                        value={duplicateStrategy}
+                        onValueChange={(value) => {
+                          setDuplicateStrategy(value as DuplicateStrategy);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="rename">
+                            {t("importProfile.duplicateRename")}
+                          </SelectItem>
+                          <SelectItem value="skip">
+                            {t("importProfile.duplicateSkip")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </AnimatedDisclosureContent>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    className="flex cursor-pointer items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowFingerprint((v) => !v)}
+                    aria-expanded={showFingerprint}
+                  >
+                    <AnimatedDisclosureChevron open={showFingerprint}>
+                      <LuChevronRight className="size-3.5" />
+                    </AnimatedDisclosureChevron>
+                    {t("importProfile.configureFingerprint")}
+                  </button>
+                  <AnimatedDisclosureContent
+                    open={showFingerprint}
+                    className="mt-3"
+                  >
+                    <WayfernConfigForm
+                      config={wayfernConfig}
+                      onConfigChange={(key, value) => {
+                        setWayfernConfig((prev) => ({ ...prev, [key]: value }));
+                      }}
+                      isCreating={true}
+                      crossOsUnlocked={crossOsUnlocked}
+                      limitedMode={!crossOsUnlocked}
+                    />
+                  </AnimatedDisclosureContent>
+                </div>
+              </div>
+            )}
+
+            {currentStep === "importing" && (
+              <div className="space-y-4">
+                {isImporting && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-medium">
+                      {t("importProfile.importingTitle")}
+                    </h3>
+                    <Progress value={progressPercent} />
+                    {progress && (
+                      <p className="text-sm text-muted-foreground">
+                        {t("importProfile.importProgress", {
+                          completed: progress.completed,
+                          total: progress.total,
+                        })}
+                        {progress.status === "importing" && (
+                          <> — {progress.name}</>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {result && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-medium">
+                      {t("importProfile.resultsSummary", {
+                        imported: result.imported_count,
+                        skipped: result.skipped_count,
+                        failed: result.failed_count,
+                      })}
+                    </h3>
+                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+                      {result.results.map((item) => (
+                        <div
+                          key={item.source_path}
+                          className="flex items-center gap-2 p-1 text-sm"
+                        >
+                          <span
+                            className={cn(
+                              "shrink-0 text-xs font-medium",
+                              item.status === "imported" && "text-success",
+                              item.status === "skipped" &&
+                                "text-muted-foreground",
+                              item.status === "failed" && "text-destructive",
+                            )}
+                          >
+                            {item.status === "imported" &&
+                              t("importProfile.statusImported")}
+                            {item.status === "skipped" &&
+                              t("importProfile.statusSkipped")}
+                            {item.status === "failed" &&
+                              t("importProfile.statusFailed")}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {item.name || item.source_path}
+                          </span>
+                          {item.error && (
+                            <span className="min-w-0 flex-1 truncate text-xs text-destructive">
+                              {translateBackendError(t, new Error(item.error))}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div
           className={cn(
             "flex shrink-0 items-center justify-end gap-2",
             subPage
-              ? "mx-auto w-full max-w-2xl border-t border-border pt-2"
+              ? "mx-auto w-full max-w-3xl border-t border-border pt-2"
               : undefined,
           )}
         >

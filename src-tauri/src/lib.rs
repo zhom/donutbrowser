@@ -29,6 +29,7 @@ mod downloader;
 mod ephemeral_dirs;
 mod extension_manager;
 mod extraction;
+mod fingerprint_consistency;
 mod geoip_downloader;
 mod geolocation;
 mod group_manager;
@@ -68,9 +69,10 @@ use browser_runner::{
 
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
-  list_browser_profiles, rename_profile, update_profile_dns_blocklist, update_profile_launch_hook,
-  update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
-  update_profile_tags, update_profile_vpn, update_profile_window_color, update_wayfern_config,
+  list_browser_profiles, rename_profile, update_profile_clear_on_close,
+  update_profile_dns_blocklist, update_profile_launch_hook, update_profile_note,
+  update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
+  update_profile_window_color, update_wayfern_config,
 };
 
 use profile::password::{
@@ -785,6 +787,13 @@ async fn clear_all_traffic_stats() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn clear_profile_traffic_stats(profile_id: String) -> Result<(), String> {
+  crate::traffic_stats::delete_traffic_stats(&profile_id);
+  let _ = events::emit_empty("traffic-stats-changed");
+  Ok(())
+}
+
+#[tauri::command]
 async fn get_traffic_stats_for_period(
   profile_id: String,
   seconds: u64,
@@ -1217,6 +1226,7 @@ async fn generate_sample_fingerprint(
     created_by_email: None,
     dns_blocklist: None,
     password_protected: false,
+    clear_on_close: false,
     created_at: None,
     updated_at: None,
   };
@@ -2044,6 +2054,16 @@ pub fn run() {
                       .await;
                   }
 
+                  // Clear-on-close for natural exits (user closed the window).
+                  // The explicit kill path in browser_runner.rs handles
+                  // app-driven stops. Must also run before
+                  // `mark_profile_stopped` so a queued sync sees the cleared
+                  // dir rather than re-uploading the wiped browsing data.
+                  if !is_running {
+                    crate::profile::clear_on_close::clear_profile_browsing_data(&profile)
+                      .await;
+                  }
+
                   // Notify sync scheduler of running state changes
                   if let Some(scheduler) = sync::get_global_scheduler() {
                     if is_running {
@@ -2238,6 +2258,7 @@ pub fn run() {
       update_profile_vpn,
       update_profile_tags,
       update_profile_note,
+      update_profile_clear_on_close,
       update_profile_launch_hook,
       update_profile_window_color,
       update_profile_proxy_bypass_rules,
@@ -2319,7 +2340,10 @@ pub fn run() {
       get_all_traffic_snapshots,
       get_profile_traffic_snapshot,
       clear_all_traffic_stats,
+      clear_profile_traffic_stats,
       get_traffic_stats_for_period,
+      fingerprint_consistency::check_profile_fingerprint_consistency,
+      fingerprint_consistency::match_profile_fingerprint_to_exit,
       get_sync_settings,
       save_sync_settings,
       set_profile_sync_mode,
@@ -2395,6 +2419,10 @@ pub fn run() {
       // DNS blocklist commands
       dns_blocklist::get_dns_blocklist_cache_status,
       dns_blocklist::refresh_dns_blocklists,
+      dns_blocklist::get_custom_dns_config,
+      dns_blocklist::set_custom_dns_config,
+      dns_blocklist::import_custom_dns_rules,
+      dns_blocklist::export_custom_dns_rules,
       // Profile password commands
       set_profile_password,
       change_profile_password,

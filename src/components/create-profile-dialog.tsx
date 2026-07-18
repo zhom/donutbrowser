@@ -53,6 +53,7 @@ import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
+import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { cn } from "@/lib/utils";
 import type { BrowserReleaseTypes, WayfernConfig, WayfernOS } from "@/types";
 
@@ -1183,21 +1184,14 @@ export function CreateProfileDialog({
                               <SelectItem value="none">
                                 {t("dnsBlocklist.none")}
                               </SelectItem>
-                              <SelectItem value="light">
-                                {t("dnsBlocklist.light")}
-                              </SelectItem>
-                              <SelectItem value="normal">
-                                {t("dnsBlocklist.normal")}
-                              </SelectItem>
-                              <SelectItem value="pro">
-                                {t("dnsBlocklist.pro")}
-                              </SelectItem>
-                              <SelectItem value="pro_plus">
-                                {t("dnsBlocklist.proPlus")}
-                              </SelectItem>
-                              <SelectItem value="ultimate">
-                                {t("dnsBlocklist.ultimate")}
-                              </SelectItem>
+                              {DNS_BLOCKLIST_LEVELS.map((level) => (
+                                <SelectItem
+                                  key={level.value}
+                                  value={level.value}
+                                >
+                                  {t(level.labelKey)}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

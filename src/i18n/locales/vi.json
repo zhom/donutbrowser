@@ -197,7 +197,14 @@
     "disableAutoUpdates": "Tắt tự động cập nhật ứng dụng",
     "disableAutoUpdatesDescription": "Ngăn ứng dụng tự động kiểm tra và cài đặt bản cập nhật Donut Browser. Cập nhật trình duyệt không bị ảnh hưởng.",
     "keepDecryptedProfilesInRam": "Giữ hồ sơ đã giải mã trong RAM",
-    "keepDecryptedProfilesInRamDescription": "Giữ bản sao đã giải mã trong RAM của hồ sơ được bảo vệ bằng mật khẩu giữa các lần khởi chạy để khởi động nhanh hơn. Bản sao trên ổ đĩa vẫn được mã hóa."
+    "keepDecryptedProfilesInRamDescription": "Giữ bản sao đã giải mã trong RAM của hồ sơ được bảo vệ bằng mật khẩu giữa các lần khởi chạy để khởi động nhanh hơn. Bản sao trên ổ đĩa vẫn được mã hóa.",
+    "privacy": {
+      "consistencyWarning": "Cảnh báo nhất quán vân tay",
+      "consistencyWarningDescription": "Cảnh báo khi khởi chạy nếu múi giờ hoặc ngôn ngữ của hồ sơ không khớp với nút thoát proxy.",
+      "clearTraffic": "Xóa toàn bộ lịch sử lưu lượng",
+      "clearTrafficDescription": "Xóa an toàn số liệu thống kê lưu lượng đã ghi của mọi hồ sơ.",
+      "clearTrafficSuccess": "Đã xóa lịch sử lưu lượng"
+    }
   },
   "header": {
     "searchPlaceholder": "Tìm kiếm hồ sơ...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "Không thể chỉnh sửa profile đang chạy",
       "cantModifyLaunching": "Không thể chỉnh sửa profile khi đang khởi chạy",
       "cantModifyStopping": "Không thể chỉnh sửa profile khi đang dừng",
-      "cantModifyUpdating": "Không thể chỉnh sửa profile khi trình duyệt đang cập nhật"
+      "cantModifyUpdating": "Không thể chỉnh sửa profile khi trình duyệt đang cập nhật",
+      "emptyTitle": "Chưa có hồ sơ nào",
+      "emptyHint": "Tạo hồ sơ đầu tiên của bạn hoặc nhập hồ sơ hiện có từ trình duyệt khác.",
+      "emptyCreate": "Tạo hồ sơ",
+      "emptyImport": "Nhập hồ sơ",
+      "emptyFilteredTitle": "Không tìm thấy hồ sơ",
+      "emptyFilteredHint": "Không có hồ sơ nào khớp với nhóm hoặc tìm kiếm này. Hãy thử bộ lọc khác hoặc tạo mới."
     },
     "actions": {
       "launch": "Khởi chạy",
@@ -1294,7 +1307,28 @@
     "domains": "tên miền",
     "fresh": "Mới",
     "stale": "Cũ",
-    "notCached": "Chưa lưu bộ nhớ đệm"
+    "notCached": "Chưa lưu bộ nhớ đệm",
+    "tabBlocklists": "Danh sách chặn",
+    "tabCustom": "Danh sách tùy chỉnh",
+    "custom.description": "Tự tạo danh sách chặn của riêng bạn từ các URL nguồn và quy tắc thủ công. Tên miền được phép luôn được ưu tiên hơn tên miền bị chặn.",
+    "custom.sourcesLabel": "URL nguồn danh sách chặn",
+    "custom.sourcesPlaceholder": "Mỗi dòng một URL",
+    "custom.blockLabel": "Tên miền bị chặn",
+    "custom.blockPlaceholder": "Mỗi dòng một tên miền",
+    "custom.allowLabel": "Tên miền được phép",
+    "custom.allowPlaceholder": "Mỗi dòng một tên miền",
+    "custom.allowHint": "Tên miền được phép sẽ bị loại khỏi danh sách chặn đã biên dịch, ghi đè mọi quy tắc chặn.",
+    "custom.saved": "Đã lưu quy tắc DNS tùy chỉnh",
+    "custom.imported": "Đã nhập quy tắc DNS tùy chỉnh",
+    "custom.exported": "Đã xuất quy tắc DNS tùy chỉnh",
+    "custom.exportTxt": "Xuất TXT",
+    "custom.exportJson": "Xuất JSON",
+    "customLevel": "Tùy chỉnh",
+    "custom.allowlistModeLabel": "Chế độ danh sách cho phép",
+    "custom.allowlistModeOn": "Chỉ các tên miền bên dưới có thể truy cập; mọi thứ khác đều bị chặn.",
+    "custom.allowlistModeOff": "Chặn các tên miền trong danh sách; cho phép mọi thứ khác.",
+    "custom.allowedOnlyLabel": "Tên miền được phép (chỉ những tên này)",
+    "custom.allowedOnlyHint": "Tên miền phụ của tên miền trong danh sách cũng được phép. Danh sách trống sẽ tắt bộ lọc."
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "Đã nhập",
     "statusSkipped": "Bỏ qua",
     "statusFailed": "Thất bại",
-    "importButtonCount": "Nhập ({{count}})"
+    "importButtonCount": "Nhập ({{count}})",
+    "vpnOptional": "VPN (tùy chọn)",
+    "noVpn": "Không dùng VPN",
+    "advancedOptions": "Tùy chọn nâng cao",
+    "configureFingerprint": "Cấu hình vân tay (tùy chọn)"
   },
   "syncTooltips": {
     "syncing": "Đang đồng bộ...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "Đã gửi",
     "receivedLegend": "Đã nhận",
     "tooltipSent": "↑ Đã gửi: ",
-    "tooltipReceived": "↓ Đã nhận: "
+    "tooltipReceived": "↓ Đã nhận: ",
+    "clearHistory": "Xóa lịch sử",
+    "clearHistoryTitle": "Xóa lịch sử lưu lượng",
+    "clearHistoryDescription": "Xóa vĩnh viễn và an toàn toàn bộ lịch sử lưu lượng đã ghi của \"{{name}}\". Hành động này không thể hoàn tác.",
+    "tabOverview": "Tổng quan",
+    "tabTopDomains": "Tên miền hàng đầu",
+    "searchDomains": "Tìm kiếm tên miền…",
+    "noDomainMatch": "Không có tên miền nào khớp với tìm kiếm."
   },
   "proxyCheck": {
     "unknownLocation": "Không xác định",
@@ -1818,7 +1863,14 @@
     "importNoItems": "Chưa chọn mục nào để nhập",
     "browserNotDownloaded": "Không có phiên bản {{browser}} nào đã tải xuống. Hãy tải xuống trước, sau đó thử nhập lại.",
     "archiveExtractionFailed": "Không thể giải nén tệp: {{detail}}",
-    "unsupportedArchiveFormat": "Định dạng tệp nén không được hỗ trợ. Chỉ hỗ trợ tệp ZIP."
+    "unsupportedArchiveFormat": "Định dạng tệp nén không được hỗ trợ. Chỉ hỗ trợ tệp ZIP.",
+    "clearOnCloseUnavailable": "Tính năng xóa khi đóng không khả dụng với hồ sơ tạm thời hoặc hồ sơ được bảo vệ bằng mật khẩu.",
+    "proxyAndVpnMutuallyExclusive": "Một hồ sơ chỉ có thể dùng proxy hoặc VPN, không dùng cả hai.",
+    "invalidDnsRulesJson": "Tệp đã chọn không phải là JSON quy tắc DNS hợp lệ.",
+    "unsupportedDnsRulesFormat": "Định dạng quy tắc không được hỗ trợ: {{format}}",
+    "dnsRulesSaveFailed": "Không thể lưu quy tắc DNS.",
+    "dnsRulesExportFailed": "Không thể xuất quy tắc DNS.",
+    "fingerprintMatchFailed": "Không thể khớp vân tay với proxy."
   },
   "rail": {
     "profiles": "Profile",
@@ -1831,7 +1883,9 @@
       "importProfile": "Nhập profile",
       "importProfileHint": "Đưa profile từ công cụ khác",
       "keyboardShortcuts": "Phím tắt",
-      "keyboardShortcutsHint": "Xem tất cả phím tắt"
+      "keyboardShortcutsHint": "Xem tất cả phím tắt",
+      "about": "Giới thiệu về Donut Browser",
+      "aboutHint": "Phiên bản và thông tin ứng dụng"
     },
     "network": "Mạng",
     "integrations": "Tích hợp",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "Khởi chạy {{name}}",
       "stopProfile": "Dừng {{name}}",
-      "profileInfo": "Thông tin — {{name}}"
+      "profileInfo": "Thông tin — {{name}}",
+      "createProfile": "Tạo hồ sơ",
+      "about": "Giới thiệu về Donut Browser"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "Chưa chọn profile Wayfern nào khác"
+  },
+  "about": {
+    "title": "Giới thiệu",
+    "version": "Phiên bản {{version}}",
+    "portableBadge": "bản portable",
+    "licenseNotice": "Trình duyệt chống phát hiện mã nguồn mở, được cấp phép theo AGPL-3.0.",
+    "website": "Trang web"
+  },
+  "clearOnClose": {
+    "label": "Xóa dữ liệu khi đóng",
+    "description": "Xóa cookie, lịch sử và bộ nhớ đệm khi trình duyệt đóng. Tiện ích mở rộng và dấu trang được giữ lại."
+  },
+  "consistencyWarning": {
+    "title": "Vân tay không khớp",
+    "intro": "Điểm thoát proxy của \"{{name}}\" không khớp với vân tay của hồ sơ này:",
+    "timezoneTitle": "Múi giờ không khớp",
+    "timezoneDetail": "Nút thoát nằm ở {{exit}} nhưng vân tay báo là {{fingerprint}}.",
+    "languageTitle": "Ngôn ngữ không khớp",
+    "languageDetail": "Quốc gia thoát là {{country}} nhưng ngôn ngữ của vân tay là {{fingerprint}}.",
+    "explainer": "Múi giờ hoặc ngôn ngữ không khớp với IP thoát là một tín hiệu chống bot rất mạnh, dù thiết bị thật của bạn không bao giờ bị lộ. Hãy căn chỉnh vân tay theo vị trí proxy để giảm bị đối xử khắt khe.",
+    "dontWarnAgain": "Không cảnh báo lại cho hồ sơ này",
+    "matchToProxy": "Khớp vân tay với proxy",
+    "matching": "Đang khớp…",
+    "matchSuccess": "Đã cập nhật vân tay để khớp với proxy. Khởi động lại hồ sơ để áp dụng."
   }
 }

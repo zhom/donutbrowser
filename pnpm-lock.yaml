@@ -109,9 +109,6 @@ importers:
       flag-icons:
         specifier: ^7.5.0
         version: 7.5.0
-      framer-motion:
-        specifier: ^12.42.2
-        version: 12.42.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       i18next:
         specifier: ^26.3.4
         version: 26.3.4(typescript@6.0.3)

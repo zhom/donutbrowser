@@ -4,12 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import Color from "color";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { DnsBlocklistDialog } from "@/components/dns-blocklist-dialog";
 import { LoadingButton } from "@/components/loading-button";
 import { useTheme } from "@/components/theme-provider";
+import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -54,6 +55,7 @@ import {
   getThemeById,
   THEME_VARIABLES,
   THEMES,
+  withThemeTransition,
 } from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
@@ -121,6 +123,16 @@ export function SettingsDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [isClearingTraffic, setIsClearingTraffic] = useState(false);
+  const [consistencyWarningEnabled, setConsistencyWarningEnabled] = useState(
+    () => {
+      try {
+        return localStorage.getItem("consistency-warn-disabled") !== "1";
+      } catch {
+        return true;
+      }
+    },
+  );
   const [permissions, setPermissions] = useState<PermissionInfo[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
   const [requestingPermission, setRequestingPermission] =
@@ -137,6 +149,12 @@ export function SettingsDialog({
   const [isVerifyE2eOpen, setIsVerifyE2eOpen] = useState(false);
   const [verifyE2ePassword, setVerifyE2ePassword] = useState("");
   const [isVerifyingE2e, setIsVerifyingE2e] = useState(false);
+  // Theme-restore guards: settings load asynchronously, and the dialog can be
+  // unmounted directly by rail navigation (bypassing handleClose). Refs mirror
+  // the loaded state so the unmount cleanup can restore the persisted theme.
+  const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
+  const hasLoadedSettingsRef = useRef(false);
+  const originalSettingsRef = useRef<AppSettings | null>(null);
   const [systemInfo, setSystemInfo] = useState<{
     app_version: string;
     os: string;
@@ -217,6 +235,24 @@ export function SettingsDialog({
     [t],
   );
 
+  const applyCustomTheme = useCallback((vars: Record<string, string>) => {
+    withThemeTransition(() => {
+      const root = document.documentElement;
+      Object.entries(vars).forEach(([k, v]) => {
+        root.style.setProperty(k, v, "important");
+      });
+    });
+  }, []);
+
+  const clearCustomTheme = useCallback(() => {
+    withThemeTransition(() => {
+      const root = document.documentElement;
+      THEME_VARIABLES.forEach(({ key }) => {
+        root.style.removeProperty(key as string);
+      });
+    });
+  }, []);
+
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -235,6 +271,9 @@ export function SettingsDialog({
       };
       setSettings(merged);
       setOriginalSettings(merged);
+      originalSettingsRef.current = merged;
+      hasLoadedSettingsRef.current = true;
+      setHasLoadedSettings(true);
 
       // Initialize custom theme state
       if (merged.theme === "custom" && merged.custom_theme) {
@@ -243,6 +282,9 @@ export function SettingsDialog({
           selectedThemeId: matchingTheme?.id ?? null,
           colors: merged.custom_theme,
         });
+        // Keep the user's custom colors applied while Settings is open —
+        // without this the page shows the default palette until save/close.
+        applyCustomTheme(merged.custom_theme);
       } else if (merged.theme === "custom") {
         // Initialize with Tokyo Night if no custom theme exists
         setCustomThemeState({
@@ -274,21 +316,7 @@ export function SettingsDialog({
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  const applyCustomTheme = useCallback((vars: Record<string, string>) => {
-    const root = document.documentElement;
-    Object.entries(vars).forEach(([k, v]) => {
-      root.style.setProperty(k, v, "important");
-    });
-  }, []);
-
-  const clearCustomTheme = useCallback(() => {
-    const root = document.documentElement;
-    THEME_VARIABLES.forEach(({ key }) => {
-      root.style.removeProperty(key as string);
-    });
-  }, []);
+  }, [applyCustomTheme]);
 
   const loadPermissions = useCallback(() => {
     setIsLoadingPermissions(true);
@@ -345,6 +373,20 @@ export function SettingsDialog({
       setIsSettingDefault(false);
     }
   }, [checkDefaultBrowserStatus]);
+
+  const handleClearTraffic = useCallback(async () => {
+    setIsClearingTraffic(true);
+    try {
+      await invoke("clear_all_traffic_stats");
+      showSuccessToast(t("settings.privacy.clearTrafficSuccess"));
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : t("common.errors.unknown"),
+      );
+    } finally {
+      setIsClearingTraffic(false);
+    }
+  }, [t]);
 
   const handleClearCache = useCallback(async () => {
     setIsClearingCache(true);
@@ -490,6 +532,10 @@ export function SettingsDialog({
       }
 
       setOriginalSettings(settingsToSave);
+      // Keep the ref in sync so the unmount-restore effect re-applies the
+      // just-SAVED theme, not the pre-save one (which reverted the theme
+      // until app restart).
+      originalSettingsRef.current = settingsToSave;
       onClose();
     } catch (error) {
       console.error("Failed to save settings:", error);
@@ -542,12 +588,38 @@ export function SettingsDialog({
     onClose,
   ]);
 
-  // Only clear custom theme when switching away from custom, don't apply live changes
+  // Only clear custom theme when switching away from custom, don't apply live
+  // changes. Gated on the async settings load: before it resolves the state
+  // still holds the "system" default, and clearing then wipes the user's
+  // custom theme vars on every Settings visit (the theme-reverts-to-dark bug).
   useEffect(() => {
-    if (settings.theme !== "custom") {
+    if (hasLoadedSettings && settings.theme !== "custom") {
       clearCustomTheme();
     }
-  }, [settings.theme, clearCustomTheme]);
+  }, [hasLoadedSettings, settings.theme, clearCustomTheme]);
+
+  // Unmount-safe theme restore: rail navigation unmounts this dialog without
+  // calling handleClose, which used to leave the theme vars wiped for the
+  // rest of the session.
+  useEffect(() => {
+    return () => {
+      const s = originalSettingsRef.current;
+      if (!hasLoadedSettingsRef.current || !s) return;
+      const root = document.documentElement;
+      if (s.theme === "custom" && s.custom_theme) {
+        Object.entries(s.custom_theme).forEach(([k, v]) => {
+          root.style.setProperty(k, v, "important");
+        });
+      } else {
+        // A non-custom persisted theme (light/dark/system) uses the
+        // stylesheet palette — strip any leftover inline custom vars so a
+        // just-saved switch away from custom isn't reverted on unmount.
+        THEME_VARIABLES.forEach(({ key }) => {
+          root.style.removeProperty(key as string);
+        });
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -640,680 +712,750 @@ export function SettingsDialog({
             </DialogHeader>
           )}
 
+          {/* The scroller spans the full width (so the wheel works over the
+              side gutters); the width cap lives on the inner column. Fusing
+              them was the dead-wheel-zone bug. */}
           <div
             className={cn(
-              "grid min-h-0 flex-1 gap-6 overflow-y-auto",
-              subPage ? "mx-auto w-full max-w-2xl py-2" : "py-4",
+              "min-h-0 flex-1 overflow-y-auto",
+              subPage ? "py-2" : "py-4",
             )}
           >
-            {/* Appearance Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("settings.appearance.title")}
-              </Label>
-
-              <div className="grid gap-2">
-                <Label htmlFor="theme-select" className="text-sm">
-                  {t("settings.appearance.theme")}
+            <div
+              className={cn(
+                "grid gap-6",
+                subPage && "mx-auto w-full max-w-4xl",
+              )}
+            >
+              {/* Appearance Section */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">
+                  {t("settings.appearance.title")}
                 </Label>
-                <Select
-                  value={settings.theme}
-                  onValueChange={(value) => {
-                    updateSetting("theme", value);
-                    if (value === "custom") {
-                      const tokyoNightTheme = getThemeById("tokyo-night");
-                      if (tokyoNightTheme) {
-                        setCustomThemeState({
-                          selectedThemeId: "tokyo-night",
-                          colors: tokyoNightTheme.colors,
-                        });
+
+                <div className="grid gap-2">
+                  <Label htmlFor="theme-select" className="text-sm">
+                    {t("settings.appearance.theme")}
+                  </Label>
+                  <Select
+                    value={settings.theme}
+                    onValueChange={(value) => {
+                      updateSetting("theme", value);
+                      if (value === "custom") {
+                        const tokyoNightTheme = getThemeById("tokyo-night");
+                        if (tokyoNightTheme) {
+                          setCustomThemeState({
+                            selectedThemeId: "tokyo-night",
+                            colors: tokyoNightTheme.colors,
+                          });
+                        }
                       }
-                    }
-                  }}
-                >
-                  <SelectTrigger id="theme-select">
-                    <SelectValue
-                      placeholder={t("settings.appearance.selectTheme")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">
-                      {t("settings.appearance.light")}
-                    </SelectItem>
-                    <SelectItem value="dark">
-                      {t("settings.appearance.dark")}
-                    </SelectItem>
-                    <SelectItem value="system">
-                      {t("settings.appearance.system")}
-                    </SelectItem>
-                    <SelectItem value="custom">
-                      {t("common.labels.custom")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                    }}
+                  >
+                    <SelectTrigger id="theme-select">
+                      <SelectValue
+                        placeholder={t("settings.appearance.selectTheme")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">
+                        {t("settings.appearance.light")}
+                      </SelectItem>
+                      <SelectItem value="dark">
+                        {t("settings.appearance.dark")}
+                      </SelectItem>
+                      <SelectItem value="system">
+                        {t("settings.appearance.system")}
+                      </SelectItem>
+                      <SelectItem value="custom">
+                        {t("common.labels.custom")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.appearance.themeDescription")}
+                </p>
+
+                {settings.theme === "custom" && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="theme-preset-select"
+                        className="text-sm font-medium"
+                      >
+                        {t("settings.appearance.themePreset")}
+                      </Label>
+                      <Select
+                        value={customThemeState.selectedThemeId ?? "custom"}
+                        onValueChange={(value) => {
+                          if (value === "custom") {
+                            setCustomThemeState((prev) => ({
+                              ...prev,
+                              selectedThemeId: null,
+                            }));
+                          } else {
+                            const theme = getThemeById(value);
+                            if (theme) {
+                              setCustomThemeState({
+                                selectedThemeId: value,
+                                colors: theme.colors,
+                              });
+                            }
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="theme-preset-select">
+                          <SelectValue
+                            placeholder={t(
+                              "settings.appearance.selectThemePreset",
+                            )}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {THEMES.map((theme) => (
+                            <SelectItem key={theme.id} value={theme.id}>
+                              {theme.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="custom">
+                            {t("settings.appearance.yourOwn")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="text-sm font-medium">
+                      {t("settings.appearance.customColors")}
+                    </div>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-3">
+                      {THEME_VARIABLES.map(({ key, label }) => {
+                        const colorValue =
+                          customThemeState.colors[key] ?? "#000000";
+                        return (
+                          <div
+                            key={key}
+                            className="flex flex-col items-center gap-1"
+                          >
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={label}
+                                  className="size-8 cursor-pointer rounded-md border shadow-sm"
+                                  style={{ backgroundColor: colorValue }}
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-[320px] p-3"
+                                sideOffset={6}
+                              >
+                                <ColorPicker
+                                  className="rounded-md border bg-background p-3 shadow-sm"
+                                  value={colorValue}
+                                  onColorChange={([r, g, b, a]) => {
+                                    const next = Color({ r, g, b }).alpha(a);
+                                    const nextStr = next.hexa();
+                                    const newColors = {
+                                      ...customThemeState.colors,
+                                      [key]: nextStr,
+                                    };
+
+                                    // Check if colors match any preset theme
+                                    const matchingTheme =
+                                      getThemeByColors(newColors);
+
+                                    setCustomThemeState({
+                                      selectedThemeId:
+                                        matchingTheme?.id ?? null,
+                                      colors: newColors,
+                                    });
+                                  }}
+                                >
+                                  <ColorPickerSelection className="h-36 rounded" />
+                                  <div className="mt-3 flex items-center gap-3">
+                                    <ColorPickerEyeDropper />
+                                    <div className="grid w-full gap-1">
+                                      <ColorPickerHue />
+                                      <ColorPickerAlpha />
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <ColorPickerOutput />
+                                    <ColorPickerFormat />
+                                  </div>
+                                </ColorPicker>
+                              </PopoverContent>
+                            </Popover>
+                            <div className="text-center text-[10px] leading-tight text-muted-foreground">
+                              {label}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                {t("settings.appearance.themeDescription")}
-              </p>
+              {/* Language Section */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">
+                  {t("settings.language.title")}
+                </Label>
 
-              {settings.theme === "custom" && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="theme-preset-select"
-                      className="text-sm font-medium"
-                    >
-                      {t("settings.appearance.themePreset")}
-                    </Label>
-                    <Select
-                      value={customThemeState.selectedThemeId ?? "custom"}
-                      onValueChange={(value) => {
-                        if (value === "custom") {
-                          setCustomThemeState((prev) => ({
-                            ...prev,
-                            selectedThemeId: null,
-                          }));
-                        } else {
-                          const theme = getThemeById(value);
-                          if (theme) {
-                            setCustomThemeState({
-                              selectedThemeId: value,
-                              colors: theme.colors,
-                            });
-                          }
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="theme-preset-select">
-                        <SelectValue
-                          placeholder={t(
-                            "settings.appearance.selectThemePreset",
-                          )}
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {THEMES.map((theme) => (
-                          <SelectItem key={theme.id} value={theme.id}>
-                            {theme.name}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="custom">
-                          {t("settings.appearance.yourOwn")}
+                <div className="grid gap-2">
+                  <Label htmlFor="language-select" className="text-sm">
+                    {t("settings.language.interface")}
+                  </Label>
+                  <Select
+                    value={selectedLanguage ?? "system"}
+                    onValueChange={(value) => {
+                      setSelectedLanguage(value);
+                    }}
+                    disabled={isLanguageLoading}
+                  >
+                    <SelectTrigger id="language-select">
+                      <SelectValue
+                        placeholder={t("settings.language.selectLanguage")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="system">
+                        {t("settings.language.systemDefault")}
+                      </SelectItem>
+                      {supportedLanguages.map((lang) => (
+                        <SelectItem key={lang.code} value={lang.code}>
+                          {lang.nativeName} ({lang.name})
                         </SelectItem>
-                      </SelectContent>
-                    </Select>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.language.description")}
+                </p>
+              </div>
+
+              {/* Default Browser Section - hidden in portable mode */}
+              {!systemInfo?.portable && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-medium">
+                      {t("settings.defaultBrowser.title")}
+                    </Label>
+                    <Badge variant={isDefaultBrowser ? "default" : "secondary"}>
+                      {isDefaultBrowser
+                        ? t("common.status.active")
+                        : t("common.status.inactive")}
+                    </Badge>
                   </div>
 
-                  <div className="text-sm font-medium">
-                    {t("settings.appearance.customColors")}
-                  </div>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-3">
-                    {THEME_VARIABLES.map(({ key, label }) => {
-                      const colorValue =
-                        customThemeState.colors[key] ?? "#000000";
-                      return (
+                  <LoadingButton
+                    isLoading={isSettingDefault}
+                    onClick={() => {
+                      handleSetDefaultBrowser().catch((err: unknown) => {
+                        console.error(err);
+                      });
+                    }}
+                    disabled={isDefaultBrowser}
+                    variant={isDefaultBrowser ? "outline" : "default"}
+                    className="w-full"
+                  >
+                    {isDefaultBrowser
+                      ? t("settings.defaultBrowser.alreadyDefault")
+                      : t("settings.defaultBrowser.setAsDefault")}
+                  </LoadingButton>
+
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.defaultBrowser.description")}
+                  </p>
+                </div>
+              )}
+
+              {/* Permissions Section - Only show on macOS */}
+              {isMacOS && (
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">
+                    {t("settings.permissions.title")}
+                  </Label>
+
+                  {isLoadingPermissions ? (
+                    <div className="text-sm text-muted-foreground">
+                      {t("settings.permissions.loading")}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {permissions.map((permission) => (
                         <div
-                          key={key}
-                          className="flex flex-col items-center gap-1"
+                          key={permission.permission_type}
+                          className="flex items-center justify-between rounded-lg border p-3"
                         >
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label={label}
-                                className="size-8 cursor-pointer rounded-md border shadow-sm"
-                                style={{ backgroundColor: colorValue }}
-                              />
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="w-[320px] p-3"
-                              sideOffset={6}
-                            >
-                              <ColorPicker
-                                className="rounded-md border bg-background p-3 shadow-sm"
-                                value={colorValue}
-                                onColorChange={([r, g, b, a]) => {
-                                  const next = Color({ r, g, b }).alpha(a);
-                                  const nextStr = next.hexa();
-                                  const newColors = {
-                                    ...customThemeState.colors,
-                                    [key]: nextStr,
-                                  };
-
-                                  // Check if colors match any preset theme
-                                  const matchingTheme =
-                                    getThemeByColors(newColors);
-
-                                  setCustomThemeState({
-                                    selectedThemeId: matchingTheme?.id ?? null,
-                                    colors: newColors,
+                          <div className="flex items-center gap-x-3">
+                            {getPermissionIcon(permission.permission_type)}
+                            <div>
+                              <div className="text-sm font-medium">
+                                {getPermissionDisplayName(
+                                  permission.permission_type,
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {permission.description}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-x-2">
+                            {getStatusBadge(permission.isGranted)}
+                            {!permission.isGranted && (
+                              <LoadingButton
+                                size="sm"
+                                isLoading={
+                                  requestingPermission ===
+                                  permission.permission_type
+                                }
+                                onClick={() => {
+                                  handleRequestPermission(
+                                    permission.permission_type,
+                                  ).catch((err: unknown) => {
+                                    console.error(err);
                                   });
                                 }}
                               >
-                                <ColorPickerSelection className="h-36 rounded" />
-                                <div className="mt-3 flex items-center gap-3">
-                                  <ColorPickerEyeDropper />
-                                  <div className="grid w-full gap-1">
-                                    <ColorPickerHue />
-                                    <ColorPickerAlpha />
-                                  </div>
-                                </div>
-                                <div className="mt-3 flex items-center gap-2">
-                                  <ColorPickerOutput />
-                                  <ColorPickerFormat />
-                                </div>
-                              </ColorPicker>
-                            </PopoverContent>
-                          </Popover>
-                          <div className="text-center text-[10px] leading-tight text-muted-foreground">
-                            {label}
+                                Grant
+                              </LoadingButton>
+                            )}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    These permissions allow browsers launched from Donut Browser
+                    to access system resources. Each website will still ask for
+                    your permission individually.
+                  </p>
                 </div>
               )}
-            </div>
 
-            {/* Language Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("settings.language.title")}
-              </Label>
-
-              <div className="grid gap-2">
-                <Label htmlFor="language-select" className="text-sm">
-                  {t("settings.language.interface")}
-                </Label>
-                <Select
-                  value={selectedLanguage ?? "system"}
-                  onValueChange={(value) => {
-                    setSelectedLanguage(value);
-                  }}
-                  disabled={isLanguageLoading}
-                >
-                  <SelectTrigger id="language-select">
-                    <SelectValue
-                      placeholder={t("settings.language.selectLanguage")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">
-                      {t("settings.language.systemDefault")}
-                    </SelectItem>
-                    {supportedLanguages.map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code}>
-                        {lang.nativeName} ({lang.name})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                {t("settings.language.description")}
-              </p>
-            </div>
-
-            {/* Default Browser Section - hidden in portable mode */}
-            {!systemInfo?.portable && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-base font-medium">
-                    {t("settings.defaultBrowser.title")}
-                  </Label>
-                  <Badge variant={isDefaultBrowser ? "default" : "secondary"}>
-                    {isDefaultBrowser
-                      ? t("common.status.active")
-                      : t("common.status.inactive")}
-                  </Badge>
-                </div>
-
-                <LoadingButton
-                  isLoading={isSettingDefault}
-                  onClick={() => {
-                    handleSetDefaultBrowser().catch((err: unknown) => {
-                      console.error(err);
-                    });
-                  }}
-                  disabled={isDefaultBrowser}
-                  variant={isDefaultBrowser ? "outline" : "default"}
-                  className="w-full"
-                >
-                  {isDefaultBrowser
-                    ? t("settings.defaultBrowser.alreadyDefault")
-                    : t("settings.defaultBrowser.setAsDefault")}
-                </LoadingButton>
-
-                <p className="text-xs text-muted-foreground">
-                  {t("settings.defaultBrowser.description")}
-                </p>
-              </div>
-            )}
-
-            {/* Permissions Section - Only show on macOS */}
-            {isMacOS && (
+              {/* Integrations Section */}
               <div className="space-y-4">
                 <Label className="text-base font-medium">
-                  {t("settings.permissions.title")}
+                  {t("settings.integrations.title")}
                 </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.integrations.description")}
+                </p>
+                <RippleButton
+                  variant="outline"
+                  className="w-full"
+                  onClick={onIntegrationsOpen}
+                >
+                  {t("integrations.openSettings")}
+                </RippleButton>
+              </div>
 
-                {isLoadingPermissions ? (
-                  <div className="text-sm text-muted-foreground">
-                    {t("settings.permissions.loading")}
+              {/* DNS Blocklist Section */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">
+                  {t("dnsBlocklist.title")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("dnsBlocklist.settingsDescription")}
+                </p>
+                <RippleButton
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setDnsBlocklistDialogOpen(true)}
+                >
+                  {t("dnsBlocklist.manageLists")}
+                </RippleButton>
+              </div>
+
+              {/* Sync Encryption Section */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">
+                  {t("settings.encryption.title")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.encryption.description")}
+                </p>
+
+                {!canUseEncryption ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings.encryption.requiresProOrOwner")}
+                  </p>
+                ) : hasE2ePassword ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default">
+                        {t("settings.encryption.passwordSet")}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {t("settings.encryption.passwordSetDescription")}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isRemovingE2e}
+                        onClick={() => {
+                          setVerifyE2ePassword("");
+                          setIsVerifyE2eOpen(true);
+                        }}
+                      >
+                        {t("settings.encryption.validatePassword")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isRemovingE2e}
+                        onClick={() => {
+                          setHasE2ePassword(false);
+                          setE2ePassword("");
+                          setE2ePasswordConfirm("");
+                          setE2eError("");
+                        }}
+                      >
+                        {t("settings.encryption.changePassword")}
+                      </Button>
+                      <LoadingButton
+                        variant="destructive"
+                        size="sm"
+                        isLoading={isRemovingE2e}
+                        onClick={async () => {
+                          setIsRemovingE2e(true);
+                          try {
+                            // Await the rollover so the user sees an error if
+                            // re-syncing fails. Previously the rollover was
+                            // fire-and-forget (`void invoke(...)`) which left
+                            // half-removed state on screen with no feedback.
+                            await invoke("delete_e2e_password");
+                            setHasE2ePassword(false);
+                            try {
+                              await invoke(
+                                "rollover_encryption_for_all_entities",
+                              );
+                            } catch (rolloverErr) {
+                              console.error(
+                                "Rollover after password removal failed:",
+                                rolloverErr,
+                              );
+                              showErrorToast(String(rolloverErr));
+                            }
+                            showSuccessToast(t("settings.encryption.removed"));
+                          } catch (error) {
+                            showErrorToast(String(error));
+                          } finally {
+                            setIsRemovingE2e(false);
+                          }
+                        }}
+                      >
+                        {t("settings.encryption.removePassword")}
+                      </LoadingButton>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {permissions.map((permission) => (
-                      <div
-                        key={permission.permission_type}
-                        className="flex items-center justify-between rounded-lg border p-3"
-                      >
-                        <div className="flex items-center gap-x-3">
-                          {getPermissionIcon(permission.permission_type)}
-                          <div>
-                            <div className="text-sm font-medium">
-                              {getPermissionDisplayName(
-                                permission.permission_type,
-                              )}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {permission.description}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-x-2">
-                          {getStatusBadge(permission.isGranted)}
-                          {!permission.isGranted && (
-                            <LoadingButton
-                              size="sm"
-                              isLoading={
-                                requestingPermission ===
-                                permission.permission_type
-                              }
-                              onClick={() => {
-                                handleRequestPermission(
-                                  permission.permission_type,
-                                ).catch((err: unknown) => {
-                                  console.error(err);
-                                });
-                              }}
-                            >
-                              Grant
-                            </LoadingButton>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <p className="text-xs text-muted-foreground">
-                  These permissions allow browsers launched from Donut Browser
-                  to access system resources. Each website will still ask for
-                  your permission individually.
-                </p>
-              </div>
-            )}
-
-            {/* Integrations Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("settings.integrations.title")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.integrations.description")}
-              </p>
-              <RippleButton
-                variant="outline"
-                className="w-full"
-                onClick={onIntegrationsOpen}
-              >
-                {t("integrations.openSettings")}
-              </RippleButton>
-            </div>
-
-            {/* DNS Blocklist Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("dnsBlocklist.title")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("dnsBlocklist.settingsDescription")}
-              </p>
-              <RippleButton
-                variant="outline"
-                className="w-full"
-                onClick={() => setDnsBlocklistDialogOpen(true)}
-              >
-                {t("dnsBlocklist.manageLists")}
-              </RippleButton>
-            </div>
-
-            {/* Sync Encryption Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("settings.encryption.title")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.encryption.description")}
-              </p>
-
-              {!canUseEncryption ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("settings.encryption.requiresProOrOwner")}
-                </p>
-              ) : hasE2ePassword ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="default">
-                      {t("settings.encryption.passwordSet")}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {t("settings.encryption.passwordSetDescription")}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isRemovingE2e}
-                      onClick={() => {
-                        setVerifyE2ePassword("");
-                        setIsVerifyE2eOpen(true);
-                      }}
-                    >
-                      {t("settings.encryption.validatePassword")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isRemovingE2e}
-                      onClick={() => {
-                        setHasE2ePassword(false);
-                        setE2ePassword("");
-                        setE2ePasswordConfirm("");
+                    <Input
+                      type="password"
+                      placeholder={t("settings.encryption.passwordPlaceholder")}
+                      value={e2ePassword}
+                      onChange={(e) => {
+                        setE2ePassword(e.target.value);
                         setE2eError("");
                       }}
-                    >
-                      {t("settings.encryption.changePassword")}
-                    </Button>
+                    />
+                    <Input
+                      type="password"
+                      placeholder={t("settings.encryption.confirmPlaceholder")}
+                      value={e2ePasswordConfirm}
+                      onChange={(e) => {
+                        setE2ePasswordConfirm(e.target.value);
+                        setE2eError("");
+                      }}
+                    />
+                    {e2eError && (
+                      <p className="text-sm text-destructive">{e2eError}</p>
+                    )}
                     <LoadingButton
-                      variant="destructive"
+                      variant="default"
                       size="sm"
-                      isLoading={isRemovingE2e}
+                      isLoading={isSavingE2e}
                       onClick={async () => {
-                        setIsRemovingE2e(true);
+                        if (e2ePassword.length < 8) {
+                          setE2eError(
+                            t("settings.encryption.passwordTooShort"),
+                          );
+                          return;
+                        }
+                        if (e2ePassword !== e2ePasswordConfirm) {
+                          setE2eError(
+                            t("settings.encryption.passwordMismatch"),
+                          );
+                          return;
+                        }
+                        setIsSavingE2e(true);
                         try {
-                          // Await the rollover so the user sees an error if
-                          // re-syncing fails. Previously the rollover was
-                          // fire-and-forget (`void invoke(...)`) which left
-                          // half-removed state on screen with no feedback.
-                          await invoke("delete_e2e_password");
-                          setHasE2ePassword(false);
+                          await invoke("set_e2e_password", {
+                            password: e2ePassword,
+                          });
+                          setHasE2ePassword(true);
+                          setE2ePassword("");
+                          setE2ePasswordConfirm("");
                           try {
+                            // Await rollover so any failure surfaces to the
+                            // user instead of being lost via fire-and-forget.
+                            // Without this, "change password" leaves entities
+                            // half-re-encrypted with no visible error.
                             await invoke(
                               "rollover_encryption_for_all_entities",
                             );
                           } catch (rolloverErr) {
                             console.error(
-                              "Rollover after password removal failed:",
+                              "Rollover after password set failed:",
                               rolloverErr,
                             );
                             showErrorToast(String(rolloverErr));
                           }
-                          showSuccessToast(t("settings.encryption.removed"));
+                          showSuccessToast(
+                            t("settings.encryption.passwordSaved"),
+                          );
                         } catch (error) {
                           showErrorToast(String(error));
                         } finally {
-                          setIsRemovingE2e(false);
+                          setIsSavingE2e(false);
                         }
                       }}
                     >
-                      {t("settings.encryption.removePassword")}
+                      {t("settings.encryption.setPassword")}
                     </LoadingButton>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <Input
-                    type="password"
-                    placeholder={t("settings.encryption.passwordPlaceholder")}
-                    value={e2ePassword}
-                    onChange={(e) => {
-                      setE2ePassword(e.target.value);
-                      setE2eError("");
-                    }}
-                  />
-                  <Input
-                    type="password"
-                    placeholder={t("settings.encryption.confirmPlaceholder")}
-                    value={e2ePasswordConfirm}
-                    onChange={(e) => {
-                      setE2ePasswordConfirm(e.target.value);
-                      setE2eError("");
-                    }}
-                  />
-                  {e2eError && (
-                    <p className="text-sm text-destructive">{e2eError}</p>
-                  )}
-                  <LoadingButton
-                    variant="default"
-                    size="sm"
-                    isLoading={isSavingE2e}
-                    onClick={async () => {
-                      if (e2ePassword.length < 8) {
-                        setE2eError(t("settings.encryption.passwordTooShort"));
-                        return;
-                      }
-                      if (e2ePassword !== e2ePasswordConfirm) {
-                        setE2eError(t("settings.encryption.passwordMismatch"));
-                        return;
-                      }
-                      setIsSavingE2e(true);
-                      try {
-                        await invoke("set_e2e_password", {
-                          password: e2ePassword,
-                        });
-                        setHasE2ePassword(true);
-                        setE2ePassword("");
-                        setE2ePasswordConfirm("");
-                        try {
-                          // Await rollover so any failure surfaces to the
-                          // user instead of being lost via fire-and-forget.
-                          // Without this, "change password" leaves entities
-                          // half-re-encrypted with no visible error.
-                          await invoke("rollover_encryption_for_all_entities");
-                        } catch (rolloverErr) {
-                          console.error(
-                            "Rollover after password set failed:",
-                            rolloverErr,
-                          );
-                          showErrorToast(String(rolloverErr));
-                        }
-                        showSuccessToast(
-                          t("settings.encryption.passwordSaved"),
-                        );
-                      } catch (error) {
-                        showErrorToast(String(error));
-                      } finally {
-                        setIsSavingE2e(false);
-                      }
-                    }}
-                  >
-                    {t("settings.encryption.setPassword")}
-                  </LoadingButton>
-                </div>
-              )}
-            </div>
-
-            {/* Commercial License Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("settings.commercial.title")}
-              </Label>
-
-              <div className="flex items-center justify-between rounded-md border bg-muted/40 p-3">
-                {cloudUser != null && cloudUser.plan !== "free" ? (
-                  // Paid Donut plan supersedes the local commercial trial —
-                  // the trial only exists to gate commercial use until the
-                  // user subscribes. Showing "Trial expired" to a paying
-                  // customer reads like a billing error, so swap in a
-                  // subscription-active badge instead.
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-success">
-                      {t("settings.commercial.subscriptionActive", {
-                        plan: cloudUser.plan,
-                      })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.commercial.subscriptionActiveDescription")}
-                    </p>
-                  </div>
-                ) : trialStatus?.type === "Active" ? (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">
-                      {t("settings.commercial.trialActive", {
-                        days: trialStatus.days_remaining,
-                        hours: trialStatus.hours_remaining,
-                      })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.commercial.trialActiveDescription")}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-warning">
-                      {t("settings.commercial.trialExpired")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.commercial.trialExpiredDescription")}
-                    </p>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Advanced Section */}
-            <div className="space-y-4">
-              <Label className="text-base font-medium">
-                {t("settings.advanced.title")}
-              </Label>
+              {/* Commercial License Section */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">
+                  {t("settings.commercial.title")}
+                </Label>
 
-              {!isLinux && (
+                <div className="flex items-center justify-between rounded-md border bg-muted/40 p-3">
+                  {cloudUser != null && cloudUser.plan !== "free" ? (
+                    // Paid Donut plan supersedes the local commercial trial —
+                    // the trial only exists to gate commercial use until the
+                    // user subscribes. Showing "Trial expired" to a paying
+                    // customer reads like a billing error, so swap in a
+                    // subscription-active badge instead.
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-success">
+                        {t("settings.commercial.subscriptionActive", {
+                          plan: cloudUser.plan,
+                        })}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.commercial.subscriptionActiveDescription")}
+                      </p>
+                    </div>
+                  ) : trialStatus?.type === "Active" ? (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {t("settings.commercial.trialActive", {
+                          days: trialStatus.days_remaining,
+                          hours: trialStatus.hours_remaining,
+                        })}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.commercial.trialActiveDescription")}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-warning">
+                        {t("settings.commercial.trialExpired")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.commercial.trialExpiredDescription")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Advanced Section */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">
+                  {t("settings.advanced.title")}
+                </Label>
+
+                {!isLinux && (
+                  <div className="flex items-start gap-x-3 rounded-lg border p-3">
+                    <Checkbox
+                      id="disable-auto-updates"
+                      checked={settings.disable_auto_updates ?? false}
+                      onCheckedChange={(checked) => {
+                        updateSetting(
+                          "disable_auto_updates",
+                          checked as boolean,
+                        );
+                      }}
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="disable-auto-updates"
+                        className="text-sm font-medium"
+                      >
+                        {t("settings.disableAutoUpdates")}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.disableAutoUpdatesDescription")}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-start gap-x-3 rounded-lg border p-3">
                   <Checkbox
-                    id="disable-auto-updates"
-                    checked={settings.disable_auto_updates ?? false}
+                    id="keep-decrypted-profiles-in-ram"
+                    checked={settings.keep_decrypted_profiles_in_ram ?? false}
                     onCheckedChange={(checked) => {
-                      updateSetting("disable_auto_updates", checked as boolean);
+                      updateSetting(
+                        "keep_decrypted_profiles_in_ram",
+                        checked as boolean,
+                      );
                     }}
                   />
                   <div className="space-y-1">
                     <Label
-                      htmlFor="disable-auto-updates"
+                      htmlFor="keep-decrypted-profiles-in-ram"
                       className="text-sm font-medium"
                     >
-                      {t("settings.disableAutoUpdates")}
+                      {t("settings.keepDecryptedProfilesInRam")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      {t("settings.disableAutoUpdatesDescription")}
+                      {t("settings.keepDecryptedProfilesInRamDescription")}
                     </p>
                   </div>
                 </div>
-              )}
 
-              <div className="flex items-start gap-x-3 rounded-lg border p-3">
-                <Checkbox
-                  id="keep-decrypted-profiles-in-ram"
-                  checked={settings.keep_decrypted_profiles_in_ram ?? false}
-                  onCheckedChange={(checked) => {
-                    updateSetting(
-                      "keep_decrypted_profiles_in_ram",
-                      checked as boolean,
-                    );
+                <LoadingButton
+                  isLoading={isClearingCache}
+                  onClick={() => {
+                    handleClearCache().catch((err: unknown) => {
+                      console.error(err);
+                    });
                   }}
-                />
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="keep-decrypted-profiles-in-ram"
-                    className="text-sm font-medium"
+                  variant="outline"
+                  className="w-full"
+                >
+                  {t("settings.advanced.clearCache")}
+                </LoadingButton>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.advanced.clearCacheDescription")}
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <RippleButton
+                    variant="outline"
+                    className="text-xs"
+                    onClick={async () => {
+                      try {
+                        const content = await invoke<string>("read_log_files");
+                        await writeClipboardText(content);
+                        showSuccessToast(
+                          t("settings.advanced.copyLogsSuccess"),
+                        );
+                      } catch (err) {
+                        showErrorToast(String(err));
+                      }
+                    }}
                   >
-                    {t("settings.keepDecryptedProfilesInRam")}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("settings.keepDecryptedProfilesInRamDescription")}
+                    {t("settings.advanced.copyLogs")}
+                  </RippleButton>
+                  <RippleButton
+                    variant="outline"
+                    className="text-xs"
+                    onClick={async () => {
+                      try {
+                        await invoke("open_log_directory");
+                      } catch (err) {
+                        showErrorToast(String(err));
+                      }
+                    }}
+                  >
+                    {t("settings.advanced.openLogDir")}
+                  </RippleButton>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.advanced.copyLogsDescription")}
+                </p>
+
+                <div className="flex items-center justify-between gap-3 border-t pt-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.privacy.consistencyWarning")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.privacy.consistencyWarningDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    aria-label={t("settings.privacy.consistencyWarning")}
+                    checked={consistencyWarningEnabled}
+                    onCheckedChange={(v) => {
+                      setConsistencyWarningEnabled(v === true);
+                      try {
+                        if (v === true) {
+                          localStorage.removeItem("consistency-warn-disabled");
+                        } else {
+                          localStorage.setItem(
+                            "consistency-warn-disabled",
+                            "1",
+                          );
+                        }
+                      } catch {
+                        // localStorage unavailable
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="border-t pt-3">
+                  <LoadingButton
+                    isLoading={isClearingTraffic}
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      handleClearTraffic().catch((err: unknown) => {
+                        console.error(err);
+                      });
+                    }}
+                  >
+                    {t("settings.privacy.clearTraffic")}
+                  </LoadingButton>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t("settings.privacy.clearTrafficDescription")}
                   </p>
                 </div>
               </div>
 
-              <LoadingButton
-                isLoading={isClearingCache}
-                onClick={() => {
-                  handleClearCache().catch((err: unknown) => {
-                    console.error(err);
-                  });
-                }}
-                variant="outline"
-                className="w-full"
-              >
-                {t("settings.advanced.clearCache")}
-              </LoadingButton>
-
-              <p className="text-xs text-muted-foreground">
-                {t("settings.advanced.clearCacheDescription")}
-              </p>
-
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <RippleButton
-                  variant="outline"
-                  className="text-xs"
-                  onClick={async () => {
-                    try {
-                      const content = await invoke<string>("read_log_files");
-                      await writeClipboardText(content);
-                      showSuccessToast(t("settings.advanced.copyLogsSuccess"));
-                    } catch (err) {
-                      showErrorToast(String(err));
-                    }
-                  }}
-                >
-                  {t("settings.advanced.copyLogs")}
-                </RippleButton>
-                <RippleButton
-                  variant="outline"
-                  className="text-xs"
-                  onClick={async () => {
-                    try {
-                      await invoke("open_log_directory");
-                    } catch (err) {
-                      showErrorToast(String(err));
-                    }
-                  }}
-                >
-                  {t("settings.advanced.openLogDir")}
-                </RippleButton>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.advanced.copyLogsDescription")}
-              </p>
+              {/* System Info */}
+              {systemInfo && (
+                <div className="border-t pt-2">
+                  <p className="font-mono text-xs whitespace-pre-line text-muted-foreground select-all">
+                    {`Donut Browser ${systemInfo.app_version}\n${systemInfo.os} ${systemInfo.arch}${systemInfo.portable ? " (portable)" : ""}`}
+                  </p>
+                </div>
+              )}
             </div>
-
-            {/* System Info */}
-            {systemInfo && (
-              <div className="border-t pt-2">
-                <p className="font-mono text-xs whitespace-pre-line text-muted-foreground select-all">
-                  {`Donut Browser ${systemInfo.app_version}\n${systemInfo.os} ${systemInfo.arch}${systemInfo.portable ? " (portable)" : ""}`}
-                </p>
-              </div>
-            )}
           </div>
 
           {subPage ? (
-            <div className="mx-auto flex w-full max-w-2xl shrink-0 items-center justify-end gap-2 border-t border-border pt-2">
+            <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 border-t border-border pt-2">
               <LoadingButton
                 size="sm"
                 isLoading={isSaving}

@@ -1,3 +1,4 @@
+pub mod clear_on_close;
 pub mod encryption;
 pub mod manager;
 pub mod password;

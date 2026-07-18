@@ -13,13 +13,21 @@
 //! carry UDP (HTTP/HTTPS/SOCKS4/Shadowsocks, or a SOCKS5 upstream that refuses
 //! the association) the request is refused, so Chromium falls back to proxied
 //! TCP rather than sending UDP from the real IP.
+//!
+//! Both commands enforce the same DNS blocklist and feed the same traffic
+//! tracker as the HTTP front-end: CONNECT via `handle_connect`, and every UDP
+//! datagram via [`UdpRelayContext`]. Without that, QUIC and WebRTC would be an
+//! unfiltered, unmetered side channel around the TCP filter.
 
 use crate::proxy_server::{
   connect_to_target_via_upstream, tunnel_streams, BlocklistMatcher, BypassMatcher,
 };
-use crate::traffic_stats::get_traffic_tracker;
+use crate::traffic_stats::{get_traffic_tracker, LiveTrafficTracker};
 use async_socks5::{AddrKind, Auth, SocksDatagram};
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use url::Url;
@@ -36,6 +44,127 @@ const CMD_UDP_ASSOCIATE: u8 = 0x03;
 
 // Max UDP datagram payload; sized for a full 64 KiB datagram plus header slack.
 const UDP_BUF: usize = 65_536;
+
+// How often per-domain UDP byte totals are pushed into the traffic tracker.
+// Datagram relay is a per-packet path, so totals accumulate locally and flush
+// on this interval rather than taking the tracker's domain write lock per
+// packet. Global byte counters are plain atomics and update inline, so live
+// bandwidth stays real-time exactly as it does for TCP tunnels.
+const UDP_STATS_FLUSH_INTERVAL: Duration = Duration::from_secs(2);
+
+// Cap on remembered destination->host flows per association. A long-lived
+// association fanning out to many peers must not grow this map without bound.
+const UDP_FLOW_MAP_MAX: usize = 1024;
+
+/// Per-association filtering and traffic accounting for the UDP relay loops.
+///
+/// UDP has no per-datagram error channel (RFC 1928 §7 has no reply code), so a
+/// blocked destination is dropped silently — which is what the browser sees for
+/// any unreachable UDP peer, and makes it fall back to proxied TCP.
+struct UdpRelayContext {
+  blocklist_matcher: BlocklistMatcher,
+  tracker: Option<Arc<LiveTrafficTracker>>,
+  /// Pending per-domain (sent, received) deltas awaiting flush.
+  pending: HashMap<String, (u64, u64)>,
+  /// Destinations already counted as a request, so each is recorded once.
+  seen: std::collections::HashSet<String>,
+  /// Maps a peer key back to the destination host we sent to, so reply bytes
+  /// are attributed to the domain rather than to a bare IP.
+  flow: HashMap<String, String>,
+  last_flush: Instant,
+}
+
+impl UdpRelayContext {
+  fn new(blocklist_matcher: BlocklistMatcher) -> Self {
+    Self {
+      blocklist_matcher,
+      tracker: get_traffic_tracker(),
+      pending: HashMap::new(),
+      seen: std::collections::HashSet::new(),
+      flow: HashMap::new(),
+      last_flush: Instant::now(),
+    }
+  }
+
+  /// Apply the DNS blocklist to a datagram destination. Mirrors the TCP path
+  /// exactly: the host string is matched whether it is a domain or an IP
+  /// literal, so allowlist mode rejects unlisted IP destinations here too.
+  fn is_blocked(&self, host: &str) -> bool {
+    self.blocklist_matcher.is_blocked(host)
+  }
+
+  /// Account a datagram relayed browser -> destination.
+  fn record_sent(&mut self, host: &str, peer_key: String, bytes: u64) {
+    let Some(tracker) = &self.tracker else {
+      return;
+    };
+    tracker.add_bytes_sent(bytes);
+    if self.seen.insert(host.to_string()) {
+      // First datagram to this destination: count it once so UDP peers show up
+      // in the domain list the way CONNECT targets do.
+      tracker.record_request(host, 0, 0);
+    }
+    if self.flow.len() < UDP_FLOW_MAP_MAX {
+      self.flow.insert(peer_key, host.to_string());
+    }
+    self.pending.entry(host.to_string()).or_insert((0, 0)).0 += bytes;
+    self.maybe_flush();
+  }
+
+  /// Account a datagram relayed destination -> browser. `peer_key` is looked up
+  /// against the flows recorded by `record_sent`; an unmatched reply (an
+  /// upstream that reports a different address than we addressed) is attributed
+  /// to `fallback_host`.
+  fn record_received(&mut self, peer_key: &str, fallback_host: &str, bytes: u64) {
+    let Some(tracker) = &self.tracker else {
+      return;
+    };
+    tracker.add_bytes_received(bytes);
+    let host = self
+      .flow
+      .get(peer_key)
+      .cloned()
+      .unwrap_or_else(|| fallback_host.to_string());
+    self.pending.entry(host).or_insert((0, 0)).1 += bytes;
+    self.maybe_flush();
+  }
+
+  fn maybe_flush(&mut self) {
+    if self.last_flush.elapsed() >= UDP_STATS_FLUSH_INTERVAL {
+      self.flush();
+    }
+  }
+
+  /// Push accumulated per-domain totals into the tracker.
+  fn flush(&mut self) {
+    let Some(tracker) = &self.tracker else {
+      self.pending.clear();
+      return;
+    };
+    for (domain, (sent, recv)) in self.pending.drain() {
+      tracker.update_domain_bytes(&domain, sent, recv);
+    }
+    self.last_flush = Instant::now();
+  }
+}
+
+/// Host portion of a UDP destination, for blocklist matching. An IP literal is
+/// rendered without its port so it matches the same way a CONNECT host does.
+fn addrkind_host(addr: &AddrKind) -> String {
+  match addr {
+    AddrKind::Ip(s) => s.ip().to_string(),
+    AddrKind::Domain(domain, _) => domain.clone(),
+  }
+}
+
+/// Stable key identifying a UDP peer, used to tie replies back to the
+/// destination host they belong to.
+fn addrkind_key(addr: &AddrKind) -> String {
+  match addr {
+    AddrKind::Ip(s) => s.to_string(),
+    AddrKind::Domain(domain, port) => format!("{domain}:{port}"),
+  }
+}
 
 /// How a UDP ASSOCIATE request must be served for a given upstream so the real
 /// IP never leaks.
@@ -108,7 +237,7 @@ pub async fn handle_socks5_connection(
       .await;
     }
     CMD_UDP_ASSOCIATE => {
-      handle_udp_associate(stream, upstream_url).await;
+      handle_udp_associate(stream, upstream_url, blocklist_matcher).await;
     }
     other => {
       log::debug!("SOCKS5 unsupported command {other:#04x}");
@@ -294,8 +423,13 @@ async fn handle_connect(
 ///
 /// `control` is the TCP control connection; the UDP association lives exactly
 /// as long as it stays open (RFC 1928 §6), so the relay loop tears down when
-/// the browser closes it.
-async fn handle_udp_associate(mut control: TcpStream, upstream_url: Option<String>) {
+/// the browser closes it. Every relayed datagram is filtered and metered via
+/// [`UdpRelayContext`], matching the TCP CONNECT path.
+async fn handle_udp_associate(
+  mut control: TcpStream,
+  upstream_url: Option<String>,
+  blocklist_matcher: BlocklistMatcher,
+) {
   let mode = udp_mode(upstream_url.as_deref());
 
   if mode == UdpMode::Refuse {
@@ -344,7 +478,7 @@ async fn handle_udp_associate(mut control: TcpStream, upstream_url: Option<Strin
         return;
       }
       log::info!("SOCKS5 UDP ASSOCIATE (direct) relaying on {relay_addr}");
-      run_udp_relay_direct(control, relay, out).await;
+      run_udp_relay_direct(control, relay, out, UdpRelayContext::new(blocklist_matcher)).await;
     }
     UdpMode::Socks5Upstream => {
       // Establish the upstream association FIRST; if the upstream refuses UDP,
@@ -367,7 +501,13 @@ async fn handle_udp_associate(mut control: TcpStream, upstream_url: Option<Strin
         return;
       }
       log::info!("SOCKS5 UDP ASSOCIATE (via SOCKS5 upstream) relaying on {relay_addr}");
-      run_udp_relay_socks5(control, relay, datagram).await;
+      run_udp_relay_socks5(
+        control,
+        relay,
+        datagram,
+        UdpRelayContext::new(blocklist_matcher),
+      )
+      .await;
     }
     UdpMode::Refuse => unreachable!("handled above"),
   }
@@ -389,10 +529,20 @@ async fn associate_upstream(
     None
   };
 
-  let proxy_stream = TcpStream::connect((host, port)).await?;
+  let proxy_stream = tokio::time::timeout(
+    crate::proxy_server::UPSTREAM_DIAL_TIMEOUT,
+    TcpStream::connect((host, port)),
+  )
+  .await
+  .map_err(|_| format!("upstream SOCKS5 connect to {host}:{port} timed out"))??;
   let bind_sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await?;
   // association_addr None => 0.0.0.0:0 (we accept replies from any peer).
-  let datagram = SocksDatagram::associate(proxy_stream, bind_sock, auth, None::<AddrKind>).await?;
+  let datagram = tokio::time::timeout(
+    crate::proxy_server::UPSTREAM_DIAL_TIMEOUT,
+    SocksDatagram::associate(proxy_stream, bind_sock, auth, None::<AddrKind>),
+  )
+  .await
+  .map_err(|_| "upstream SOCKS5 UDP ASSOCIATE handshake timed out")??;
   Ok(datagram)
 }
 
@@ -467,7 +617,12 @@ fn build_udp_response(peer: SocketAddr, data: &[u8]) -> Vec<u8> {
 
 /// Direct UDP relay: browser <-> a plain egress UDP socket. Used only when
 /// there is no upstream proxy, so the host IP is the profile's own IP.
-async fn run_udp_relay_direct(mut control: TcpStream, relay: UdpSocket, out: UdpSocket) {
+async fn run_udp_relay_direct(
+  mut control: TcpStream,
+  relay: UdpSocket,
+  out: UdpSocket,
+  mut ctx: UdpRelayContext,
+) {
   let mut client_addr: Option<SocketAddr> = None;
   let mut from_client = vec![0u8; UDP_BUF];
   let mut from_target = vec![0u8; UDP_BUF];
@@ -490,23 +645,37 @@ async fn run_udp_relay_direct(mut control: TcpStream, relay: UdpSocket, out: Udp
         if header.frag != 0 {
           continue; // fragmentation unsupported
         }
+        let host = addrkind_host(&header.dst);
+        if ctx.is_blocked(&host) {
+          log::debug!("[blocklist] Blocked SOCKS5 UDP datagram to {host}");
+          continue;
+        }
         let payload = &from_client[header.data_offset..n];
+        // Resolve after the blocklist check so a blocked host is never even
+        // looked up, and count bytes against the resolved peer so replies from
+        // it are attributed back to this host.
         let dst = match resolve_addr(&header.dst).await {
           Some(d) => d,
           None => continue,
         };
-        let _ = out.send_to(payload, dst).await;
+        if out.send_to(payload, dst).await.is_ok() {
+          ctx.record_sent(&host, dst.to_string(), payload.len() as u64);
+        }
       }
       // Target -> browser.
       r = out.recv_from(&mut from_target) => {
         let Ok((n, peer)) = r else { continue };
         if let Some(client) = client_addr {
           let resp = build_udp_response(peer, &from_target[..n]);
-          let _ = relay.send_to(&resp, client).await;
+          if relay.send_to(&resp, client).await.is_ok() {
+            ctx.record_received(&peer.to_string(), &peer.ip().to_string(), n as u64);
+          }
         }
       }
     }
   }
+
+  ctx.flush();
 }
 
 /// UDP relay tunneled through a SOCKS5 upstream that granted UDP ASSOCIATE.
@@ -514,6 +683,7 @@ async fn run_udp_relay_socks5(
   mut control: TcpStream,
   relay: UdpSocket,
   datagram: SocksDatagram<TcpStream>,
+  mut ctx: UdpRelayContext,
 ) {
   let mut client_addr: Option<SocketAddr> = None;
   let mut from_client = vec![0u8; UDP_BUF];
@@ -536,19 +706,33 @@ async fn run_udp_relay_socks5(
         if header.frag != 0 {
           continue;
         }
+        let host = addrkind_host(&header.dst);
+        if ctx.is_blocked(&host) {
+          log::debug!("[blocklist] Blocked SOCKS5 UDP datagram to {host}");
+          continue;
+        }
+        let peer_key = addrkind_key(&header.dst);
         let payload = from_client[header.data_offset..n].to_vec();
-        let _ = datagram.send_to(&payload, header.dst).await;
+        if datagram.send_to(&payload, header.dst).await.is_ok() {
+          ctx.record_sent(&host, peer_key, payload.len() as u64);
+        }
       }
       // Upstream -> browser.
       r = datagram.recv_from(&mut from_upstream) => {
         let Ok((n, peer)) = r else { continue };
         if let Some(client) = client_addr {
           let resp = build_udp_response(addrkind_to_socketaddr(&peer), &from_upstream[..n]);
-          let _ = relay.send_to(&resp, client).await;
+          if relay.send_to(&resp, client).await.is_ok() {
+            // The upstream usually reports the peer by IP even when we
+            // addressed a domain, so an unmatched flow falls back to that IP.
+            ctx.record_received(&addrkind_key(&peer), &addrkind_host(&peer), n as u64);
+          }
         }
       }
     }
   }
+
+  ctx.flush();
 }
 
 /// Resolve a UDP destination to a concrete socket address for direct relay.
@@ -635,6 +819,91 @@ mod tests {
   fn parse_udp_header_rejects_truncated() {
     assert!(parse_udp_header(&[0, 0, 0]).is_none());
     assert!(parse_udp_header(&[0, 0, 0, 0x01, 1, 2]).is_none());
+  }
+
+  #[test]
+  fn addrkind_host_strips_port_for_blocklist_matching() {
+    // The blocklist matches CONNECT hosts without a port, so UDP destinations
+    // must be rendered the same way or IP rules would never match.
+    assert_eq!(
+      addrkind_host(&AddrKind::Ip(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)),
+        443
+      ))),
+      "1.2.3.4"
+    );
+    assert_eq!(
+      addrkind_host(&AddrKind::Domain("ads.example.com".into(), 443)),
+      "ads.example.com"
+    );
+  }
+
+  #[test]
+  fn addrkind_key_distinguishes_ports() {
+    assert_eq!(
+      addrkind_key(&AddrKind::Domain("example.com".into(), 443)),
+      "example.com:443"
+    );
+    assert_eq!(
+      addrkind_key(&AddrKind::Ip(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)),
+        53
+      ))),
+      "1.2.3.4:53"
+    );
+  }
+
+  #[test]
+  fn udp_relay_context_blocks_like_the_tcp_path() {
+    let dir = std::env::temp_dir().join(format!("donut-udp-blocklist-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("block.txt");
+    std::fs::write(&path, "ads.example.com\n").unwrap();
+
+    let matcher = BlocklistMatcher::from_file(path.to_str().unwrap()).unwrap();
+    let ctx = UdpRelayContext::new(matcher);
+    assert!(ctx.is_blocked("ads.example.com"));
+    // Subdomains are blocked by the parent rule, as on the CONNECT path.
+    assert!(ctx.is_blocked("cdn.ads.example.com"));
+    assert!(!ctx.is_blocked("example.com"));
+
+    std::fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn udp_relay_context_allowlist_mode_blocks_unlisted_ip_destinations() {
+    // Parity check: allowlist mode blocks a bare IP destination over UDP the
+    // same way is_blocked does for a CONNECT to an IP literal — otherwise QUIC
+    // to a hardcoded IP would walk straight through a strict allowlist.
+    let dir = std::env::temp_dir().join(format!("donut-udp-allowlist-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("allow.txt");
+    std::fs::write(&path, "trusted.example.com\n").unwrap();
+
+    let matcher = BlocklistMatcher::from_file_with_mode(path.to_str().unwrap(), true).unwrap();
+    let ctx = UdpRelayContext::new(matcher);
+    assert!(!ctx.is_blocked("trusted.example.com"));
+    assert!(ctx.is_blocked("evil.example.com"));
+    assert!(ctx.is_blocked(&addrkind_host(&AddrKind::Ip(SocketAddr::new(
+      IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)),
+      443
+    )))));
+
+    std::fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn udp_relay_context_attributes_replies_to_the_destination_host() {
+    // No tracker is initialised in tests, so this exercises the flow map that
+    // decides which domain reply bytes belong to.
+    let mut ctx = UdpRelayContext::new(BlocklistMatcher::new());
+    ctx.flow.insert("1.2.3.4:443".into(), "example.com".into());
+    assert_eq!(
+      ctx.flow.get("1.2.3.4:443").map(String::as_str),
+      Some("example.com")
+    );
+    // An unknown peer has no flow and falls back to the peer's own host.
+    assert!(!ctx.flow.contains_key("9.9.9.9:53"));
   }
 
   #[test]

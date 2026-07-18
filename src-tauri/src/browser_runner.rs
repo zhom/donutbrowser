@@ -34,24 +34,29 @@ impl BrowserRunner {
     crate::app_dirs::binaries_dir()
   }
 
-  /// Resolve the DNS blocklist level to a cached file path.
-  /// If a level is set but the cache is missing, fetches on demand (blocks until done).
+  /// Resolve the DNS blocklist level to a cached file path plus whether that
+  /// file should be treated as an allowlist. If a level is set but the cache
+  /// is missing, fetches/compiles on demand (blocks until done).
   async fn resolve_blocklist_file(
     profile: &crate::profile::BrowserProfile,
-  ) -> Result<Option<String>, String> {
+  ) -> Result<(Option<String>, bool), String> {
     let Some(ref level_str) = profile.dns_blocklist else {
-      return Ok(None);
+      return Ok((None, false));
     };
     let Some(level) = crate::dns_blocklist::BlocklistLevel::parse_level(level_str) else {
-      return Ok(None);
+      return Ok((None, false));
     };
     if level == crate::dns_blocklist::BlocklistLevel::None {
-      return Ok(None);
+      return Ok((None, false));
     }
+    // Only the user's custom list can be an allowlist; the Hagezi tiers are
+    // always block lists.
+    let allowlist_mode = level == crate::dns_blocklist::BlocklistLevel::Custom
+      && crate::dns_blocklist::CustomDnsConfig::load().allowlist_mode;
     let path = crate::dns_blocklist::BlocklistManager::ensure_cached(level)
       .await
       .map_err(|e| format!("Failed to fetch DNS blocklist: {e}"))?;
-    Ok(Some(path.to_string_lossy().to_string()))
+    Ok((Some(path.to_string_lossy().to_string()), allowlist_mode))
   }
 
   /// Refresh cloud proxy credentials if the profile uses a cloud or cloud-derived proxy,
@@ -247,15 +252,20 @@ impl BrowserRunner {
       // Start the proxy and get local proxy settings
       // If proxy startup fails, DO NOT launch Wayfern - it requires local proxy
       let profile_id_str = profile.id.to_string();
-      let blocklist_file = Self::resolve_blocklist_file(profile).await?;
+      let (blocklist_file, dns_allowlist_mode) = Self::resolve_blocklist_file(profile).await?;
+      // Unique per-launch key: a shared constant here would let concurrent
+      // launches overwrite each other's active_proxies entry, ending with one
+      // browser's worker tracked under another browser's PID.
+      let launch_placeholder_pid = crate::proxy_manager::next_launch_placeholder_pid();
       let local_proxy = PROXY_MANAGER
         .start_proxy(
           app_handle.clone(),
           upstream_proxy.as_ref(),
-          0, // Use 0 as temporary PID, will be updated later
+          launch_placeholder_pid,
           Some(&profile_id_str),
           profile.proxy_bypass_rules.clone(),
           blocklist_file,
+          dns_allowlist_mode,
           // Wayfern (Chromium) uses a local SOCKS5 proxy so QUIC and WebRTC
           // UDP can be routed through it (via SOCKS5 UDP ASSOCIATE) without
           // leaking the real IP, rather than being forced direct as they
@@ -268,6 +278,40 @@ impl BrowserRunner {
           log::error!("{}", error_msg);
           error_msg
         })?;
+
+      // If any step below fails before the browser is up, the detached worker
+      // must be stopped here: its config never gets a browser_pid, so neither
+      // the GUI sweeps nor the worker's own watchdog would ever reap it — it
+      // would survive until machine reboot.
+      struct ProxyLaunchGuard {
+        app_handle: tauri::AppHandle,
+        placeholder_pid: u32,
+        profile_name: String,
+        armed: bool,
+      }
+      impl Drop for ProxyLaunchGuard {
+        fn drop(&mut self) {
+          if self.armed {
+            log::warn!(
+              "Launch failed after local proxy start for profile {}; stopping proxy worker",
+              self.profile_name
+            );
+            let app_handle = self.app_handle.clone();
+            let pid = self.placeholder_pid;
+            tauri::async_runtime::spawn(async move {
+              if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle, pid).await {
+                log::warn!("Failed to stop proxy worker after failed launch: {e}");
+              }
+            });
+          }
+        }
+      }
+      let mut proxy_launch_guard = ProxyLaunchGuard {
+        app_handle: app_handle.clone(),
+        placeholder_pid: launch_placeholder_pid,
+        profile_name: profile.name.clone(),
+        armed: true,
+      };
 
       // Format proxy URL for wayfern - use SOCKS5 for the local proxy so
       // Chromium proxies UDP (QUIC/WebRTC), not just TCP.
@@ -317,11 +361,10 @@ impl BrowserRunner {
         if wayfern_config.os.is_some() {
           updated_wayfern_config.os = wayfern_config.os.clone();
         }
-        // The fresh fingerprint's location matches the current routing; record
-        // its signature so launches keep it in sync with the non-randomize
-        // path. Only when geolocation actually applied — otherwise leave it
-        // unset so the refresh path can repair the location if the user later
-        // turns randomize off.
+        // Record which routing this fresh fingerprint's geolocation was built
+        // for (provenance only — nothing rewrites the fingerprint from it).
+        // Only when geolocation actually applied; otherwise leave it unset so a
+        // later on-demand match can tell the location was never resolved.
         updated_wayfern_config.geo_proxy_signature = if geolocation_applied {
           Some(crate::wayfern_manager::WayfernManager::geo_signature(
             upstream_proxy.as_ref(),
@@ -338,63 +381,15 @@ impl BrowserRunner {
           profile.name,
           updated_wayfern_config.fingerprint.as_ref().map(|f| f.len()).unwrap_or(0)
         );
-      } else {
-        // Safety net: the stored fingerprint's timezone and geolocation were
-        // computed for whatever proxy was set when the fingerprint was
-        // generated. If the profile's proxy or VPN has changed since (the
-        // common case being a user who forgot to set a proxy at creation and
-        // added one afterwards), that location data is stale and the user would
-        // see the wrong timezone on first launch. When the routing signature no
-        // longer matches, refresh just the location fields of the stored
-        // fingerprint through the current proxy. Wayfern only; the randomize
-        // path above already regenerates the whole fingerprint each launch.
-        let current_geo_sig = crate::wayfern_manager::WayfernManager::geo_signature(
-          upstream_proxy.as_ref(),
-          profile.vpn_id.as_deref(),
-          wayfern_config.geoip.as_ref(),
-        );
-        let geo_enabled = !matches!(
-          wayfern_config.geoip.as_ref(),
-          Some(serde_json::Value::Bool(false))
-        );
-        if geo_enabled
-          && wayfern_config.geo_proxy_signature.as_deref() != Some(current_geo_sig.as_str())
-        {
-          if let Some(stored_fp) = wayfern_config.fingerprint.clone() {
-            log::info!(
-              "Routing changed for Wayfern profile {} since its fingerprint was generated (was {:?}, now {}); refreshing timezone and geolocation",
-              profile.name,
-              wayfern_config.geo_proxy_signature,
-              current_geo_sig
-            );
-            match crate::wayfern_manager::WayfernManager::refresh_fingerprint_geolocation(
-              &stored_fp,
-              wayfern_config.proxy.as_deref(),
-              wayfern_config.geoip.as_ref(),
-            )
-            .await
-            {
-              Some(refreshed) => {
-                // Use the refreshed fingerprint for this launch...
-                wayfern_config.fingerprint = Some(refreshed.clone());
-                wayfern_config.geo_proxy_signature = Some(current_geo_sig.clone());
-                // ...and persist it so the corrected location sticks and we do
-                // not refresh again on the next launch with the same proxy.
-                let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
-                cfg.fingerprint = Some(refreshed);
-                cfg.geo_proxy_signature = Some(current_geo_sig);
-                updated_profile.wayfern_config = Some(cfg);
-              }
-              None => {
-                log::warn!(
-                  "Could not refresh geolocation for Wayfern profile {} (proxy unreachable?); launching with existing location and will retry next launch",
-                  profile.name
-                );
-              }
-            }
-          }
-        }
       }
+      // A non-randomize profile keeps its configured fingerprint verbatim, even
+      // when its proxy/VPN routing has changed since the fingerprint was built.
+      // We deliberately do NOT silently rewrite its timezone/language to match
+      // the new exit: that hid every real fingerprint-vs-exit mismatch (a US
+      // fingerprint behind a German exit would be quietly relabelled German
+      // before the launch-time consistency check could see it). The check now
+      // surfaces the mismatch, and the user re-matches on demand via
+      // `match_profile_fingerprint_to_exit`.
 
       // Create ephemeral dir for ephemeral or password-protected profiles
       if profile.password_protected {
@@ -457,6 +452,10 @@ impl BrowserRunner {
           format!("Failed to launch Wayfern: {e}").into()
         })?;
 
+      // Browser is up and using the worker — failures past this point must
+      // not stop it.
+      proxy_launch_guard.armed = false;
+
       // Get the process ID from launch result
       let process_id = wayfern_result.processId.unwrap_or(0);
       log::info!("Wayfern launched successfully with PID: {process_id}");
@@ -483,11 +482,18 @@ impl BrowserRunner {
       updated_profile.process_id = Some(process_id);
       updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
-      // Update the proxy manager with the correct PID
-      if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, process_id) {
-        log::warn!("Warning: Failed to update proxy PID mapping: {e}");
-      } else {
-        log::info!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
+      // Update the proxy manager with the correct PID. When the browser
+      // reported no PID, keep the entry keyed by its unique placeholder (which
+      // the cleanup sweep skips) rather than remapping to a shared 0 key that
+      // concurrent launches could collide on.
+      if process_id != 0 {
+        if let Err(e) = PROXY_MANAGER.update_proxy_pid(launch_placeholder_pid, process_id) {
+          log::warn!("Warning: Failed to update proxy PID mapping: {e}");
+        } else {
+          log::info!(
+            "Updated proxy PID mapping from launch placeholder {launch_placeholder_pid} to actual PID: {process_id}"
+          );
+        }
       }
 
       // Persist the real browser PID so the detached proxy worker self-reaps
@@ -1096,6 +1102,10 @@ impl BrowserRunner {
         crate::profile::password::complete_after_quit_and_wait(profile).await;
       } else if profile.ephemeral {
         crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+      } else if profile.clear_on_close {
+        // Awaited for the same reason as re-encryption above: a queued sync
+        // must see the cleared dir, not the pre-clear snapshot.
+        crate::profile::clear_on_close::clear_profile_browsing_data(profile).await;
       }
 
       log::info!(
@@ -1296,11 +1306,8 @@ pub async fn launch_browser_profile_impl(
     updated_profile.id
   );
 
-  // Now update the proxy with the correct PID if we have one
-  if let Some(actual_pid) = updated_profile.process_id {
-    // Update the proxy manager with the correct PID (we always started with temp pid 1)
-    let _ = PROXY_MANAGER.update_proxy_pid(1u32, actual_pid);
-  }
+  // The proxy PID mapping was already reconciled inside launch_browser_internal
+  // (placeholder → real browser PID); nothing is ever keyed by a constant here.
 
   Ok(updated_profile)
 }

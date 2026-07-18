@@ -197,7 +197,14 @@
     "disableAutoUpdates": "Desativar Atualizações Automáticas do App",
     "disableAutoUpdatesDescription": "Impede que o aplicativo verifique e instale atualizações do Donut Browser automaticamente. As atualizações de navegadores não são afetadas.",
     "keepDecryptedProfilesInRam": "Manter Perfis Descriptografados na RAM",
-    "keepDecryptedProfilesInRamDescription": "Preserva a cópia descriptografada na RAM dos perfis protegidos por senha entre execuções para um início mais rápido. A cópia em disco permanece criptografada em qualquer caso."
+    "keepDecryptedProfilesInRamDescription": "Preserva a cópia descriptografada na RAM dos perfis protegidos por senha entre execuções para um início mais rápido. A cópia em disco permanece criptografada em qualquer caso.",
+    "privacy": {
+      "consistencyWarning": "Aviso de consistência de impressão digital",
+      "consistencyWarningDescription": "Avisar ao iniciar quando o fuso horário ou o idioma de um perfil não corresponder ao seu nó de saída do proxy.",
+      "clearTraffic": "Limpar todo o histórico de tráfego",
+      "clearTrafficDescription": "Apaga com segurança as estatísticas de tráfego registradas de todos os perfis.",
+      "clearTrafficSuccess": "Histórico de tráfego limpo"
+    }
   },
   "header": {
     "searchPlaceholder": "Pesquisar perfis...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "Não é possível modificar um perfil em execução",
       "cantModifyLaunching": "Não é possível modificar o perfil durante a inicialização",
       "cantModifyStopping": "Não é possível modificar o perfil durante a parada",
-      "cantModifyUpdating": "Não é possível modificar o perfil enquanto o navegador é atualizado"
+      "cantModifyUpdating": "Não é possível modificar o perfil enquanto o navegador é atualizado",
+      "emptyTitle": "Nenhum perfil ainda",
+      "emptyHint": "Crie seu primeiro perfil ou importe perfis existentes de outro navegador.",
+      "emptyCreate": "Criar perfil",
+      "emptyImport": "Importar perfis",
+      "emptyFilteredTitle": "Nenhum perfil encontrado",
+      "emptyFilteredHint": "Nenhum perfil corresponde a este grupo ou pesquisa. Tente outro filtro ou crie um novo."
     },
     "actions": {
       "launch": "Iniciar",
@@ -1294,7 +1307,28 @@
     "domains": "domínios",
     "fresh": "Atualizado",
     "stale": "Desatualizado",
-    "notCached": "Sem cache"
+    "notCached": "Sem cache",
+    "tabBlocklists": "Listas de bloqueio",
+    "tabCustom": "Listas personalizadas",
+    "custom.description": "Monte sua própria lista de bloqueio a partir de URLs de origem e regras manuais. Domínios permitidos sempre têm prioridade sobre os bloqueados.",
+    "custom.sourcesLabel": "URLs de origem de listas de bloqueio",
+    "custom.sourcesPlaceholder": "Uma URL por linha",
+    "custom.blockLabel": "Domínios bloqueados",
+    "custom.blockPlaceholder": "Um domínio por linha",
+    "custom.allowLabel": "Domínios permitidos",
+    "custom.allowPlaceholder": "Um domínio por linha",
+    "custom.allowHint": "Os domínios permitidos são removidos da lista de bloqueio compilada, anulando qualquer regra de bloqueio.",
+    "custom.saved": "Regras DNS personalizadas salvas",
+    "custom.imported": "Regras DNS personalizadas importadas",
+    "custom.exported": "Regras DNS personalizadas exportadas",
+    "custom.exportTxt": "Exportar TXT",
+    "custom.exportJson": "Exportar JSON",
+    "customLevel": "Personalizada",
+    "custom.allowlistModeLabel": "Modo lista de permitidos",
+    "custom.allowlistModeOn": "Apenas os domínios abaixo são acessíveis; todo o resto é bloqueado.",
+    "custom.allowlistModeOff": "Bloquear os domínios listados; permitir todo o resto.",
+    "custom.allowedOnlyLabel": "Domínios permitidos (apenas estes)",
+    "custom.allowedOnlyHint": "Subdomínios de um domínio listado também são permitidos. Uma lista vazia desativa a filtragem."
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "Importado",
     "statusSkipped": "Ignorado",
     "statusFailed": "Falhou",
-    "importButtonCount": "Importar ({{count}})"
+    "importButtonCount": "Importar ({{count}})",
+    "vpnOptional": "VPN (opcional)",
+    "noVpn": "Sem VPN",
+    "advancedOptions": "Opções avançadas",
+    "configureFingerprint": "Configurar impressão digital (opcional)"
   },
   "syncTooltips": {
     "syncing": "Sincronizando...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "Enviado",
     "receivedLegend": "Recebido",
     "tooltipSent": "↑ Enviado: ",
-    "tooltipReceived": "↓ Recebido: "
+    "tooltipReceived": "↓ Recebido: ",
+    "clearHistory": "Limpar histórico",
+    "clearHistoryTitle": "Limpar histórico de tráfego",
+    "clearHistoryDescription": "Apaga de forma permanente e segura todo o histórico de tráfego registrado de \"{{name}}\". Isso não pode ser desfeito.",
+    "tabOverview": "Visão geral",
+    "tabTopDomains": "Principais domínios",
+    "searchDomains": "Pesquisar domínios…",
+    "noDomainMatch": "Nenhum domínio corresponde à sua pesquisa."
   },
   "proxyCheck": {
     "unknownLocation": "Desconhecido",
@@ -1818,7 +1863,14 @@
     "importNoItems": "Nada selecionado para importar",
     "browserNotDownloaded": "Nenhuma versão baixada de {{browser}} está disponível. Baixe-a primeiro e tente importar novamente.",
     "archiveExtractionFailed": "Falha ao extrair o arquivo: {{detail}}",
-    "unsupportedArchiveFormat": "Formato de arquivo não suportado. Apenas arquivos ZIP são suportados."
+    "unsupportedArchiveFormat": "Formato de arquivo não suportado. Apenas arquivos ZIP são suportados.",
+    "clearOnCloseUnavailable": "A limpeza ao fechar não está disponível para perfis efêmeros ou protegidos por senha.",
+    "proxyAndVpnMutuallyExclusive": "Um perfil pode usar um proxy ou uma VPN, mas não ambos.",
+    "invalidDnsRulesJson": "O arquivo selecionado não é um JSON de regras DNS válido.",
+    "unsupportedDnsRulesFormat": "Formato de regras não suportado: {{format}}",
+    "dnsRulesSaveFailed": "Falha ao salvar as regras DNS.",
+    "dnsRulesExportFailed": "Falha ao exportar as regras DNS.",
+    "fingerprintMatchFailed": "Não foi possível ajustar a impressão digital ao proxy."
   },
   "rail": {
     "profiles": "Perfis",
@@ -1831,7 +1883,9 @@
       "importProfile": "Importar perfil",
       "importProfileHint": "Trazer perfis de outra ferramenta",
       "keyboardShortcuts": "Atalhos de teclado",
-      "keyboardShortcutsHint": "Ver todos os atalhos"
+      "keyboardShortcutsHint": "Ver todos os atalhos",
+      "about": "Sobre o Donut Browser",
+      "aboutHint": "Versão e informações do aplicativo"
     },
     "network": "Rede",
     "integrations": "Integrações",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "Iniciar {{name}}",
       "stopProfile": "Parar {{name}}",
-      "profileInfo": "Informações — {{name}}"
+      "profileInfo": "Informações — {{name}}",
+      "createProfile": "Criar perfil",
+      "about": "Sobre o Donut Browser"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "Nenhum outro perfil Wayfern selecionado"
+  },
+  "about": {
+    "title": "Sobre",
+    "version": "Versão {{version}}",
+    "portableBadge": "portátil",
+    "licenseNotice": "Navegador anti-detecção de código aberto, licenciado sob AGPL-3.0.",
+    "website": "Site"
+  },
+  "clearOnClose": {
+    "label": "Limpar dados ao fechar",
+    "description": "Apaga cookies, histórico e cache quando o navegador é fechado. Extensões e favoritos são mantidos."
+  },
+  "consistencyWarning": {
+    "title": "Divergência de impressão digital",
+    "intro": "A saída do proxy de \"{{name}}\" não corresponde à impressão digital deste perfil:",
+    "timezoneTitle": "Divergência de fuso horário",
+    "timezoneDetail": "O nó de saída está em {{exit}}, mas a impressão digital indica {{fingerprint}}.",
+    "languageTitle": "Divergência de idioma",
+    "languageDetail": "O país de saída é {{country}}, mas o idioma da impressão digital é {{fingerprint}}.",
+    "explainer": "Um fuso horário ou idioma que não combina com seu IP de saída é um forte sinal anti-bot, mesmo que seu dispositivo real nunca vaze. Alinhe a impressão digital com a localização do proxy para reduzir tratamentos hostis.",
+    "dontWarnAgain": "Não avisar novamente para este perfil",
+    "matchToProxy": "Ajustar impressão ao proxy",
+    "matching": "Ajustando…",
+    "matchSuccess": "Impressão digital atualizada para corresponder ao proxy. Reinicie o perfil para aplicar."
   }
 }

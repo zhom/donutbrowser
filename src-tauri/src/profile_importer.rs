@@ -33,6 +33,8 @@ pub struct ImportProfileItem {
   pub new_profile_name: String,
   #[serde(default)]
   pub proxy_id: Option<String>,
+  #[serde(default)]
+  pub vpn_id: Option<String>,
 }
 
 fn default_import_browser_type() -> String {
@@ -132,6 +134,15 @@ fn emit_import_progress(total: usize, completed: usize, index: usize, name: &str
   );
 }
 
+/// A known Chromium-family browser install location.
+struct BrowserSource {
+  key: &'static str,
+  dir: PathBuf,
+  /// Opera-style quirk: the profile (Preferences, Cookies, …) lives at the
+  /// root of the config dir instead of under `Default/`.
+  root_profile: bool,
+}
+
 pub struct ProfileImporter {
   base_dirs: BaseDirs,
   downloaded_browsers_registry: &'static DownloadedBrowsersRegistry,
@@ -161,9 +172,50 @@ impl ProfileImporter {
     // Only Chromium-based sources (mapping to Wayfern) are detected. Gecko-family
     // sources mapped to Camoufox, which was removed, so they can no longer be
     // imported.
-    detected_profiles.extend(self.detect_chrome_profiles()?);
-    detected_profiles.extend(self.detect_brave_profiles()?);
-    detected_profiles.extend(self.detect_chromium_profiles()?);
+    for source in self.browser_sources() {
+      if source.root_profile {
+        // Opera-style layout: the user-data root itself is the profile.
+        if source.dir.join("Preferences").exists() {
+          detected_profiles.push(DetectedProfile {
+            browser: source.key.to_string(),
+            mapped_browser: map_browser_type(source.key).to_string(),
+            name: format!(
+              "{} - Default Profile",
+              self.get_browser_display_name(source.key)
+            ),
+            path: source.dir.to_string_lossy().to_string(),
+            description: "Default profile".to_string(),
+          });
+        }
+        // Newer Opera builds keep extra profiles under _side_profiles/.
+        let side = source.dir.join("_side_profiles");
+        if let Ok(entries) = fs::read_dir(&side) {
+          for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.join("Preferences").exists() {
+              let dir_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("profile")
+                .to_string();
+              detected_profiles.push(DetectedProfile {
+                browser: source.key.to_string(),
+                mapped_browser: map_browser_type(source.key).to_string(),
+                name: format!(
+                  "{} - {}",
+                  self.get_browser_display_name(source.key),
+                  dir_name
+                ),
+                path: path.to_string_lossy().to_string(),
+                description: format!("Side profile {dir_name}"),
+              });
+            }
+          }
+        }
+      } else {
+        detected_profiles.extend(self.scan_chrome_profiles_dir(&source.dir, source.key)?);
+      }
+    }
 
     let mut seen_paths = HashSet::new();
     let unique_profiles: Vec<DetectedProfile> = detected_profiles
@@ -172,6 +224,162 @@ impl ProfileImporter {
       .collect();
 
     Ok(unique_profiles)
+  }
+
+  /// Every Chromium-family browser we know how to find, with its per-OS
+  /// user-data directory. `root_profile` marks the Opera-style quirk where the
+  /// profile lives at the root of the config dir instead of `Default/`.
+  fn browser_sources(&self) -> Vec<BrowserSource> {
+    let mut sources: Vec<BrowserSource> = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+      let support = self
+        .base_dirs
+        .home_dir()
+        .join("Library/Application Support");
+      let standard: &[(&str, &str)] = &[
+        ("chromium", "Google/Chrome"),
+        ("chrome-beta", "Google/Chrome Beta"),
+        ("chrome-dev", "Google/Chrome Dev"),
+        ("chrome-canary", "Google/Chrome Canary"),
+        ("chromium", "Chromium"),
+        ("brave", "BraveSoftware/Brave-Browser"),
+        ("brave-beta", "BraveSoftware/Brave-Browser-Beta"),
+        ("brave-nightly", "BraveSoftware/Brave-Browser-Nightly"),
+        ("edge", "Microsoft Edge"),
+        ("edge-beta", "Microsoft Edge Beta"),
+        ("edge-dev", "Microsoft Edge Dev"),
+        ("vivaldi", "Vivaldi"),
+        // Arc nests its user-data dir one level down, unlike Chrome.
+        ("arc", "Arc/User Data"),
+        ("yandex", "Yandex/YandexBrowser"),
+      ];
+      for (key, rel) in standard {
+        sources.push(BrowserSource {
+          key,
+          dir: support.join(rel),
+          root_profile: false,
+        });
+      }
+      for (key, rel) in &[
+        ("opera", "com.operasoftware.Opera"),
+        ("opera-gx", "com.operasoftware.OperaGX"),
+      ] {
+        sources.push(BrowserSource {
+          key,
+          dir: support.join(rel),
+          root_profile: true,
+        });
+      }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      let local = self.base_dirs.data_local_dir().to_path_buf();
+      let standard: &[(&str, &str)] = &[
+        ("chromium", "Google/Chrome/User Data"),
+        ("chrome-beta", "Google/Chrome Beta/User Data"),
+        ("chrome-dev", "Google/Chrome Dev/User Data"),
+        // Canary installs as "Chrome SxS" (side-by-side), not "Chrome Canary".
+        ("chrome-canary", "Google/Chrome SxS/User Data"),
+        ("chromium", "Chromium/User Data"),
+        ("brave", "BraveSoftware/Brave-Browser/User Data"),
+        ("brave-beta", "BraveSoftware/Brave-Browser-Beta/User Data"),
+        (
+          "brave-nightly",
+          "BraveSoftware/Brave-Browser-Nightly/User Data",
+        ),
+        ("edge", "Microsoft/Edge/User Data"),
+        ("edge-beta", "Microsoft/Edge Beta/User Data"),
+        ("edge-dev", "Microsoft/Edge Dev/User Data"),
+        ("vivaldi", "Vivaldi/User Data"),
+        ("yandex", "Yandex/YandexBrowser/User Data"),
+      ];
+      for (key, rel) in standard {
+        sources.push(BrowserSource {
+          key,
+          dir: local.join(rel),
+          root_profile: false,
+        });
+      }
+      // Opera keeps the profile under %APPDATA% (Roaming), not %LOCALAPPDATA%.
+      let roaming = self.base_dirs.data_dir().to_path_buf();
+      for (key, rel) in &[
+        ("opera", "Opera Software/Opera Stable"),
+        ("opera-gx", "Opera Software/Opera GX Stable"),
+      ] {
+        sources.push(BrowserSource {
+          key,
+          dir: roaming.join(rel),
+          root_profile: true,
+        });
+      }
+      // Arc on Windows is MSIX-packaged; the package-family suffix can vary,
+      // so glob Packages/TheBrowserCompany.Arc_*.
+      let packages = local.join("Packages");
+      if let Ok(entries) = fs::read_dir(&packages) {
+        for entry in entries.flatten() {
+          let name = entry.file_name();
+          let Some(name) = name.to_str() else { continue };
+          if name.starts_with("TheBrowserCompany.Arc_") {
+            sources.push(BrowserSource {
+              key: "arc",
+              dir: entry.path().join("LocalCache/Local/Arc/User Data"),
+              root_profile: false,
+            });
+          }
+        }
+      }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      let home = self.base_dirs.home_dir().to_path_buf();
+      let config = home.join(".config");
+      let standard: &[(&str, &str)] = &[
+        ("chromium", "google-chrome"),
+        ("chrome-beta", "google-chrome-beta"),
+        // The Linux Dev channel dir is google-chrome-unstable.
+        ("chrome-dev", "google-chrome-unstable"),
+        ("chromium", "chromium"),
+        ("brave", "BraveSoftware/Brave-Browser"),
+        ("brave-beta", "BraveSoftware/Brave-Browser-Beta"),
+        ("brave-nightly", "BraveSoftware/Brave-Browser-Nightly"),
+        ("edge", "microsoft-edge"),
+        ("edge-beta", "microsoft-edge-beta"),
+        ("edge-dev", "microsoft-edge-dev"),
+        ("vivaldi", "vivaldi"),
+        ("yandex", "yandex-browser"),
+        // The long-standing Linux package ships as the beta channel.
+        ("yandex", "yandex-browser-beta"),
+      ];
+      for (key, rel) in standard {
+        sources.push(BrowserSource {
+          key,
+          dir: config.join(rel),
+          root_profile: false,
+        });
+      }
+      sources.push(BrowserSource {
+        key: "opera",
+        dir: config.join("opera"),
+        root_profile: true,
+      });
+      // Distro-packaged Chromium fallbacks.
+      sources.push(BrowserSource {
+        key: "chromium",
+        dir: home.join("snap/chromium/common/chromium"),
+        root_profile: false,
+      });
+      sources.push(BrowserSource {
+        key: "chromium",
+        dir: home.join(".var/app/org.chromium.Chromium/config/chromium"),
+        root_profile: false,
+      });
+    }
+
+    sources
   }
 
   /// Scan an arbitrary folder for importable Chromium-family profiles.
@@ -349,93 +557,6 @@ impl ProfileImporter {
     Ok(())
   }
 
-  fn detect_chrome_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
-    let mut profiles = Vec::new();
-
-    #[cfg(target_os = "macos")]
-    {
-      let chrome_dir = self
-        .base_dirs
-        .home_dir()
-        .join("Library/Application Support/Google/Chrome");
-      profiles.extend(self.scan_chrome_profiles_dir(&chrome_dir, "chromium")?);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-      let local_app_data = self.base_dirs.data_local_dir();
-      let chrome_dir = local_app_data.join("Google/Chrome/User Data");
-      profiles.extend(self.scan_chrome_profiles_dir(&chrome_dir, "chromium")?);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-      let chrome_dir = self.base_dirs.home_dir().join(".config/google-chrome");
-      profiles.extend(self.scan_chrome_profiles_dir(&chrome_dir, "chromium")?);
-    }
-
-    Ok(profiles)
-  }
-
-  fn detect_chromium_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
-    let mut profiles = Vec::new();
-
-    #[cfg(target_os = "macos")]
-    {
-      let chromium_dir = self
-        .base_dirs
-        .home_dir()
-        .join("Library/Application Support/Chromium");
-      profiles.extend(self.scan_chrome_profiles_dir(&chromium_dir, "chromium")?);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-      let local_app_data = self.base_dirs.data_local_dir();
-      let chromium_dir = local_app_data.join("Chromium/User Data");
-      profiles.extend(self.scan_chrome_profiles_dir(&chromium_dir, "chromium")?);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-      let chromium_dir = self.base_dirs.home_dir().join(".config/chromium");
-      profiles.extend(self.scan_chrome_profiles_dir(&chromium_dir, "chromium")?);
-    }
-
-    Ok(profiles)
-  }
-
-  fn detect_brave_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
-    let mut profiles = Vec::new();
-
-    #[cfg(target_os = "macos")]
-    {
-      let brave_dir = self
-        .base_dirs
-        .home_dir()
-        .join("Library/Application Support/BraveSoftware/Brave-Browser");
-      profiles.extend(self.scan_chrome_profiles_dir(&brave_dir, "brave")?);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-      let local_app_data = self.base_dirs.data_local_dir();
-      let brave_dir = local_app_data.join("BraveSoftware/Brave-Browser/User Data");
-      profiles.extend(self.scan_chrome_profiles_dir(&brave_dir, "brave")?);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-      let brave_dir = self
-        .base_dirs
-        .home_dir()
-        .join(".config/BraveSoftware/Brave-Browser");
-      profiles.extend(self.scan_chrome_profiles_dir(&brave_dir, "brave")?);
-    }
-
-    Ok(profiles)
-  }
-
   fn scan_chrome_profiles_dir(
     &self,
     browser_dir: &Path,
@@ -491,7 +612,20 @@ impl ProfileImporter {
   fn get_browser_display_name(&self, browser_type: &str) -> &str {
     match browser_type {
       "chromium" => "Chrome/Chromium",
+      "chrome-beta" => "Chrome Beta",
+      "chrome-dev" => "Chrome Dev",
+      "chrome-canary" => "Chrome Canary",
       "brave" => "Brave",
+      "brave-beta" => "Brave Beta",
+      "brave-nightly" => "Brave Nightly",
+      "edge" => "Microsoft Edge",
+      "edge-beta" => "Edge Beta",
+      "edge-dev" => "Edge Dev",
+      "opera" => "Opera",
+      "opera-gx" => "Opera GX",
+      "vivaldi" => "Vivaldi",
+      "arc" => "Arc",
+      "yandex" => "Yandex Browser",
       "zen" => "Zen Browser",
 
       "wayfern" => "Wayfern",
@@ -526,6 +660,37 @@ impl ProfileImporter {
             .into(),
         );
       }
+    }
+
+    // Gate the paid fingerprint-OS override here rather than at each call site.
+    // `wayfern_config` is only ever consumed by this function, so a caller that
+    // forgets the check (the REST and MCP surfaces each had their own copy)
+    // would bypass the restriction with no compile error.
+    let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
+    if !crate::cloud_auth::CLOUD_AUTH
+      .is_fingerprint_os_allowed(fingerprint_os)
+      .await
+    {
+      return Err(
+        serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" })
+          .to_string()
+          .into(),
+      );
+    }
+
+    // A profile routes through a proxy or a VPN, never both: create_profile_with_group
+    // rejects it, and at launch browser_runner resolves the proxy first and
+    // silently ignores the VPN. The importer saves profiles directly, so
+    // without this it is the one way to persist the invalid combination.
+    if items
+      .iter()
+      .any(|i| i.proxy_id.is_some() && i.vpn_id.is_some())
+    {
+      return Err(
+        serde_json::json!({ "code": "PROXY_AND_VPN_MUTUALLY_EXCLUSIVE" })
+          .to_string()
+          .into(),
+      );
     }
 
     let mut taken_names: HashSet<String> = self
@@ -589,6 +754,7 @@ impl ProfileImporter {
           &item.browser_type,
           &final_name,
           item.proxy_id.clone(),
+          item.vpn_id.clone(),
           group_id.clone(),
           wayfern_config.clone(),
         )
@@ -640,6 +806,7 @@ impl ProfileImporter {
     browser_type: &str,
     new_profile_name: &str,
     proxy_id: Option<String>,
+    vpn_id: Option<String>,
     group_id: Option<String>,
     wayfern_config: Option<WayfernConfig>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -683,11 +850,28 @@ impl ProfileImporter {
     // Profile dirs can be multiple GB — keep the copy off the async runtime.
     let copy_source = source_path.to_path_buf();
     let copy_dest = new_profile_data_dir.clone();
-    let copy_result = tokio::task::spawn_blocking(move || {
+    let copy_result = match tokio::task::spawn_blocking(move || {
       Self::copy_directory_recursive(&copy_source, &copy_dest).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("Profile copy task failed: {e}"))?;
+    {
+      Ok(r) => r,
+      Err(e) => {
+        // The copy task died (panic, or runtime shutdown mid-import). Clean up
+        // like every other error path here, or the half-copied — possibly
+        // multi-GB — directory is orphaned with no metadata pointing at it, so
+        // nothing ever reclaims it.
+        let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+        return Err(
+          serde_json::json!({
+            "code": "INTERNAL_ERROR",
+            "params": { "detail": format!("Profile copy task failed: {e}") },
+          })
+          .to_string()
+          .into(),
+        );
+      }
+    };
     if let Err(e) = copy_result {
       let _ = fs::remove_dir_all(&new_profile_uuid_dir);
       return Err(
@@ -761,6 +945,7 @@ impl ProfileImporter {
           created_by_email: None,
           dns_blocklist: None,
           password_protected: false,
+          clear_on_close: false,
           created_at: None,
           updated_at: None,
         };
@@ -799,7 +984,7 @@ impl ProfileImporter {
       browser: mapped.to_string(),
       version,
       proxy_id,
-      vpn_id: None,
+      vpn_id,
       launch_hook: None,
       process_id: None,
       last_launch: None,
@@ -820,6 +1005,7 @@ impl ProfileImporter {
       created_by_email: None,
       dns_blocklist: None,
       password_protected: false,
+      clear_on_close: false,
       created_at: Some(
         std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
@@ -924,15 +1110,7 @@ pub async fn import_browser_profiles(
   duplicate_strategy: Option<DuplicateStrategy>,
   wayfern_config: Option<WayfernConfig>,
 ) -> Result<ProfileImportBatchResult, String> {
-  let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
-
-  if !crate::cloud_auth::CLOUD_AUTH
-    .is_fingerprint_os_allowed(fingerprint_os)
-    .await
-  {
-    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
-  }
-
+  // The Pro gate for fingerprint OS spoofing lives inside import_profiles.
   let importer = ProfileImporter::instance();
   importer
     .import_profiles(

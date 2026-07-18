@@ -760,3 +760,27 @@ export function clearThemeColors(): void {
     root.style.removeProperty(key as string);
   });
 }
+
+/**
+ * Run a theme mutation inside a View Transition so the whole UI cross-fades
+ * (~200ms, tuned in globals.css) instead of hard-cutting between palettes.
+ * Falls back to an instant switch when the API is unavailable or the user
+ * prefers reduced motion.
+ */
+export function withThemeTransition(mutate: () => void): void {
+  if (typeof document === "undefined") {
+    mutate();
+    return;
+  }
+  const reduced =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const doc = document as Document & {
+    startViewTransition?: (callback: () => void) => unknown;
+  };
+  if (reduced || typeof doc.startViewTransition !== "function") {
+    mutate();
+    return;
+  }
+  doc.startViewTransition(mutate);
+}

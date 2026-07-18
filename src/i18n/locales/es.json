@@ -197,7 +197,14 @@
     "disableAutoUpdates": "Desactivar Actualizaciones Automáticas de la App",
     "disableAutoUpdatesDescription": "Evita que la aplicación busque e instale actualizaciones de Donut Browser automáticamente. Las actualizaciones de navegadores no se ven afectadas.",
     "keepDecryptedProfilesInRam": "Mantener Perfiles Descifrados en RAM",
-    "keepDecryptedProfilesInRamDescription": "Conservar la copia descifrada en RAM de los perfiles protegidos por contraseña entre lanzamientos para un inicio más rápido. La copia en disco permanece cifrada en cualquier caso."
+    "keepDecryptedProfilesInRamDescription": "Conservar la copia descifrada en RAM de los perfiles protegidos por contraseña entre lanzamientos para un inicio más rápido. La copia en disco permanece cifrada en cualquier caso.",
+    "privacy": {
+      "consistencyWarning": "Advertencia de consistencia de huella digital",
+      "consistencyWarningDescription": "Advertir al iniciar cuando la zona horaria o el idioma de un perfil no coincidan con su nodo de salida del proxy.",
+      "clearTraffic": "Borrar todo el historial de tráfico",
+      "clearTrafficDescription": "Elimina de forma segura las estadísticas de tráfico registradas de todos los perfiles.",
+      "clearTrafficSuccess": "Historial de tráfico borrado"
+    }
   },
   "header": {
     "searchPlaceholder": "Buscar perfiles...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "No se puede modificar un perfil en ejecución",
       "cantModifyLaunching": "No se puede modificar el perfil mientras se inicia",
       "cantModifyStopping": "No se puede modificar el perfil mientras se detiene",
-      "cantModifyUpdating": "No se puede modificar el perfil mientras se actualiza el navegador"
+      "cantModifyUpdating": "No se puede modificar el perfil mientras se actualiza el navegador",
+      "emptyTitle": "Aún no hay perfiles",
+      "emptyHint": "Crea tu primer perfil o importa perfiles existentes desde otro navegador.",
+      "emptyCreate": "Crear perfil",
+      "emptyImport": "Importar perfiles",
+      "emptyFilteredTitle": "No se encontraron perfiles",
+      "emptyFilteredHint": "Ningún perfil coincide con este grupo o búsqueda. Prueba otro filtro o crea uno nuevo."
     },
     "actions": {
       "launch": "Iniciar",
@@ -1294,7 +1307,28 @@
     "domains": "dominios",
     "fresh": "Actualizado",
     "stale": "Desactualizado",
-    "notCached": "Sin caché"
+    "notCached": "Sin caché",
+    "tabBlocklists": "Listas de bloqueo",
+    "tabCustom": "Listas personalizadas",
+    "custom.description": "Crea tu propia lista de bloqueo a partir de URLs de origen y reglas manuales. Los dominios permitidos siempre prevalecen sobre los bloqueados.",
+    "custom.sourcesLabel": "URLs de origen de listas de bloqueo",
+    "custom.sourcesPlaceholder": "Una URL por línea",
+    "custom.blockLabel": "Dominios bloqueados",
+    "custom.blockPlaceholder": "Un dominio por línea",
+    "custom.allowLabel": "Dominios permitidos",
+    "custom.allowPlaceholder": "Un dominio por línea",
+    "custom.allowHint": "Los dominios permitidos se eliminan de la lista de bloqueo compilada, anulando cualquier regla de bloqueo.",
+    "custom.saved": "Reglas DNS personalizadas guardadas",
+    "custom.imported": "Reglas DNS personalizadas importadas",
+    "custom.exported": "Reglas DNS personalizadas exportadas",
+    "custom.exportTxt": "Exportar TXT",
+    "custom.exportJson": "Exportar JSON",
+    "customLevel": "Personalizada",
+    "custom.allowlistModeLabel": "Modo lista de permitidos",
+    "custom.allowlistModeOn": "Solo se puede acceder a los dominios de abajo; todo lo demás se bloquea.",
+    "custom.allowlistModeOff": "Bloquear los dominios de la lista; permitir todo lo demás.",
+    "custom.allowedOnlyLabel": "Dominios permitidos (solo estos)",
+    "custom.allowedOnlyHint": "También se permiten los subdominios de un dominio de la lista. Una lista vacía desactiva el filtrado."
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "Importado",
     "statusSkipped": "Omitido",
     "statusFailed": "Fallido",
-    "importButtonCount": "Importar ({{count}})"
+    "importButtonCount": "Importar ({{count}})",
+    "vpnOptional": "VPN (opcional)",
+    "noVpn": "Sin VPN",
+    "advancedOptions": "Opciones avanzadas",
+    "configureFingerprint": "Configurar huella digital (opcional)"
   },
   "syncTooltips": {
     "syncing": "Sincronizando...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "Enviado",
     "receivedLegend": "Recibido",
     "tooltipSent": "↑ Enviado: ",
-    "tooltipReceived": "↓ Recibido: "
+    "tooltipReceived": "↓ Recibido: ",
+    "clearHistory": "Borrar historial",
+    "clearHistoryTitle": "Borrar historial de tráfico",
+    "clearHistoryDescription": "Elimina de forma permanente y segura todo el historial de tráfico registrado de \"{{name}}\". Esta acción no se puede deshacer.",
+    "tabOverview": "Resumen",
+    "tabTopDomains": "Dominios principales",
+    "searchDomains": "Buscar dominios…",
+    "noDomainMatch": "Ningún dominio coincide con tu búsqueda."
   },
   "proxyCheck": {
     "unknownLocation": "Desconocido",
@@ -1818,7 +1863,14 @@
     "importNoItems": "No hay nada seleccionado para importar",
     "browserNotDownloaded": "No hay ninguna versión descargada de {{browser}}. Descárgala primero y vuelve a intentar la importación.",
     "archiveExtractionFailed": "No se pudo extraer el archivo: {{detail}}",
-    "unsupportedArchiveFormat": "Formato de archivo no compatible. Solo se admiten archivos ZIP."
+    "unsupportedArchiveFormat": "Formato de archivo no compatible. Solo se admiten archivos ZIP.",
+    "clearOnCloseUnavailable": "El borrado al cerrar no está disponible para perfiles efímeros o protegidos con contraseña.",
+    "proxyAndVpnMutuallyExclusive": "Un perfil puede usar un proxy o una VPN, pero no ambos.",
+    "invalidDnsRulesJson": "El archivo seleccionado no es un JSON de reglas DNS válido.",
+    "unsupportedDnsRulesFormat": "Formato de reglas no compatible: {{format}}",
+    "dnsRulesSaveFailed": "No se pudieron guardar las reglas DNS.",
+    "dnsRulesExportFailed": "No se pudieron exportar las reglas DNS.",
+    "fingerprintMatchFailed": "No se pudo ajustar la huella al proxy."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -1831,7 +1883,9 @@
       "importProfile": "Importar perfil",
       "importProfileHint": "Trae perfiles de otra herramienta",
       "keyboardShortcuts": "Atajos de teclado",
-      "keyboardShortcutsHint": "Ver todos los atajos"
+      "keyboardShortcutsHint": "Ver todos los atajos",
+      "about": "Acerca de Donut Browser",
+      "aboutHint": "Versión e información de la aplicación"
     },
     "network": "Red",
     "integrations": "Integraciones",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "Iniciar {{name}}",
       "stopProfile": "Detener {{name}}",
-      "profileInfo": "Información — {{name}}"
+      "profileInfo": "Información — {{name}}",
+      "createProfile": "Crear perfil",
+      "about": "Acerca de Donut Browser"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "No hay otros perfiles Wayfern seleccionados"
+  },
+  "about": {
+    "title": "Acerca de",
+    "version": "Versión {{version}}",
+    "portableBadge": "portable",
+    "licenseNotice": "Navegador anti-detección de código abierto, con licencia AGPL-3.0.",
+    "website": "Sitio web"
+  },
+  "clearOnClose": {
+    "label": "Borrar datos al cerrar",
+    "description": "Elimina cookies, historial y caché al cerrar el navegador. Las extensiones y los marcadores se conservan."
+  },
+  "consistencyWarning": {
+    "title": "Discrepancia de huella digital",
+    "intro": "La salida del proxy de \"{{name}}\" no coincide con la huella digital de este perfil:",
+    "timezoneTitle": "Discrepancia de zona horaria",
+    "timezoneDetail": "El nodo de salida está en {{exit}}, pero la huella digital indica {{fingerprint}}.",
+    "languageTitle": "Discrepancia de idioma",
+    "languageDetail": "El país de salida es {{country}}, pero el idioma de la huella digital es {{fingerprint}}.",
+    "explainer": "Una zona horaria o un idioma que no coincide con tu IP de salida es una fuerte señal anti-bot, aunque tu dispositivo real nunca se filtre. Alinea la huella digital con la ubicación del proxy para reducir el trato hostil.",
+    "dontWarnAgain": "No volver a advertir para este perfil",
+    "matchToProxy": "Ajustar huella al proxy",
+    "matching": "Ajustando…",
+    "matchSuccess": "Huella actualizada para coincidir con el proxy. Reinicia el perfil para aplicar."
   }
 }

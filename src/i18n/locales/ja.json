@@ -197,7 +197,14 @@
     "disableAutoUpdates": "アプリの自動更新を無効にする",
     "disableAutoUpdatesDescription": "Donut Browserの自動更新確認・インストールを無効にします。ブラウザの更新には影響しません。",
     "keepDecryptedProfilesInRam": "復号済みプロファイルをRAMに保持",
-    "keepDecryptedProfilesInRamDescription": "起動を高速化するため、パスワード保護されたプロファイルの復号済みコピーをRAMに保持します。ディスク上のコピーは常に暗号化されたままです。"
+    "keepDecryptedProfilesInRamDescription": "起動を高速化するため、パスワード保護されたプロファイルの復号済みコピーをRAMに保持します。ディスク上のコピーは常に暗号化されたままです。",
+    "privacy": {
+      "consistencyWarning": "フィンガープリント整合性の警告",
+      "consistencyWarningDescription": "プロファイルのタイムゾーンや言語がプロキシ出口ノードと一致しない場合、起動時に警告します。",
+      "clearTraffic": "すべてのトラフィック履歴を消去",
+      "clearTrafficDescription": "すべてのプロファイルの記録されたトラフィック統計を安全に消去します。",
+      "clearTrafficSuccess": "トラフィック履歴を消去しました"
+    }
   },
   "header": {
     "searchPlaceholder": "プロファイルを検索...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "実行中のプロファイルは変更できません",
       "cantModifyLaunching": "起動中はプロファイルを変更できません",
       "cantModifyStopping": "停止中はプロファイルを変更できません",
-      "cantModifyUpdating": "ブラウザの更新中はプロファイルを変更できません"
+      "cantModifyUpdating": "ブラウザの更新中はプロファイルを変更できません",
+      "emptyTitle": "プロファイルはまだありません",
+      "emptyHint": "最初のプロファイルを作成するか、他のブラウザから既存のプロファイルをインポートしてください。",
+      "emptyCreate": "プロファイルを作成",
+      "emptyImport": "プロファイルをインポート",
+      "emptyFilteredTitle": "プロファイルが見つかりません",
+      "emptyFilteredHint": "このグループまたは検索に一致するプロファイルはありません。別のフィルターを試すか、新規作成してください。"
     },
     "actions": {
       "launch": "起動",
@@ -1294,7 +1307,28 @@
     "domains": "ドメイン",
     "fresh": "最新",
     "stale": "期限切れ",
-    "notCached": "キャッシュなし"
+    "notCached": "キャッシュなし",
+    "tabBlocklists": "ブロックリスト",
+    "tabCustom": "カスタムリスト",
+    "custom.description": "ソース URL と手動ルールから独自のブロックリストを作成します。許可ドメインは常にブロックより優先されます。",
+    "custom.sourcesLabel": "ブロックリストのソース URL",
+    "custom.sourcesPlaceholder": "1 行につき 1 つの URL",
+    "custom.blockLabel": "ブロックするドメイン",
+    "custom.blockPlaceholder": "1 行につき 1 つのドメイン",
+    "custom.allowLabel": "許可するドメイン",
+    "custom.allowPlaceholder": "1 行につき 1 つのドメイン",
+    "custom.allowHint": "許可ドメインはコンパイル済みブロックリストから除外され、あらゆるブロックルールより優先されます。",
+    "custom.saved": "カスタム DNS ルールを保存しました",
+    "custom.imported": "カスタム DNS ルールをインポートしました",
+    "custom.exported": "カスタム DNS ルールをエクスポートしました",
+    "custom.exportTxt": "TXT をエクスポート",
+    "custom.exportJson": "JSON をエクスポート",
+    "customLevel": "カスタム",
+    "custom.allowlistModeLabel": "許可リストモード",
+    "custom.allowlistModeOn": "下記のドメインのみアクセス可能で、それ以外はすべてブロックされます。",
+    "custom.allowlistModeOff": "リストのドメインをブロックし、それ以外はすべて許可します。",
+    "custom.allowedOnlyLabel": "許可するドメイン（これらのみ）",
+    "custom.allowedOnlyHint": "リスト内ドメインのサブドメインも許可されます。リストが空の場合はフィルタリングが無効になります。"
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "インポート済み",
     "statusSkipped": "スキップ",
     "statusFailed": "失敗",
-    "importButtonCount": "インポート ({{count}})"
+    "importButtonCount": "インポート ({{count}})",
+    "vpnOptional": "VPN(任意)",
+    "noVpn": "VPNなし",
+    "advancedOptions": "詳細オプション",
+    "configureFingerprint": "フィンガープリントを設定(任意)"
   },
   "syncTooltips": {
     "syncing": "同期中...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "送信",
     "receivedLegend": "受信",
     "tooltipSent": "↑ 送信: ",
-    "tooltipReceived": "↓ 受信: "
+    "tooltipReceived": "↓ 受信: ",
+    "clearHistory": "履歴を消去",
+    "clearHistoryTitle": "トラフィック履歴を消去",
+    "clearHistoryDescription": "「{{name}}」の記録されたトラフィック履歴をすべて完全かつ安全に消去します。この操作は元に戻せません。",
+    "tabOverview": "概要",
+    "tabTopDomains": "上位ドメイン",
+    "searchDomains": "ドメインを検索…",
+    "noDomainMatch": "検索に一致するドメインはありません。"
   },
   "proxyCheck": {
     "unknownLocation": "不明",
@@ -1818,7 +1863,14 @@
     "importNoItems": "インポートする項目が選択されていません",
     "browserNotDownloaded": "{{browser}}のダウンロード済みバージョンがありません。先にダウンロードしてから、再度インポートしてください。",
     "archiveExtractionFailed": "アーカイブの展開に失敗しました：{{detail}}",
-    "unsupportedArchiveFormat": "サポートされていないアーカイブ形式です。ZIPアーカイブのみサポートされています。"
+    "unsupportedArchiveFormat": "サポートされていないアーカイブ形式です。ZIPアーカイブのみサポートされています。",
+    "clearOnCloseUnavailable": "終了時消去は、一時プロファイルやパスワード保護されたプロファイルでは利用できません。",
+    "proxyAndVpnMutuallyExclusive": "プロファイルにはプロキシまたは VPN のいずれかを設定できます（両方は設定できません）。",
+    "invalidDnsRulesJson": "選択したファイルは有効な DNS ルール JSON ではありません。",
+    "unsupportedDnsRulesFormat": "サポートされていないルール形式: {{format}}",
+    "dnsRulesSaveFailed": "DNS ルールを保存できませんでした。",
+    "dnsRulesExportFailed": "DNS ルールをエクスポートできませんでした。",
+    "fingerprintMatchFailed": "フィンガープリントをプロキシに合わせられませんでした。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1831,7 +1883,9 @@
       "importProfile": "プロファイルをインポート",
       "importProfileHint": "別のツールから取り込む",
       "keyboardShortcuts": "キーボードショートカット",
-      "keyboardShortcutsHint": "すべてのショートカットを表示"
+      "keyboardShortcutsHint": "すべてのショートカットを表示",
+      "about": "Donut Browser について",
+      "aboutHint": "バージョンとアプリ情報"
     },
     "network": "ネットワーク",
     "integrations": "連携",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "{{name}} を起動",
       "stopProfile": "{{name}} を停止",
-      "profileInfo": "情報 — {{name}}"
+      "profileInfo": "情報 — {{name}}",
+      "createProfile": "プロファイルを作成",
+      "about": "Donut Browser について"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "他に Wayfern プロファイルが選択されていません"
+  },
+  "about": {
+    "title": "このアプリについて",
+    "version": "バージョン {{version}}",
+    "portableBadge": "ポータブル",
+    "licenseNotice": "AGPL-3.0 ライセンスのオープンソース・アンチディテクトブラウザです。",
+    "website": "ウェブサイト"
+  },
+  "clearOnClose": {
+    "label": "終了時にデータを消去",
+    "description": "ブラウザを閉じるときに Cookie、履歴、キャッシュを消去します。拡張機能とブックマークは保持されます。"
+  },
+  "consistencyWarning": {
+    "title": "フィンガープリントの不一致",
+    "intro": "「{{name}}」のプロキシ出口がこのプロファイルのフィンガープリントと一致していません:",
+    "timezoneTitle": "タイムゾーンの不一致",
+    "timezoneDetail": "出口ノードは {{exit}} にありますが、フィンガープリントは {{fingerprint}} を示しています。",
+    "languageTitle": "言語の不一致",
+    "languageDetail": "出口の国は {{country}} ですが、フィンガープリントの言語は {{fingerprint}} です。",
+    "explainer": "出口 IP と食い違うタイムゾーンや言語は、実際のデバイス情報が漏れていなくても強力なアンチボットシグナルになります。フィンガープリントをプロキシの場所に合わせて、警戒される扱いを減らしましょう。",
+    "dontWarnAgain": "このプロファイルでは今後警告しない",
+    "matchToProxy": "フィンガープリントをプロキシに合わせる",
+    "matching": "調整中…",
+    "matchSuccess": "フィンガープリントをプロキシに合わせて更新しました。反映するにはプロファイルを再起動してください。"
   }
 }

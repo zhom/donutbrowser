@@ -668,6 +668,7 @@ mod tests {
       created_by_email: None,
       dns_blocklist: None,
       password_protected: false,
+      clear_on_close: false,
       created_at: None,
       updated_at: None,
     }

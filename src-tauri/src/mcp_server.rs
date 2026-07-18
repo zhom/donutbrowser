@@ -673,6 +673,10 @@ impl McpServer {
                   "proxy_id": {
                     "type": "string",
                     "description": "Optional proxy UUID to assign to this profile"
+                  },
+                  "vpn_id": {
+                    "type": "string",
+                    "description": "Optional VPN UUID to assign to this profile"
                   }
                 },
                 "required": ["source_path", "new_profile_name"]
@@ -731,6 +735,10 @@ impl McpServer {
               "type": "array",
               "items": { "type": "string" },
               "description": "Proxy bypass rules (replaces existing rules)"
+            },
+            "clear_on_close": {
+              "type": "boolean",
+              "description": "Wipe browsing data (keeping extensions and bookmarks) when the browser exits. Not available for ephemeral or password-protected profiles."
             }
           },
           "required": ["profile_id"]
@@ -2544,6 +2552,14 @@ impl McpServer {
         .map_err(|e| McpError {
           code: -32000,
           message: format!("Failed to update proxy bypass rules: {e}"),
+        })?;
+    }
+
+    if let Some(clear_on_close) = arguments.get("clear_on_close").and_then(|v| v.as_bool()) {
+      pm.update_profile_clear_on_close(app_handle, profile_id, clear_on_close)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update clear-on-close: {e}"),
         })?;
     }
 

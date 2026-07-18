@@ -199,314 +199,316 @@ export function AccountPage({
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
       <DialogContent className="flex max-h-[calc(100vh-5rem)] max-w-3xl flex-col">
-        <div
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto",
-            subPage && "mx-auto w-full max-w-3xl",
-          )}
-        >
-          <AnimatedTabs defaultValue="account">
-            <AnimatedTabsList>
-              <AnimatedTabsTrigger value="account">
-                {t("account.tabs.account")}
-              </AnimatedTabsTrigger>
-              <AnimatedTabsTrigger
-                value="self-hosted"
-                disabled={selfHostedDisabled}
-                title={
-                  selfHostedDisabled
-                    ? t("account.selfHosted.disabledWhileLoggedIn")
-                    : undefined
-                }
-              >
-                {t("account.tabs.selfHosted")}
-              </AnimatedTabsTrigger>
-            </AnimatedTabsList>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={cn(subPage && "mx-auto w-full max-w-4xl")}>
+            <AnimatedTabs defaultValue="account">
+              <AnimatedTabsList>
+                <AnimatedTabsTrigger value="account">
+                  {t("account.tabs.account")}
+                </AnimatedTabsTrigger>
+                <AnimatedTabsTrigger
+                  value="self-hosted"
+                  disabled={selfHostedDisabled}
+                  title={
+                    selfHostedDisabled
+                      ? t("account.selfHosted.disabledWhileLoggedIn")
+                      : undefined
+                  }
+                >
+                  {t("account.tabs.selfHosted")}
+                </AnimatedTabsTrigger>
+              </AnimatedTabsList>
 
-            <AnimatedTabsContent value="account" className="mt-4">
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-foreground">
-                    <LuUser className="size-6" />
+              <AnimatedTabsContent value="account" className="mt-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-foreground">
+                      <LuUser className="size-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {isLoggedIn && user ? (
+                        <>
+                          <h2 className="truncate text-base font-semibold">
+                            {user.email}
+                          </h2>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {t("account.plan", {
+                              plan: user.plan,
+                              period: user.planPeriod ?? "—",
+                            })}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h2 className="text-base font-semibold">
+                            {t("account.signedOut")}
+                          </h2>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {t("account.signedOutDescription")}
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    {isLoggedIn && user ? (
-                      <>
-                        <h2 className="truncate text-base font-semibold">
-                          {user.email}
-                        </h2>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {t("account.plan", {
-                            plan: user.plan,
-                            period: user.planPeriod ?? "—",
-                          })}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <h2 className="text-base font-semibold">
-                          {t("account.signedOut")}
-                        </h2>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {t("account.signedOutDescription")}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {isLoggedIn && user && (
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-                      <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                        {t("account.fields.plan")}
-                      </p>
-                      <p className="mt-0.5 font-medium uppercase">
-                        {user.plan}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-                      <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                        {t("account.fields.status")}
-                      </p>
-                      <p className="mt-0.5">{user.subscriptionStatus ?? "—"}</p>
-                    </div>
-                    {user.teamRole && (
+                  {isLoggedIn && user && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
                         <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                          {t("account.fields.teamRole")}
+                          {t("account.fields.plan")}
                         </p>
-                        <p className="mt-0.5">{user.teamRole}</p>
-                      </div>
-                    )}
-                    {user.planPeriod && (
-                      <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-                        <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                          {t("account.fields.period")}
+                        <p className="mt-0.5 font-medium uppercase">
+                          {user.plan}
                         </p>
-                        <p className="mt-0.5">{user.planPeriod}</p>
                       </div>
-                    )}
-                    {typeof user.deviceOrdinal === "number" && (
                       <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
                         <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                          {t("account.fields.device")}
+                          {t("account.fields.status")}
                         </p>
                         <p className="mt-0.5">
-                          {t("account.deviceOrdinal", {
-                            ordinal: user.deviceOrdinal,
-                            count: user.deviceCount ?? user.deviceOrdinal,
-                          })}
+                          {user.subscriptionStatus ?? "—"}
                         </p>
                       </div>
+                      {user.teamRole && (
+                        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                          <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                            {t("account.fields.teamRole")}
+                          </p>
+                          <p className="mt-0.5">{user.teamRole}</p>
+                        </div>
+                      )}
+                      {user.planPeriod && (
+                        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                          <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                            {t("account.fields.period")}
+                          </p>
+                          <p className="mt-0.5">{user.planPeriod}</p>
+                        </div>
+                      )}
+                      {typeof user.deviceOrdinal === "number" && (
+                        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                          <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                            {t("account.fields.device")}
+                          </p>
+                          <p className="mt-0.5">
+                            {t("account.deviceOrdinal", {
+                              ordinal: user.deviceOrdinal,
+                              count: user.deviceCount ?? user.deviceOrdinal,
+                            })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {isLoggedIn &&
+                    user &&
+                    getEntitlements(user).browserAutomation &&
+                    user.isPrimaryDevice === false && (
+                      <p className="text-xs text-warning">
+                        {t("account.automationPrimaryOnly")}
+                      </p>
                     )}
-                  </div>
-                )}
+                  {isLoggedIn &&
+                    user &&
+                    getEntitlements(user).browserAutomation &&
+                    user.isPrimaryDevice === true &&
+                    (user.deviceCount ?? 1) > 1 && (
+                      <p className="text-xs text-success">
+                        {t("account.automationActiveHere")}
+                      </p>
+                    )}
 
-                {isLoggedIn &&
-                  user &&
-                  getEntitlements(user).browserAutomation &&
-                  user.isPrimaryDevice === false && (
-                    <p className="text-xs text-warning">
-                      {t("account.automationPrimaryOnly")}
-                    </p>
-                  )}
-                {isLoggedIn &&
-                  user &&
-                  getEntitlements(user).browserAutomation &&
-                  user.isPrimaryDevice === true &&
-                  (user.deviceCount ?? 1) > 1 && (
-                    <p className="text-xs text-success">
-                      {t("account.automationActiveHere")}
-                    </p>
-                  )}
-
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {isLoggedIn ? (
-                    <>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {isLoggedIn ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            void handleRefresh();
+                          }}
+                          disabled={isRefreshing}
+                          className="h-8 gap-1.5 text-xs"
+                        >
+                          <LuRefreshCw className="size-3" />
+                          {t("account.refresh")}
+                        </Button>
+                        <LoadingButton
+                          size="sm"
+                          variant="destructive"
+                          isLoading={isLoggingOut}
+                          disabled={isRefreshing}
+                          onClick={() => {
+                            void handleLogout();
+                          }}
+                          className="h-8 gap-1.5 text-xs"
+                        >
+                          <LuLogOut className="size-3" />
+                          {t("account.logout")}
+                        </LoadingButton>
+                      </>
+                    ) : (
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          void handleRefresh();
-                        }}
-                        disabled={isRefreshing}
+                        onClick={onOpenSignIn}
                         className="h-8 gap-1.5 text-xs"
                       >
-                        <LuRefreshCw className="size-3" />
-                        {t("account.refresh")}
+                        <LuCloud className="size-3" />
+                        {t("account.signIn")}
                       </Button>
-                      <LoadingButton
-                        size="sm"
-                        variant="destructive"
-                        isLoading={isLoggingOut}
-                        disabled={isRefreshing}
-                        onClick={() => {
-                          void handleLogout();
-                        }}
-                        className="h-8 gap-1.5 text-xs"
-                      >
-                        <LuLogOut className="size-3" />
-                        {t("account.logout")}
-                      </LoadingButton>
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      onClick={onOpenSignIn}
-                      className="h-8 gap-1.5 text-xs"
-                    >
-                      <LuCloud className="size-3" />
-                      {t("account.signIn")}
-                    </Button>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            </AnimatedTabsContent>
+              </AnimatedTabsContent>
 
-            <AnimatedTabsContent value="self-hosted" className="mt-4">
-              {selfHostedDisabled ? (
-                // Defensive: the tab trigger is disabled while the user is
-                // logged in, so this branch shouldn't be reachable via UI —
-                // but if state flips mid-render (e.g. a cloud login finishes
-                // while the tab is open), show the explanation instead of
-                // a silent empty card.
-                <p className="text-sm text-muted-foreground">
-                  {t("account.selfHosted.disabledWhileLoggedIn")}
-                </p>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {t("account.selfHosted.title")}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {t("account.selfHosted.description")}
-                    </p>
-                  </div>
+              <AnimatedTabsContent value="self-hosted" className="mt-4">
+                {selfHostedDisabled ? (
+                  // Defensive: the tab trigger is disabled while the user is
+                  // logged in, so this branch shouldn't be reachable via UI —
+                  // but if state flips mid-render (e.g. a cloud login finishes
+                  // while the tab is open), show the explanation instead of
+                  // a silent empty card.
+                  <p className="text-sm text-muted-foreground">
+                    {t("account.selfHosted.disabledWhileLoggedIn")}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {t("account.selfHosted.title")}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {t("account.selfHosted.description")}
+                      </p>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="self-hosted-server-url" className="text-xs">
-                      {t("sync.serverUrl")}
-                    </Label>
-                    <Input
-                      id="self-hosted-server-url"
-                      type="url"
-                      placeholder={t("sync.serverUrlPlaceholder")}
-                      value={serverUrl}
-                      onChange={(e) => {
-                        setServerUrl(e.target.value);
-                        setConnectionStatus("unknown");
-                      }}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="self-hosted-token" className="text-xs">
-                      {t("sync.token")}
-                    </Label>
-                    <div className="relative">
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="self-hosted-server-url"
+                        className="text-xs"
+                      >
+                        {t("sync.serverUrl")}
+                      </Label>
                       <Input
-                        id="self-hosted-token"
-                        type={showToken ? "text" : "password"}
-                        placeholder={t("sync.tokenPlaceholder")}
-                        value={token}
+                        id="self-hosted-server-url"
+                        type="url"
+                        placeholder={t("sync.serverUrlPlaceholder")}
+                        value={serverUrl}
                         onChange={(e) => {
-                          setToken(e.target.value);
+                          setServerUrl(e.target.value);
                           setConnectionStatus("unknown");
                         }}
                         autoComplete="off"
                         spellCheck={false}
-                        className="pr-9"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowToken((v) => !v);
-                        }}
-                        aria-label={
-                          showToken
-                            ? t("common.aria.hideToken")
-                            : t("common.aria.showToken")
-                        }
-                        className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        {showToken ? (
-                          <LuEyeOff className="size-3.5" />
-                        ) : (
-                          <LuEye className="size-3.5" />
-                        )}
-                      </button>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">
-                      {t("account.selfHosted.connectionStatus")}
-                    </span>
-                    {connectionStatus === "connected" && (
-                      <Badge
-                        variant="default"
-                        className="bg-success text-success-foreground"
-                      >
-                        {t("sync.status.connected")}
-                      </Badge>
-                    )}
-                    {connectionStatus === "error" && (
-                      <Badge variant="destructive">
-                        {t("sync.status.error")}
-                      </Badge>
-                    )}
-                    {connectionStatus === "testing" && (
-                      <Badge variant="secondary">
-                        {t("sync.status.syncing")}
-                      </Badge>
-                    )}
-                    {connectionStatus === "unknown" && (
-                      <Badge variant="secondary">
-                        {t("account.selfHosted.statusUnknown")}
-                      </Badge>
-                    )}
-                  </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="self-hosted-token" className="text-xs">
+                        {t("sync.token")}
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="self-hosted-token"
+                          type={showToken ? "text" : "password"}
+                          placeholder={t("sync.tokenPlaceholder")}
+                          value={token}
+                          onChange={(e) => {
+                            setToken(e.target.value);
+                            setConnectionStatus("unknown");
+                          }}
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="pr-9"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowToken((v) => !v);
+                          }}
+                          aria-label={
+                            showToken
+                              ? t("common.aria.hideToken")
+                              : t("common.aria.showToken")
+                          }
+                          className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                        >
+                          {showToken ? (
+                            <LuEyeOff className="size-3.5" />
+                          ) : (
+                            <LuEye className="size-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <LoadingButton
-                      size="sm"
-                      variant="outline"
-                      isLoading={isTestingConnection}
-                      disabled={!serverUrl || isSavingSelfHosted}
-                      onClick={() => void handleTestConnection()}
-                      className="h-8 text-xs"
-                    >
-                      {t("account.selfHosted.testConnection")}
-                    </LoadingButton>
-                    <LoadingButton
-                      size="sm"
-                      isLoading={isSavingSelfHosted}
-                      disabled={!serverUrl || !token || isTestingConnection}
-                      onClick={() => void handleSaveSelfHosted()}
-                      className="h-8 text-xs"
-                    >
-                      {t("common.buttons.save")}
-                    </LoadingButton>
-                    {hasConfig && (
-                      <Button
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">
+                        {t("account.selfHosted.connectionStatus")}
+                      </span>
+                      {connectionStatus === "connected" && (
+                        <Badge
+                          variant="default"
+                          className="bg-success text-success-foreground"
+                        >
+                          {t("sync.status.connected")}
+                        </Badge>
+                      )}
+                      {connectionStatus === "error" && (
+                        <Badge variant="destructive">
+                          {t("sync.status.error")}
+                        </Badge>
+                      )}
+                      {connectionStatus === "testing" && (
+                        <Badge variant="secondary">
+                          {t("sync.status.syncing")}
+                        </Badge>
+                      )}
+                      {connectionStatus === "unknown" && (
+                        <Badge variant="secondary">
+                          {t("account.selfHosted.statusUnknown")}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <LoadingButton
                         size="sm"
-                        variant="destructive"
-                        disabled={isSavingSelfHosted || isTestingConnection}
-                        onClick={() => void handleDisconnectSelfHosted()}
+                        variant="outline"
+                        isLoading={isTestingConnection}
+                        disabled={!serverUrl || isSavingSelfHosted}
+                        onClick={() => void handleTestConnection()}
                         className="h-8 text-xs"
                       >
-                        {t("account.selfHosted.disconnect")}
-                      </Button>
-                    )}
+                        {t("account.selfHosted.testConnection")}
+                      </LoadingButton>
+                      <LoadingButton
+                        size="sm"
+                        isLoading={isSavingSelfHosted}
+                        disabled={!serverUrl || !token || isTestingConnection}
+                        onClick={() => void handleSaveSelfHosted()}
+                        className="h-8 text-xs"
+                      >
+                        {t("common.buttons.save")}
+                      </LoadingButton>
+                      {hasConfig && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={isSavingSelfHosted || isTestingConnection}
+                          onClick={() => void handleDisconnectSelfHosted()}
+                          className="h-8 text-xs"
+                        >
+                          {t("account.selfHosted.disconnect")}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </AnimatedTabsContent>
-          </AnimatedTabs>
+                )}
+              </AnimatedTabsContent>
+            </AnimatedTabs>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

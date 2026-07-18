@@ -162,8 +162,12 @@ function SubPageContent({
     <motion.div
       data-slot="sub-page"
       data-sub-page="true"
-      initial={false}
-      animate={{ opacity: 1 }}
+      // Sub-pages enter with a short rise+fade so rail navigation reads as a
+      // transition instead of a hard cut. Same axis for every page (spatial
+      // consistency); the outgoing page unmounts under the incoming fade.
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
       style={{
         position: "relative",
         display: "flex",
@@ -177,7 +181,11 @@ function SubPageContent({
         margin: 0,
         padding: 12,
         gap: 12,
-        overflow: "auto",
+        // The sub-page wrapper never scrolls itself — exactly one inner
+        // element per page owns scrolling (full-width, so the wheel works
+        // over side gutters too). "auto" here created a competing,
+        // never-engaged scroll container.
+        overflow: "hidden",
         background: "var(--background)",
         containerType: "inline-size",
       }}
@@ -258,7 +266,7 @@ function DialogContent({
             // w-[calc(100%-2rem)] (not w-full + max-w) keeps the 1rem window
             // gutter even when callers override max-w-*: tailwind-merge drops
             // a base max-w in favor of the caller's, but leaves width alone.
-            "fixed top-[50%] left-[50%] z-10000 grid max-h-[calc(100vh-3rem)] w-[calc(100%-2rem)] max-w-lg -translate-[50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg",
+            "surface-material fixed top-[50%] left-[50%] z-10000 grid max-h-[calc(100vh-3rem)] w-[calc(100%-2rem)] max-w-lg -translate-[50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg",
             className,
           )}
           {...props}

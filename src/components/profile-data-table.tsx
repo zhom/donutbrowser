@@ -14,6 +14,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
+import { AnimatePresence, motion } from "motion/react";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,7 @@ import {
   LuSquare,
   LuTrash2,
   LuTriangleAlert,
+  LuUserSearch,
   LuUsers,
 } from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -89,6 +91,7 @@ import {
   getProfileIcon,
   isCrossOsProfile,
 } from "@/lib/browser-utils";
+import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -107,11 +110,13 @@ import {
   DataTableActionBarAction,
   DataTableActionBarSelection,
 } from "./data-table-action-bar";
+import { Logo } from "./icons/logo";
 import MultipleSelector, { type Option } from "./multiple-selector";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { TrafficDetailsDialog } from "./traffic-details-dialog";
 import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
+import { Skeleton } from "./ui/skeleton";
 
 declare module "@tanstack/react-table" {
   interface ColumnMeta<TData extends RowData, TValue> {
@@ -424,15 +429,7 @@ function DnsCell({
   const [open, setOpen] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const level = profile.dns_blocklist ?? null;
-  // Backend levels are: light, normal, pro, pro_plus, ultimate (+ null).
-  // Keep the list ordered from least to most restrictive.
-  const LEVELS: { value: string; labelKey: string }[] = [
-    { value: "light", labelKey: "dnsBlocklist.light" },
-    { value: "normal", labelKey: "dnsBlocklist.normal" },
-    { value: "pro", labelKey: "dnsBlocklist.pro" },
-    { value: "pro_plus", labelKey: "dnsBlocklist.proPlus" },
-    { value: "ultimate", labelKey: "dnsBlocklist.ultimate" },
-  ];
+  const LEVELS = DNS_BLOCKLIST_LEVELS;
   const currentLabel =
     level === null
       ? null
@@ -1168,6 +1165,12 @@ interface ProfilesDataTableProps {
    */
   infoDialogProfile?: BrowserProfile | null;
   onInfoDialogProfileChange?: (profile: BrowserProfile | null) => void;
+  /** Initial data load in flight — renders skeleton rows instead of "empty". */
+  isLoading?: boolean;
+  /** True when the app has zero profiles overall (not just a filtered view). */
+  showOnboardingEmptyState?: boolean;
+  onCreateProfile?: () => void;
+  onImportProfiles?: () => void;
 }
 
 export function ProfilesDataTable({
@@ -1205,6 +1208,10 @@ export function ProfilesDataTable({
   onRemovePassword,
   infoDialogProfile,
   onInfoDialogProfileChange,
+  isLoading = false,
+  showOnboardingEmptyState = false,
+  onCreateProfile,
+  onImportProfiles,
 }: ProfilesDataTableProps) {
   const { t } = useTranslation();
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
@@ -2391,13 +2398,42 @@ export function ProfilesDataTable({
                           : void handleProfileLaunch(profile)
                       }
                     >
-                      {isLaunching || isStopping ? (
-                        <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-                      ) : isRunning ? (
-                        <LuSquare className="size-3.5 fill-current" />
-                      ) : (
-                        <LuPlay className="size-3.5 fill-current" />
-                      )}
+                      <AnimatePresence mode="wait" initial={false}>
+                        {isLaunching || isStopping ? (
+                          <motion.span
+                            key="spinner"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.12 }}
+                            className="grid place-items-center"
+                          >
+                            <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+                          </motion.span>
+                        ) : isRunning ? (
+                          <motion.span
+                            key="stop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.12 }}
+                            className="grid place-items-center"
+                          >
+                            <LuSquare className="size-3.5 fill-current" />
+                          </motion.span>
+                        ) : (
+                          <motion.span
+                            key="play"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.12 }}
+                            className="grid place-items-center"
+                          >
+                            <LuPlay className="size-3.5 fill-current" />
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
                     </RippleButton>
                   </span>
                 </TooltipTrigger>
@@ -3172,14 +3208,97 @@ export function ProfilesDataTable({
             </TableHeader>
             <TableBody className="overflow-visible">
               {sortedRows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={table.getVisibleLeafColumns().length}
-                    className="h-24 text-center"
-                  >
-                    {t("profiles.table.empty")}
-                  </TableCell>
-                </TableRow>
+                isLoading ? (
+                  Array.from({ length: 8 }, (_, i) => (
+                    <TableRow
+                      key={`skeleton-${i}`}
+                      className="border-0!"
+                      style={{ height: `${ROW_HEIGHT}px` }}
+                    >
+                      <TableCell
+                        colSpan={table.getVisibleLeafColumns().length}
+                        className="py-0"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="size-7 shrink-0 rounded-md" />
+                          <Skeleton
+                            className="h-3"
+                            style={{ width: `${30 + ((i * 17) % 40)}%` }}
+                          />
+                          <div className="flex-1" />
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-3 w-10" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : showOnboardingEmptyState ? (
+                  <TableRow className="border-0! hover:bg-transparent">
+                    <TableCell
+                      colSpan={table.getVisibleLeafColumns().length}
+                      className="py-16"
+                    >
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <Logo className="size-12 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {t("profiles.table.emptyTitle")}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t("profiles.table.emptyHint")}
+                          </p>
+                        </div>
+                        <div className="mt-1 flex gap-2">
+                          {onCreateProfile && (
+                            <RippleButton size="sm" onClick={onCreateProfile}>
+                              {t("profiles.table.emptyCreate")}
+                            </RippleButton>
+                          )}
+                          {onImportProfiles && (
+                            <RippleButton
+                              size="sm"
+                              variant="outline"
+                              onClick={onImportProfiles}
+                            >
+                              {t("profiles.table.emptyImport")}
+                            </RippleButton>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow className="border-0! hover:bg-transparent">
+                    <TableCell
+                      colSpan={table.getVisibleLeafColumns().length}
+                      className="py-16"
+                    >
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <div className="grid size-12 place-items-center rounded-full bg-muted/60">
+                          <LuUserSearch className="size-6 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {t("profiles.table.emptyFilteredTitle")}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t("profiles.table.emptyFilteredHint")}
+                          </p>
+                        </div>
+                        {onCreateProfile && (
+                          <RippleButton
+                            size="sm"
+                            variant="outline"
+                            className="mt-1"
+                            onClick={onCreateProfile}
+                          >
+                            {t("profiles.table.emptyCreate")}
+                          </RippleButton>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
               ) : (
                 <>
                   {paddingTop > 0 && (

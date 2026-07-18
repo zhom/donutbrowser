@@ -39,6 +39,7 @@ pub struct ApiProfile {
   pub is_running: bool,
   pub proxy_bypass_rules: Vec<String>,
   pub vpn_id: Option<String>,
+  pub clear_on_close: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -94,6 +95,9 @@ pub struct UpdateProfileRequest {
   pub proxy_bypass_rules: Option<Vec<String>>,
   /// One of "Disabled", "Regular", "Encrypted".
   pub sync_mode: Option<String>,
+  /// Wipe browsing data (keeping extensions and bookmarks) when the browser
+  /// exits. Rejected (400) for ephemeral or password-protected profiles.
+  pub clear_on_close: Option<bool>,
 }
 
 #[derive(Clone)]
@@ -756,6 +760,11 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
         StatusCode::NOT_FOUND
       } else if code == "INTERNAL_ERROR" {
         StatusCode::INTERNAL_SERVER_ERROR
+      } else if code.ends_with("_REQUIRES_PRO") || code.ends_with("_PAYMENT_REQUIRED") {
+        // Paid-feature gates (FINGERPRINT_REQUIRES_PRO, PROXY_PAYMENT_REQUIRED).
+        // Mapping them here lets the gate live in the shared manager instead of
+        // being re-implemented in each handler to get the status right.
+        StatusCode::PAYMENT_REQUIRED
       } else {
         // Validation-style codes (NAME_CANNOT_BE_EMPTY, GROUP_ALREADY_EXISTS,
         // WAYFERN_VERSION_NOT_AVAILABLE, ...).
@@ -838,6 +847,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           is_running: profile.process_id.is_some(), // Simple check based on process_id
           proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
           vpn_id: profile.vpn_id.clone(),
+          clear_on_close: profile.clear_on_close,
         })
         .collect();
 
@@ -891,6 +901,7 @@ async fn get_profile(
             is_running: profile.process_id.is_some(), // Simple check based on process_id
             proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
             vpn_id: profile.vpn_id.clone(),
+            clear_on_close: profile.clear_on_close,
           },
         }))
       } else {
@@ -1055,6 +1066,7 @@ async fn create_profile(
           is_running: false,
           proxy_bypass_rules: profile.proxy_bypass_rules,
           vpn_id: profile.vpn_id,
+          clear_on_close: profile.clear_on_close,
         },
       }))
     }
@@ -1191,6 +1203,14 @@ async fn update_profile(
   if let Some(sync_mode) = request.sync_mode {
     if let Err(e) =
       crate::sync::set_profile_sync_mode(state.app_handle.clone(), id.clone(), sync_mode).await
+    {
+      return Err(manager_error_response(e));
+    }
+  }
+
+  if let Some(clear_on_close) = request.clear_on_close {
+    if let Err(e) =
+      profile_manager.update_profile_clear_on_close(&state.app_handle, &id, clear_on_close)
     {
       return Err(manager_error_response(e));
     }
@@ -2412,17 +2432,8 @@ async fn import_profiles_api(
     .as_ref()
     .and_then(|config| serde_json::from_value(config.clone()).ok());
 
-  let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
-  if !crate::cloud_auth::CLOUD_AUTH
-    .is_fingerprint_os_allowed(fingerprint_os)
-    .await
-  {
-    return Err((
-      StatusCode::PAYMENT_REQUIRED,
-      "Fingerprint OS spoofing requires an active Pro subscription.".to_string(),
-    ));
-  }
-
+  // The Pro gate for fingerprint OS spoofing lives inside import_profiles, so
+  // every surface inherits it; manager_error_response maps the code to 402.
   let importer = crate::profile_importer::ProfileImporter::instance();
   importer
     .import_profiles(
@@ -2706,7 +2717,7 @@ mod tests {
     }
 
     let import_item = schema_required(&spec, "ImportProfileItem");
-    for field in ["proxy_id", "browser_type"] {
+    for field in ["proxy_id", "vpn_id", "browser_type"] {
       assert!(
         !import_item.iter().any(|f| f == field),
         "{field} must be optional on import items, required list: {import_item:?}"

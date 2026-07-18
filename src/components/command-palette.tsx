@@ -5,12 +5,14 @@ import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear } from "react-icons/go";
 import {
+  LuBadgeInfo,
   LuCircleStop,
   LuCloud,
   LuInfo,
   LuKeyboard,
   LuPlay,
   LuPlug,
+  LuPlus,
   LuPuzzle,
   LuUser,
   LuUsers,
@@ -53,6 +55,8 @@ interface CommandPaletteProps {
   onLaunchProfile: (profile: BrowserProfile) => void;
   onKillProfile: (profile: BrowserProfile) => void;
   onShowProfileInfo: (profile: BrowserProfile) => void;
+  onCreateProfile: () => void;
+  onOpenAbout: () => void;
 }
 
 const ICONS: Record<ShortcutId, React.ComponentType<{ className?: string }>> = {
@@ -122,6 +126,8 @@ export function CommandPalette({
   onLaunchProfile,
   onKillProfile,
   onShowProfileInfo,
+  onCreateProfile,
+  onOpenAbout,
 }: CommandPaletteProps) {
   const { t } = useTranslation();
 
@@ -251,6 +257,14 @@ export function CommandPalette({
         <CommandSeparator />
 
         <CommandGroup heading={t("commandPalette.groups.actions")}>
+          <CommandItem
+            onSelect={() => {
+              dispatch(onCreateProfile);
+            }}
+          >
+            <LuPlus />
+            <span>{t("commandPalette.actions.createProfile")}</span>
+          </CommandItem>
           {byGroup("actions").map((s) => {
             const Icon = ICONS[s.id];
             return (
@@ -268,6 +282,14 @@ export function CommandPalette({
               </CommandItem>
             );
           })}
+          <CommandItem
+            onSelect={() => {
+              dispatch(onOpenAbout);
+            }}
+          >
+            <LuBadgeInfo />
+            <span>{t("commandPalette.actions.about")}</span>
+          </CommandItem>
         </CommandGroup>
       </CommandList>
     </CommandDialog>

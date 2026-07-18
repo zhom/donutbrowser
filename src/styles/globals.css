@@ -261,3 +261,51 @@
     scroll-behavior: auto;
   }
 }
+
+/* Theme switches run inside a View Transition (see themes.ts
+   withThemeTransition) — a short whole-page cross-fade instead of an abrupt
+   palette jump. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+}
+
+/* Translucent material for floating chrome (modals, popovers, menus).
+   Uses theme variables so it adapts to every theme; falls back to the solid
+   surface when the user prefers reduced transparency. Never stack two
+   material surfaces on top of each other. */
+.surface-material {
+  background-color: color-mix(in oklab, var(--background) 85%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+
+.surface-material-popover {
+  background-color: color-mix(in oklab, var(--popover) 85%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+
+.surface-material-card {
+  background-color: color-mix(in oklab, var(--card) 85%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .surface-material {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .surface-material-popover {
+    background-color: var(--popover);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .surface-material-card {
+    background-color: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

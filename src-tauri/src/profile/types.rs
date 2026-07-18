@@ -72,6 +72,10 @@ pub struct BrowserProfile {
   /// Decryption goes to a RAM-backed ephemeral dir, never to disk.
   #[serde(default)]
   pub password_protected: bool,
+  /// Wipe browsing data (except extensions and bookmarks) when the browser
+  /// exits. Ignored for ephemeral and password-protected profiles.
+  #[serde(default)]
+  pub clear_on_close: bool,
   /// Profile creation timestamp (epoch seconds, UTC). `None` for legacy
   /// profiles that pre-date this field — those are treated as ancient by
   /// any staleness check.

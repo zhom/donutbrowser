@@ -197,7 +197,14 @@
     "disableAutoUpdates": "Отключить автообновление приложения",
     "disableAutoUpdatesDescription": "Запретить автоматическую проверку и установку обновлений Donut Browser. Обновления браузеров не затрагиваются.",
     "keepDecryptedProfilesInRam": "Хранить расшифрованные профили в ОЗУ",
-    "keepDecryptedProfilesInRamDescription": "Сохранять расшифрованную копию защищённых паролем профилей в ОЗУ между запусками для ускорения старта. Копия на диске в любом случае остаётся зашифрованной."
+    "keepDecryptedProfilesInRamDescription": "Сохранять расшифрованную копию защищённых паролем профилей в ОЗУ между запусками для ускорения старта. Копия на диске в любом случае остаётся зашифрованной.",
+    "privacy": {
+      "consistencyWarning": "Предупреждение о согласованности отпечатка",
+      "consistencyWarningDescription": "Предупреждать при запуске, если часовой пояс или язык профиля не совпадает с выходным узлом прокси.",
+      "clearTraffic": "Очистить всю историю трафика",
+      "clearTrafficDescription": "Безопасно удаляет записанную статистику трафика для всех профилей.",
+      "clearTrafficSuccess": "История трафика очищена"
+    }
   },
   "header": {
     "searchPlaceholder": "Поиск профилей...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "Нельзя изменить запущенный профиль",
       "cantModifyLaunching": "Нельзя изменить профиль во время запуска",
       "cantModifyStopping": "Нельзя изменить профиль во время остановки",
-      "cantModifyUpdating": "Нельзя изменить профиль во время обновления браузера"
+      "cantModifyUpdating": "Нельзя изменить профиль во время обновления браузера",
+      "emptyTitle": "Профилей пока нет",
+      "emptyHint": "Создайте свой первый профиль или импортируйте существующие из другого браузера.",
+      "emptyCreate": "Создать профиль",
+      "emptyImport": "Импортировать профили",
+      "emptyFilteredTitle": "Профили не найдены",
+      "emptyFilteredHint": "Нет профилей для этой группы или запроса. Попробуйте другой фильтр или создайте профиль."
     },
     "actions": {
       "launch": "Запустить",
@@ -1294,7 +1307,28 @@
     "domains": "доменов",
     "fresh": "Актуальный",
     "stale": "Устаревший",
-    "notCached": "Не кэшировано"
+    "notCached": "Не кэшировано",
+    "tabBlocklists": "Списки блокировки",
+    "tabCustom": "Пользовательские списки",
+    "custom.description": "Составьте собственный список блокировки из URL-источников и ручных правил. Разрешённые домены всегда имеют приоритет над заблокированными.",
+    "custom.sourcesLabel": "URL-источники списков блокировки",
+    "custom.sourcesPlaceholder": "Один URL на строку",
+    "custom.blockLabel": "Заблокированные домены",
+    "custom.blockPlaceholder": "Один домен на строку",
+    "custom.allowLabel": "Разрешённые домены",
+    "custom.allowPlaceholder": "Один домен на строку",
+    "custom.allowHint": "Разрешённые домены исключаются из итогового списка блокировки и имеют приоритет над любым правилом блокировки.",
+    "custom.saved": "Пользовательские правила DNS сохранены",
+    "custom.imported": "Пользовательские правила DNS импортированы",
+    "custom.exported": "Пользовательские правила DNS экспортированы",
+    "custom.exportTxt": "Экспорт TXT",
+    "custom.exportJson": "Экспорт JSON",
+    "customLevel": "Пользовательский",
+    "custom.allowlistModeLabel": "Режим разрешённого списка",
+    "custom.allowlistModeOn": "Доступны только домены ниже; всё остальное блокируется.",
+    "custom.allowlistModeOff": "Блокировать домены из списка; всё остальное разрешено.",
+    "custom.allowedOnlyLabel": "Разрешённые домены (только эти)",
+    "custom.allowedOnlyHint": "Поддомены указанных доменов также разрешены. Пустой список отключает фильтрацию."
   },
   "vpns": {
     "form": {
@@ -1415,7 +1449,11 @@
     "statusImported": "Импортирован",
     "statusSkipped": "Пропущен",
     "statusFailed": "Ошибка",
-    "importButtonCount": "Импортировать ({{count}})"
+    "importButtonCount": "Импортировать ({{count}})",
+    "vpnOptional": "VPN (необязательно)",
+    "noVpn": "Без VPN",
+    "advancedOptions": "Дополнительные параметры",
+    "configureFingerprint": "Настроить отпечаток (необязательно)"
   },
   "syncTooltips": {
     "syncing": "Синхронизация...",
@@ -1618,7 +1656,14 @@
     "sentLegend": "Отправлено",
     "receivedLegend": "Получено",
     "tooltipSent": "↑ Отправлено: ",
-    "tooltipReceived": "↓ Получено: "
+    "tooltipReceived": "↓ Получено: ",
+    "clearHistory": "Очистить историю",
+    "clearHistoryTitle": "Очистить историю трафика",
+    "clearHistoryDescription": "Навсегда и безопасно удаляет всю записанную историю трафика для «{{name}}». Это действие нельзя отменить.",
+    "tabOverview": "Обзор",
+    "tabTopDomains": "Топ доменов",
+    "searchDomains": "Поиск доменов…",
+    "noDomainMatch": "Нет доменов, соответствующих запросу."
   },
   "proxyCheck": {
     "unknownLocation": "Неизвестно",
@@ -1818,7 +1863,14 @@
     "importNoItems": "Ничего не выбрано для импорта",
     "browserNotDownloaded": "Нет загруженной версии {{browser}}. Сначала загрузите её, затем повторите импорт.",
     "archiveExtractionFailed": "Не удалось распаковать архив: {{detail}}",
-    "unsupportedArchiveFormat": "Неподдерживаемый формат архива. Поддерживаются только ZIP-архивы."
+    "unsupportedArchiveFormat": "Неподдерживаемый формат архива. Поддерживаются только ZIP-архивы.",
+    "clearOnCloseUnavailable": "Очистка при закрытии недоступна для эфемерных и защищённых паролем профилей.",
+    "proxyAndVpnMutuallyExclusive": "Профиль может использовать либо прокси, либо VPN, но не оба сразу.",
+    "invalidDnsRulesJson": "Выбранный файл не является корректным JSON с правилами DNS.",
+    "unsupportedDnsRulesFormat": "Неподдерживаемый формат правил: {{format}}",
+    "dnsRulesSaveFailed": "Не удалось сохранить правила DNS.",
+    "dnsRulesExportFailed": "Не удалось экспортировать правила DNS.",
+    "fingerprintMatchFailed": "Не удалось подогнать отпечаток под прокси."
   },
   "rail": {
     "profiles": "Профили",
@@ -1831,7 +1883,9 @@
       "importProfile": "Импорт профиля",
       "importProfileHint": "Перенести профили из другого инструмента",
       "keyboardShortcuts": "Сочетания клавиш",
-      "keyboardShortcutsHint": "Показать все сочетания"
+      "keyboardShortcutsHint": "Показать все сочетания",
+      "about": "О Donut Browser",
+      "aboutHint": "Версия и сведения о приложении"
     },
     "network": "Сеть",
     "integrations": "Интеграции",
@@ -1920,7 +1974,9 @@
     "actions": {
       "launchProfile": "Запустить {{name}}",
       "stopProfile": "Остановить {{name}}",
-      "profileInfo": "Информация — {{name}}"
+      "profileInfo": "Информация — {{name}}",
+      "createProfile": "Создать профиль",
+      "about": "О Donut Browser"
     }
   },
   "shortcuts": {
@@ -2036,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "Других выбранных Wayfern профилей нет"
+  },
+  "about": {
+    "title": "О приложении",
+    "version": "Версия {{version}}",
+    "portableBadge": "портативная",
+    "licenseNotice": "Антидетект-браузер с открытым исходным кодом, распространяется по лицензии AGPL-3.0.",
+    "website": "Веб-сайт"
+  },
+  "clearOnClose": {
+    "label": "Очищать данные при закрытии",
+    "description": "Удаляет cookie, историю и кэш при закрытии браузера. Расширения и закладки сохраняются."
+  },
+  "consistencyWarning": {
+    "title": "Несовпадение отпечатка",
+    "intro": "Выходной узел прокси для «{{name}}» не соответствует отпечатку этого профиля:",
+    "timezoneTitle": "Несовпадение часового пояса",
+    "timezoneDetail": "Выходной узел находится в {{exit}}, но отпечаток сообщает {{fingerprint}}.",
+    "languageTitle": "Несовпадение языка",
+    "languageDetail": "Страна выхода — {{country}}, но язык отпечатка — {{fingerprint}}.",
+    "explainer": "Часовой пояс или язык, не совпадающий с выходным IP, — сильный антибот-сигнал, даже если данные вашего реального устройства никогда не утекают. Приведите отпечаток в соответствие с расположением прокси, чтобы снизить враждебное отношение.",
+    "dontWarnAgain": "Больше не предупреждать для этого профиля",
+    "matchToProxy": "Подогнать отпечаток под прокси",
+    "matching": "Подгонка…",
+    "matchSuccess": "Отпечаток обновлён под прокси. Перезапустите профиль, чтобы применить."
   }
 }

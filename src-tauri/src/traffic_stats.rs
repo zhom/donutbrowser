@@ -347,7 +347,12 @@ pub fn save_traffic_stats(stats: &TrafficStats) -> Result<(), Box<dyn std::error
   let key = get_stats_storage_key(stats);
   let file_path = storage_dir.join(format!("{key}.json"));
   let content = serde_json::to_string(stats)?;
-  fs::write(&file_path, content)?;
+
+  // Write atomically via temp file + rename so readers never observe a
+  // partially-written file (same pattern as write_session_snapshot)
+  let temp_path = storage_dir.join(format!("{key}.json.tmp"));
+  fs::write(&temp_path, content)?;
+  fs::rename(&temp_path, &file_path)?;
 
   Ok(())
 }
@@ -370,15 +375,18 @@ pub fn load_traffic_stats_by_profile(profile_id: &str) -> Option<TrafficStats> {
   load_traffic_stats(profile_id)
 }
 
-/// List all traffic stats files and migrate old proxy-id based files to profile-id based
-pub fn list_traffic_stats() -> Vec<TrafficStats> {
+/// Load all traffic stats files keyed by storage key, migrating old
+/// proxy-id based files to profile-id based ones. Only writes to disk when a
+/// migration or merge actually changed data; the common case is read-only.
+fn collect_traffic_stats() -> HashMap<String, TrafficStats> {
   let storage_dir = get_traffic_stats_dir();
 
   if !storage_dir.exists() {
-    return Vec::new();
+    return HashMap::new();
   }
 
   let mut stats_map: HashMap<String, TrafficStats> = HashMap::new();
+  let mut dirty_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
   let mut files_to_delete: Vec<std::path::PathBuf> = Vec::new();
 
   if let Ok(entries) = fs::read_dir(&storage_dir) {
@@ -399,12 +407,14 @@ pub fn list_traffic_stats() -> Vec<TrafficStats> {
             if let Some(existing) = stats_map.get_mut(&key) {
               // Merge stats from this file into existing
               merge_traffic_stats(existing, &s);
+              dirty_keys.insert(key);
               if is_old_proxy_file {
                 files_to_delete.push(path.clone());
               }
             } else {
               stats_map.insert(key.clone(), s);
               if is_old_proxy_file {
+                dirty_keys.insert(key);
                 files_to_delete.push(path.clone());
               }
             }
@@ -414,10 +424,12 @@ pub fn list_traffic_stats() -> Vec<TrafficStats> {
     }
   }
 
-  // Save merged stats and delete old files
-  for stats in stats_map.values() {
-    if let Err(e) = save_traffic_stats(stats) {
-      log::warn!("Failed to save merged traffic stats: {}", e);
+  // Persist only entries actually changed by a merge or migration
+  for key in &dirty_keys {
+    if let Some(stats) = stats_map.get(key) {
+      if let Err(e) = save_traffic_stats(stats) {
+        log::warn!("Failed to save merged traffic stats: {}", e);
+      }
     }
   }
 
@@ -427,7 +439,12 @@ pub fn list_traffic_stats() -> Vec<TrafficStats> {
     }
   }
 
-  stats_map.into_values().collect()
+  stats_map
+}
+
+/// List all traffic stats files and migrate old proxy-id based files to profile-id based
+pub fn list_traffic_stats() -> Vec<TrafficStats> {
+  collect_traffic_stats().into_values().collect()
 }
 
 /// Merge traffic stats from source into destination
@@ -487,27 +504,82 @@ fn merge_traffic_stats(dest: &mut TrafficStats, src: &TrafficStats) {
   }
 }
 
-/// Delete traffic stats by id (profile_id or proxy_id)
+/// Delete traffic stats by id (profile_id or proxy_id).
+///
+/// Removes the session snapshot and any temp orphans alongside the main file.
+/// The snapshot is what a running worker writes every second, and
+/// `get_all_traffic_snapshots_realtime` rebuilds an entry straight from it when
+/// no main file exists — so clearing only `{id}.json` resurrects the very
+/// totals the user asked to erase, and leaves the snapshot's copy on disk.
 pub fn delete_traffic_stats(id: &str) -> bool {
   let storage_dir = get_traffic_stats_dir();
-  let file_path = storage_dir.join(format!("{id}.json"));
+  let mut removed = false;
 
-  if file_path.exists() {
-    fs::remove_file(&file_path).is_ok()
-  } else {
-    false
+  for name in [
+    format!("{id}.json"),
+    format!("{id}.json.tmp"),
+    format!("{id}.session.json"),
+    format!("{id}.session.json.tmp"),
+  ] {
+    let path = storage_dir.join(name);
+    if path.exists() && secure_remove_file(&path).is_ok() {
+      removed = true;
+    }
   }
+
+  removed
 }
 
-/// Clear all traffic stats (used when clearing cache)
+/// Best-effort secure erase: overwrite the file's bytes with zeros and flush
+/// before unlinking, so the traffic history isn't trivially recoverable from
+/// the freed blocks. On copy-on-write / SSD storage the OS may still retain
+/// old blocks — this is a best-effort mitigation, not a guarantee.
+fn secure_remove_file(path: &std::path::Path) -> std::io::Result<()> {
+  use std::io::Write;
+  if let Ok(meta) = fs::metadata(path) {
+    let len = meta.len();
+    if len > 0 {
+      if let Ok(mut f) = fs::OpenOptions::new().write(true).open(path) {
+        let zeros = vec![0u8; 8192];
+        let mut remaining = len;
+        // The overwrite is best-effort and must never gate the unlink: a write
+        // failure part-way (ENOSPC on a copy-on-write volume, EIO) would
+        // otherwise leave the file both un-wiped and un-deleted, which is
+        // strictly worse than the plain remove this replaced — and the caller
+        // reports success either way, so the history would silently survive a
+        // clear.
+        while remaining > 0 {
+          let chunk = remaining.min(zeros.len() as u64) as usize;
+          if f.write_all(&zeros[..chunk]).is_err() {
+            break;
+          }
+          remaining -= chunk as u64;
+        }
+        let _ = f.flush();
+        let _ = f.sync_all();
+      }
+    }
+  }
+  fs::remove_file(path)
+}
+
+/// Clear all traffic stats (used when clearing cache), securely erasing each
+/// file first.
 pub fn clear_all_traffic_stats() -> Result<(), Box<dyn std::error::Error>> {
   let storage_dir = get_traffic_stats_dir();
 
   if storage_dir.exists() {
     for entry in fs::read_dir(&storage_dir)?.flatten() {
       let path = entry.path();
-      if path.extension().is_some_and(|ext| ext == "json") {
-        let _ = fs::remove_file(&path);
+      // Wipe the live stats files and any temp orphan left by an interrupted
+      // atomic save, which still holds a copy of the history. This directory
+      // holds nothing but traffic stats, so matching every `.json`/`.tmp` also
+      // catches orphans from older temp-naming schemes.
+      let is_stats = path
+        .extension()
+        .is_some_and(|ext| ext == "json" || ext == "tmp");
+      if is_stats {
+        let _ = secure_remove_file(&path);
       }
     }
   }
@@ -584,8 +656,10 @@ impl LiveTrafficTracker {
     fs::create_dir_all(&storage_dir)?;
     let session_file = storage_dir.join(format!("{}.session.json", storage_key));
 
-    // Write atomically using a temp file
-    let temp_file = session_file.with_extension("tmp");
+    // Write atomically using a temp file. Named by suffix rather than
+    // `with_extension`, which would replace `.json` and yield
+    // `{key}.session.tmp` — a name the cleanup sweeps did not recognise.
+    let temp_file = storage_dir.join(format!("{}.session.json.tmp", storage_key));
     let content = serde_json::to_string(&snapshot)?;
     fs::write(&temp_file, content)?;
     fs::rename(&temp_file, &session_file)?;
@@ -1035,14 +1109,14 @@ fn load_session_snapshot(profile_id: &str) -> Option<SessionSnapshot> {
 pub fn get_all_traffic_snapshots_realtime() -> Vec<TrafficSnapshot> {
   use std::collections::HashMap;
 
-  // Start with disk-stored stats
-  let mut snapshots: HashMap<String, TrafficSnapshot> = list_traffic_stats()
-    .into_iter()
-    .map(|s| {
-      let key = s.profile_id.clone().unwrap_or_else(|| s.proxy_id.clone());
-      (key, s.to_snapshot())
-    })
-    .collect();
+  // Start with disk-stored stats, keeping last_flush_timestamp per key so the
+  // session-snapshot merge below doesn't need to re-read the files
+  let mut snapshots: HashMap<String, TrafficSnapshot> = HashMap::new();
+  let mut last_flush_by_key: HashMap<String, u64> = HashMap::new();
+  for (key, s) in collect_traffic_stats() {
+    last_flush_by_key.insert(key.clone(), s.last_flush_timestamp);
+    snapshots.insert(key, s.to_snapshot());
+  }
 
   // Try to merge in real-time data from active tracker (if in same process)
   if let Some(tracker) = get_traffic_tracker() {
@@ -1068,11 +1142,7 @@ pub fn get_all_traffic_snapshots_realtime() -> Vec<TrafficSnapshot> {
                 // Only merge session data if it's newer than the last flush
                 // Session snapshots written before the last flush contain bytes already
                 // included in disk totals, so merging them would cause double-counting
-                let disk_stats = load_traffic_stats(profile_id);
-                let last_flush = disk_stats
-                  .as_ref()
-                  .map(|s| s.last_flush_timestamp)
-                  .unwrap_or(0);
+                let last_flush = last_flush_by_key.get(profile_id).copied().unwrap_or(0);
 
                 if session.timestamp > last_flush {
                   // Session data contains in-memory counters not yet flushed to disk

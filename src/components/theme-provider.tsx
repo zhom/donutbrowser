@@ -8,7 +8,11 @@ import {
   useMemo,
   useState,
 } from "react";
-import { applyThemeColors, clearThemeColors } from "@/lib/themes";
+import {
+  applyThemeColors,
+  clearThemeColors,
+  withThemeTransition,
+} from "@/lib/themes";
 
 interface AppSettings {
   set_as_default_browser: boolean;
@@ -54,11 +58,13 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
 
   const setTheme = useCallback((newTheme: string) => {
     setThemeState(newTheme);
-    if (newTheme === "custom") {
-      applyClassToHtml("dark");
-    } else {
-      applyClassToHtml(newTheme);
-    }
+    withThemeTransition(() => {
+      if (newTheme === "custom") {
+        applyClassToHtml("dark");
+      } else {
+        applyClassToHtml(newTheme);
+      }
+    });
   }, []);
 
   // Load initial theme from Tauri settings

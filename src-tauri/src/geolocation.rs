@@ -9,6 +9,7 @@ use rand::RngExt;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 const TERRITORY_INFO_XML: &str = include_str!("territory_info.xml");
 
@@ -39,6 +40,27 @@ pub enum GeolocationError {
 
   #[error("IP error: {0}")]
   Ip(#[from] IpError),
+}
+
+/// The language part of a locale or language tag: `"en"` from `"en-US"`,
+/// `"zh"` from `"zh_Hant"`.
+pub fn primary_subtag(tag: &str) -> &str {
+  tag.split(['-', '_']).next().unwrap_or(tag)
+}
+
+/// Shared selector over the bundled CLDR territory data. Parsing the XML costs
+/// real time, and the data is immutable, so build it once.
+pub fn locale_selector() -> Option<&'static LocaleSelector> {
+  static SELECTOR: OnceLock<Option<LocaleSelector>> = OnceLock::new();
+  SELECTOR
+    .get_or_init(|| match LocaleSelector::new() {
+      Ok(s) => Some(s),
+      Err(e) => {
+        log::warn!("Failed to build the CLDR locale selector: {e}");
+        None
+      }
+    })
+    .as_ref()
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +172,28 @@ impl LocaleSelector {
     }
 
     Ok(Self { territories })
+  }
+
+  /// Whether CLDR associates `language` with `region` at all.
+  ///
+  /// Returns `None` for a territory with no language data, so callers can skip
+  /// rather than guess. The test is deliberately "is this language listed for
+  /// this country", not "is this the country's main language": `from_region`
+  /// samples the whole listed distribution weighted by speaker share, so every
+  /// listed language is one this selector itself can emit. Anything stricter
+  /// would flag fingerprints Donut generated on purpose — CLDR puts `es` at
+  /// 9.6% in the US and `fr` at 30% in Canada, and those get picked.
+  pub fn region_speaks(&self, region: &str, language: &str) -> Option<bool> {
+    let languages = self.territories.get(&region.to_uppercase())?;
+    if languages.is_empty() {
+      return None;
+    }
+    let primary = primary_subtag(language);
+    Some(
+      languages
+        .iter()
+        .any(|l| primary_subtag(&l.language).eq_ignore_ascii_case(primary)),
+    )
   }
 
   #[allow(clippy::wrong_self_convention)]

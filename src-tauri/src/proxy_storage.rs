@@ -16,6 +16,10 @@ pub struct ProxyConfig {
   pub bypass_rules: Vec<String>,
   #[serde(default)]
   pub blocklist_file: Option<String>,
+  /// When true, `blocklist_file` is treated as an ALLOW list: the browser may
+  /// only reach domains in the file; everything else is blocked.
+  #[serde(default)]
+  pub dns_allowlist_mode: bool,
   /// Protocol the local worker serves to the browser: "socks5" (Wayfern/Chromium so QUIC and
   /// WebRTC UDP can be proxied without leaking the real IP). Independent of
   /// `upstream_url`, which is the real upstream proxy/VPN this worker dials.
@@ -42,6 +46,7 @@ impl ProxyConfig {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
     }
@@ -59,6 +64,11 @@ impl ProxyConfig {
 
   pub fn with_blocklist_file(mut self, blocklist_file: Option<String>) -> Self {
     self.blocklist_file = blocklist_file;
+    self
+  }
+
+  pub fn with_dns_allowlist_mode(mut self, allowlist_mode: bool) -> Self {
+    self.dns_allowlist_mode = allowlist_mode;
     self
   }
 
@@ -167,11 +177,18 @@ pub fn generate_proxy_id() -> String {
 }
 
 pub fn is_process_running(pid: u32) -> bool {
-  use sysinfo::{ProcessRefreshKind, RefreshKind, System};
-  let system = System::new_with_specifics(
-    RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+  use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+  let pid = sysinfo::Pid::from_u32(pid);
+  // Refresh only the queried PID with the minimal refresh kind: this is a
+  // pure existence check, and callers (worker supervisors every 15s, GUI
+  // cleanup loops) must not pay for a full system process-table scan.
+  let mut system = System::new();
+  system.refresh_processes_specifics(
+    ProcessesToUpdate::Some(&[pid]),
+    true,
+    ProcessRefreshKind::nothing(),
   );
-  system.process(sysinfo::Pid::from_u32(pid)).is_some()
+  system.process(pid).is_some()
 }
 
 #[cfg(test)]

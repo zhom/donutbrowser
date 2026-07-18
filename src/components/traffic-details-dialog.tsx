@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { LuSearch, LuTrash2 } from "react-icons/lu";
 import {
   Area,
   AreaChart,
@@ -17,6 +18,13 @@ import type {
   ValueType,
 } from "recharts/types/component/DefaultTooltipContent";
 import type { TooltipContentProps } from "recharts/types/component/Tooltip";
+import { toast } from "sonner";
+import {
+  AnimatedTabs,
+  AnimatedTabsContent,
+  AnimatedTabsList,
+  AnimatedTabsTrigger,
+} from "@/components/ui/animated-tabs";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -37,7 +46,10 @@ import {
   TooltipTrigger,
   Tooltip as UITooltip,
 } from "@/components/ui/tooltip";
+import { translateBackendError } from "@/lib/backend-errors";
 import type { FilteredTrafficStats } from "@/types";
+import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
+import { RippleButton } from "./ui/ripple";
 
 type TimePeriod =
   | "1m"
@@ -157,23 +169,27 @@ export function TrafficDetailsDialog({
   const { t } = useTranslation();
   const [stats, setStats] = React.useState<FilteredTrafficStats | null>(null);
   const [timePeriod, setTimePeriod] = React.useState<TimePeriod>("5m");
+  const [showClearConfirm, setShowClearConfirm] = React.useState(false);
+  const [isClearing, setIsClearing] = React.useState(false);
+  const [domainSearch, setDomainSearch] = React.useState("");
+
+  const fetchStats = React.useCallback(async () => {
+    if (!profileId) return;
+    try {
+      const seconds = getSecondsForPeriod(timePeriod);
+      const filteredStats = await invoke<FilteredTrafficStats | null>(
+        "get_traffic_stats_for_period",
+        { profileId, seconds },
+      );
+      setStats(filteredStats);
+    } catch (error) {
+      console.error("Failed to fetch traffic stats:", error);
+    }
+  }, [profileId, timePeriod]);
 
   // Fetch stats periodically - now uses filtered API
   React.useEffect(() => {
     if (!isOpen || !profileId) return;
-
-    const fetchStats = async () => {
-      try {
-        const seconds = getSecondsForPeriod(timePeriod);
-        const filteredStats = await invoke<FilteredTrafficStats | null>(
-          "get_traffic_stats_for_period",
-          { profileId, seconds },
-        );
-        setStats(filteredStats);
-      } catch (error) {
-        console.error("Failed to fetch traffic stats:", error);
-      }
-    };
 
     void fetchStats();
     const interval = setInterval(() => {
@@ -185,7 +201,22 @@ export function TrafficDetailsDialog({
       // Clear stats from memory when dialog closes to free up memory
       setStats(null);
     };
-  }, [isOpen, profileId, timePeriod]);
+  }, [isOpen, profileId, fetchStats]);
+
+  const handleClearHistory = React.useCallback(async () => {
+    if (!profileId) return;
+    setIsClearing(true);
+    try {
+      await invoke("clear_profile_traffic_stats", { profileId });
+      setStats(null);
+      setShowClearConfirm(false);
+      await fetchStats();
+    } catch (error) {
+      toast.error(translateBackendError(t, error));
+    } finally {
+      setIsClearing(false);
+    }
+  }, [profileId, fetchStats, t]);
 
   // Transform data for chart (already filtered by backend)
   const chartData = React.useMemo(() => {
@@ -231,24 +262,31 @@ export function TrafficDetailsDialog({
     [t],
   );
 
-  // Top domains sorted by total traffic
-  const topDomainsByTraffic = React.useMemo(() => {
+  // Domains matching the search query (empty query = all).
+  const filteredDomains = React.useMemo(() => {
     if (!stats?.domains) return [];
-    return Object.values(stats.domains)
-      .sort(
-        (a, b) =>
-          b.bytes_sent + b.bytes_received - (a.bytes_sent + a.bytes_received),
-      )
-      .slice(0, 10);
-  }, [stats]);
+    const q = domainSearch.trim().toLowerCase();
+    const all = Object.values(stats.domains);
+    return q ? all.filter((d) => d.domain.toLowerCase().includes(q)) : all;
+  }, [stats, domainSearch]);
+
+  // Top domains sorted by total traffic. When searching, show every match
+  // (not just the top 10) so the queried domain is never hidden below the cut.
+  const topDomainsByTraffic = React.useMemo(() => {
+    const sorted = [...filteredDomains].sort(
+      (a, b) =>
+        b.bytes_sent + b.bytes_received - (a.bytes_sent + a.bytes_received),
+    );
+    return domainSearch.trim() ? sorted : sorted.slice(0, 10);
+  }, [filteredDomains, domainSearch]);
 
   // Top domains sorted by request count
   const topDomainsByRequests = React.useMemo(() => {
-    if (!stats?.domains) return [];
-    return Object.values(stats.domains)
-      .sort((a, b) => b.request_count - a.request_count)
-      .slice(0, 10);
-  }, [stats]);
+    const sorted = [...filteredDomains].sort(
+      (a, b) => b.request_count - a.request_count,
+    );
+    return domainSearch.trim() ? sorted : sorted.slice(0, 10);
+  }, [filteredDomains, domainSearch]);
 
   return (
     <Dialog
@@ -257,364 +295,461 @@ export function TrafficDetailsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-[min(56rem,calc(100%-4rem))]">
-        <DialogHeader>
-          <DialogTitle>
-            {t("traffic.title")}
-            {profileName && (
-              <span className="ml-2 font-normal text-muted-foreground">
-                — {profileName}
-              </span>
-            )}
-          </DialogTitle>
+      <DialogContent className="flex max-h-[80vh] max-w-[min(56rem,calc(100%-4rem))] flex-col">
+        <DialogHeader className="shrink-0">
+          <div className="flex items-center justify-between pr-8">
+            <DialogTitle>
+              {t("traffic.title")}
+              {profileName && (
+                <span className="ml-2 font-normal text-muted-foreground">
+                  — {profileName}
+                </span>
+              )}
+            </DialogTitle>
+            <RippleButton
+              variant="outline"
+              size="sm"
+              disabled={!stats}
+              onClick={() => setShowClearConfirm(true)}
+            >
+              <LuTrash2 className="mr-1.5 size-3.5" />
+              {t("traffic.clearHistory")}
+            </RippleButton>
+          </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[60vh]">
-          <div className="space-y-6 pr-4">
-            {/* Chart with Period Selector */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-medium">
-                  {t("traffic.bandwidthOverTime")}
-                </h3>
-                <Select
-                  value={timePeriod}
-                  onValueChange={(v) => {
-                    setTimePeriod(v as TimePeriod);
-                  }}
-                >
-                  <SelectTrigger className="h-8 w-[120px]">
-                    <SelectValue
-                      placeholder={t("traffic.timePeriodPlaceholder")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1m">{t("traffic.last1m")}</SelectItem>
-                    <SelectItem value="5m">{t("traffic.last5m")}</SelectItem>
-                    <SelectItem value="30m">{t("traffic.last30m")}</SelectItem>
-                    <SelectItem value="1h">{t("traffic.last1h")}</SelectItem>
-                    <SelectItem value="2h">{t("traffic.last2h")}</SelectItem>
-                    <SelectItem value="4h">{t("traffic.last4h")}</SelectItem>
-                    <SelectItem value="1d">{t("traffic.last1d")}</SelectItem>
-                    <SelectItem value="7d">{t("traffic.last7d")}</SelectItem>
-                    <SelectItem value="30d">{t("traffic.last30d")}</SelectItem>
-                    <SelectItem value="all">{t("traffic.allTime")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        <AnimatedTabs
+          defaultValue="overview"
+          className="flex min-h-0 flex-1 flex-col gap-4"
+        >
+          <AnimatedTabsList className="shrink-0">
+            <AnimatedTabsTrigger value="overview">
+              {t("traffic.tabOverview")}
+            </AnimatedTabsTrigger>
+            <AnimatedTabsTrigger value="domains">
+              {t("traffic.tabTopDomains")}
+            </AnimatedTabsTrigger>
+          </AnimatedTabsList>
 
-              <div className="h-[clamp(200px,28vh,360px)] w-full">
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                  minWidth={1}
-                  minHeight={1}
-                >
-                  <AreaChart
-                    data={chartData}
-                    margin={{ top: 10, right: 10, bottom: 0, left: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="sentGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
+          <AnimatedTabsContent
+            value="overview"
+            className="min-h-0 flex-1 overflow-hidden"
+          >
+            <ScrollArea className="h-[56vh]">
+              <div className="space-y-6 pr-4">
+                {/* Chart with Period Selector */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-medium">
+                      {t("traffic.bandwidthOverTime")}
+                    </h3>
+                    <Select
+                      value={timePeriod}
+                      onValueChange={(v) => {
+                        setTimePeriod(v as TimePeriod);
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[120px]">
+                        <SelectValue
+                          placeholder={t("traffic.timePeriodPlaceholder")}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1m">
+                          {t("traffic.last1m")}
+                        </SelectItem>
+                        <SelectItem value="5m">
+                          {t("traffic.last5m")}
+                        </SelectItem>
+                        <SelectItem value="30m">
+                          {t("traffic.last30m")}
+                        </SelectItem>
+                        <SelectItem value="1h">
+                          {t("traffic.last1h")}
+                        </SelectItem>
+                        <SelectItem value="2h">
+                          {t("traffic.last2h")}
+                        </SelectItem>
+                        <SelectItem value="4h">
+                          {t("traffic.last4h")}
+                        </SelectItem>
+                        <SelectItem value="1d">
+                          {t("traffic.last1d")}
+                        </SelectItem>
+                        <SelectItem value="7d">
+                          {t("traffic.last7d")}
+                        </SelectItem>
+                        <SelectItem value="30d">
+                          {t("traffic.last30d")}
+                        </SelectItem>
+                        <SelectItem value="all">
+                          {t("traffic.allTime")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="h-[clamp(200px,28vh,360px)] w-full">
+                    <ResponsiveContainer
+                      width="100%"
+                      height="100%"
+                      minWidth={1}
+                      minHeight={1}
+                    >
+                      <AreaChart
+                        data={chartData}
+                        margin={{ top: 10, right: 10, bottom: 0, left: 0 }}
                       >
-                        <stop
-                          offset="0%"
-                          stopColor="var(--chart-1)"
-                          stopOpacity={0.5}
+                        <defs>
+                          <linearGradient
+                            id="sentGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor="var(--chart-1)"
+                              stopOpacity={0.5}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="var(--chart-1)"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                          <linearGradient
+                            id="receivedGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor="var(--chart-2)"
+                              stopOpacity={0.5}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor="var(--chart-2)"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          className="stroke-muted"
                         />
-                        <stop
-                          offset="100%"
-                          stopColor="var(--chart-1)"
-                          stopOpacity={0.1}
+                        <XAxis
+                          dataKey="time"
+                          tickFormatter={(t) =>
+                            new Date(t * 1000).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          }
+                          className="text-xs"
+                          tick={{ fill: "var(--muted-foreground)" }}
                         />
-                      </linearGradient>
-                      <linearGradient
-                        id="receivedGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="var(--chart-2)"
-                          stopOpacity={0.5}
+                        <YAxis
+                          tickFormatter={(v) => formatBytesPerSecond(v)}
+                          className="text-xs"
+                          tick={{ fill: "var(--muted-foreground)" }}
+                          width={60}
                         />
-                        <stop
-                          offset="100%"
-                          stopColor="var(--chart-2)"
-                          stopOpacity={0.1}
+                        <Tooltip content={renderTooltip} />
+                        <Area
+                          type="monotone"
+                          dataKey="sent"
+                          stackId="1"
+                          stroke="var(--chart-1)"
+                          fill="url(#sentGradient)"
+                          strokeWidth={1.5}
+                          isAnimationActive={false}
                         />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      className="stroke-muted"
-                    />
-                    <XAxis
-                      dataKey="time"
-                      tickFormatter={(t) =>
-                        new Date(t * 1000).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      }
-                      className="text-xs"
-                      tick={{ fill: "var(--muted-foreground)" }}
-                    />
-                    <YAxis
-                      tickFormatter={(v) => formatBytesPerSecond(v)}
-                      className="text-xs"
-                      tick={{ fill: "var(--muted-foreground)" }}
-                      width={60}
-                    />
-                    <Tooltip content={renderTooltip} />
-                    <Area
-                      type="monotone"
-                      dataKey="sent"
-                      stackId="1"
-                      stroke="var(--chart-1)"
-                      fill="url(#sentGradient)"
-                      strokeWidth={1.5}
-                      isAnimationActive={false}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="received"
-                      stackId="1"
-                      stroke="var(--chart-2)"
-                      fill="url(#receivedGradient)"
-                      strokeWidth={1.5}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+                        <Area
+                          type="monotone"
+                          dataKey="received"
+                          stackId="1"
+                          stroke="var(--chart-2)"
+                          fill="url(#receivedGradient)"
+                          strokeWidth={1.5}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
 
-              <div className="mt-2 flex items-center justify-center gap-6">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="size-3 rounded"
-                    style={{ backgroundColor: "var(--chart-1)" }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {t("traffic.sentLegend")}
-                  </span>
+                  <div className="mt-2 flex items-center justify-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="size-3 rounded"
+                        style={{ backgroundColor: "var(--chart-1)" }}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {t("traffic.sentLegend")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="size-3 rounded"
+                        style={{ backgroundColor: "var(--chart-2)" }}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {t("traffic.receivedLegend")}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="size-3 rounded"
-                    style={{ backgroundColor: "var(--chart-2)" }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {t("traffic.receivedLegend")}
-                  </span>
+
+                {/* Period Stats - now uses backend-computed values */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      {t("traffic.sentLabel", {
+                        period:
+                          timePeriod === "all"
+                            ? t("traffic.totalSuffix")
+                            : timePeriod,
+                      })}
+                    </p>
+                    <p className="text-lg font-semibold text-chart-1">
+                      {formatBytes(stats?.period_bytes_sent ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      {t("traffic.receivedLabel", {
+                        period:
+                          timePeriod === "all"
+                            ? t("traffic.totalSuffix")
+                            : timePeriod,
+                      })}
+                    </p>
+                    <p className="text-lg font-semibold text-chart-2">
+                      {formatBytes(stats?.period_bytes_received ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      {t("traffic.requestsLabel", {
+                        period:
+                          timePeriod === "all"
+                            ? t("traffic.totalSuffix")
+                            : timePeriod,
+                      })}
+                    </p>
+                    <p className="text-lg font-semibold">
+                      {(stats?.period_requests ?? 0).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Period Stats - now uses backend-computed values */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">
-                  {t("traffic.sentLabel", {
-                    period:
-                      timePeriod === "all"
-                        ? t("traffic.totalSuffix")
-                        : timePeriod,
-                  })}
-                </p>
-                <p className="text-lg font-semibold text-chart-1">
-                  {formatBytes(stats?.period_bytes_sent ?? 0)}
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">
-                  {t("traffic.receivedLabel", {
-                    period:
-                      timePeriod === "all"
-                        ? t("traffic.totalSuffix")
-                        : timePeriod,
-                  })}
-                </p>
-                <p className="text-lg font-semibold text-chart-2">
-                  {formatBytes(stats?.period_bytes_received ?? 0)}
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground">
-                  {t("traffic.requestsLabel", {
-                    period:
-                      timePeriod === "all"
-                        ? t("traffic.totalSuffix")
-                        : timePeriod,
-                  })}
-                </p>
-                <p className="text-lg font-semibold">
-                  {(stats?.period_requests ?? 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
+                {/* Total Stats (smaller, under period stats) */}
+                <div className="flex items-center gap-6 border-t pt-4 text-sm text-muted-foreground">
+                  <div>
+                    <span className="font-medium">
+                      {t("traffic.allTimeTraffic")}
+                    </span>{" "}
+                    {formatBytes(
+                      (stats?.total_bytes_sent ?? 0) +
+                        (stats?.total_bytes_received ?? 0),
+                    )}
+                  </div>
+                  <div>
+                    <span className="font-medium">
+                      {t("traffic.allTimeRequests")}
+                    </span>{" "}
+                    {stats?.total_requests?.toLocaleString() ?? 0}
+                  </div>
+                </div>
 
-            {/* Total Stats (smaller, under period stats) */}
-            <div className="flex items-center gap-6 border-t pt-4 text-sm text-muted-foreground">
-              <div>
-                <span className="font-medium">
-                  {t("traffic.allTimeTraffic")}
-                </span>{" "}
-                {formatBytes(
-                  (stats?.total_bytes_sent ?? 0) +
-                    (stats?.total_bytes_received ?? 0),
+                {/* Disclaimer about proxy/VPN traffic calculation */}
+                <p className="text-xs text-muted-foreground italic">
+                  {t("traffic.proxyDisclaimer")}
+                </p>
+
+                {/* No data state (overview) */}
+                {!stats && (
+                  <div className="py-8 text-center text-muted-foreground">
+                    <p>{t("traffic.noData")}</p>
+                    <p className="mt-1 text-sm">{t("traffic.noDataHint")}</p>
+                  </div>
                 )}
               </div>
-              <div>
-                <span className="font-medium">
-                  {t("traffic.allTimeRequests")}
-                </span>{" "}
-                {stats?.total_requests?.toLocaleString() ?? 0}
-              </div>
-            </div>
+            </ScrollArea>
+          </AnimatedTabsContent>
 
-            {/* Disclaimer about proxy/VPN traffic calculation */}
-            <p className="text-xs text-muted-foreground italic">
-              {t("traffic.proxyDisclaimer")}
-            </p>
-
-            {/* Top Domains by Traffic */}
-            {topDomainsByTraffic.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium">
-                  {t("traffic.topByTraffic", {
-                    period:
-                      timePeriod === "all"
-                        ? t("traffic.allTimeShort")
-                        : timePeriod,
-                  })}
-                </h3>
-                <div className="rounded-md border">
-                  <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
-                    <span>{t("traffic.columnDomain")}</span>
-                    <span className="text-right">
-                      {t("traffic.columnRequests")}
-                    </span>
-                    <span className="text-right">
-                      {t("traffic.columnSent")}
-                    </span>
-                    <span className="text-right">
-                      {t("traffic.columnReceived")}
-                    </span>
-                  </div>
-                  <div className="max-h-[clamp(180px,25vh,400px)] overflow-y-auto">
-                    {topDomainsByTraffic.map((domain, index) => (
-                      <div
-                        key={domain.domain}
-                        className="grid grid-cols-[1fr_80px_80px_80px] gap-2 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/30"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="w-4 shrink-0 text-xs text-muted-foreground">
-                            {index + 1}
-                          </span>
-                          <TruncatedDomain domain={domain.domain} />
-                        </div>
-                        <span className="text-right text-muted-foreground">
-                          {domain.request_count.toLocaleString()}
-                        </span>
-                        <span className="text-right text-chart-1">
-                          {formatBytes(domain.bytes_sent)}
-                        </span>
-                        <span className="text-right text-chart-2">
-                          {formatBytes(domain.bytes_received)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+          <AnimatedTabsContent
+            value="domains"
+            className="min-h-0 flex-1 overflow-hidden"
+          >
+            <ScrollArea className="h-[56vh]">
+              <div className="space-y-6 pr-4">
+                <div className="relative">
+                  <LuSearch className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={domainSearch}
+                    onChange={(e) => setDomainSearch(e.target.value)}
+                    placeholder={t("traffic.searchDomains")}
+                    className="h-8 pl-8 text-sm"
+                  />
                 </div>
-              </div>
-            )}
 
-            {/* Top Domains by Requests */}
-            {topDomainsByRequests.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium">
-                  {t("traffic.topByRequests", {
-                    period:
-                      timePeriod === "all"
-                        ? t("traffic.allTimeShort")
-                        : timePeriod,
-                  })}
-                </h3>
-                <div className="rounded-md border">
-                  <div className="grid grid-cols-[1fr_80px_100px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
-                    <span>{t("traffic.columnDomain")}</span>
-                    <span className="text-right">
-                      {t("traffic.columnRequests")}
-                    </span>
-                    <span className="text-right">
-                      {t("traffic.columnTotal")}
-                    </span>
-                  </div>
-                  <div className="max-h-[clamp(180px,25vh,400px)] overflow-y-auto">
-                    {topDomainsByRequests.map((domain, index) => (
-                      <div
-                        key={domain.domain}
-                        className="grid grid-cols-[1fr_80px_100px] gap-2 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/30"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="w-4 shrink-0 text-xs text-muted-foreground">
-                            {index + 1}
-                          </span>
-                          <TruncatedDomain domain={domain.domain} />
-                        </div>
-                        <span className="text-right text-muted-foreground">
-                          {domain.request_count.toLocaleString()}
+                {domainSearch.trim() && topDomainsByTraffic.length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    {t("traffic.noDomainMatch")}
+                  </p>
+                )}
+
+                {/* Top Domains by Traffic */}
+                {topDomainsByTraffic.length > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-medium">
+                      {t("traffic.topByTraffic", {
+                        period:
+                          timePeriod === "all"
+                            ? t("traffic.allTimeShort")
+                            : timePeriod,
+                      })}
+                    </h3>
+                    <div className="rounded-md border">
+                      <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
+                        <span>{t("traffic.columnDomain")}</span>
+                        <span className="text-right">
+                          {t("traffic.columnRequests")}
                         </span>
                         <span className="text-right">
-                          {formatBytes(
-                            domain.bytes_sent + domain.bytes_received,
-                          )}
+                          {t("traffic.columnSent")}
+                        </span>
+                        <span className="text-right">
+                          {t("traffic.columnReceived")}
                         </span>
                       </div>
-                    ))}
+                      <div className="max-h-[clamp(180px,25vh,400px)] overflow-y-auto">
+                        {topDomainsByTraffic.map((domain, index) => (
+                          <div
+                            key={domain.domain}
+                            className="grid grid-cols-[1fr_80px_80px_80px] gap-2 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/30"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="w-4 shrink-0 text-xs text-muted-foreground">
+                                {index + 1}
+                              </span>
+                              <TruncatedDomain domain={domain.domain} />
+                            </div>
+                            <span className="text-right text-muted-foreground">
+                              {domain.request_count.toLocaleString()}
+                            </span>
+                            <span className="text-right text-chart-1">
+                              {formatBytes(domain.bytes_sent)}
+                            </span>
+                            <span className="text-right text-chart-2">
+                              {formatBytes(domain.bytes_received)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            {/* Unique IPs */}
-            {stats?.unique_ips && stats.unique_ips.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium">
-                  {t("traffic.uniqueIps", { count: stats.unique_ips.length })}
-                </h3>
-                <FadingScrollArea className="max-h-[clamp(120px,15vh,240px)] p-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {stats.unique_ips.map((ip) => (
-                      <span
-                        key={ip}
-                        className="rounded bg-muted px-2 py-1 font-mono text-xs"
-                      >
-                        {ip}
-                      </span>
-                    ))}
+                {/* Top Domains by Requests */}
+                {topDomainsByRequests.length > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-medium">
+                      {t("traffic.topByRequests", {
+                        period:
+                          timePeriod === "all"
+                            ? t("traffic.allTimeShort")
+                            : timePeriod,
+                      })}
+                    </h3>
+                    <div className="rounded-md border">
+                      <div className="grid grid-cols-[1fr_80px_100px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
+                        <span>{t("traffic.columnDomain")}</span>
+                        <span className="text-right">
+                          {t("traffic.columnRequests")}
+                        </span>
+                        <span className="text-right">
+                          {t("traffic.columnTotal")}
+                        </span>
+                      </div>
+                      <div className="max-h-[clamp(180px,25vh,400px)] overflow-y-auto">
+                        {topDomainsByRequests.map((domain, index) => (
+                          <div
+                            key={domain.domain}
+                            className="grid grid-cols-[1fr_80px_100px] gap-2 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/30"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="w-4 shrink-0 text-xs text-muted-foreground">
+                                {index + 1}
+                              </span>
+                              <TruncatedDomain domain={domain.domain} />
+                            </div>
+                            <span className="text-right text-muted-foreground">
+                              {domain.request_count.toLocaleString()}
+                            </span>
+                            <span className="text-right">
+                              {formatBytes(
+                                domain.bytes_sent + domain.bytes_received,
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </FadingScrollArea>
-              </div>
-            )}
+                )}
 
-            {/* No data state */}
-            {!stats && (
-              <div className="py-8 text-center text-muted-foreground">
-                <p>{t("traffic.noData")}</p>
-                <p className="mt-1 text-sm">{t("traffic.noDataHint")}</p>
+                {/* Unique IPs */}
+                {stats?.unique_ips && stats.unique_ips.length > 0 && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-medium">
+                      {t("traffic.uniqueIps", {
+                        count: stats.unique_ips.length,
+                      })}
+                    </h3>
+                    <FadingScrollArea className="max-h-[clamp(120px,15vh,240px)] p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {stats.unique_ips.map((ip) => (
+                          <span
+                            key={ip}
+                            className="rounded bg-muted px-2 py-1 font-mono text-xs"
+                          >
+                            {ip}
+                          </span>
+                        ))}
+                      </div>
+                    </FadingScrollArea>
+                  </div>
+                )}
+
+                {/* No data state (domains) */}
+                {!stats && (
+                  <div className="py-8 text-center text-muted-foreground">
+                    <p>{t("traffic.noData")}</p>
+                    <p className="mt-1 text-sm">{t("traffic.noDataHint")}</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          </AnimatedTabsContent>
+        </AnimatedTabs>
+
+        <DeleteConfirmationDialog
+          isOpen={showClearConfirm}
+          onClose={() => setShowClearConfirm(false)}
+          onConfirm={handleClearHistory}
+          title={t("traffic.clearHistoryTitle")}
+          description={t("traffic.clearHistoryDescription", {
+            name: profileName ?? "",
+          })}
+          confirmButtonText={t("traffic.clearHistory")}
+          isLoading={isClearing}
+        />
       </DialogContent>
     </Dialog>
   );

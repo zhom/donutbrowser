@@ -137,6 +137,25 @@ pub fn now_secs() -> u64 {
     .as_secs()
 }
 
+/// Keys in `active_proxies` at or above this value are in-flight launch
+/// placeholders, not real browser PIDs. Real OS PIDs never reach this range
+/// (Linux pid_max caps at 2^22, macOS at ~100k, Windows PIDs are small DWORD
+/// multiples of 4), so a placeholder can never shadow a live process ID.
+pub const LAUNCH_PLACEHOLDER_PID_MIN: u32 = u32::MAX - 0x00FF_FFFF;
+
+static NEXT_LAUNCH_PLACEHOLDER_PID: std::sync::atomic::AtomicU32 =
+  std::sync::atomic::AtomicU32::new(u32::MAX);
+
+/// Allocate a unique `active_proxies` key for a launch in flight, so concurrent
+/// launches can never overwrite each other's placeholder entry.
+pub fn next_launch_placeholder_pid() -> u32 {
+  NEXT_LAUNCH_PLACEHOLDER_PID.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn is_launch_placeholder_pid(pid: u32) -> bool {
+  pid >= LAUNCH_PLACEHOLDER_PID_MIN
+}
+
 impl StoredProxy {
   pub fn new(name: String, proxy_settings: ProxySettings) -> Self {
     let sync_enabled = crate::sync::is_sync_configured();
@@ -1040,8 +1059,10 @@ impl ProxyManager {
     format!("Proxy check failed for {proxy_addr}. Could not connect through the proxy.")
   }
 
-  // Build proxy URL string from ProxySettings
-  fn build_proxy_url(proxy_settings: &ProxySettings) -> String {
+  // Build proxy URL string from ProxySettings. Credentials are percent-encoded:
+  // a password containing `/`, `#`, `?` or `@` otherwise breaks the URL
+  // authority and silently retargets the request at the wrong host.
+  pub fn build_proxy_url(proxy_settings: &ProxySettings) -> String {
     let mut url = format!("{}://", proxy_settings.proxy_type);
 
     if let (Some(username), Some(password)) = (&proxy_settings.username, &proxy_settings.password) {
@@ -1081,9 +1102,17 @@ impl ProxyManager {
         .map_err(|e| e.to_string());
 
     let ip_result = match proxy_start_result {
-      Ok(proxy_config) => {
+      Ok(mut proxy_config) => {
         let local_url = format!("http://127.0.0.1:{}", proxy_config.local_port.unwrap_or(0));
         let config_id = proxy_config.id.clone();
+        // Tie the check worker's lifetime to this GUI process: the worker's
+        // PID watchdog self-exits when browser_pid dies, so if the app is
+        // killed mid-check the worker follows instead of idling until the
+        // next app launch.
+        proxy_config.browser_pid = Some(std::process::id());
+        if !crate::proxy_storage::update_proxy_config(&proxy_config) {
+          log::warn!("Failed to tag check worker {config_id} with app PID for self-expiry");
+        }
         // Wrap in a timeout so the check worker doesn't stay alive indefinitely
         // if the upstream is slow or unreachable.
         let result = tokio::time::timeout(
@@ -1493,6 +1522,7 @@ impl ProxyManager {
     profile_id: Option<&str>,
     bypass_rules: Vec<String>,
     blocklist_file: Option<String>,
+    dns_allowlist_mode: bool,
     // Protocol the local worker serves the browser: "socks5" (Wayfern). Reflected in
     // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
     local_protocol: &str,
@@ -1626,6 +1656,9 @@ impl ProxyManager {
     // Add blocklist file path if provided
     if let Some(ref path) = blocklist_file {
       proxy_cmd = proxy_cmd.arg("--blocklist-file").arg(path);
+      if dns_allowlist_mode {
+        proxy_cmd = proxy_cmd.arg("--dns-allowlist-mode");
+      }
     }
 
     // Tell the worker which protocol to serve the browser (http or socks5)
@@ -1696,6 +1729,10 @@ impl ProxyManager {
         }
       }
       if !ready {
+        // The detached worker is already running with its config on disk, but
+        // it was never registered in active_proxies — no cleanup pass could
+        // ever find it, so it must be killed before this error propagates.
+        let _ = crate::proxy_runner::stop_proxy_process(&proxy_info.id).await;
         return Err(format!(
           "Local proxy on 127.0.0.1:{} did not become ready in time",
           proxy_info.local_port
@@ -1868,9 +1905,9 @@ impl ProxyManager {
   /// Persist the real browser PID onto the worker's on-disk config so the
   /// detached worker can self-terminate when that browser dies, independent of
   /// the GUI being alive. Resolved via the profile→proxy_id map rather than the
-  /// PID-keyed `active_proxies` map: the latter uses a placeholder key 0 during
-  /// launch that collides across concurrent launches, which could tag a live
-  /// worker with the wrong (dead) PID and make it self-exit. Safe on the reuse
+  /// PID-keyed `active_proxies` map: the latter is keyed by a per-launch
+  /// placeholder until `update_proxy_pid` runs, so it is not a reliable way to
+  /// find the worker for a profile mid-launch. Safe on the reuse
   /// path — it simply rewrites `browser_pid` to the new live PID. A `browser_pid`
   /// of 0 (launch failed to report a PID) is ignored so the worker never
   /// self-exits against a bogus PID.
@@ -2090,9 +2127,9 @@ impl ProxyManager {
         let mut snapshot_pids: std::collections::HashSet<u32> = std::collections::HashSet::new();
         for (browser_pid, proxy_id, profile_id) in snapshot {
           snapshot_pids.insert(browser_pid);
-          // The sentinel PID=0 is used as a placeholder during launch,
-          // before update_proxy_pid has recorded the real browser PID.
-          if browser_pid == 0 {
+          // Launch placeholders (and the legacy 0 sentinel) are not real
+          // browser PIDs — update_proxy_pid hasn't recorded the real one yet.
+          if browser_pid == 0 || is_launch_placeholder_pid(browser_pid) {
             continue;
           }
           if system
@@ -2759,6 +2796,35 @@ mod tests {
   }
 
   #[test]
+  fn test_launch_placeholder_pids_unique_and_reconcile_independently() {
+    let a = next_launch_placeholder_pid();
+    let b = next_launch_placeholder_pid();
+    assert_ne!(a, b);
+    assert!(is_launch_placeholder_pid(a));
+    assert!(is_launch_placeholder_pid(b));
+    // Real PIDs (and the legacy 0 sentinel) are never in the placeholder range.
+    assert!(!is_launch_placeholder_pid(0));
+    assert!(!is_launch_placeholder_pid(1));
+    assert!(!is_launch_placeholder_pid(4_194_304)); // Linux pid_max
+    assert!(!is_launch_placeholder_pid(std::process::id()));
+
+    // Two concurrent launches with distinct placeholder keys: finishing
+    // launch A must not remap or evict launch B's in-flight entry.
+    let pm = ProxyManager::new();
+    pm.insert_active_proxy(a, make_proxy_info("px_launch_a", 9201, Some("prof_a")));
+    pm.insert_active_proxy(b, make_proxy_info("px_launch_b", 9202, Some("prof_b")));
+
+    pm.update_proxy_pid(a, 3001).unwrap();
+    assert_eq!(pm.get_active_proxy(3001).unwrap().id, "px_launch_a");
+    assert_eq!(pm.get_active_proxy(b).unwrap().id, "px_launch_b");
+
+    pm.update_proxy_pid(b, 3002).unwrap();
+    assert_eq!(pm.get_active_proxy(3002).unwrap().id, "px_launch_b");
+    assert!(pm.get_active_proxy(a).is_none());
+    assert!(pm.get_active_proxy(b).is_none());
+  }
+
+  #[test]
   fn test_profile_proxy_id_mapping_tracks_active_proxy() {
     let pm = ProxyManager::new();
 
@@ -2930,6 +2996,7 @@ mod tests {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
     };
@@ -2943,6 +3010,7 @@ mod tests {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
     };
@@ -2984,6 +3052,7 @@ mod tests {
       profile_id: Some("prof_abc".to_string()),
       bypass_rules: vec!["*.local".to_string(), "192.168.*".to_string()],
       blocklist_file: None,
+      dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
     };
@@ -3304,6 +3373,7 @@ mod tests {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
     };

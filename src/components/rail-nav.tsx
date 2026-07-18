@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FaDownload } from "react-icons/fa";
@@ -7,12 +8,15 @@ import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal } from "react-icons/go";
 import {
   LuCloud,
+  LuInfo,
   LuKeyboard,
   LuPlug,
   LuPuzzle,
   LuUser,
   LuUsers,
 } from "react-icons/lu";
+import { launchDonutClone } from "@/lib/donut-physics";
+import { MOTION_SPRING_POSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { Logo } from "./icons/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -31,11 +35,6 @@ export type AppPage =
 
 const CLICK_THRESHOLD = 5;
 const CLICK_WINDOW_MS = 2000;
-const GRAVITY = 2200;
-const BOUNCE_DAMPING = 0.6;
-const INITIAL_HORIZONTAL_SPEED = 350;
-const SPIN_SPEED = 720;
-const MIN_BOUNCE_VELOCITY = 60;
 const LOGO_HIDDEN_KEY = "donut-logo-hidden";
 
 function useLogoEasterEgg({
@@ -64,74 +63,15 @@ function useLogoEasterEgg({
     }
   });
   const logoRef = useRef<HTMLButtonElement>(null);
-  const animFrameRef = useRef<number>(0);
+  const cancelFallRef = useRef<(() => void) | null>(null);
 
   const triggerFall = useCallback(() => {
     const el = logoRef.current;
     if (!el || isFalling) return;
     setIsFalling(true);
 
-    const rect = el.getBoundingClientRect();
-    const startX = rect.left;
-    const startY = rect.top;
-
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.style.position = "fixed";
-    clone.style.left = `${startX}px`;
-    clone.style.top = `${startY}px`;
-    clone.style.zIndex = "9999";
-    clone.style.pointerEvents = "none";
-    clone.style.margin = "0";
-    document.body.appendChild(clone);
-    el.style.visibility = "hidden";
-
-    let x = 0;
-    let y = 0;
-    let vy = -500;
-    // Roll right first, bounce off the right wall, then escape the left.
-    let vx = INITIAL_HORIZONTAL_SPEED;
-    let rotation = 0;
-    let lastTime = performance.now();
-
-    const animate = (time: number) => {
-      const dt = Math.min((time - lastTime) / 1000, 0.05);
-      lastTime = time;
-
-      // Read live so a mid-animation window resize moves the floor/wall.
-      const floorY = window.innerHeight;
-      const rightWall = window.innerWidth;
-
-      vy += GRAVITY * dt;
-      x += vx * dt;
-      y += vy * dt;
-      rotation += SPIN_SPEED * dt * (vx > 0 ? 1 : -1);
-
-      const currentBottom = startY + y + rect.height;
-      if (currentBottom >= floorY && vy > 0) {
-        y = floorY - startY - rect.height;
-        vy =
-          Math.abs(vy) > MIN_BOUNCE_VELOCITY
-            ? -Math.abs(vy) * BOUNCE_DAMPING
-            : -MIN_BOUNCE_VELOCITY * 3;
-      }
-
-      // Right-wall bounce: hit, reverse horizontal velocity (with a tiny
-      // damping), and keep rolling. Left wall has no bounce — the donut
-      // exits the window off the left edge.
-      const currentRight = startX + x + rect.width;
-      if (currentRight >= rightWall && vx > 0) {
-        x = rightWall - startX - rect.width;
-        vx = -Math.abs(vx) * 0.9;
-      }
-
-      clone.style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg)`;
-
-      const offScreenLeft = startX + x + rect.width < -200;
-      const offScreenBottom = startY + y > floorY + 100;
-      const offScreenTop = startY + y + rect.height < -200;
-
-      if (offScreenLeft || offScreenBottom || offScreenTop) {
-        clone.remove();
+    cancelFallRef.current = launchDonutClone(el, {
+      onExit: () => {
         try {
           sessionStorage.setItem(LOGO_HIDDEN_KEY, "1");
         } catch {
@@ -139,16 +79,13 @@ function useLogoEasterEgg({
         }
         setIsHidden(true);
         setIsFalling(false);
-        return;
-      }
-      animFrameRef.current = requestAnimationFrame(animate);
-    };
-    animFrameRef.current = requestAnimationFrame(animate);
+      },
+    });
   }, [isFalling]);
 
   useEffect(() => {
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      cancelFallRef.current?.();
     };
   }, []);
 
@@ -236,6 +173,19 @@ function useLogoEasterEgg({
 interface RailNavProps {
   currentPage: AppPage;
   onNavigate: (page: AppPage) => void;
+  onOpenAbout: () => void;
+}
+
+/** Shared-element indicator that slides between the active rail items. */
+function ActiveIndicator() {
+  return (
+    <motion.span
+      aria-hidden="true"
+      layoutId="rail-indicator"
+      transition={MOTION_SPRING_POSITION}
+      className="absolute inset-y-1.5 left-[-7px] w-[2px] rounded-full bg-foreground"
+    />
+  );
 }
 
 interface RailItem {
@@ -275,7 +225,11 @@ const MORE_ITEMS: MoreMenuItem[] = [
   },
 ];
 
-export function RailNav({ currentPage, onNavigate }: RailNavProps) {
+export function RailNav({
+  currentPage,
+  onNavigate,
+  onOpenAbout,
+}: RailNavProps) {
   const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
   const {
@@ -358,12 +312,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                       : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
                   )}
                 >
-                  {active && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-y-1.5 left-[-7px] w-[2px] rounded-full bg-foreground"
-                    />
-                  )}
+                  {active && <ActiveIndicator />}
                   <Icon className="size-3.5" />
                 </button>
               </TooltipTrigger>
@@ -413,12 +362,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                 : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
             )}
           >
-            {currentPage === "settings" && (
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-1.5 left-[-7px] w-[2px] rounded-full bg-foreground"
-              />
-            )}
+            {currentPage === "settings" && <ActiveIndicator />}
             <GoGear className="size-3.5" />
           </button>
         </TooltipTrigger>
@@ -435,7 +379,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
               setMoreOpen(false);
             }}
           />
-          <div className="absolute bottom-14 left-11 z-40 w-56 animate-in rounded-lg border border-border bg-card p-1 shadow-2xl duration-100 fade-in-0 slide-in-from-bottom-1">
+          <div className="surface-material-card absolute bottom-14 left-11 z-40 w-56 animate-in rounded-lg border border-border p-1 shadow-2xl duration-100 fade-in-0 slide-in-from-bottom-1">
             {MORE_ITEMS.map(({ page, Icon, labelKey, hintKey }) => (
               <button
                 key={page}
@@ -459,6 +403,26 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                 </span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                onOpenAbout();
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent"
+            >
+              <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+                <LuInfo className="size-3" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-xs font-medium text-foreground">
+                  {t("rail.more.about")}
+                </span>
+                <span className="truncate text-[10px] text-muted-foreground">
+                  {t("rail.more.aboutHint")}
+                </span>
+              </span>
+            </button>
           </div>
         </>
       )}

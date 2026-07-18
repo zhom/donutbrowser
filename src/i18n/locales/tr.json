@@ -197,7 +197,14 @@
     "disableAutoUpdates": "Uygulama Otomatik Güncellemelerini Devre Dışı Bırak",
     "disableAutoUpdatesDescription": "Uygulamanın Donut Browser güncellemelerini otomatik olarak denetlemesini ve yüklemesini engelleyin. Tarayıcı güncellemeleri bundan etkilenmez.",
     "keepDecryptedProfilesInRam": "Şifresi Çözülmüş Profilleri RAM'de Tut",
-    "keepDecryptedProfilesInRamDescription": "Daha hızlı başlatma için parola korumalı profillerin şifresi çözülmüş RAM kopyasını başlatmalar arasında koruyun. Diskteki kopya her durumda şifreli kalır."
+    "keepDecryptedProfilesInRamDescription": "Daha hızlı başlatma için parola korumalı profillerin şifresi çözülmüş RAM kopyasını başlatmalar arasında koruyun. Diskteki kopya her durumda şifreli kalır.",
+    "privacy": {
+      "consistencyWarning": "Parmak izi tutarlılık uyarısı",
+      "consistencyWarningDescription": "Bir profilin saat dilimi veya dili proxy çıkış düğümüyle eşleşmediğinde başlatma sırasında uyar.",
+      "clearTraffic": "Tüm trafik geçmişini temizle",
+      "clearTrafficDescription": "Tüm profillerin kayıtlı trafik istatistiklerini güvenli bir şekilde siler.",
+      "clearTrafficSuccess": "Trafik geçmişi temizlendi"
+    }
   },
   "header": {
     "searchPlaceholder": "Profillerde ara...",
@@ -245,7 +252,13 @@
       "cantModifyRunning": "Çalışan profil değiştirilemez",
       "cantModifyLaunching": "Başlatılırken profil değiştirilemez",
       "cantModifyStopping": "Durdurulurken profil değiştirilemez",
-      "cantModifyUpdating": "Tarayıcı güncellenirken profil değiştirilemez"
+      "cantModifyUpdating": "Tarayıcı güncellenirken profil değiştirilemez",
+      "emptyTitle": "Henüz profil yok",
+      "emptyHint": "İlk profilinizi oluşturun veya başka bir tarayıcıdan mevcut profilleri içe aktarın.",
+      "emptyCreate": "Profil oluştur",
+      "emptyImport": "Profilleri içe aktar",
+      "emptyFilteredTitle": "Profil bulunamadı",
+      "emptyFilteredHint": "Bu grup veya aramayla eşleşen profil yok. Başka bir filtre deneyin veya yeni bir profil oluşturun."
     },
     "actions": {
       "launch": "Başlat",
@@ -1294,7 +1307,28 @@
     "domains": "alan adı",
     "fresh": "Güncel",
     "stale": "Eski",
-    "notCached": "Önbelleğe alınmadı"
+    "notCached": "Önbelleğe alınmadı",
+    "tabBlocklists": "Engel listeleri",
+    "tabCustom": "Özel listeler",
+    "custom.description": "Kaynak URL'lerden ve manuel kurallardan kendi engel listenizi oluşturun. İzin verilen alan adları her zaman engellenenlerin önüne geçer.",
+    "custom.sourcesLabel": "Engel listesi kaynak URL'leri",
+    "custom.sourcesPlaceholder": "Her satıra bir URL",
+    "custom.blockLabel": "Engellenen alan adları",
+    "custom.blockPlaceholder": "Her satıra bir alan adı",
+    "custom.allowLabel": "İzin verilen alan adları",
+    "custom.allowPlaceholder": "Her satıra bir alan adı",
+    "custom.allowHint": "İzin verilen alan adları derlenen engel listesinden çıkarılır ve tüm engelleme kurallarını geçersiz kılar.",
+    "custom.saved": "Özel DNS kuralları kaydedildi",
+    "custom.imported": "Özel DNS kuralları içe aktarıldı",
+    "custom.exported": "Özel DNS kuralları dışa aktarıldı",
+    "custom.exportTxt": "TXT olarak dışa aktar",
+    "custom.exportJson": "JSON olarak dışa aktar",
+    "customLevel": "Özel",
+    "custom.allowlistModeLabel": "İzin listesi modu",
+    "custom.allowlistModeOn": "Yalnızca aşağıdaki alan adlarına erişilebilir; diğer her şey engellenir.",
+    "custom.allowlistModeOff": "Listelenen alan adlarını engelle; diğer her şeye izin ver.",
+    "custom.allowedOnlyLabel": "İzin verilen alan adları (yalnızca bunlar)",
+    "custom.allowedOnlyHint": "Listelenen bir alan adının alt alan adlarına da izin verilir. Boş liste filtrelemeyi devre dışı bırakır."
   },
   "vpns": {
     "form": {
@@ -1378,16 +1412,9 @@
     "scanning": "Tarayıcı profilleri taranıyor...",
     "noneFound": "Sisteminizde tarayıcı profili bulunamadı.",
     "noneFoundHint": "Profilleriniz özel konumlardaysa elle içe aktarma seçeneğini deneyin.",
-    "selectProfile": "Profil Seçin:",
-    "selectProfilePlaceholder": "Algılanan bir profil seçin",
-    "pathLabel": "Yol:",
-    "browserLabel": "Tarayıcı:",
     "newProfileName": "Yeni Profil Adı:",
     "newProfileNamePlaceholder": "İçe aktarılan profil için bir ad girin",
     "manualTitle": "Elle Profil İçe Aktarma",
-    "browserType": "Tarayıcı Türü:",
-    "loadingBrowsers": "Tarayıcılar yükleniyor...",
-    "selectBrowserType": "Tarayıcı türü seçin",
     "profileFolderPath": "Profil Klasörü Yolu:",
     "profileFolderPlaceholder": "Profil klasörünün tam yolunu girin",
     "browseFolderTitle": "Klasöre göz at",
@@ -1395,17 +1422,38 @@
     "selectFolderTitle": "Tarayıcı Profil Klasörünü Seçin",
     "folderDialogFailed": "Klasör iletişim kutusu açılamadı",
     "detectFailed": "Mevcut tarayıcı profilleri algılanamadı",
-    "fillFields": "Lütfen tüm alanları doldurun",
-    "selectAndName": "Lütfen bir profil seçin ve bir ad girin",
-    "profileNotFound": "Seçilen profil bulunamadı",
-    "importedSuccess": "\"{{name}}\" profili başarıyla içe aktarıldı",
-    "notInstalled": "{{browser}} yüklü değil. Lütfen önce ana pencereden {{browser}} indirin, ardından içe aktarmayı yeniden deneyin.",
-    "importFailed": "Profil içe aktarılamadı: {{error}}",
     "proxyOptional": "Proxy (İsteğe Bağlı)",
     "noProxy": "Proxy yok",
     "nextButton": "İleri",
-    "importButton": "İçe Aktar",
-    "importedAs": "Bu profil bir {{browser}} profili olarak içe aktarılacak."
+    "importedAs": "Bu profil bir {{browser}} profili olarak içe aktarılacak.",
+    "selectAll": "Tümünü seç",
+    "selectedCount": "{{count}} seçildi",
+    "scanButton": "Tara",
+    "manualHint": "Bir profil klasörü, tarayıcı kullanıcı verisi klasörü, dışa aktarılmış profiller içeren bir klasör veya bir ZIP arşivi seçin.",
+    "selectArchiveTitle": "ZIP arşivi seç",
+    "noProfilesInLocation": "Bu konumda profil bulunamadı.",
+    "selectAtLeastOne": "İçe aktarmak için en az bir profil seçin",
+    "emptyNames": "Seçilen her profilin bir adı olmalı",
+    "profilesToImport": "İçe aktarılacak profiller",
+    "groupOptional": "Grup (İsteğe bağlı)",
+    "noGroup": "Grup yok",
+    "createNewGroup": "Yeni grup oluştur…",
+    "newGroupNamePlaceholder": "Yeni grup adı",
+    "duplicateStrategyLabel": "Profil adı zaten varsa",
+    "duplicateRename": "Otomatik olarak yeniden adlandır",
+    "duplicateSkip": "Atla",
+    "proxyRoundRobin": "Kayıtlı proxy'leri dağıt (sırayla)",
+    "importingTitle": "Profiller içe aktarılıyor…",
+    "importProgress": "{{total}} öğeden {{completed}} tanesi işlendi",
+    "resultsSummary": "{{imported}} içe aktarıldı, {{skipped}} atlandı, {{failed}} başarısız",
+    "statusImported": "İçe aktarıldı",
+    "statusSkipped": "Atlandı",
+    "statusFailed": "Başarısız",
+    "importButtonCount": "İçe aktar ({{count}})",
+    "vpnOptional": "VPN (isteğe bağlı)",
+    "noVpn": "VPN yok",
+    "advancedOptions": "Gelişmiş seçenekler",
+    "configureFingerprint": "Parmak izini yapılandır (isteğe bağlı)"
   },
   "syncTooltips": {
     "syncing": "Eşitleniyor...",
@@ -1608,7 +1656,14 @@
     "sentLegend": "Gönderilen",
     "receivedLegend": "Alınan",
     "tooltipSent": "↑ Gönderilen: ",
-    "tooltipReceived": "↓ Alınan: "
+    "tooltipReceived": "↓ Alınan: ",
+    "clearHistory": "Geçmişi temizle",
+    "clearHistoryTitle": "Trafik geçmişini temizle",
+    "clearHistoryDescription": "\"{{name}}\" için kayıtlı tüm trafik geçmişini kalıcı ve güvenli bir şekilde siler. Bu işlem geri alınamaz.",
+    "tabOverview": "Genel bakış",
+    "tabTopDomains": "En çok kullanılan alan adları",
+    "searchDomains": "Alan adı ara…",
+    "noDomainMatch": "Aramanızla eşleşen alan adı yok."
   },
   "proxyCheck": {
     "unknownLocation": "Bilinmiyor",
@@ -1802,7 +1857,20 @@
     "updateChecksumsUnavailable": "{{version}} güncellemesi doğrulanamadı çünkü sağlama toplamı dosyası alınamadı. Güncelleme yüklenmedi; daha sonra yeniden denenecek.",
     "updateChecksumMismatch": "İndirilen güncelleme dosyası {{file}} sağlama toplamı doğrulamasını geçemedi ve silindi. Lütfen yeniden deneyin.",
     "nameCannotBeEmpty": "Ad boş olamaz",
-    "wayfernVersionNotAvailable": "Wayfern {{requested}} sürümü indirilemiyor. Güncel sürüm: {{current}}."
+    "wayfernVersionNotAvailable": "Wayfern {{requested}} sürümü indirilemiyor. Güncel sürüm: {{current}}.",
+    "profileNameExists": "\"{{name}}\" adlı bir profil zaten var",
+    "importSourceNotFound": "Kaynak yol mevcut değil",
+    "importNoItems": "İçe aktarmak için hiçbir şey seçilmedi",
+    "browserNotDownloaded": "{{browser}} tarayıcısının indirilmiş bir sürümü yok. Önce indirin, sonra içe aktarmayı yeniden deneyin.",
+    "archiveExtractionFailed": "Arşiv çıkarılamadı: {{detail}}",
+    "unsupportedArchiveFormat": "Desteklenmeyen arşiv biçimi. Yalnızca ZIP arşivleri desteklenir.",
+    "clearOnCloseUnavailable": "Kapatırken temizleme, geçici veya parola korumalı profillerde kullanılamaz.",
+    "proxyAndVpnMutuallyExclusive": "Bir profil ya proxy ya da VPN kullanabilir, ikisini birden kullanamaz.",
+    "invalidDnsRulesJson": "Seçilen dosya geçerli bir DNS kuralı JSON'u değil.",
+    "unsupportedDnsRulesFormat": "Desteklenmeyen kural biçimi: {{format}}",
+    "dnsRulesSaveFailed": "DNS kuralları kaydedilemedi.",
+    "dnsRulesExportFailed": "DNS kuralları dışa aktarılamadı.",
+    "fingerprintMatchFailed": "Parmak izi proxy'ye eşlenemedi."
   },
   "rail": {
     "profiles": "Profiller",
@@ -1815,7 +1883,9 @@
       "importProfile": "Profil içe aktar",
       "importProfileHint": "Başka bir araçtan profil getirin",
       "keyboardShortcuts": "Klavye kısayolları",
-      "keyboardShortcutsHint": "Tüm kısayolları görüntüle"
+      "keyboardShortcutsHint": "Tüm kısayolları görüntüle",
+      "about": "Donut Browser Hakkında",
+      "aboutHint": "Sürüm ve uygulama bilgileri"
     },
     "network": "Ağ",
     "integrations": "Entegrasyonlar",
@@ -1904,7 +1974,9 @@
     "actions": {
       "launchProfile": "{{name}} profilini başlat",
       "stopProfile": "{{name}} profilini durdur",
-      "profileInfo": "Bilgi — {{name}}"
+      "profileInfo": "Bilgi — {{name}}",
+      "createProfile": "Profil oluştur",
+      "about": "Donut Browser Hakkında"
     }
   },
   "shortcuts": {
@@ -2020,5 +2092,29 @@
   },
   "cookieCopy": {
     "noOtherTargets": "Başka Wayfern profili seçilmedi"
+  },
+  "about": {
+    "title": "Hakkında",
+    "version": "Sürüm {{version}}",
+    "portableBadge": "taşınabilir",
+    "licenseNotice": "AGPL-3.0 lisanslı, açık kaynak anti-detect tarayıcı.",
+    "website": "Web sitesi"
+  },
+  "clearOnClose": {
+    "label": "Kapatırken verileri temizle",
+    "description": "Tarayıcı kapanırken çerezleri, geçmişi ve önbelleği siler. Uzantılar ve yer imleri korunur."
+  },
+  "consistencyWarning": {
+    "title": "Parmak izi uyuşmazlığı",
+    "intro": "\"{{name}}\" için proxy çıkışı bu profilin parmak iziyle eşleşmiyor:",
+    "timezoneTitle": "Saat dilimi uyuşmazlığı",
+    "timezoneDetail": "Çıkış düğümü {{exit}} konumunda, ancak parmak izi {{fingerprint}} bildiriyor.",
+    "languageTitle": "Dil uyuşmazlığı",
+    "languageDetail": "Çıkış ülkesi {{country}}, ancak parmak izi dili {{fingerprint}}.",
+    "explainer": "Çıkış IP'nizle uyuşmayan bir saat dilimi veya dil, gerçek cihazınız hiç sızdırmasa bile güçlü bir anti-bot sinyalidir. Şüpheli muameleyi azaltmak için parmak izini proxy konumuyla hizalayın.",
+    "dontWarnAgain": "Bu profil için bir daha uyarma",
+    "matchToProxy": "Parmak izini proxy'ye eşle",
+    "matching": "Eşleniyor…",
+    "matchSuccess": "Parmak izi proxy'ye uyacak şekilde güncellendi. Uygulamak için profili yeniden başlatın."
   }
 }

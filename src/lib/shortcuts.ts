@@ -98,11 +98,14 @@ export const SHORTCUTS: ShortcutDef[] = [
     mod: true,
   },
   {
+    // Mod+Shift+A (not Mod+A): plain Mod+A must stay select-all in any
+    // focused text field or table context.
     id: "goAccount",
     labelKey: "shortcuts.goAccount",
     group: "navigation",
     key: "a",
     mod: true,
+    shift: true,
   },
   {
     id: "goSettings",

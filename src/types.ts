@@ -32,6 +32,7 @@ export interface BrowserProfile {
   last_sync?: number; // Timestamp of last successful sync (epoch seconds)
   host_os?: string; // OS where profile was created ("macos", "windows", "linux")
   ephemeral?: boolean;
+  clear_on_close?: boolean;
   extension_group_id?: string;
   proxy_bypass_rules?: string[];
   created_by_id?: string;
@@ -201,7 +202,9 @@ export interface ImportProfileItem {
   source_path: string;
   browser_type?: string;
   new_profile_name: string;
+  /** Mutually exclusive with `vpn_id`; the importer rejects setting both. */
   proxy_id?: string | null;
+  vpn_id?: string | null;
 }
 
 export interface ProfileImportItemResult {
