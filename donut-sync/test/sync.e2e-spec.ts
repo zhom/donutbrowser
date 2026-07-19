@@ -17,6 +17,7 @@ import {
 interface PresignResponse {
   url: string;
   expiresAt: string;
+  metadata?: Record<string, string>;
 }
 
 interface ListResponse {
@@ -34,6 +35,7 @@ interface StatResponse {
   exists: boolean;
   size?: number;
   lastModified?: string;
+  metadata?: Record<string, string>;
 }
 
 describe("SyncController (e2e)", () => {
@@ -111,6 +113,65 @@ describe("SyncController (e2e)", () => {
       expect(body.url).toBeDefined();
       expect(body.url).toContain("test/upload-key.txt");
       expect(body.expiresAt).toBeDefined();
+    });
+
+    it("should sign and persist echoed object metadata", async () => {
+      const testKey = `vpns/metadata-${Date.now()}.json`;
+      const updatedAt = Math.floor(Date.now() / 1000).toString();
+
+      try {
+        const response = await request(app.getHttpServer())
+          .post("/v1/objects/presign-upload")
+          .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
+          .send({
+            key: testKey,
+            contentType: "application/json",
+            metadata: {
+              "updated-at": updatedAt,
+              ignored: "not-allowed",
+            },
+          })
+          .expect(200);
+
+        const body = response.body as PresignResponse;
+        expect(body.metadata).toEqual({ "updated-at": updatedAt });
+
+        const uploadUrl = new URL(body.url);
+        const signedHeaders =
+          uploadUrl.searchParams.get("X-Amz-SignedHeaders")?.split(";") ?? [];
+        expect(signedHeaders).toContain("x-amz-meta-updated-at");
+        expect(uploadUrl.searchParams.has("x-amz-meta-updated-at")).toBe(false);
+
+        const uploadResult = await fetch(body.url, {
+          method: "PUT",
+          body: "{}",
+          headers: {
+            "Content-Type": "application/json",
+            "x-amz-meta-updated-at": updatedAt,
+          },
+        });
+        if (!uploadResult.ok) {
+          throw new Error(
+            `Metadata upload failed with status ${uploadResult.status}: ${await uploadResult.text()}`,
+          );
+        }
+
+        const statResponse = await request(app.getHttpServer())
+          .post("/v1/objects/stat")
+          .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
+          .send({ key: testKey })
+          .expect(200);
+
+        const statBody = statResponse.body as StatResponse;
+        expect(statBody.exists).toBe(true);
+        expect(statBody.metadata?.["updated-at"]).toBe(updatedAt);
+      } finally {
+        await request(app.getHttpServer())
+          .post("/v1/objects/delete")
+          .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
+          .send({ key: testKey })
+          .expect(200);
+      }
     });
   });
 

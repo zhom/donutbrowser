@@ -329,7 +329,16 @@ export class SyncService implements OnModuleInit {
       Metadata: metadata,
     });
 
-    const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+    const metadataHeaders = new Set(
+      Object.keys(metadata ?? {}).map((name) => `x-amz-meta-${name}`),
+    );
+    const url = await getSignedUrl(this.s3Client, command, {
+      expiresIn,
+      // The AWS presigner otherwise hoists user metadata into the query string.
+      // The client echoes the response metadata as headers, so those headers
+      // must remain in the request and be covered by SignedHeaders.
+      unhoistableHeaders: metadataHeaders,
+    });
 
     // Report profile usage after upload presign if key is under profiles/
     if (ctx.mode === "cloud" && dto.key.startsWith("profiles/")) {
