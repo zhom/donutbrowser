@@ -243,6 +243,17 @@ export function RailNav({
     handleClick,
   } = useLogoEasterEgg({ currentPage, onNavigate });
 
+  useEffect(() => {
+    if (!moreOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [moreOpen]);
+
   return (
     <nav className="relative flex w-10 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2">
       {!isHidden ? (
@@ -379,11 +390,16 @@ export function RailNav({
               setMoreOpen(false);
             }}
           />
-          <div className="surface-material-card absolute bottom-14 left-11 z-40 w-56 animate-in rounded-lg border border-border p-1 shadow-2xl duration-100 fade-in-0 slide-in-from-bottom-1">
+          <div
+            role="menu"
+            aria-label={t("rail.more.label")}
+            className="surface-material-card absolute bottom-14 left-11 z-40 w-56 animate-in rounded-lg border border-border p-1 shadow-2xl duration-100 fade-in-0 slide-in-from-bottom-1"
+          >
             {MORE_ITEMS.map(({ page, Icon, labelKey, hintKey }) => (
               <button
                 key={page}
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setMoreOpen(false);
                   onNavigate(page);
@@ -405,6 +421,7 @@ export function RailNav({
             ))}
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMoreOpen(false);
                 onOpenAbout();

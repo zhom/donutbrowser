@@ -2037,6 +2037,14 @@ rm "{}"
 
 #[tauri::command]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
+  #[cfg(feature = "e2e")]
+  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+    && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
+  {
+    log::info!("E2E: skipping automatic app update check");
+    return Ok(None);
+  }
+
   if crate::app_dirs::is_portable() {
     log::info!("App auto-updates disabled in portable mode");
     return Ok(None);
@@ -2090,6 +2098,14 @@ pub async fn restart_application() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
+  #[cfg(feature = "e2e")]
+  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+    && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
+  {
+    log::info!("E2E: skipping manual app update check");
+    return Ok(None);
+  }
+
   log::info!("Manual app update check triggered");
   let updater = AppAutoUpdater::instance();
   updater

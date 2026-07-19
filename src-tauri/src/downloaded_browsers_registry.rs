@@ -1261,6 +1261,14 @@ mod tests {
 pub async fn ensure_active_browsers_downloaded(
   app_handle: tauri::AppHandle,
 ) -> Result<Vec<String>, String> {
+  #[cfg(feature = "e2e")]
+  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+    && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
+  {
+    log::info!("E2E: skipping proactive browser download");
+    return Ok(Vec::new());
+  }
+
   let registry = DownloadedBrowsersRegistry::instance();
   let version_manager = crate::browser_version_manager::BrowserVersionManager::instance();
   let mut downloaded = Vec::new();
@@ -1410,6 +1418,14 @@ pub async fn check_missing_binaries() -> Result<Vec<(String, String, String)>, S
 pub async fn ensure_all_binaries_exist(
   app_handle: tauri::AppHandle,
 ) -> Result<Vec<String>, String> {
+  #[cfg(feature = "e2e")]
+  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+    && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
+  {
+    log::info!("E2E: skipping proactive binary and GeoIP downloads");
+    return Ok(Vec::new());
+  }
+
   let registry = DownloadedBrowsersRegistry::instance();
   registry
     .ensure_all_binaries_exist(&app_handle)

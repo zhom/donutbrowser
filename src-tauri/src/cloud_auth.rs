@@ -779,6 +779,13 @@ impl CloudAuthManager {
 
   /// Launch/drive profiles programmatically (local API + MCP automation).
   pub async fn can_use_browser_automation(&self) -> bool {
+    #[cfg(feature = "e2e")]
+    if crate::e2e_automation_enabled()
+      && std::env::var_os("WAYFERN_TEST_TOKEN").is_some_and(|token| !token.is_empty())
+    {
+      return true;
+    }
+
     self
       .entitlements()
       .await
@@ -788,6 +795,13 @@ impl CloudAuthManager {
 
   /// Edit fingerprints / use a non-native OS fingerprint.
   pub async fn can_use_cross_os_fingerprints(&self) -> bool {
+    #[cfg(feature = "e2e")]
+    if crate::e2e_automation_enabled()
+      && std::env::var_os("WAYFERN_TEST_TOKEN").is_some_and(|token| !token.is_empty())
+    {
+      return true;
+    }
+
     self
       .entitlements()
       .await
@@ -1224,6 +1238,16 @@ impl CloudAuthManager {
 
   /// Get the current wayfern token, if any.
   pub async fn get_wayfern_token(&self) -> Option<String> {
+    #[cfg(feature = "e2e")]
+    if tauri_plugin_cross_platform_webdriver::automation_enabled() {
+      if let Some(token) = std::env::var_os("WAYFERN_TEST_TOKEN")
+        .filter(|token| !token.is_empty())
+        .and_then(|token| token.into_string().ok())
+      {
+        return Some(token);
+      }
+    }
+
     let wt = self.wayfern_token.lock().await;
     wt.clone()
   }

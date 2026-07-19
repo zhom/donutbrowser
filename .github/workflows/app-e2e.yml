@@ -1,0 +1,179 @@
+name: App E2E Tests
+
+on:
+  workflow_call:
+    inputs:
+      smoke_only:
+        description: Run the cross-platform pull-request smoke matrix
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: E2E suite to run
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - smoke
+          - ui
+          - entities
+          - integrations
+          - sync
+          - browser
+  push:
+    branches: ["main"]
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke (${{ matrix.os }})
+    if: ${{ inputs.smoke_only == true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Disable git core.autocrlf on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Checkout Donut Browser
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: donutbrowser
+
+      - name: Checkout private cross-platform WebDriver
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ vars.TAURI_WEBDRIVER_REPOSITORY || 'zhom/tauri-cross-platform-webdriver' }}
+          token: ${{ secrets.TAURI_WEBDRIVER_TOKEN || github.token }}
+          path: tauri-cross-platform-webdriver
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: donutbrowser/.node-version
+          cache: pnpm
+          cache-dependency-path: donutbrowser/pnpm-lock.yaml
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: |
+            donutbrowser/src-tauri -> target
+            tauri-cross-platform-webdriver -> target
+
+      - name: Install Tauri dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev xvfb openvpn
+
+      - name: Install app dependencies
+        working-directory: donutbrowser
+        run: pnpm install --frozen-lockfile
+
+      - name: Run isolated smoke suite
+        working-directory: donutbrowser
+        env:
+          DONUT_E2E_KEEP_ARTIFACTS: "1"
+        shell: bash
+        run: |
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            xvfb-run -a pnpm e2e:smoke
+          else
+            pnpm e2e:smoke
+          fi
+
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-e2e-smoke-${{ matrix.os }}
+          path: ${{ runner.temp }}/donut-e2e-*
+          if-no-files-found: ignore
+          retention-days: 7
+
+  full:
+    name: Full UI, sync, encryption, and Wayfern
+    if: ${{ inputs.smoke_only != true }}
+    runs-on: macos-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout Donut Browser
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: donutbrowser
+
+      - name: Checkout private cross-platform WebDriver
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ vars.TAURI_WEBDRIVER_REPOSITORY || 'zhom/tauri-cross-platform-webdriver' }}
+          token: ${{ secrets.TAURI_WEBDRIVER_TOKEN || github.token }}
+          path: tauri-cross-platform-webdriver
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: donutbrowser/.node-version
+          cache: pnpm
+          cache-dependency-path: donutbrowser/pnpm-lock.yaml
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: |
+            donutbrowser/src-tauri -> target
+            tauri-cross-platform-webdriver -> target
+
+      - name: Install app dependencies
+        working-directory: donutbrowser
+        run: pnpm install --frozen-lockfile
+
+      - name: Run full isolated app suite
+        working-directory: donutbrowser
+        env:
+          DONUT_E2E_KEEP_ARTIFACTS: "1"
+          DONUT_E2E_SUITE: ${{ inputs.suite || 'full' }}
+          WAYFERN_TEST_TOKEN: ${{ secrets.WAYFERN_TEST_TOKEN }}
+        run: node e2e/run.mjs --suite=${DONUT_E2E_SUITE}
+
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-e2e-full-macos
+          path: ${{ runner.temp }}/donut-e2e-*
+          if-no-files-found: ignore
+          retention-days: 7

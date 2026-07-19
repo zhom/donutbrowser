@@ -3,6 +3,7 @@ use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+#[cfg(not(feature = "e2e"))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -13,6 +14,17 @@ static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 // interceptor lets the next CloseRequested through instead of looping back
 // to the confirmation dialog.
 static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
+
+fn e2e_automation_enabled() -> bool {
+  #[cfg(feature = "e2e")]
+  {
+    tauri_plugin_cross_platform_webdriver::automation_enabled()
+  }
+  #[cfg(not(feature = "e2e"))]
+  {
+    false
+  }
+}
 
 mod api_client;
 mod api_server;
@@ -1263,6 +1275,7 @@ fn hide_to_tray(app_handle: tauri::AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+#[cfg(not(feature = "e2e"))]
 fn show_main_window(app_handle: &tauri::AppHandle) {
   if let Some(window) = app_handle.get_webview_window("main") {
     let _ = window.show();
@@ -1302,6 +1315,7 @@ fn update_tray_menu(
 /// Build the system tray. Best-effort: on Linux the tray depends on
 /// libayatana-appindicator at runtime, so any failure here must not abort app
 /// startup — the caller logs and continues without a tray.
+#[cfg(not(feature = "e2e"))]
 fn setup_system_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
   use std::sync::atomic::Ordering;
   use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -1391,54 +1405,65 @@ pub fn run() {
     }),
   };
 
-  tauri::Builder::default()
-    .plugin(
-      tauri_plugin_log::Builder::new()
-        .clear_targets() // Clear default targets to avoid duplicates
-        .target(Target::new(TargetKind::Stdout))
-        .target(Target::new(TargetKind::Webview))
-        .target(file_log_target)
-        // 5 MB per rotated file × KeepAll — the previous 100 KB limit
-        // truncated useful context in customer support reports; 50 MB
-        // turned out to be excessive disk pressure.
-        .max_file_size(5 * 1024 * 1024)
-        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
-        .level(log::LevelFilter::Info)
-        .format(|out, message, record| {
-          use chrono::Local;
-          let now = Local::now();
-          let timestamp = format!(
-            "{}.{:03}",
-            now.format("%Y-%m-%d %H:%M:%S"),
-            now.timestamp_subsec_millis()
-          );
-          out.finish(format_args!(
-            "[{}][{}][{}] {}",
-            timestamp,
-            record.target(),
-            record.level(),
-            message
-          ))
-        })
-        .build(),
-    )
-    .plugin(tauri_plugin_single_instance::init(
-      |app_handle, args, _cwd| {
-        log::info!("Single instance triggered with args: {args:?}");
-        if let Some(window) = app_handle.get_webview_window("main") {
-          let _ = window.show();
-          let _ = window.set_focus();
-          let _ = window.unminimize();
-        }
-      },
-    ))
+  let builder = tauri::Builder::default();
+
+  #[cfg(feature = "e2e")]
+  let builder = builder.plugin(tauri_plugin_cross_platform_webdriver::init());
+
+  let builder = builder.plugin(
+    tauri_plugin_log::Builder::new()
+      .clear_targets() // Clear default targets to avoid duplicates
+      .target(Target::new(TargetKind::Stdout))
+      .target(Target::new(TargetKind::Webview))
+      .target(file_log_target)
+      // 5 MB per rotated file × KeepAll — the previous 100 KB limit
+      // truncated useful context in customer support reports; 50 MB
+      // turned out to be excessive disk pressure.
+      .max_file_size(5 * 1024 * 1024)
+      .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+      .level(log::LevelFilter::Info)
+      .format(|out, message, record| {
+        use chrono::Local;
+        let now = Local::now();
+        let timestamp = format!(
+          "{}.{:03}",
+          now.format("%Y-%m-%d %H:%M:%S"),
+          now.timestamp_subsec_millis()
+        );
+        out.finish(format_args!(
+          "[{}][{}][{}] {}",
+          timestamp,
+          record.target(),
+          record.level(),
+          message
+        ))
+      })
+      .build(),
+  );
+
+  #[cfg(not(feature = "e2e"))]
+  let builder = builder.plugin(tauri_plugin_single_instance::init(
+    |app_handle, args, _cwd| {
+      log::info!("Single instance triggered with args: {args:?}");
+      if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.unminimize();
+      }
+    },
+  ));
+
+  let builder = builder
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
-    .plugin(tauri_plugin_clipboard_manager::init())
+    .plugin(tauri_plugin_clipboard_manager::init());
+
+  #[cfg(not(feature = "e2e"))]
+  let builder = builder
     // Persist window size/position across restarts. VISIBLE is excluded
     // because the app hides to tray: restoring visibility would otherwise
     // relaunch with an invisible window after quitting from the tray while
@@ -1453,8 +1478,9 @@ pub fn run() {
             & !tauri_plugin_window_state::StateFlags::FULLSCREEN,
         )
         .build(),
-    )
-    .setup(|app| {
+    );
+
+  builder.setup(|app| {
       // Recover ephemeral dir mappings from RAM-backed storage (tmpfs/ramdisk)
       ephemeral_dirs::recover_ephemeral_dirs();
 
@@ -1476,6 +1502,20 @@ pub fn run() {
         .focused(true)
         .visible(true);
 
+      #[cfg(feature = "e2e")]
+      let win_builder =
+        match tauri_plugin_cross_platform_webdriver::automation_profile_dir() {
+          Some(profile_dir) => win_builder
+            .data_directory(profile_dir.join("webview"))
+            // WKWebView ignores data_directory on macOS. Incognito gives every
+            // launched app process a non-persistent data store there, and also
+            // prevents WebView2/WebKitGTK caches from escaping the session on
+            // the other platforms. Durable app state is still exercised via
+            // DONUTBROWSER_DATA_ROOT; only browser-engine storage is ephemeral.
+            .incognito(true),
+          None => win_builder,
+        };
+
       #[cfg(target_os = "windows")]
       let win_builder = win_builder.decorations(false);
 
@@ -1486,8 +1526,11 @@ pub fn run() {
       // dialog's "Minimize" action hides the window. Best-effort: a tray
       // failure (e.g. missing libayatana-appindicator on Linux) must never
       // prevent the app from launching, so we log and continue without it.
-      if let Err(e) = setup_system_tray(app.handle()) {
-        log::warn!("System tray unavailable, continuing without it: {e}");
+      #[cfg(not(feature = "e2e"))]
+      {
+        if let Err(e) = setup_system_tray(app.handle()) {
+          log::warn!("System tray unavailable, continuing without it: {e}");
+        }
       }
 
       // Intercept the window close so the frontend can ask the user whether
@@ -1530,7 +1573,7 @@ pub fn run() {
         log::warn!("Failed to set global event emitter: {e}");
       }
 
-      #[cfg(windows)]
+      #[cfg(all(windows, not(feature = "e2e")))]
       {
         // For Windows, register all deep links at runtime
         if let Err(e) = app.deep_link().register_all() {
@@ -1538,7 +1581,7 @@ pub fn run() {
         }
       }
 
-      #[cfg(target_os = "macos")]
+      #[cfg(all(target_os = "macos", not(feature = "e2e")))]
       {
         // On macOS, try to register deep links for development builds
         if let Err(e) = app.deep_link().register_all() {
@@ -1548,28 +1591,28 @@ pub fn run() {
         }
       }
 
-      app.deep_link().on_open_url({
-        let handle = handle.clone();
-        move |event| {
-          let urls = event.urls();
-          log::info!("Deep link event received with {} URLs", urls.len());
+      #[cfg(not(feature = "e2e"))]
+      {
+        app.deep_link().on_open_url({
+          let handle = handle.clone();
+          move |event| {
+            let urls = event.urls();
+            log::info!("Deep link event received with {} URLs", urls.len());
 
-          for url in urls {
-            let url_string = url.to_string();
-            log::info!("Deep link received: {url_string}");
+            for url in urls {
+              let url_string = url.to_string();
+              log::info!("Deep link received: {url_string}");
+              let handle_clone = handle.clone();
 
-            // Clone the handle for each async task
-            let handle_clone = handle.clone();
-
-            // Handle the URL asynchronously
-            tauri::async_runtime::spawn(async move {
-              if let Err(e) = handle_url_open(handle_clone, url_string.clone()).await {
-                log::error!("Failed to handle deep link URL: {e}");
-              }
-            });
+              tauri::async_runtime::spawn(async move {
+                if let Err(e) = handle_url_open(handle_clone, url_string.clone()).await {
+                  log::error!("Failed to handle deep link URL: {e}");
+                }
+              });
+            }
           }
-        }
-      });
+        });
+      }
 
       if let Some(startup_url) = startup_url {
         let handle_clone = handle.clone();
@@ -1581,30 +1624,29 @@ pub fn run() {
         });
       }
 
-      // Initialize and start background version updater
-      let app_handle = app.handle().clone();
-      tauri::async_runtime::spawn(async move {
-        let version_updater = get_version_updater();
+      if !e2e_automation_enabled() {
+        // Initialize and start background version updater
+        let app_handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+          let version_updater = get_version_updater();
 
-        // Set the app handle
-        {
-          let mut updater_guard = version_updater.lock().await;
-          updater_guard.set_app_handle(app_handle);
-        }
-
-        // Run startup check without holding the lock
-        {
-          let updater_guard = version_updater.lock().await;
-          if let Err(e) = updater_guard.start_background_updates().await {
-            log::error!("Failed to start background updates: {e}");
+          {
+            let mut updater_guard = version_updater.lock().await;
+            updater_guard.set_app_handle(app_handle);
           }
-        }
-      });
 
-      // Start the background update task separately
-      tauri::async_runtime::spawn(async move {
-        version_updater::VersionUpdater::run_background_task().await;
-      });
+          {
+            let updater_guard = version_updater.lock().await;
+            if let Err(e) = updater_guard.start_background_updates().await {
+              log::error!("Failed to start background updates: {e}");
+            }
+          }
+        });
+
+        tauri::async_runtime::spawn(async move {
+          version_updater::VersionUpdater::run_background_task().await;
+        });
+      }
 
       // Auto-start MCP server if it was previously enabled. Always log the
       // decision so customer logs reveal whether MCP is actually running —
@@ -1765,12 +1807,12 @@ pub fn run() {
         }
       }
 
-      let app_handle_auto_updater = app.handle().clone();
-
-      // Start the auto-update check task separately
-      tauri::async_runtime::spawn(async move {
-        auto_updater::check_for_updates_with_progress(app_handle_auto_updater).await;
-      });
+      if !e2e_automation_enabled() {
+        let app_handle_auto_updater = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+          auto_updater::check_for_updates_with_progress(app_handle_auto_updater).await;
+        });
+      }
 
       // Handle any pending URLs that were received before the window was ready
       let handle_pending = handle.clone();
@@ -1793,107 +1835,85 @@ pub fn run() {
         }
       });
 
-      // Start periodic cleanup task for unused binaries
-      // Only runs when sync is not in progress to avoid deleting browsers
-      // that might be needed for profiles being synced from the cloud
-      tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200)); // Every 12 hours
-
-        loop {
-          interval.tick().await;
-
-          // Check if sync is in progress before running cleanup
-          if let Some(scheduler) = sync::get_global_scheduler() {
-            if scheduler.is_sync_in_progress().await {
-              log::debug!("Skipping cleanup: sync is in progress");
-              continue;
-            }
-          }
-
-          let registry =
-            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-          if let Err(e) = registry.cleanup_unused_binaries() {
-            log::error!("Periodic cleanup failed: {e}");
-          } else {
-            log::debug!("Periodic cleanup completed successfully");
-          }
-        }
-      });
-
-      // DNS blocklist refresh task (every 12 hours)
-      tauri::async_runtime::spawn(async move {
-        let manager = dns_blocklist::BlocklistManager::instance();
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200));
-        interval.tick().await; // Skip the immediate first tick
-        loop {
-          interval.tick().await;
-          manager.refresh_all_stale().await;
-        }
-      });
-
-      tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3 * 60 * 60));
-
-        loop {
-          interval.tick().await;
-
-          log::info!("Checking for app updates...");
-          // Route through check_for_app_updates (not the raw check_for_updates)
-          // so the background loop respects portable mode and the
-          // disable_auto_updates setting. Previously it bypassed both, so a
-          // portable install would auto-download and run the NSIS installer,
-          // clobbering the portable folder instead of updating in place.
-          match app_auto_updater::check_for_app_updates().await {
-            Ok(Some(update_info)) => {
-              log::info!(
-                "App update available: {} -> {}",
-                update_info.current_version,
-                update_info.new_version
-              );
-              if let Err(e) = events::emit("app-update-available", &update_info) {
-                log::error!("Failed to emit app update event: {e}");
+      if !e2e_automation_enabled() {
+        // Start periodic cleanup task for unused binaries.
+        tauri::async_runtime::spawn(async move {
+          let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200));
+          loop {
+            interval.tick().await;
+            if let Some(scheduler) = sync::get_global_scheduler() {
+              if scheduler.is_sync_in_progress().await {
+                log::debug!("Skipping cleanup: sync is in progress");
+                continue;
               }
             }
-            Ok(None) => {
-              log::debug!("No app updates available");
-            }
-            Err(e) => {
-              log::error!("Failed to check for app updates: {e}");
-            }
-          }
-        }
-      });
 
-      // Check and download GeoIP database at startup if needed
-      let app_handle_geoip = app.handle().clone();
-      tauri::async_runtime::spawn(async move {
-        // Wait a bit for the app to fully initialize
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-        let geoip_downloader = crate::geoip_downloader::GeoIPDownloader::instance();
-        match geoip_downloader.check_missing_geoip_database() {
-          Ok(true) => {
-            log::info!(
-              "GeoIP database is missing for Wayfern profiles, downloading at startup..."
-            );
-            let geoip_downloader = GeoIPDownloader::instance();
-            if let Err(e) = geoip_downloader
-              .download_geoip_database(&app_handle_geoip)
-              .await
-            {
-              log::error!("Failed to download GeoIP database at startup: {e}");
+            let registry =
+              crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+            if let Err(e) = registry.cleanup_unused_binaries() {
+              log::error!("Periodic cleanup failed: {e}");
             } else {
-              log::info!("GeoIP database downloaded successfully at startup");
+              log::debug!("Periodic cleanup completed successfully");
             }
           }
-          Ok(false) => {
-            // No Wayfern profiles or GeoIP database already available
+        });
+
+        tauri::async_runtime::spawn(async move {
+          let manager = dns_blocklist::BlocklistManager::instance();
+          let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200));
+          interval.tick().await;
+          loop {
+            interval.tick().await;
+            manager.refresh_all_stale().await;
           }
-          Err(e) => {
-            log::error!("Failed to check GeoIP database status at startup: {e}");
+        });
+
+        tauri::async_runtime::spawn(async move {
+          let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3 * 60 * 60));
+          loop {
+            interval.tick().await;
+            log::info!("Checking for app updates...");
+            match app_auto_updater::check_for_app_updates().await {
+              Ok(Some(update_info)) => {
+                log::info!(
+                  "App update available: {} -> {}",
+                  update_info.current_version,
+                  update_info.new_version
+                );
+                if let Err(e) = events::emit("app-update-available", &update_info) {
+                  log::error!("Failed to emit app update event: {e}");
+                }
+              }
+              Ok(None) => log::debug!("No app updates available"),
+              Err(e) => log::error!("Failed to check for app updates: {e}"),
+            }
           }
-        }
-      });
+        });
+
+        let app_handle_geoip = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+          tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+          let geoip_downloader = crate::geoip_downloader::GeoIPDownloader::instance();
+          match geoip_downloader.check_missing_geoip_database() {
+            Ok(true) => {
+              log::info!(
+                "GeoIP database is missing for Wayfern profiles, downloading at startup..."
+              );
+              let geoip_downloader = GeoIPDownloader::instance();
+              if let Err(e) = geoip_downloader
+                .download_geoip_database(&app_handle_geoip)
+                .await
+              {
+                log::error!("Failed to download GeoIP database at startup: {e}");
+              } else {
+                log::info!("GeoIP database downloaded successfully at startup");
+              }
+            }
+            Ok(false) => {}
+            Err(e) => log::error!("Failed to check GeoIP database status at startup: {e}"),
+          }
+        });
+      }
 
       // Start proxy cleanup task for dead browser processes
       let app_handle_proxy_cleanup = app.handle().clone();

@@ -295,9 +295,23 @@ impl BlocklistManager {
   }
 
   pub async fn fetch_blocklist(level: BlocklistLevel) -> Result<PathBuf, String> {
-    let url = level
+    let production_url = level
       .url()
       .ok_or_else(|| format!("No URL for level {:?}", level))?;
+    #[cfg(feature = "e2e")]
+    let url = std::env::var("DONUT_E2E_DNS_BLOCKLIST_BASE_URL")
+      .ok()
+      .filter(|base| !base.is_empty())
+      .map(|base| {
+        format!(
+          "{}/{}",
+          base.trim_end_matches('/'),
+          level.filename().unwrap_or("blocklist.txt")
+        )
+      })
+      .unwrap_or_else(|| production_url.to_string());
+    #[cfg(not(feature = "e2e"))]
+    let url = production_url.to_string();
     let path =
       Self::cached_file_path(level).ok_or_else(|| format!("No filename for level {:?}", level))?;
 
@@ -311,7 +325,7 @@ impl BlocklistManager {
     );
 
     let response = HTTP_CLIENT
-      .get(url)
+      .get(&url)
       .send()
       .await
       .map_err(|e| format!("Failed to fetch blocklist: {e}"))?;

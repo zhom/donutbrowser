@@ -492,6 +492,9 @@ impl SyncEngine {
       return Ok(());
     }
 
+    let reconciled_profile = self.reconcile_profile_metadata(profile).await?;
+    let profile = &reconciled_profile;
+
     // Derive encryption key if encrypted sync
     let encryption_key = if profile.is_encrypted_sync() {
       let password = encryption::load_e2e_password()
@@ -697,11 +700,6 @@ impl SyncEngine {
       log::debug!("Deleted remote file: {}", path);
     }
 
-    // Upload metadata.json (sanitized profile)
-    self
-      .upload_profile_metadata(&profile_id, profile, &key_prefix)
-      .await?;
-
     // If this sync changed the local profile directory (downloaded files and/or
     // deleted local files), the manifest generated at the START of the sync is
     // now stale. Uploading it would advertise wrong hashes/mtimes for the files
@@ -747,37 +745,18 @@ impl SyncEngine {
       let _ = self.sync_vpn(vpn_id, Some(app_handle)).await;
     }
 
-    // Download remote metadata and merge changes (name, tags, notes, etc.)
-    let remote_metadata_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
-    if let Ok(remote_meta) = self.download_profile_metadata(&remote_metadata_key).await {
-      let mut updated_profile = profile.clone();
-      // Merge fields that can be changed on other devices
-      updated_profile.name = remote_meta.name;
-      updated_profile.tags = remote_meta.tags;
-      updated_profile.note = remote_meta.note;
-      updated_profile.proxy_id = remote_meta.proxy_id;
-      updated_profile.vpn_id = remote_meta.vpn_id;
-      updated_profile.group_id = remote_meta.group_id;
-      updated_profile.extension_group_id = remote_meta.extension_group_id;
-      updated_profile.window_color = remote_meta.window_color;
-      updated_profile.last_sync = Some(
-        std::time::SystemTime::now()
-          .duration_since(std::time::UNIX_EPOCH)
-          .unwrap()
-          .as_secs(),
-      );
-      let _ = profile_manager.save_profile(&updated_profile);
-    } else {
-      // Fallback: just update last_sync
-      let mut updated_profile = profile.clone();
-      updated_profile.last_sync = Some(
-        std::time::SystemTime::now()
-          .duration_since(std::time::UNIX_EPOCH)
-          .unwrap()
-          .as_secs(),
-      );
-      let _ = profile_manager.save_profile(&updated_profile);
-    }
+    let mut updated_profile = profile.clone();
+    updated_profile.last_sync = Some(
+      std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs(),
+    );
+    profile_manager
+      .save_profile(&updated_profile)
+      .map_err(|e| {
+        SyncError::IoError(format!("Failed to save reconciled profile metadata: {e}"))
+      })?;
     let _ = events::emit("profiles-changed", ());
 
     let _ = events::emit(
@@ -881,6 +860,45 @@ impl SyncEngine {
     Ok(profile)
   }
 
+  async fn reconcile_profile_metadata(
+    &self,
+    profile: &BrowserProfile,
+  ) -> SyncResult<BrowserProfile> {
+    let profile_id = profile.id.to_string();
+    let key_prefix = Self::get_team_key_prefix(profile).await;
+    let remote_key = format!("{key_prefix}profiles/{profile_id}/metadata.json");
+    let stat = self.client.stat(&remote_key).await?;
+
+    if !stat.exists {
+      self
+        .upload_profile_metadata(&profile_id, profile, &key_prefix)
+        .await?;
+      return Ok(profile.clone());
+    }
+
+    let local_updated = profile.updated_at.unwrap_or(0);
+    let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
+    if local_updated > remote_updated {
+      self
+        .upload_profile_metadata(&profile_id, profile, &key_prefix)
+        .await?;
+      return Ok(profile.clone());
+    }
+    if remote_updated <= local_updated {
+      return Ok(profile.clone());
+    }
+
+    let mut remote = self.download_profile_metadata(&remote_key).await?;
+    // Process state is device-local and deliberately stripped from uploads.
+    remote.process_id = profile.process_id;
+    remote.last_launch = profile.last_launch;
+    remote.last_sync = profile.last_sync;
+    ProfileManager::instance()
+      .save_profile(&remote)
+      .map_err(|e| SyncError::IoError(format!("Failed to save remote profile metadata: {e}")))?;
+    Ok(remote)
+  }
+
   /// Sync only metadata for cross-OS profiles (tags, notes, proxies, groups).
   /// No browser files are synced.
   async fn sync_cross_os_metadata(
@@ -889,34 +907,8 @@ impl SyncEngine {
     profile: &BrowserProfile,
   ) -> SyncResult<()> {
     let profile_id = profile.id.to_string();
-    let key_prefix = Self::get_team_key_prefix(profile).await;
-    let profile_manager = ProfileManager::instance();
-
-    // Upload our metadata
-    self
-      .upload_profile_metadata(&profile_id, profile, &key_prefix)
-      .await?;
-
-    // Download remote metadata and merge if remote has changes
-    let remote_metadata_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
-    if let Ok(remote_meta) = self.download_profile_metadata(&remote_metadata_key).await {
-      let mut updated = profile.clone();
-      updated.name = remote_meta.name;
-      updated.tags = remote_meta.tags;
-      updated.note = remote_meta.note;
-      updated.proxy_id = remote_meta.proxy_id;
-      updated.vpn_id = remote_meta.vpn_id;
-      updated.group_id = remote_meta.group_id;
-      updated.extension_group_id = remote_meta.extension_group_id;
-      updated.window_color = remote_meta.window_color;
-      updated.last_sync = Some(
-        std::time::SystemTime::now()
-          .duration_since(std::time::UNIX_EPOCH)
-          .unwrap()
-          .as_secs(),
-      );
-      let _ = profile_manager.save_profile(&updated);
-    }
+    let reconciled_profile = self.reconcile_profile_metadata(profile).await?;
+    let profile = &reconciled_profile;
 
     // Sync associated entities
     if let Some(proxy_id) = &profile.proxy_id {
@@ -954,18 +946,9 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&sanitized)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize profile: {e}")))?;
 
-    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
-      .map_err(|e| SyncError::InvalidData(format!("Failed to seal profile metadata: {e}")))?;
-
     let remote_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
-    let presign = self
-      .client
-      .presign_upload(&remote_key, Some(content_type))
-      .await?;
-
     self
-      .client
-      .upload_bytes(&presign.url, &payload, Some(content_type))
+      .upload_config_json(&remote_key, &json, sanitized.updated_at.unwrap_or(0))
       .await?;
 
     Ok(())
@@ -4023,28 +4006,55 @@ pub async fn rollover_encryption_for_all_entities(
 ) -> Result<(), String> {
   let _ = events::emit("e2e-rollover-started", ());
 
+  let internal_error = |detail: String| {
+    serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": detail } }).to_string()
+  };
+  let engine = SyncEngine::create_from_settings(&app_handle)
+    .await
+    .map_err(&internal_error)?;
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
-    .map_err(|e| format!("Failed to list profiles: {e}"))?;
+    .map_err(|e| internal_error(format!("Failed to list profiles: {e}")))?;
 
   let synced_profiles: Vec<_> = profiles
     .iter()
     .filter(|p| p.sync_mode != SyncMode::Disabled)
     .collect();
 
-  let total_profiles = synced_profiles.len();
-  let mut running_profile_ids: std::collections::HashSet<uuid::Uuid> =
-    std::collections::HashSet::new();
+  if synced_profiles
+    .iter()
+    .any(|profile| profile.process_id.is_some())
+  {
+    return Err(serde_json::json!({ "code": "PROFILE_RUNNING" }).to_string());
+  }
 
+  let total_profiles = synced_profiles.len();
   for (i, profile) in synced_profiles.iter().enumerate() {
-    if profile.process_id.is_some() {
-      running_profile_ids.insert(profile.id);
-    }
     let id_str = profile.id.to_string();
-    if let Err(e) = trigger_sync_for_profile(app_handle.clone(), id_str.clone()).await {
-      log::warn!("Rollover: profile {} re-sync failed: {e}", id_str);
-    }
+    // The remote manifest may be encrypted with the previous password. Delete
+    // only that manifest so the normal sync path treats every local file as an
+    // upload and rewrites it with the current password. Existing remote files
+    // remain available until their replacements have uploaded.
+    let key_prefix = SyncEngine::get_team_key_prefix(profile).await;
+    engine
+      .upload_profile_metadata(&id_str, profile, &key_prefix)
+      .await
+      .map_err(|e| {
+        internal_error(format!(
+          "Failed to roll over profile metadata {id_str}: {e}"
+        ))
+      })?;
+    let manifest_key = format!("{key_prefix}profiles/{id_str}/manifest.json");
+    engine
+      .client
+      .delete(&manifest_key, None)
+      .await
+      .map_err(|e| internal_error(format!("Failed to reset profile manifest: {e}")))?;
+    engine
+      .sync_profile(&app_handle, profile)
+      .await
+      .map_err(|e| internal_error(format!("Failed to roll over profile {id_str}: {e}")))?;
     let _ = events::emit(
       "e2e-rollover-progress",
       serde_json::json!({
@@ -4055,37 +4065,14 @@ pub async fn rollover_encryption_for_all_entities(
     );
   }
 
-  // Determine which entity ids are referenced by running profiles, so we can
-  // defer their re-upload (changing their files mid-session would cause the
-  // running browser to see a different proxy/extension config than what it
-  // launched with).
-  let mut deferred_proxy_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-  let mut deferred_vpn_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-  let mut deferred_group_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-  for p in &profiles {
-    if running_profile_ids.contains(&p.id) {
-      if let Some(id) = &p.proxy_id {
-        deferred_proxy_ids.insert(id.clone());
-      }
-      if let Some(id) = &p.vpn_id {
-        deferred_vpn_ids.insert(id.clone());
-      }
-      if let Some(id) = &p.group_id {
-        deferred_group_ids.insert(id.clone());
-      }
-    }
-  }
-
   let proxies = crate::proxy_manager::PROXY_MANAGER.get_stored_proxies();
   let synced_proxies: Vec<_> = proxies.iter().filter(|p| p.sync_enabled).collect();
   let total_proxies = synced_proxies.len();
-  let mut deferred = Vec::new();
   for (i, proxy) in synced_proxies.iter().enumerate() {
-    if deferred_proxy_ids.contains(&proxy.id) {
-      deferred.push(proxy.id.clone());
-    } else if let Some(scheduler) = super::get_global_scheduler() {
-      scheduler.queue_proxy_sync(proxy.id.clone()).await;
-    }
+    engine
+      .upload_proxy(proxy)
+      .await
+      .map_err(|e| internal_error(format!("Failed to roll over proxy {}: {e}", proxy.id)))?;
     let _ = events::emit(
       "e2e-rollover-progress",
       serde_json::json!({"stage": "proxies", "done": i + 1, "total": total_proxies}),
@@ -4095,17 +4082,15 @@ pub async fn rollover_encryption_for_all_entities(
   let groups = {
     let gm = crate::group_manager::GROUP_MANAGER.lock().unwrap();
     gm.get_all_groups()
-      .map_err(|e| format!("Failed to get groups: {e}"))?
+      .map_err(|e| internal_error(format!("Failed to get groups: {e}")))?
   };
   let synced_groups: Vec<_> = groups.iter().filter(|g| g.sync_enabled).collect();
   let total_groups = synced_groups.len();
-  let mut deferred_groups = Vec::new();
   for (i, group) in synced_groups.iter().enumerate() {
-    if deferred_group_ids.contains(&group.id) {
-      deferred_groups.push(group.id.clone());
-    } else if let Some(scheduler) = super::get_global_scheduler() {
-      scheduler.queue_group_sync(group.id.clone()).await;
-    }
+    engine
+      .upload_group(group)
+      .await
+      .map_err(|e| internal_error(format!("Failed to roll over group {}: {e}", group.id)))?;
     let _ = events::emit(
       "e2e-rollover-progress",
       serde_json::json!({"stage": "groups", "done": i + 1, "total": total_groups}),
@@ -4116,17 +4101,15 @@ pub async fn rollover_encryption_for_all_entities(
     let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
     storage
       .list_configs()
-      .map_err(|e| format!("Failed to list VPN configs: {e}"))?
+      .map_err(|e| internal_error(format!("Failed to list VPN configs: {e}")))?
   };
   let synced_vpns: Vec<_> = vpns.iter().filter(|v| v.sync_enabled).collect();
   let total_vpns = synced_vpns.len();
-  let mut deferred_vpns = Vec::new();
   for (i, config) in synced_vpns.iter().enumerate() {
-    if deferred_vpn_ids.contains(&config.id) {
-      deferred_vpns.push(config.id.clone());
-    } else if let Some(scheduler) = super::get_global_scheduler() {
-      scheduler.queue_vpn_sync(config.id.clone()).await;
-    }
+    engine
+      .upload_vpn(config)
+      .await
+      .map_err(|e| internal_error(format!("Failed to roll over VPN {}: {e}", config.id)))?;
     let _ = events::emit(
       "e2e-rollover-progress",
       serde_json::json!({"stage": "vpns", "done": i + 1, "total": total_vpns}),
@@ -4136,14 +4119,15 @@ pub async fn rollover_encryption_for_all_entities(
   let extensions = {
     let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     em.list_extensions()
-      .map_err(|e| format!("Failed to list extensions: {e}"))?
+      .map_err(|e| internal_error(format!("Failed to list extensions: {e}")))?
   };
   let synced_exts: Vec<_> = extensions.iter().filter(|e| e.sync_enabled).collect();
   let total_exts = synced_exts.len();
   for (i, ext) in synced_exts.iter().enumerate() {
-    if let Some(scheduler) = super::get_global_scheduler() {
-      scheduler.queue_extension_sync(ext.id.clone()).await;
-    }
+    engine
+      .upload_extension(ext)
+      .await
+      .map_err(|e| internal_error(format!("Failed to roll over extension {}: {e}", ext.id)))?;
     let _ = events::emit(
       "e2e-rollover-progress",
       serde_json::json!({"stage": "extensions", "done": i + 1, "total": total_exts}),
@@ -4153,35 +4137,21 @@ pub async fn rollover_encryption_for_all_entities(
   let ext_groups = {
     let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     em.list_groups()
-      .map_err(|e| format!("Failed to list extension groups: {e}"))?
+      .map_err(|e| internal_error(format!("Failed to list extension groups: {e}")))?
   };
   let synced_ext_groups: Vec<_> = ext_groups.iter().filter(|g| g.sync_enabled).collect();
   let total_eg = synced_ext_groups.len();
   for (i, group) in synced_ext_groups.iter().enumerate() {
-    if let Some(scheduler) = super::get_global_scheduler() {
-      scheduler.queue_extension_group_sync(group.id.clone()).await;
-    }
+    engine.upload_extension_group(group).await.map_err(|e| {
+      internal_error(format!(
+        "Failed to roll over extension group {}: {e}",
+        group.id
+      ))
+    })?;
     let _ = events::emit(
       "e2e-rollover-progress",
       serde_json::json!({"stage": "extension_groups", "done": i + 1, "total": total_eg}),
     );
-  }
-
-  if !deferred.is_empty() || !deferred_groups.is_empty() || !deferred_vpns.is_empty() {
-    tauri::async_runtime::spawn(async move {
-      tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-      if let Some(scheduler) = super::get_global_scheduler() {
-        for id in deferred {
-          scheduler.queue_proxy_sync(id).await;
-        }
-        for id in deferred_groups {
-          scheduler.queue_group_sync(id).await;
-        }
-        for id in deferred_vpns {
-          scheduler.queue_vpn_sync(id).await;
-        }
-      }
-    });
   }
 
   let _ = events::emit("e2e-rollover-completed", ());

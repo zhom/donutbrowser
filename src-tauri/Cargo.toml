@@ -42,6 +42,7 @@ tauri-plugin-macos-permissions = "2"
 tauri-plugin-log = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-window-state = "2"
+tauri-plugin-cross-platform-webdriver = { path = "../../tauri-cross-platform-webdriver/crates/tauri-plugin-cross-platform-webdriver", optional = true }
 log = "0.4"
 env_logger = "0.11"
 
@@ -186,3 +187,4 @@ default = ["custom-protocol"]
 # this feature is used used for production builds where `devPath` points to the filesystem
 # DO NOT remove this
 custom-protocol = ["tauri/custom-protocol"]
+e2e = ["dep:tauri-plugin-cross-platform-webdriver"]

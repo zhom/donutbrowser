@@ -51,7 +51,9 @@ donutbrowser/
 │   └── Cargo.toml                  # Rust dependencies
 ├── donut-sync/                     # NestJS sync server (self-hostable)
 │   └── src/                        # Controllers, services, auth, S3 sync
-├── docs/                           # Documentation (self-hosting guide)
+├── e2e/                            # Isolated native UI/sync/Wayfern E2E system
+│   ├── lib/                        # WebDriver, CDP, fixtures, app-session helpers
+│   └── tests/                      # Smoke, UI, entity, integration, sync, browser suites
 ├── flake.nix                       # Nix development environment
 └── .github/workflows/              # CI/CD pipelines
 ```
@@ -63,6 +65,34 @@ donutbrowser/
 - `pnpm lint` includes spellcheck via [typos](https://github.com/crate-ci/typos). False positives can be allowlisted in `_typos.toml`
 - The full `pnpm test` output dumps every test name (≈400+ lines) which burns context for no signal. Filter:
   `pnpm test 2>&1 | grep -E "test result|panicked|FAILED"` — four "test result: ok" lines means everything passed.
+
+### Native app E2E tests are mandatory for affected behavior
+
+The native suites use the sibling `../tauri-cross-platform-webdriver/` repository and launch an
+`e2e`-feature build. Every session gets its own temporary Donut data/cache/log root, home directory,
+WebView store, ports, and sync bucket. Never point a suite at production or development data.
+
+After a behavior change, run the smallest affected subset below in addition to the standard
+format/lint/unit-test command. A code change is not considered verified until its affected native
+suite passes:
+
+| Changed area | Required command |
+| --- | --- |
+| Startup, settings, persistence, window state, shortcuts, navigation | `pnpm e2e:smoke` |
+| React components, dialogs, responsive layout, accessibility, onboarding | `pnpm e2e:ui` |
+| Profiles, imports, groups, proxies, VPNs, extensions, DNS, cookies, passwords, traffic | `pnpm e2e:entities` |
+| REST API/OpenAPI, MCP, cloud/update contracts, team locks, real-time synchronizer | `pnpm e2e:integrations` |
+| Sync client/server, manifests, timestamps, deletion, encryption, password rollover | `pnpm e2e:sync` |
+| Wayfern download/terms/fingerprint, browser runner, CDP, automation endpoints, process cleanup | `pnpm e2e:browser` |
+| E2E harness, WebDriver plugin/driver, app isolation hooks, or changes spanning multiple rows | Run every affected row; use `pnpm e2e` for cross-cutting changes |
+
+`e2e:browser` and the full suite require `WAYFERN_TEST_TOKEN` in the environment or the local
+`.env`; all other suites must run without credentials. Use `--no-build` only when the frontend,
+Rust app, sidecar, and WebDriver binaries are already current. Keep failed artifacts and inspect the
+per-session app/driver logs and screenshot before changing assertions.
+
+When adding a Tauri command, assign it exactly once in `e2e/coverage-map.mjs` and add executable
+evidence to the owning suite. `e2e:smoke` fails if command registration and the coverage map drift.
 
 ## Logs (when debugging a running app)
 

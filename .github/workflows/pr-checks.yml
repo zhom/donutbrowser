@@ -45,15 +45,22 @@ jobs:
     permissions:
       contents: read
 
+  app-e2e:
+    name: Cross-platform App E2E
+    uses: ./.github/workflows/app-e2e.yml
+    secrets: inherit
+    permissions:
+      contents: read
+
   pr-status:
     name: PR Status Check
     runs-on: ubuntu-latest
-    needs: [lint-js, lint-rust, security-scan, sync-e2e]
+    needs: [lint-js, lint-rust, security-scan, sync-e2e, app-e2e]
     if: always()
     steps:
       - name: Check all jobs succeeded
         run: |
-          if [[ "${{ needs.lint-js.result }}" != "success" || "${{ needs.lint-rust.result }}" != "success" || "${{ needs.security-scan.result }}" != "success" ]]; then
+          if [[ "${{ needs.lint-js.result }}" != "success" || "${{ needs.lint-rust.result }}" != "success" || "${{ needs.security-scan.result }}" != "success" || "${{ needs.app-e2e.result }}" != "success" ]]; then
             echo "One or more checks failed"
             exit 1
           fi
