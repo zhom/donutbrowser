@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "Format de règles non pris en charge : {{format}}",
     "dnsRulesSaveFailed": "Échec de l'enregistrement des règles DNS.",
     "dnsRulesExportFailed": "Échec de l'exportation des règles DNS.",
-    "fingerprintMatchFailed": "Impossible d'aligner l'empreinte sur le proxy."
+    "fingerprintMatchFailed": "Impossible d'aligner l'empreinte sur le proxy.",
+    "proxySidecarVersionMismatch": "Certains fichiers de Donut Browser proviennent de versions différentes. Réinstallez la dernière mise à jour ; vos profils resteront intacts.",
+    "updateProfilesRunning": "Arrêtez tous les profils en cours d’exécution avant d’installer la mise à jour.",
+    "updatePreparationFailed": "Donut Browser n’a pas pu arrêter en toute sécurité un processus réseau en arrière-plan. Redémarrez l’ordinateur, puis réessayez la mise à jour."
   },
   "rail": {
     "profiles": "Profils",

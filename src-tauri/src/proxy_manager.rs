@@ -1614,6 +1614,10 @@ impl ProxyManager {
       }
     }
 
+    crate::proxy_runner::ensure_sidecar_version()
+      .await
+      .map_err(|e| e.to_string())?;
+
     // Start a new proxy using the donut-proxy binary with the correct CLI interface
     let mut proxy_cmd = app_handle
       .shell()

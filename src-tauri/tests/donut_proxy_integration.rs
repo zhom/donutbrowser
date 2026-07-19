@@ -66,7 +66,17 @@ async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + 
     .join("debug")
     .join(proxy_binary_name);
 
-  if !proxy_binary.exists() {
+  let binary_is_current = proxy_binary.exists()
+    && std::process::Command::new(&proxy_binary)
+      .arg("--version")
+      .output()
+      .is_ok_and(|output| {
+        output.status.success()
+          && String::from_utf8_lossy(&output.stdout).trim()
+            == format!("donut-proxy {}", env!("BUILD_VERSION"))
+      });
+
+  if !binary_is_current {
     println!("Building donut-proxy binary for integration tests...");
     let build_status = std::process::Command::new("cargo")
       .args(["build", "--bin", "donut-proxy"])
@@ -125,6 +135,25 @@ impl Drop for ProxyTestTracker {
       }
     });
   }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_sidecar_reports_build_version() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
+  let binary_path = setup_test().await?;
+  let output = TestUtils::execute_command(&binary_path, &["--version"]).await?;
+
+  assert!(
+    output.status.success(),
+    "donut-proxy --version failed: {}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+  assert_eq!(
+    String::from_utf8(output.stdout)?.trim(),
+    format!("donut-proxy {}", env!("BUILD_VERSION"))
+  );
+  Ok(())
 }
 
 /// Test starting a local proxy without upstream proxy (DIRECT)

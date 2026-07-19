@@ -160,6 +160,8 @@ jobs:
       - name: Build sidecar binaries
         shell: bash
         working-directory: ./src-tauri
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           cargo build --bin donut-proxy --target ${{ matrix.target }} --release
 

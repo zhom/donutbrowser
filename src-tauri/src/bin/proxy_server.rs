@@ -110,6 +110,7 @@ async fn main() {
   }));
 
   let matches = Command::new("donut-proxy")
+    .version(env!("BUILD_VERSION"))
     .subcommand(
       Command::new("proxy")
         .about("Manage proxy servers")

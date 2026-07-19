@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "Unsupported rules format: {{format}}",
     "dnsRulesSaveFailed": "Failed to save the DNS rules.",
     "dnsRulesExportFailed": "Failed to export the DNS rules.",
-    "fingerprintMatchFailed": "Couldn't match the fingerprint to the proxy."
+    "fingerprintMatchFailed": "Couldn't match the fingerprint to the proxy.",
+    "proxySidecarVersionMismatch": "Some Donut Browser files are from different versions. Reinstall the latest update; your profiles will stay safe.",
+    "updateProfilesRunning": "Stop all running profiles before installing the update.",
+    "updatePreparationFailed": "Donut Browser could not safely stop a background network process. Restart your computer, then try the update again."
   },
   "rail": {
     "profiles": "Profiles",

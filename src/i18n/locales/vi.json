@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "Định dạng quy tắc không được hỗ trợ: {{format}}",
     "dnsRulesSaveFailed": "Không thể lưu quy tắc DNS.",
     "dnsRulesExportFailed": "Không thể xuất quy tắc DNS.",
-    "fingerprintMatchFailed": "Không thể khớp vân tay với proxy."
+    "fingerprintMatchFailed": "Không thể khớp vân tay với proxy.",
+    "proxySidecarVersionMismatch": "Một số tệp Donut Browser thuộc các phiên bản khác nhau. Hãy cài đặt lại bản cập nhật mới nhất; hồ sơ của bạn vẫn được giữ an toàn.",
+    "updateProfilesRunning": "Hãy dừng tất cả hồ sơ đang chạy trước khi cài đặt bản cập nhật.",
+    "updatePreparationFailed": "Donut Browser không thể dừng an toàn một tiến trình mạng chạy nền. Hãy khởi động lại máy tính rồi thử cập nhật lại."
   },
   "rail": {
     "profiles": "Profile",

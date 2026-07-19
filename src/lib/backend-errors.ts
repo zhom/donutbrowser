@@ -36,8 +36,11 @@ export type BackendErrorCode =
   | "PROXY_PAYMENT_REQUIRED"
   | "VPN_NOT_WORKING"
   | "CAMOUFOX_IMPORT_DEPRECATED"
+  | "PROXY_SIDECAR_VERSION_MISMATCH"
   | "UPDATE_CHECKSUMS_UNAVAILABLE"
   | "UPDATE_CHECKSUM_MISMATCH"
+  | "UPDATE_PROFILES_RUNNING"
+  | "UPDATE_PREPARATION_FAILED"
   | "PROFILE_NAME_EXISTS"
   | "IMPORT_SOURCE_NOT_FOUND"
   | "IMPORT_NO_ITEMS"
@@ -162,6 +165,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.vpnNotWorking");
     case "CAMOUFOX_IMPORT_DEPRECATED":
       return t("backendErrors.camoufoxImportDeprecated");
+    case "PROXY_SIDECAR_VERSION_MISMATCH":
+      return t("backendErrors.proxySidecarVersionMismatch");
     case "UPDATE_CHECKSUMS_UNAVAILABLE":
       return t("backendErrors.updateChecksumsUnavailable", {
         version: parsed.params?.version ?? "",
@@ -170,6 +175,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.updateChecksumMismatch", {
         file: parsed.params?.file ?? "",
       });
+    case "UPDATE_PROFILES_RUNNING":
+      return t("backendErrors.updateProfilesRunning");
+    case "UPDATE_PREPARATION_FAILED":
+      return t("backendErrors.updatePreparationFailed");
     case "PROFILE_NAME_EXISTS":
       return t("backendErrors.profileNameExists", {
         name: parsed.params?.name ?? "",

@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "지원되지 않는 규칙 형식: {{format}}",
     "dnsRulesSaveFailed": "DNS 규칙을 저장하지 못했습니다.",
     "dnsRulesExportFailed": "DNS 규칙을 내보내지 못했습니다.",
-    "fingerprintMatchFailed": "지문을 프록시에 맞추지 못했습니다."
+    "fingerprintMatchFailed": "지문을 프록시에 맞추지 못했습니다.",
+    "proxySidecarVersionMismatch": "Donut Browser 파일에 서로 다른 버전이 섞여 있습니다. 최신 업데이트를 다시 설치해 주세요. 프로필은 안전하게 유지됩니다.",
+    "updateProfilesRunning": "업데이트를 설치하기 전에 실행 중인 모든 프로필을 중지하세요.",
+    "updatePreparationFailed": "Donut Browser가 백그라운드 네트워크 프로세스를 안전하게 중지하지 못했습니다. 컴퓨터를 다시 시작한 후 업데이트를 다시 시도하세요."
   },
   "rail": {
     "profiles": "프로필",

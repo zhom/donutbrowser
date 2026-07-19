@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "Неподдерживаемый формат правил: {{format}}",
     "dnsRulesSaveFailed": "Не удалось сохранить правила DNS.",
     "dnsRulesExportFailed": "Не удалось экспортировать правила DNS.",
-    "fingerprintMatchFailed": "Не удалось подогнать отпечаток под прокси."
+    "fingerprintMatchFailed": "Не удалось подогнать отпечаток под прокси.",
+    "proxySidecarVersionMismatch": "Некоторые файлы Donut Browser относятся к разным версиям. Переустановите последнее обновление — ваши профили останутся в безопасности.",
+    "updateProfilesRunning": "Остановите все запущенные профили перед установкой обновления.",
+    "updatePreparationFailed": "Donut Browser не удалось безопасно остановить фоновый сетевой процесс. Перезагрузите компьютер и повторите обновление."
   },
   "rail": {
     "profiles": "Профили",

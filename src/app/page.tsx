@@ -950,7 +950,7 @@ export default function Home() {
         }
       } catch (err: unknown) {
         console.error("Failed to launch browser:", err);
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const errorMessage = translateBackendError(t, err);
         showErrorToast(
           t("errors.launchBrowserFailed", { error: errorMessage }),
         );

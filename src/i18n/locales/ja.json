@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "サポートされていないルール形式: {{format}}",
     "dnsRulesSaveFailed": "DNS ルールを保存できませんでした。",
     "dnsRulesExportFailed": "DNS ルールをエクスポートできませんでした。",
-    "fingerprintMatchFailed": "フィンガープリントをプロキシに合わせられませんでした。"
+    "fingerprintMatchFailed": "フィンガープリントをプロキシに合わせられませんでした。",
+    "proxySidecarVersionMismatch": "Donut Browser のファイルに異なるバージョンが混在しています。最新のアップデートを再インストールしてください。プロファイルはそのまま保持されます。",
+    "updateProfilesRunning": "アップデートをインストールする前に、実行中のプロファイルをすべて停止してください。",
+    "updatePreparationFailed": "バックグラウンドのネットワークプロセスを安全に停止できませんでした。コンピューターを再起動してから、もう一度アップデートしてください。"
   },
   "rail": {
     "profiles": "プロファイル",

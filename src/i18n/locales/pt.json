@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "Formato de regras não suportado: {{format}}",
     "dnsRulesSaveFailed": "Falha ao salvar as regras DNS.",
     "dnsRulesExportFailed": "Falha ao exportar as regras DNS.",
-    "fingerprintMatchFailed": "Não foi possível ajustar a impressão digital ao proxy."
+    "fingerprintMatchFailed": "Não foi possível ajustar a impressão digital ao proxy.",
+    "proxySidecarVersionMismatch": "Alguns arquivos do Donut Browser são de versões diferentes. Reinstale a atualização mais recente; seus perfis permanecerão seguros.",
+    "updateProfilesRunning": "Pare todos os perfis em execução antes de instalar a atualização.",
+    "updatePreparationFailed": "O Donut Browser não conseguiu encerrar com segurança um processo de rede em segundo plano. Reinicie o computador e tente atualizar novamente."
   },
   "rail": {
     "profiles": "Perfis",

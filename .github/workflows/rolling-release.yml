@@ -164,9 +164,25 @@ jobs:
           echo "Checking from src-tauri perspective:"
           ls -la src-tauri/../dist || echo "Warning: dist not accessible from src-tauri"
 
+      - name: Generate nightly timestamp
+        id: timestamp
+        shell: bash
+        run: |
+          # Committer date, not wall clock: every job in this run (including
+          # update-nightly-release, which runs much later) must derive the
+          # exact same tag, or a run straddling midnight UTC splits the
+          # release from its checksums.
+          TIMESTAMP=$(git show -s --format=%cs HEAD)
+          COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          echo "timestamp=${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "Generated timestamp: ${TIMESTAMP}-${COMMIT_HASH}"
+
       - name: Build sidecar binaries
         shell: bash
         working-directory: ./src-tauri
+        env:
+          BUILD_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
+          GITHUB_REF_NAME: "nightly-${{ steps.timestamp.outputs.timestamp }}"
         run: |
           cargo build --bin donut-proxy --target ${{ matrix.target }} --release
 
@@ -213,19 +229,6 @@ jobs:
           security find-identity -v -p codesigning $KEYCHAIN_PATH
 
           rm -f $CERT_PATH $KEY_PATH $PEM_PATH $P12_PATH
-
-      - name: Generate nightly timestamp
-        id: timestamp
-        shell: bash
-        run: |
-          # Committer date, not wall clock: every job in this run (including
-          # update-nightly-release, which runs much later) must derive the
-          # exact same tag, or a run straddling midnight UTC splits the
-          # release from its checksums.
-          TIMESTAMP=$(git show -s --format=%cs HEAD)
-          COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          echo "timestamp=${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
-          echo "Generated timestamp: ${TIMESTAMP}-${COMMIT_HASH}"
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f #v1.0.0

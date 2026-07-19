@@ -1698,6 +1698,95 @@ impl AppAutoUpdater {
     }
   }
 
+  #[cfg(any(target_os = "windows", test))]
+  async fn prepare_windows_installer() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let profiles = match crate::profile::ProfileManager::instance().list_profiles() {
+      Ok(profiles) => profiles,
+      Err(e) => {
+        log::error!("Failed to inspect running profiles before app update: {e}");
+        return Err(
+          serde_json::json!({
+            "code": "UPDATE_PREPARATION_FAILED"
+          })
+          .to_string()
+          .into(),
+        );
+      }
+    };
+
+    let has_running_profiles = profiles.into_iter().any(|profile| {
+      profile
+        .process_id
+        .is_some_and(|pid| pid != 0 && crate::proxy_storage::is_process_running(pid))
+    });
+    if has_running_profiles {
+      return Err(
+        serde_json::json!({
+          "code": "UPDATE_PROFILES_RUNNING"
+        })
+        .to_string()
+        .into(),
+      );
+    }
+
+    let proxy_configs = crate::proxy_storage::list_proxy_configs();
+    let vpn_configs = crate::vpn_worker_storage::list_vpn_worker_configs();
+    let mut worker_pids: Vec<u32> = proxy_configs
+      .iter()
+      .filter_map(|config| config.pid)
+      .chain(vpn_configs.iter().filter_map(|config| config.pid))
+      .collect();
+    worker_pids.sort_unstable();
+    worker_pids.dedup();
+
+    let proxy_ids: Vec<String> = proxy_configs.into_iter().map(|config| config.id).collect();
+    let vpn_ids: Vec<String> = vpn_configs.into_iter().map(|config| config.id).collect();
+
+    let stop_proxies = futures_util::future::join_all(
+      proxy_ids
+        .iter()
+        .map(|id| crate::proxy_runner::stop_proxy_process(id)),
+    );
+    let stop_vpns = futures_util::future::join_all(
+      vpn_ids
+        .iter()
+        .map(|id| crate::vpn_worker_runner::stop_vpn_worker(id)),
+    );
+    let (proxy_results, vpn_results) = tokio::join!(stop_proxies, stop_vpns);
+
+    for result in proxy_results.into_iter().chain(vpn_results) {
+      if let Err(e) = result {
+        log::warn!("Failed to stop a network worker before app update: {e}");
+      }
+    }
+
+    for _ in 0..20 {
+      if worker_pids
+        .iter()
+        .all(|pid| !crate::proxy_storage::is_process_running(*pid))
+      {
+        return Ok(());
+      }
+      tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    let remaining: Vec<u32> = worker_pids
+      .into_iter()
+      .filter(|pid| crate::proxy_storage::is_process_running(*pid))
+      .collect();
+    log::error!(
+      "App update aborted because donut-proxy worker PIDs are still running: {:?}",
+      remaining
+    );
+    Err(
+      serde_json::json!({
+        "code": "UPDATE_PREPARATION_FAILED"
+      })
+      .to_string()
+      .into(),
+    )
+  }
+
   /// Restart the application
   async fn restart_application(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(target_os = "macos")]
@@ -1764,6 +1853,11 @@ rm "{}"
       let pending = PENDING_INSTALLER_PATH.lock().unwrap().take();
 
       if let Some(installer_path) = pending {
+        if let Err(e) = Self::prepare_windows_installer().await {
+          *PENDING_INSTALLER_PATH.lock().unwrap() = Some(installer_path);
+          return Err(e);
+        }
+
         // Use ShellExecuteW to run the installer directly — no batch script,
         // no cmd.exe console window. The NSIS/MSI installer handles killing the
         // old process and restarting the app natively (via /UPDATE and
@@ -1991,7 +2085,7 @@ pub async fn restart_application() -> Result<(), String> {
   updater
     .restart_application()
     .await
-    .map_err(|e| format!("Failed to restart application: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to restart application"))
 }
 
 #[tauri::command]
@@ -2195,6 +2289,25 @@ not-a-hash  Donut_0.29.0_amd64.deb
     )
     .expect("asset with digest should deserialize");
     assert_eq!(with.digest.as_deref(), Some("sha256:ab12"));
+  }
+
+  #[test]
+  fn test_windows_installer_hook_protects_sidecar_replacement() {
+    let _ = AppAutoUpdater::prepare_windows_installer;
+
+    let config: serde_json::Value =
+      serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    assert_eq!(
+      config["bundle"]["windows"]["nsis"]["installerHooks"].as_str(),
+      Some("installer-hooks.nsh")
+    );
+
+    let hooks = include_str!("../installer-hooks.nsh");
+    assert!(hooks.contains("NSIS_HOOK_PREINSTALL"));
+    assert!(hooks.contains("IfFileExists \"$INSTDIR\\donut-proxy.exe\""));
+    assert!(hooks.contains("taskkill.exe"));
+    assert!(hooks.contains("donut-proxy.exe"));
+    assert!(hooks.contains("Delete \"$INSTDIR\\donut-proxy.exe\""));
   }
 
   #[test]

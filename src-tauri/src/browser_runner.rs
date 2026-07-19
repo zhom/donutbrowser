@@ -274,7 +274,7 @@ impl BrowserRunner {
         )
         .await
         .map_err(|e| {
-          let error_msg = format!("Failed to start local proxy for Wayfern: {e}");
+          let error_msg = crate::wrap_backend_error(e, "Failed to start local proxy for Wayfern");
           log::error!("{}", error_msg);
           error_msg
         })?;
@@ -1297,7 +1297,7 @@ pub async fn launch_browser_profile_impl(
         return format!("Failed to launch browser: Executable format error. This browser version is not compatible with your system architecture ({}). Please try a different browser or version that supports your platform.", std::env::consts::ARCH);
       }
     }
-    format!("Failed to launch browser or open URL: {e}")
+    crate::wrap_backend_error(e, "Failed to launch browser or open URL")
   })?;
 
   log::info!(

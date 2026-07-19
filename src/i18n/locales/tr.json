@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "Desteklenmeyen kural biçimi: {{format}}",
     "dnsRulesSaveFailed": "DNS kuralları kaydedilemedi.",
     "dnsRulesExportFailed": "DNS kuralları dışa aktarılamadı.",
-    "fingerprintMatchFailed": "Parmak izi proxy'ye eşlenemedi."
+    "fingerprintMatchFailed": "Parmak izi proxy'ye eşlenemedi.",
+    "proxySidecarVersionMismatch": "Bazı Donut Browser dosyaları farklı sürümlere ait. En son güncellemeyi yeniden yükleyin; profilleriniz güvende kalır.",
+    "updateProfilesRunning": "Güncellemeyi yüklemeden önce çalışan tüm profilleri durdurun.",
+    "updatePreparationFailed": "Donut Browser arka plandaki bir ağ işlemini güvenli şekilde durduramadı. Bilgisayarınızı yeniden başlatıp güncellemeyi tekrar deneyin."
   },
   "rail": {
     "profiles": "Profiller",

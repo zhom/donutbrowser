@@ -100,6 +100,8 @@ async fn wait_for_vpn_worker_ready(
 }
 
 pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn std::error::Error>> {
+  crate::proxy_runner::ensure_sidecar_version().await?;
+
   for config in list_vpn_worker_configs() {
     if let Some(pid) = config.pid {
       if !is_process_running(pid) {

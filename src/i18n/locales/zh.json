@@ -1870,7 +1870,10 @@
     "unsupportedDnsRulesFormat": "不支持的规则格式：{{format}}",
     "dnsRulesSaveFailed": "保存 DNS 规则失败。",
     "dnsRulesExportFailed": "导出 DNS 规则失败。",
-    "fingerprintMatchFailed": "无法将指纹匹配到代理。"
+    "fingerprintMatchFailed": "无法将指纹匹配到代理。",
+    "proxySidecarVersionMismatch": "部分 Donut Browser 文件来自不同版本。请重新安装最新更新；你的配置文件将保持安全。",
+    "updateProfilesRunning": "安装更新前，请停止所有正在运行的配置文件。",
+    "updatePreparationFailed": "Donut Browser 无法安全停止后台网络进程。请重启电脑，然后再次尝试更新。"
   },
   "rail": {
     "profiles": "配置文件",
