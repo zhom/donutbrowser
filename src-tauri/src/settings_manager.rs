@@ -852,7 +852,13 @@ pub async fn read_log_files(app_handle: tauri::AppHandle) -> Result<String, Stri
   const MAX_BYTES: usize = 5 * 1024 * 1024;
   let mut out = String::with_capacity(64 * 1024);
   for (path, _) in entries.iter().rev() {
-    let header = format!("===== {} =====\n", path.display());
+    let header = format!(
+      "===== {} =====\n",
+      path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("log")
+    );
     if out.len() + header.len() >= MAX_BYTES {
       break;
     }
@@ -884,7 +890,7 @@ pub async fn read_log_files(app_handle: tauri::AppHandle) -> Result<String, Stri
     .map(|s| format!("===== {s}"))
     .collect::<String>();
 
-  Ok(final_out)
+  Ok(crate::log_redaction::text(&final_out))
 }
 
 /// Reveal the log directory in the OS file manager.

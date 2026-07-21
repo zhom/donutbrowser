@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, copyFile, mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -11,17 +11,13 @@ export function defaultWayfernPath(projectRoot) {
   if (process.env.DONUT_E2E_WAYFERN_PATH) {
     return path.resolve(process.env.DONUT_E2E_WAYFERN_PATH);
   }
-  const sibling = path.resolve(
-    projectRoot,
-    "../wayfern-test/test_extracted_app",
-  );
-  if (process.platform === "darwin") {
-    return path.join(sibling, "Wayfern.app");
-  }
-  if (process.platform === "win32") {
-    return path.join(sibling, "Wayfern.exe");
-  }
-  return path.join(sibling, "wayfern");
+  const fixtureRoot = path.join(projectRoot, ".cache", "e2e-wayfern-fixture");
+  return process.platform === "darwin"
+    ? path.join(fixtureRoot, "Wayfern.app")
+    : path.join(
+        fixtureRoot,
+        process.platform === "win32" ? "Wayfern.exe" : "wayfern",
+      );
 }
 
 export function wayfernExecutable(bundlePath) {
@@ -60,18 +56,16 @@ export function inspectWayfern(bundlePath) {
   return { bundlePath, executable, version: match[1], output };
 }
 
-async function linkOrCopy(source, destination) {
+async function cloneAppBundle(source, destination) {
   await mkdir(path.dirname(destination), { recursive: true });
   try {
-    await symlink(
-      source,
-      destination,
-      process.platform === "win32" ? "junction" : undefined,
-    );
-  } catch (error) {
-    if (error.code !== "EEXIST") {
-      throw error;
-    }
+    execFileSync("/bin/cp", ["-cR", source, destination]);
+  } catch (_error) {
+    await cp(source, destination, {
+      recursive: true,
+      preserveTimestamps: true,
+      errorOnExist: true,
+    });
   }
 }
 
@@ -85,7 +79,10 @@ export async function seedWayfern(dataRoot, wayfern) {
   );
   await mkdir(installDir, { recursive: true });
   if (process.platform === "darwin") {
-    await linkOrCopy(wayfern.bundlePath, path.join(installDir, "Wayfern.app"));
+    await cloneAppBundle(
+      wayfern.bundlePath,
+      path.join(installDir, "Wayfern.app"),
+    );
   } else {
     const name = process.platform === "win32" ? "wayfern.exe" : "wayfern";
     const destination = path.join(installDir, name);
@@ -114,6 +111,30 @@ export async function seedWayfern(dataRoot, wayfern) {
   await mkdir(path.dirname(registryPath), { recursive: true });
   await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
   return installDir;
+}
+
+export async function prepareWayfern(app, projectRoot) {
+  const localBundle = defaultWayfernPath(projectRoot);
+  if (existsSync(localBundle)) {
+    const wayfern = inspectWayfern(localBundle);
+    await seedWayfern(app.dataRoot, wayfern);
+    return { version: wayfern.version, source: "local fixture" };
+  }
+
+  if (!app.session) await app.start();
+  const current = await app.invoke("fetch_browser_versions_with_count", {
+    browserStr: "wayfern",
+  });
+  assert.ok(
+    current.versions.length > 0,
+    "No Wayfern build is published for this platform",
+  );
+  const version = current.versions[0];
+  await app.invoke("download_browser", {
+    browserStr: "wayfern",
+    version,
+  });
+  return { version, source: "published download" };
 }
 
 export function wireGuardFixture() {

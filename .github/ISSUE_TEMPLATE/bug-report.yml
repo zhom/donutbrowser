@@ -2,6 +2,11 @@ name: Bug Report
 description: Something isn't working
 labels: ["bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include passwords, access tokens, proxy credentials, personal information, or other secrets. Automated triage sends the issue title and body to OpenRouter after removing the logs/screenshots field and redacting common sensitive-data patterns.
+
   - type: textarea
     id: description
     attributes:
@@ -54,7 +59,7 @@ body:
     id: logs
     attributes:
       label: Error logs or screenshots
-      description: Run from terminal to get logs. Paste errors, screenshots, or screen recordings.
+      description: Use Settings → Advanced → Copy logs for a redacted log bundle. Review it before posting. Never include credentials or personal information.
       placeholder: Paste logs here or drag screenshots
     validations:
       required: false

@@ -1351,9 +1351,8 @@ pub async fn handle_proxy_connection(
 
 /// Render an upstream proxy URL for logging with any embedded credentials
 /// stripped. `config.upstream_url` carries `scheme://user:pass@host:port`, and
-/// these logs land in a world-readable file under the system temp dir, so the
-/// userinfo must never be emitted.
-fn redacted_upstream(upstream: &str) -> String {
+/// diagnostic logs and command responses must never expose the userinfo.
+pub fn redacted_upstream(upstream: &str) -> String {
   if upstream.is_empty() {
     return "none".to_string();
   }
@@ -2236,6 +2235,16 @@ mod tests {
     let s = format!("socks5://{}@127.0.0.1:1080", urlencoding::encode("u@name"));
     let u = Url::parse(&s).unwrap();
     assert_eq!(upstream_userpass(&u), ("u@name".into(), String::new()));
+  }
+
+  #[test]
+  fn upstream_log_value_never_contains_credentials() {
+    assert_eq!(
+      redacted_upstream("http://user:p%40ss@example.com:8080"),
+      "http://example.com:8080"
+    );
+    assert_eq!(redacted_upstream("not a URL"), "<redacted>");
+    assert_eq!(redacted_upstream(""), "none");
   }
 
   #[test]

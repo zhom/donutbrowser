@@ -349,12 +349,11 @@ mod tests {
 
   fn create_test_config() -> WireGuardConfig {
     WireGuardConfig {
-      // These are test keys, not real ones
-      private_key: "YEocP0e2o1WT5GlvBvQzVF7EeR6z9aCk+ZdZ5NKEuXA=".to_string(),
+      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string(),
       address: "10.0.0.2/24".to_string(),
       dns: Some("1.1.1.1".to_string()),
       mtu: Some(1420),
-      peer_public_key: "aGnF7JlG+U5t0BqB1PVf1yOuELHrWLGGcUJb0eCK9Aw=".to_string(),
+      peer_public_key: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=".to_string(),
       peer_endpoint: "127.0.0.1:51820".to_string(),
       allowed_ips: vec!["0.0.0.0/0".to_string()],
       persistent_keepalive: Some(25),
@@ -375,8 +374,7 @@ mod tests {
 
   #[test]
   fn test_parse_key_valid() {
-    // Valid base64-encoded 32-byte key
-    let key = "YEocP0e2o1WT5GlvBvQzVF7EeR6z9aCk+ZdZ5NKEuXA=";
+    let key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
     let result = WireGuardTunnel::parse_key(key);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 32);

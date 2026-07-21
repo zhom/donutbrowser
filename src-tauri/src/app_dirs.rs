@@ -209,6 +209,30 @@ pub fn restrict_to_owner(path: &std::path::Path) {
   }
 }
 
+/// Write sensitive data without creating a wider-permission file first.
+pub fn create_owner_only(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+  if path.exists() {
+    restrict_to_owner(path);
+  }
+  let mut options = std::fs::OpenOptions::new();
+  options.create(true).truncate(true).write(true);
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::OpenOptionsExt;
+    options.mode(0o600);
+  }
+  let file = options.open(path)?;
+  restrict_to_owner(path);
+  Ok(file)
+}
+
+pub fn write_owner_only(path: &std::path::Path, content: &[u8]) -> std::io::Result<()> {
+  use std::io::Write;
+  let mut file = create_owner_only(path)?;
+  file.write_all(content)?;
+  Ok(())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -219,6 +243,19 @@ mod tests {
     assert!(
       name == "DonutBrowser" || name == "DonutBrowserDev",
       "app_name should be DonutBrowser or DonutBrowserDev, got: {name}"
+    );
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn owner_only_writer_uses_private_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("secret.json");
+    write_owner_only(&path, b"secret").unwrap();
+    assert_eq!(
+      std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+      0o600
     );
   }
 

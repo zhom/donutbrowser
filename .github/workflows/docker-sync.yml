@@ -11,6 +11,11 @@ on:
         description: "Docker tag (e.g., v1.0.0)"
         required: true
         type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -43,23 +48,29 @@ jobs:
 
       - name: Determine tags
         id: tags
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           TAGS=""
-          INPUT_TAG="${{ inputs.tag }}"
 
           if [ -n "$INPUT_TAG" ]; then
             # Called from release workflow or manual dispatch
+            if [[ ! "$INPUT_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "Invalid Docker tag" >&2
+              exit 1
+            fi
             TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${INPUT_TAG}"
             TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          elif [ "${{ github.event_name }}" = "push" ]; then
+          elif [ "$EVENT_NAME" = "push" ]; then
             # Push to main (nightly): tag with nightly and commit SHA
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            SHORT_SHA=${COMMIT_SHA:0:7}
             TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly"
             TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly-${SHORT_SHA}"
           fi
 
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "Tags: ${TAGS}"
+          printf 'tags=%s\n' "$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a #v7.3.0

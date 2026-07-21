@@ -2,8 +2,8 @@ use clap::{Arg, Command};
 use donutbrowser_lib::proxy_runner::{
   start_proxy_process_with_profile, stop_all_proxy_processes, stop_proxy_process,
 };
-use donutbrowser_lib::proxy_server::run_proxy_server;
-use donutbrowser_lib::proxy_storage::get_proxy_config;
+use donutbrowser_lib::proxy_server::{redacted_upstream, run_proxy_server};
+use donutbrowser_lib::proxy_storage::{build_proxy_url, get_proxy_config};
 use std::process;
 
 fn set_high_priority() {
@@ -55,31 +55,6 @@ fn set_high_priority() {
   }
 }
 
-fn build_proxy_url(
-  proxy_type: &str,
-  host: &str,
-  port: u16,
-  username: Option<&str>,
-  password: Option<&str>,
-) -> String {
-  let mut url = format!("{}://", proxy_type.to_lowercase());
-
-  if let (Some(user), Some(pass)) = (username, password) {
-    let encoded_user = urlencoding::encode(user);
-    let encoded_pass = urlencoding::encode(pass);
-    url.push_str(&format!("{}:{}@", encoded_user, encoded_pass));
-  } else if let Some(user) = username {
-    let encoded_user = urlencoding::encode(user);
-    url.push_str(&format!("{}@", encoded_user));
-  }
-
-  url.push_str(host);
-  url.push(':');
-  url.push_str(&port.to_string());
-
-  url
-}
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
   // Initialize logger to write to stderr (which will be redirected to file).
@@ -129,8 +104,6 @@ async fn main() {
                 .long("type")
                 .help("Proxy type (http, https, socks4, socks5, ss)"),
             )
-            .arg(Arg::new("username").long("username").help("Proxy username"))
-            .arg(Arg::new("password").long("password").help("Proxy password"))
             .arg(
               Arg::new("port")
                 .short('p')
@@ -243,16 +216,22 @@ async fn main() {
         start_matches.get_one::<u16>("proxy-port"),
         start_matches.get_one::<String>("type"),
       ) {
-        let username = start_matches.get_one::<String>("username");
-        let password = start_matches.get_one::<String>("password");
+        let username = std::env::var("DONUT_PROXY_USERNAME").ok();
+        let password = std::env::var("DONUT_PROXY_PASSWORD").ok();
         upstream_url = Some(build_proxy_url(
           proxy_type,
           host,
           *port,
-          username.map(|s| s.as_str()),
-          password.map(|s| s.as_str()),
+          username.as_deref(),
+          password.as_deref(),
         ));
       } else if let Some(upstream) = start_matches.get_one::<String>("upstream") {
+        if url::Url::parse(upstream)
+          .is_ok_and(|parsed| !parsed.username().is_empty() || parsed.password().is_some())
+        {
+          eprintln!("Credentialed upstream URLs are not accepted as process arguments");
+          process::exit(2);
+        }
         upstream_url = Some(upstream.clone());
       }
 
@@ -286,7 +265,7 @@ async fn main() {
               "id": config.id,
               "localPort": config.local_port,
               "localUrl": config.local_url,
-              "upstreamUrl": config.upstream_url,
+              "upstreamUrl": redacted_upstream(&config.upstream_url),
             })
           );
           process::exit(0);
@@ -380,7 +359,7 @@ async fn main() {
               "Found config: id={}, port={:?}, upstream={}",
               config.id,
               config.local_port,
-              config.upstream_url
+              redacted_upstream(&config.upstream_url)
             );
             break config;
           }

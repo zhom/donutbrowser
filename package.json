@@ -16,6 +16,7 @@
     "e2e:smoke": "node e2e/run.mjs --suite=smoke",
     "e2e:ui": "node e2e/run.mjs --suite=ui",
     "e2e:entities": "node e2e/run.mjs --suite=entities",
+    "e2e:network": "node e2e/run.mjs --suite=network",
     "e2e:integrations": "node e2e/run.mjs --suite=integrations",
     "e2e:sync": "node e2e/run.mjs --suite=sync",
     "e2e:browser": "node e2e/run.mjs --suite=browser",
@@ -34,7 +35,7 @@
     "unused-exports:js": "ts-unused-exports tsconfig.json",
     "check-unused-commands": "cd src-tauri && cargo test test_no_unused_tauri_commands",
     "copy-proxy-binary": "node src-tauri/copy-proxy-binary.mjs",
-    "prebuild": "pnpm copy-proxy-binary",
+    "copy-proxy-binary:release": "node src-tauri/copy-proxy-binary.mjs --release",
     "pretauri:dev": "pnpm copy-proxy-binary",
     "precargo": "pnpm copy-proxy-binary"
   },

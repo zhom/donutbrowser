@@ -8,26 +8,8 @@
 	<string>Donut needs microphone access to enable microphone functionality in web browsers. Each website will still ask for your permission individually.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Donut has proxy functionality that requires local network access. You can deny this functionality if you don't plan on setting proxies for browser profiles.</string>
-	<key>CFBundleDisplayName</key>
-	<string>Donut</string>
-	<key>CFBundleName</key>
-	<string>Donut</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.donutbrowser</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-    <key>CFBundleURLName</key>
-    <string>com.donutbrowser</string>
-	<key>CFBundleExecutable</key>
-	<string>donutbrowser</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>CFBundleIconFile</key>
-	<string>icon.icns</string>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.productivity</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2025 Donut</string>
+	<string>Copyright © 2026 Donut</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -57,4 +39,4 @@
 		</dict>
 	</array>
 </dict>
-</plist> 
+</plist>

@@ -279,7 +279,7 @@ impl ProxyManager {
   ) -> Result<(), Box<dyn std::error::Error>> {
     let cache_file = self.get_proxy_check_cache_file(proxy_id)?;
     let content = serde_json::to_string_pretty(result)?;
-    fs::write(&cache_file, content)?;
+    crate::app_dirs::write_owner_only(&cache_file, content.as_bytes())?;
     Ok(())
   }
 
@@ -404,7 +404,7 @@ impl ProxyManager {
 
     let proxy_file = self.get_proxy_file_path(&proxy.id);
     let content = serde_json::to_string_pretty(proxy)?;
-    fs::write(&proxy_file, content)?;
+    crate::app_dirs::write_owner_only(&proxy_file, content.as_bytes())?;
 
     Ok(())
   }
@@ -1636,12 +1636,13 @@ impl ProxyManager {
         .arg("--type")
         .arg(&proxy_settings.proxy_type);
 
-      // Add credentials if provided
+      // Keep credentials out of process arguments. The short-lived sidecar
+      // removes these variables before it spawns the detached worker.
       if let Some(username) = &proxy_settings.username {
-        proxy_cmd = proxy_cmd.arg("--username").arg(username);
+        proxy_cmd = proxy_cmd.env("DONUT_PROXY_USERNAME", username);
       }
       if let Some(password) = &proxy_settings.password {
-        proxy_cmd = proxy_cmd.arg("--password").arg(password);
+        proxy_cmd = proxy_cmd.env("DONUT_PROXY_PASSWORD", password);
       }
     }
 
@@ -2526,7 +2527,7 @@ mod tests {
     Ok(())
   }
 
-  // Test that validates the command line arguments are constructed correctly
+  // Validate that non-secret proxy settings remain command arguments.
   #[test]
   fn test_proxy_command_construction() {
     let proxy_settings = ProxySettings {
@@ -2547,10 +2548,6 @@ mod tests {
       "8080",
       "--type",
       "http",
-      "--username",
-      "user",
-      "--password",
-      "pass",
     ];
 
     // This test verifies the argument structure without actually running the command
@@ -2669,61 +2666,6 @@ mod tests {
     } else {
       // Even if the upstream fails, the CLI should still exit quickly
       println!("CLI command failed but exited quickly as expected");
-    }
-
-    Ok(())
-  }
-
-  // Test that validates URL encoding for special characters in credentials
-  #[tokio::test]
-  async fn test_proxy_credentials_encoding() -> Result<(), Box<dyn std::error::Error>> {
-    let proxy_path = ensure_donut_proxy_binary().await?;
-
-    // Test with credentials that include special characters
-    let mut cmd = Command::new(&proxy_path);
-    cmd
-      .arg("proxy")
-      .arg("start")
-      .arg("--host")
-      .arg("test.example.com")
-      .arg("--proxy-port")
-      .arg("8080")
-      .arg("--type")
-      .arg("http")
-      .arg("--username")
-      .arg("user@domain.com")
-      .arg("--password")
-      .arg("pass word!");
-
-    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await??;
-
-    if output.status.success() {
-      let stdout = String::from_utf8(output.stdout)?;
-      let config: serde_json::Value = serde_json::from_str(&stdout)?;
-
-      let upstream_url = config["upstreamUrl"].as_str().unwrap();
-
-      println!("Generated upstream URL: {upstream_url}");
-
-      // Verify that special characters are properly encoded
-      assert!(upstream_url.contains("user%40domain.com"));
-      assert!(upstream_url.contains("pass%20word"));
-
-      println!("URL encoding test passed - special characters handled correctly");
-
-      // Clean up
-      let proxy_id = config["id"].as_str().unwrap();
-      let mut stop_cmd = Command::new(&proxy_path);
-      stop_cmd.arg("proxy").arg("stop").arg("--id").arg(proxy_id);
-      let _ = stop_cmd.output().await;
-    } else {
-      let stdout = String::from_utf8(output.stdout)?;
-      let stderr = String::from_utf8(output.stderr)?;
-      println!("Command failed (expected for non-existent upstream):");
-      println!("Stdout: {stdout}");
-      println!("Stderr: {stderr}");
-
-      println!("URL encoding test completed - credentials should be properly encoded");
     }
 
     Ok(())
@@ -3063,6 +3005,18 @@ mod tests {
 
     // Save
     save_proxy_config(&config).unwrap();
+
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      let mode =
+        std::fs::metadata(crate::proxy_storage::get_storage_dir().join(format!("{id}.json")))
+          .unwrap()
+          .permissions()
+          .mode()
+          & 0o777;
+      assert_eq!(mode, 0o600, "proxy credentials must be owner-only");
+    }
 
     // Load and compare
     let loaded = get_proxy_config(&id).expect("Config should be loadable");

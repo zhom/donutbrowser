@@ -1,5 +1,3 @@
-/** biome-ignore-all lint/a11y/noStaticElementInteractions: temporary suppress until in active use */
-/** biome-ignore-all lint/a11y/useKeyWithClickEvents: temporary suppress until in active use */
 "use client";
 
 import { Command as CommandPrimitive, useCommandState } from "cmdk";
@@ -14,9 +12,9 @@ export interface Option {
   value: string;
   label?: string;
   disable?: boolean;
-  /** fixed option that can't be removed. */
+  /** An option that cannot be removed. */
   fixed?: boolean;
-  /** Group the options by providing key. */
+  /** Group options by this property. */
   [key: string]: string | boolean | undefined;
 }
 type GroupOption = Record<string, Option[]>;
@@ -24,21 +22,20 @@ type GroupOption = Record<string, Option[]>;
 interface MultipleSelectorProps {
   value?: Option[];
   defaultOptions?: Option[];
-  /** manually controlled options */
+  /** Manually controlled options. */
   options?: Option[];
   placeholder?: string;
   /** Loading component. */
   loadingIndicator?: React.ReactNode;
   /** Empty component. */
   emptyIndicator?: React.ReactNode;
-  /** Debounce time for async search. Only work with `onSearch`. */
+  /** Debounce time for async search. Used only with `onSearch`. */
   delay?: number;
   /**
-   * Only work with `onSearch` prop. Trigger search when `onFocus`.
-   * For example, when user click on the input, it will trigger the search to get initial options.
+   * Trigger `onSearch` when the input receives focus.
    **/
   triggerSearchOnFocus?: boolean;
-  /** async search */
+  /** Asynchronous search. */
   onSearch?: (value: string) => Promise<Option[]>;
   onChange?: (options: Option[]) => void;
   /** Limit the maximum number of selected options. */
@@ -48,13 +45,12 @@ interface MultipleSelectorProps {
   /** Hide the placeholder when there are options selected. */
   hidePlaceholderWhenSelected?: boolean;
   disabled?: boolean;
-  /** Group the options base on provided key. */
+  /** Group options by the provided key. */
   groupBy?: string;
   className?: string;
   badgeClassName?: string;
   /**
-   * First item selected is a default behavior by cmdk. That is why the default is true.
-   * This is a workaround solution by add a dummy item.
+   * Prevent cmdk from selecting the first item by inserting a dummy item.
    *
    * @reference: https://github.com/pacocoursey/cmdk/issues/171
    */
@@ -375,7 +371,7 @@ const MultipleSelector = React.forwardRef<
       return Object.values(selectables).some((group) => group.length > 0);
     }, [selectables]);
 
-    /** Avoid Creatable Selector freezing or lagging when paste a long string. */
+    // Skip fuzzy matching for creatable inputs to keep long pasted values responsive.
     const commandFilter = React.useCallback(() => {
       if (commandProps?.filter) {
         return commandProps.filter;
@@ -401,13 +397,15 @@ const MultipleSelector = React.forwardRef<
           "relative h-auto overflow-visible bg-transparent",
           commandProps?.className,
         )}
+        // Consumers may override filtering even when search is asynchronous.
         shouldFilter={
           commandProps?.shouldFilter !== undefined
             ? commandProps.shouldFilter
             : !onSearch
-        } // When onSearch is provided, we don't want to filter the options. You can still override it.
+        }
         filter={commandFilter()}
       >
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer focus is forwarded to the nested input; keyboard users focus nested controls directly */}
         <div
           className={cn(
             "min-h-10 rounded-md border border-input text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
@@ -417,7 +415,7 @@ const MultipleSelector = React.forwardRef<
             },
             className,
           )}
-          onClick={() => {
+          onMouseDown={() => {
             if (disabled) return;
             inputRef.current?.focus();
           }}

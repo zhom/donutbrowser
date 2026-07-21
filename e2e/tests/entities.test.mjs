@@ -25,7 +25,6 @@ async function createProfile(app, name = "Entity Profile") {
 
 test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", async () => {
   await withApp("entities-core", async (app) => {
-    await app.invoke("complete_onboarding");
     const group = await app.invoke("create_profile_group", {
       name: "Research",
     });

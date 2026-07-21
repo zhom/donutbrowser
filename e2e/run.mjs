@@ -7,7 +7,15 @@ import {
   existsSync,
   statSync,
 } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+} from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -15,6 +23,7 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+import { createSafeDiagnostics } from "./lib/diagnostics.mjs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(dirname, "..");
@@ -26,10 +35,11 @@ const isWindows = process.platform === "win32";
 const executableSuffix = isWindows ? ".exe" : "";
 const appBinary = path.join(
   projectRoot,
-  "src-tauri",
+  "e2e",
+  "app",
   "target",
   "debug",
-  `donutbrowser${executableSuffix}`,
+  `donutbrowser-e2e${executableSuffix}`,
 );
 const driverBinary = path.join(
   webdriverRoot,
@@ -39,17 +49,20 @@ const driverBinary = path.join(
 );
 
 const suiteFiles = {
-  smoke: ["smoke.test.mjs", "coverage.test.mjs"],
+  smoke: ["diagnostics.test.mjs", "smoke.test.mjs", "coverage.test.mjs"],
   ui: ["ui.test.mjs"],
   entities: ["entities.test.mjs"],
+  network: ["network.test.mjs"],
   integrations: ["integrations.test.mjs"],
   sync: ["sync.test.mjs"],
   browser: ["browser.test.mjs"],
   full: [
+    "diagnostics.test.mjs",
     "coverage.test.mjs",
     "smoke.test.mjs",
     "ui.test.mjs",
     "entities.test.mjs",
+    "network.test.mjs",
     "integrations.test.mjs",
     "sync.test.mjs",
     "browser.test.mjs",
@@ -189,28 +202,42 @@ async function stopProcess(record) {
   record.stream.end();
 }
 
-async function loadLocalToken() {
-  if (process.env.WAYFERN_TEST_TOKEN) {
-    return process.env.WAYFERN_TEST_TOKEN;
+function unquoteEnvValue(value) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if ((quote === '"' || quote === "'") && trimmed.at(-1) === quote) {
+    return trimmed.slice(1, -1);
   }
-  for (const file of [
-    path.join(projectRoot, ".env"),
-    path.resolve(projectRoot, "../wayfern-test/.env"),
-  ]) {
+  return trimmed;
+}
+
+async function loadLocalValues(names) {
+  const values = Object.fromEntries(
+    names
+      .filter((name) => process.env[name])
+      .map((name) => [name, process.env[name]]),
+  );
+  for (const file of [path.join(projectRoot, ".env")]) {
     try {
       const content = await readFile(file, "utf8");
-      const match = content.match(
-        /^\s*(?:export\s+)?WAYFERN_TEST_TOKEN\s*=\s*(.+?)\s*$/m,
-      );
-      if (match) {
-        const raw = match[1].trim();
-        return raw.replace(/^(['"])(.*)\1$/, "$2");
+      for (const name of names) {
+        if (values[name]) continue;
+        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const match = content.match(
+          new RegExp(
+            `^\\s*(?:export\\s+)?${escapedName}\\s*=\\s*(.+?)\\s*$`,
+            "m",
+          ),
+        );
+        if (match) {
+          values[name] = unquoteEnvValue(match[1]);
+        }
       }
     } catch {
-      // A local token is only mandatory for the browser suite.
+      // Individual suites validate the secrets they require.
     }
   }
-  return "";
+  return values;
 }
 
 function buildAll() {
@@ -221,8 +248,8 @@ function buildAll() {
   run("pnpm", ["copy-proxy-binary"], projectRoot);
   run(
     "cargo",
-    ["build", "--features", "e2e", "--bin", "donutbrowser"],
-    path.join(projectRoot, "src-tauri"),
+    ["build", "--locked", "--manifest-path", "e2e/app/Cargo.toml"],
+    projectRoot,
   );
   run(
     "cargo",
@@ -474,21 +501,159 @@ async function startSyncInfrastructure(runRoot, options, records) {
   };
 }
 
+function runDocker(args, { allowFailure = false } = {}) {
+  const result = spawnSync("docker", args, {
+    encoding: "utf8",
+    timeout: 120_000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (!allowFailure && (result.error || result.status !== 0)) {
+    throw new Error(
+      `docker ${args[0]} failed: ${result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`}`,
+    );
+  }
+  return result;
+}
+
+function dockerAvailable() {
+  const result = runDocker(["version"], { allowFailure: true });
+  return !result.error && result.status === 0;
+}
+
+async function startWireGuardInfrastructure() {
+  if (!dockerAvailable()) {
+    throw new Error(
+      "The network E2E suite requires a running Docker daemon for its local WireGuard peer",
+    );
+  }
+
+  const port = await freePort();
+  const name = `donut-wg-e2e-${process.pid}-${Date.now()}`;
+  const image =
+    process.env.DONUT_E2E_WIREGUARD_IMAGE ??
+    "lscr.io/linuxserver/wireguard:latest";
+  log("Starting isolated local WireGuard peer");
+  runDocker([
+    "run",
+    "-d",
+    "--name",
+    name,
+    "--cap-add=NET_ADMIN",
+    "-p",
+    `${port}:51820/udp`,
+    "-e",
+    "PEERS=1",
+    "-e",
+    "SERVERURL=127.0.0.1",
+    "-e",
+    "SERVERPORT=51820",
+    "-e",
+    "PEERDNS=auto",
+    "-e",
+    "INTERNAL_SUBNET=10.64.0.0",
+    image,
+  ]);
+
+  try {
+    const deadline = Date.now() + 45_000;
+    let config = "";
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      const configResult = runDocker(
+        ["exec", name, "cat", "/config/peer1/peer1.conf"],
+        { allowFailure: true },
+      );
+      const statusResult = runDocker(["exec", name, "wg", "show"], {
+        allowFailure: true,
+      });
+      if (
+        configResult.status === 0 &&
+        statusResult.status === 0 &&
+        statusResult.stdout.includes("listening port")
+      ) {
+        config = configResult.stdout;
+        break;
+      }
+    }
+    if (!config) {
+      throw new Error("Local WireGuard peer did not become ready within 45s");
+    }
+
+    const server = runDocker([
+      "exec",
+      "-d",
+      name,
+      "sh",
+      "-c",
+      'while true; do printf "HTTP/1.1 200 OK\\r\\nContent-Length: 13\\r\\nConnection: close\\r\\n\\r\\nWG-TUNNEL-OK\\n" | nc -l -p 8080 >> /tmp/donut-e2e-target-requests 2>/dev/null; done',
+    ]);
+    if (server.status !== 0) {
+      throw new Error("Failed to start the WireGuard tunnel target server");
+    }
+    config = config.replace(
+      /^Endpoint\s*=.*$/m,
+      `Endpoint = 127.0.0.1:${port}`,
+    );
+    return {
+      name,
+      config,
+      targetUrl: "http://10.64.0.1:8080/donut-e2e-wireguard",
+    };
+  } catch (error) {
+    runDocker(["rm", "-f", name], { allowFailure: true });
+    throw error;
+  }
+}
+
+async function prepareRetainedArtifacts(
+  runRoot,
+  { suite, failed, sensitiveValues },
+) {
+  const sessionsRoot = path.join(runRoot, "sessions");
+  const sessions = await readdir(sessionsRoot, {
+    withFileTypes: true,
+  }).catch(() => []);
+  await Promise.all(
+    sessions
+      .filter((entry) => entry.isDirectory())
+      .map((entry) =>
+        rm(path.join(sessionsRoot, entry.name, "donut", "data", "binaries"), {
+          recursive: true,
+          force: true,
+        }),
+      ),
+  );
+  await createSafeDiagnostics(runRoot, { suite, failed, sensitiveValues });
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const runRoot = await mkdtemp(path.join(os.tmpdir(), "donut-e2e-"));
   await mkdir(path.join(runRoot, "logs"), { recursive: true });
   const records = [];
   let fixture;
+  let wireGuard;
   let failed = false;
+  const sensitiveValues = [
+    "donut-e2e-sync-token-0123456789abcdef",
+    "minioadmin",
+  ];
   const cleanup = async () => {
     await Promise.all(records.reverse().map(stopProcess));
     if (fixture) {
       await new Promise((resolve) => fixture.server.close(resolve));
     }
+    if (wireGuard) {
+      runDocker(["rm", "-f", wireGuard.name], { allowFailure: true });
+    }
     if (!options.keep && !failed) {
       await rm(runRoot, { recursive: true, force: true });
     } else {
+      await prepareRetainedArtifacts(runRoot, {
+        suite: options.suite,
+        failed,
+        sensitiveValues,
+      });
       log(`Artifacts retained at ${runRoot}`);
     }
   };
@@ -536,22 +701,42 @@ async function main() {
     await waitForUrl(`http://127.0.0.1:${driverPort}/status`, 15_000, driver);
 
     const needsBrowser =
-      options.suite === "browser" || options.suite === "full";
+      options.suite === "browser" ||
+      options.suite === "network" ||
+      options.suite === "full";
+    const networkEnabled =
+      (options.suite === "network" || options.suite === "full") &&
+      process.env.DONUT_E2E_SKIP_NETWORK_TEST !== "1";
     const geoIpFixture = needsBrowser ? await ensureGeoIpFixture() : null;
     fixture = await startFixtureServer(geoIpFixture);
     let sync = {};
     if (options.suite === "sync" || options.suite === "full") {
       sync = await startSyncInfrastructure(runRoot, options, records);
     }
-
-    const token = await loadLocalToken();
-    if ((options.suite === "browser" || options.suite === "full") && !token) {
-      throw new Error("WAYFERN_TEST_TOKEN is required by the browser suite");
+    if (networkEnabled && process.env.DONUT_E2E_SKIP_VPN_TUNNEL !== "1") {
+      wireGuard = await startWireGuardInfrastructure();
     }
 
-    const files = suiteFiles[options.suite].map((file) =>
-      path.join(dirname, "tests", file),
-    );
+    const localValues = await loadLocalValues([
+      "WAYFERN_TEST_TOKEN",
+      "RESIDENTIAL_PROXY_URL_ONE_SOCKS",
+      "RESIDENTIAL_PROXY_URL_ONE_HTTP",
+    ]);
+    sensitiveValues.push(...Object.values(localValues));
+    const token = localValues.WAYFERN_TEST_TOKEN ?? "";
+    if (needsBrowser && !token) {
+      throw new Error("WAYFERN_TEST_TOKEN is required by the browser suite");
+    }
+    if (wireGuard) {
+      sensitiveValues.push(
+        wireGuard.config,
+        Buffer.from(wireGuard.config).toString("base64"),
+      );
+    }
+
+    const files = suiteFiles[options.suite]
+      .filter((file) => networkEnabled || file !== "network.test.mjs")
+      .map((file) => path.join(dirname, "tests", file));
     const testArgs = [
       "--test",
       "--test-concurrency=1",
@@ -570,9 +755,18 @@ async function main() {
         DONUT_E2E_FIXTURE_URL: `http://127.0.0.1:${fixture.port}`,
         DONUT_E2E_GEOIP_FIXTURE_READY: geoIpFixture ? "1" : "0",
         WAYFERN_TEST_TOKEN: token,
+        RESIDENTIAL_PROXY_URL_ONE_SOCKS:
+          localValues.RESIDENTIAL_PROXY_URL_ONE_SOCKS ?? "",
+        RESIDENTIAL_PROXY_URL_ONE_HTTP:
+          localValues.RESIDENTIAL_PROXY_URL_ONE_HTTP ?? "",
         DONUT_E2E_SYNC_URL: sync.syncUrl ?? "",
         DONUT_E2E_SYNC_TOKEN: sync.syncToken ?? "",
         DONUT_E2E_MINIO_URL: sync.minioUrl ?? "",
+        DONUT_E2E_WIREGUARD_CONFIG_BASE64: wireGuard
+          ? Buffer.from(wireGuard.config).toString("base64")
+          : "",
+        DONUT_E2E_WIREGUARD_TARGET_URL: wireGuard?.targetUrl ?? "",
+        DONUT_E2E_WIREGUARD_CONTAINER: wireGuard?.name ?? "",
       },
       stdio: "inherit",
     });

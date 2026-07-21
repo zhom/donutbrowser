@@ -87,6 +87,29 @@ impl ProxyConfig {
   }
 }
 
+pub fn build_proxy_url(
+  proxy_type: &str,
+  host: &str,
+  port: u16,
+  username: Option<&str>,
+  password: Option<&str>,
+) -> String {
+  let mut url = format!("{}://", proxy_type.to_lowercase());
+  if let (Some(user), Some(pass)) = (username, password) {
+    url.push_str(&format!(
+      "{}:{}@",
+      urlencoding::encode(user),
+      urlencoding::encode(pass)
+    ));
+  } else if let Some(user) = username {
+    url.push_str(&format!("{}@", urlencoding::encode(user)));
+  }
+  url.push_str(host);
+  url.push(':');
+  url.push_str(&port.to_string());
+  url
+}
+
 pub fn get_storage_dir() -> PathBuf {
   crate::app_dirs::proxy_workers_dir()
 }
@@ -97,7 +120,7 @@ pub fn save_proxy_config(config: &ProxyConfig) -> Result<(), Box<dyn std::error:
 
   let file_path = storage_dir.join(format!("{}.json", config.id));
   let content = serde_json::to_string_pretty(config)?;
-  fs::write(&file_path, content)?;
+  crate::app_dirs::write_owner_only(&file_path, content.as_bytes())?;
 
   Ok(())
 }
@@ -159,10 +182,13 @@ pub fn update_proxy_config(config: &ProxyConfig) -> bool {
     return false;
   }
 
-  match serde_json::to_string_pretty(config) {
-    Ok(content) => fs::write(&file_path, content).is_ok(),
-    Err(_) => false,
+  let Ok(content) = serde_json::to_string_pretty(config) else {
+    return false;
+  };
+  if crate::app_dirs::write_owner_only(&file_path, content.as_bytes()).is_err() {
+    return false;
   }
+  true
 }
 
 pub fn generate_proxy_id() -> String {
@@ -194,6 +220,21 @@ pub fn is_process_running(pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn proxy_url_encodes_credentials() {
+    let url = build_proxy_url(
+      "HTTP",
+      "test.example.com",
+      8080,
+      Some("user@domain.com"),
+      Some("pass word!"),
+    );
+    assert_eq!(
+      url,
+      "http://user%40domain.com:pass%20word%21@test.example.com:8080"
+    );
+  }
 
   #[test]
   fn test_is_process_running_detects_current_process() {

@@ -14,7 +14,6 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
-  id-token: write
 
 env:
   # Single source of truth for the model used by both triage and composer.
@@ -49,8 +48,9 @@ jobs:
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          node <<'EOF'
-          const fs = require('node:fs');
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs';
+          import { redactIssueBody, redactSensitiveText } from './scripts/redact-sensitive-text.mjs';
           const body = process.env.ISSUE_BODY || '';
           // GitHub issue templates render fields as `### Heading\nValue` blocks.
           // Split on `###` at line start to recover them.
@@ -61,29 +61,27 @@ jobs:
             if (nl < 0) continue;
             const heading = section.slice(0, nl).trim();
             const value = section.slice(nl + 1).trim();
-            fields[heading] = value === '_No response_' ? '' : value;
+            const normalized = value === '_No response_' ? '' : value;
+            fields[heading] = heading === 'Error logs or screenshots'
+              ? '[omitted from automated processing]'
+              : redactSensitiveText(normalized);
           }
           fs.writeFileSync('/tmp/issue-fields.json', JSON.stringify(fields, null, 2));
-          // Convenience extractions for the prompt — empty string if missing.
           const get = (k) => fields[k] || '';
           fs.writeFileSync('/tmp/issue-os.txt', get('Operating System'));
           fs.writeFileSync('/tmp/issue-version.txt', get('Donut Browser version'));
           fs.writeFileSync('/tmp/issue-wayfern-version.txt', get('Wayfern version'));
           fs.writeFileSync('/tmp/issue-repro.txt', get('Steps to reproduce'));
-          fs.writeFileSync('/tmp/issue-logs.txt', get('Error logs or screenshots'));
           fs.writeFileSync('/tmp/issue-what.txt', get('What happened?') || get('What do you want?'));
+          fs.writeFileSync('/tmp/issue-body.txt', redactIssueBody(body));
           EOF
-          echo "Parsed fields:"
-          cat /tmp/issue-fields.json
 
       - name: Build repo context
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           cp CLAUDE.md /tmp/repo-context.txt
-          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
-          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
+          printf '%s' "$ISSUE_TITLE" | node scripts/redact-sensitive-text.mjs > /tmp/issue-title.txt
 
           # List all source files for the AI to choose from
           find . -type f \( -name "*.rs" -o -name "*.ts" -o -name "*.tsx" \) \
@@ -199,7 +197,7 @@ jobs:
           Return ONLY valid JSON. No preamble, no code fences. Schema:
           {
             "language": "en" or ISO 639-1 code,
-            "classification": one of ["bug-in-scope", "bug-template-violation", "feature-request", "fork-request", "regression", "ai-generated-junk", "question", "other"],
+            "classification": one of ["bug-in-scope", "bug-template-violation", "feature-request", "fork-request", "regression", "automated-content", "question", "other"],
             "operating_system": "macos" | "windows" | "linux" | "unknown",
             "is_paid_feature": true | false,
             "user_followed_template": true | false,
@@ -211,11 +209,11 @@ jobs:
 
           Classification guidance:
           - "bug-template-violation": missing or filled-in nonsense for required template fields.
-          - "ai-generated-junk": cites fabricated "official docs" (context7, deepwiki, non-donutbrowser URLs) or has the polished AI-spam shape (long, structured, fabricated certainty).
+          - "automated-content": cites fabricated "official docs" (context7, deepwiki, non-donutbrowser URLs) or has a highly structured automated-submission pattern with fabricated certainty.
           - "fork-request": asks for support of CloverLabsAI/VulpineOS/etc. forks.
           - "regression": user names a prior version that worked.
 
-          File selection: pick files that an experienced reviewer would actually look at to act on this issue. If the issue is a fork-request or junk, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.
+          File selection: pick files that an experienced reviewer would actually look at to act on this issue. For a fork request or automated-content classification, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.
           TRIAGE_TAIL
           } > /tmp/triage-system.txt
           wc -c /tmp/triage-system.txt
@@ -238,7 +236,7 @@ jobs:
               messages: [
                 { role: "system", content: $system_prompt },
                 { role: "user",
-                  content: ("Issue title: " + $title + "\n\nBody:\n" + $body + "\n\nParsed template fields:\n" + $fields + "\n\nAll source files:\n" + $files) }
+                  content: ("Issue title: " + $title + "\n\nSanitized body:\n" + $body + "\n\nSanitized template fields:\n" + $fields + "\n\nAll source files:\n" + $files) }
               ]
             }')
 
@@ -249,14 +247,12 @@ jobs:
 
           jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/triage-raw.txt
 
-          # Strip ```json fences if the model couldn't help itself.
+          # Normalize optional markdown fences before parsing.
           sed -E 's/^```(json)?$//; s/```$//' /tmp/triage-raw.txt > /tmp/triage.json
 
-          # Validate; if the model returned junk, fall back to a minimal stub so the
-          # composer still gets called and produces SOMETHING.
+          # Fall back to a safe classification when the response is not JSON.
           if ! jq -e . /tmp/triage.json >/dev/null 2>&1; then
             echo "::warning::Triage returned non-JSON; using fallback classification"
-            cat /tmp/triage-raw.txt
             jq -n '{
               language: "en",
               classification: "bug-in-scope",
@@ -270,17 +266,16 @@ jobs:
             }' > /tmp/triage.json
           fi
 
-          echo "Triage result:"
-          cat /tmp/triage.json
+          echo "Triage response validated"
 
       - name: Read files chosen by triage
         run: |
           : > /tmp/file-context.txt
-          # files_to_read may be empty (e.g. fork-request or junk) — that's fine.
+          # An empty file list is valid for classifications that need no source context.
           jq -r '.files_to_read[]? // empty' /tmp/triage.json | while IFS= read -r filepath; do
             filepath=$(echo "$filepath" | xargs)
             [ -z "$filepath" ] && continue
-            # Reject paths that escape the repo or look fishy
+            # Reject paths that escape the repository.
             case "$filepath" in
               /*|*..*|*$'\n'*) continue ;;
             esac
@@ -331,7 +326,7 @@ jobs:
           The triage classification (`triage.classification`) determines the response shape:
 
           - `bug-in-scope`: ask for what is missing using the user's reported OS log path. Be concrete about how to obtain logs.
-          - `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Wayfern version, Steps to reproduce, Error logs sections). If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
+          - `bug-template-violation` or `automated-content`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Wayfern version, Steps to reproduce, Error logs sections). If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
           - `feature-request`: one neutral sentence acknowledging, then ask only what is genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.
           - `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No "clear enhancement" language.
           - `regression`: do NOT call known/expected. Ask which exact previous version was the last working one, what changed in the user's environment between then and now, and the specific delta in symptoms.
@@ -408,8 +403,8 @@ jobs:
                     + "Title: " + $title
                     + "\nAuthor: " + $author
                     + "\n\n## Triage result\n" + $triage
-                    + "\n\n## Parsed template fields\n" + $fields
-                    + "\n\n## Raw issue body\n" + $body
+                    + "\n\n## Sanitized template fields\n" + $fields
+                    + "\n\n## Sanitized issue body\n" + $body
                     + "\n\n## Source files (selected by triage)\n" + $files) }
               ]
             }')
@@ -423,8 +418,6 @@ jobs:
 
           if [ ! -s /tmp/ai-comment.txt ]; then
             echo "::error::Composer returned empty response"
-            echo "Raw response:"
-            echo "$RESPONSE"
             exit 1
           fi
 
@@ -484,8 +477,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+          gh api --paginate "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
             --jq '.[] | "- \(.filename) (\(.status)) +\(.additions)/-\(.deletions)"' \
             > /tmp/pr-files.txt
 
@@ -499,14 +493,27 @@ jobs:
           cp CLAUDE.md /tmp/repo-context.txt
 
           : > /tmp/related-file-contents.txt
-          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' | while IFS= read -r filepath; do
-            if [ -f "$filepath" ] && file --mime "$filepath" | grep -q "text/"; then
-              echo "=== $filepath (full file) ===" >> /tmp/related-file-contents.txt
-              cat "$filepath" >> /tmp/related-file-contents.txt
-              echo "" >> /tmp/related-file-contents.txt
+          gh api --paginate "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[] | select(.status != "removed") | [.filename, .sha] | @tsv' |
+          while IFS=$'\t' read -r filepath blob_sha; do
+            case "$filepath" in
+              /*|*..*|*$'\n'*) continue ;;
+            esac
+            blob_file=$(mktemp)
+            if gh api "/repos/$HEAD_REPOSITORY/git/blobs/$blob_sha" --jq .content \
+              | tr -d '\n' | base64 --decode > "$blob_file" 2>/dev/null \
+              && file --mime "$blob_file" | grep -q "text/"; then
+                echo "=== $filepath (head revision) ===" >> /tmp/related-file-contents.txt
+                cat "$blob_file" >> /tmp/related-file-contents.txt
+                echo "" >> /tmp/related-file-contents.txt
             fi
+            rm -f "$blob_file"
           done
           head -c 100000 /tmp/related-file-contents.txt > /tmp/pr-file-context.txt
+          node scripts/redact-sensitive-text.mjs < /tmp/pr-diff.txt > /tmp/pr-diff.safe.txt
+          mv /tmp/pr-diff.safe.txt /tmp/pr-diff.txt
+          node scripts/redact-sensitive-text.mjs < /tmp/pr-file-context.txt > /tmp/pr-file-context.safe.txt
+          mv /tmp/pr-file-context.safe.txt /tmp/pr-file-context.txt
 
       - name: Analyze PR with AI
         env:
@@ -525,8 +532,8 @@ jobs:
             GREETING='This is a first-time contributor. Start your comment with: "Thanks for your first PR!"'
           fi
 
-          printf '%s' "$PR_TITLE" > /tmp/pr-title.txt
-          printf '%s' "${PR_BODY:-}" > /tmp/pr-body.txt
+          printf '%s' "$PR_TITLE" | node scripts/redact-sensitive-text.mjs > /tmp/pr-title.txt
+          printf '%s' "${PR_BODY:-}" | node scripts/redact-sensitive-text.mjs > /tmp/pr-body.txt
           printf '%s' "$PR_AUTHOR" > /tmp/pr-author.txt
           printf '%s' "$PR_BASE" > /tmp/pr-base.txt
           printf '%s' "$PR_HEAD" > /tmp/pr-head.txt
@@ -550,7 +557,7 @@ jobs:
               messages: [
                 {
                   role: "system",
-                  content: ("You are a code review bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nContributing guidelines:\n" + $contributing + "\n\nYou have access to the full changed files and the diff. Use them to give a substantive review.\n\nReview this PR and produce a single comment. Format:\n\n1. One sentence summarizing what this PR does and whether the approach is sound.\n2. **Code review** - Specific observations about the actual code changes. Mention file names and what you see in the diff. Look for:\n   - Bugs or logic errors in the changed code\n   - Security issues (SQL injection, path traversal, XSS, command injection)\n   - Missing error handling or edge cases\n   - Breaking changes to existing APIs or behavior\n   - If UI text was added/changed, check if all 7 translation files (en, es, fr, ja, pt, ru, zh) in src/i18n/locales/ were updated\n   - If Tauri commands were added/removed, the unused-commands test in lib.rs needs updating\n3. **Suggestions** - Concrete improvements if any. Skip if the PR looks good.\n\nRules:\n- Be substantive. Review the actual diff, not just the description.\n- Do NOT nitpick formatting or style — the project has automated linting (biome + clippy + rustfmt).\n- Do NOT just summarize the PR description back to the user — they wrote it, they know what it says.\n- If the PR is good, say so briefly.\n- Never exceed 20 lines.")
+                  content: ("You are a code review bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nContributing guidelines:\n" + $contributing + "\n\nYou have access to sanitized head-revision contents for changed files and a sanitized diff. Use them to give a substantive review.\n\nReview this PR and produce a single comment. Format:\n\n1. One sentence summarizing what this PR does and whether the approach is sound.\n2. **Code review** - Specific observations about the actual code changes. Mention file names and what you see in the diff. Look for:\n   - Bugs or logic errors in the changed code\n   - Security issues (SQL injection, path traversal, XSS, command injection)\n   - Missing error handling or edge cases\n   - Breaking changes to existing APIs or behavior\n   - If UI text was added or changed, verify the key exists in every JSON file under src/i18n/locales/\n   - If Tauri commands were added or removed, verify e2e/coverage-map.mjs is updated exactly once per command\n3. **Suggestions** - Concrete improvements if any. Skip if the PR looks good.\n\nRules:\n- Be substantive. Review the actual diff, not just the description.\n- Do NOT nitpick formatting or style — the project has automated linting (biome + clippy + rustfmt).\n- Do NOT just summarize the PR description back to the user — they wrote it, they know what it says.\n- If the PR is good, say so briefly.\n- Never exceed 20 lines.")
                 },
                 {
                   role: "user",
@@ -577,8 +584,6 @@ jobs:
 
           if [ ! -s /tmp/ai-comment.txt ]; then
             echo "::error::AI response was empty"
-            echo "Raw response:"
-            echo "$RESPONSE"
             exit 1
           fi
 
@@ -593,6 +598,9 @@ jobs:
     if: |
       github.repository == 'zhom/donutbrowser' &&
       (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR') &&
       (contains(github.event.comment.body, ' /oc') ||
        startsWith(github.event.comment.body, '/oc') ||
        contains(github.event.comment.body, ' /opencode') ||

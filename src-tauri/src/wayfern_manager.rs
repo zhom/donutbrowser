@@ -910,11 +910,6 @@ impl WayfernManager {
         );
       }
     }
-    if let Some(ref token) = wayfern_token {
-      args.push(format!("--wayfern-token={token}"));
-      log::info!("Wayfern token passed as CLI flag (length: {})", token.len());
-    }
-
     if let Some(proxy) = proxy_url {
       // Map the local proxy scheme to the matching PAC directive. SOCKS5 lets
       // Chromium route UDP (QUIC/WebRTC) and resolve DNS through the proxy;
@@ -942,6 +937,10 @@ impl WayfernManager {
       .stdin(Stdio::null())
       .stdout(Stdio::null())
       .stderr(Stdio::null());
+    if let Some(ref token) = wayfern_token {
+      command.env("WAYFERN_TOKEN", token);
+      log::info!("Wayfern authorization configured for browser process");
+    }
 
     let child = command
       .spawn()
@@ -1040,16 +1039,13 @@ impl WayfernManager {
 
       for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
-          log::info!("Applying fingerprint to target via WebSocket: {}", ws_url);
+          log::info!("Applying fingerprint to page target");
           match self
             .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint_params.clone())
             .await
           {
             Ok(result) => {
-              log::info!(
-                "Successfully applied fingerprint to page target: {:?}",
-                result
-              );
+              log::info!("Successfully applied fingerprint to page target");
               // Wayfern.setFingerprint echoes back the fingerprint it actually
               // used, which may be UPGRADED from what we sent (e.g. when the
               // stored fingerprint targets an older browser version). Capture
@@ -1080,7 +1076,7 @@ impl WayfernManager {
     // Geolocation is handled internally by the browser binary.
 
     if let Some(url) = url {
-      log::info!("Navigating to URL via CDP: {}", url);
+      log::info!("Navigating to URL via CDP");
       if let Some(target) = page_targets.first() {
         if let Some(ws_url) = &target.websocket_debugger_url {
           if let Err(e) = self
@@ -1212,7 +1208,7 @@ impl WayfernManager {
       return Err(format!("CDP /json/new returned HTTP {}", resp.status()).into());
     }
 
-    log::info!("Opened URL in new tab via CDP: {}", url);
+    log::info!("Opened URL in new tab via CDP");
     Ok(())
   }
 

@@ -1389,9 +1389,8 @@ async fn test_local_proxy_with_shadowsocks_upstream(
   }
 
   // Start donut-proxy with Shadowsocks upstream
-  let output = TestUtils::execute_command(
-    &binary_path,
-    &[
+  let output = tokio::process::Command::new(&binary_path)
+    .args([
       "proxy",
       "start",
       "--host",
@@ -1400,13 +1399,11 @@ async fn test_local_proxy_with_shadowsocks_upstream(
       &ss_port.to_string(),
       "--type",
       "ss",
-      "--username",
-      ss_method,
-      "--password",
-      ss_password,
-    ],
-  )
-  .await?;
+    ])
+    .env("DONUT_PROXY_USERNAME", ss_method)
+    .env("DONUT_PROXY_PASSWORD", ss_password)
+    .output()
+    .await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);

@@ -359,7 +359,7 @@ impl SynchronizerManager {
     log::info!("Synchronizer: leader CDP port = {leader_port}, getting WS URL");
     let leader_ws_url = Self::get_page_ws_url(leader_port).await?;
 
-    log::info!("Synchronizer: connecting to leader page at {leader_ws_url}");
+    log::info!("Synchronizer: connecting to leader page");
 
     let (mut ws_stream, _) = connect_async(&leader_ws_url)
       .await
@@ -504,7 +504,7 @@ impl SynchronizerManager {
             Ok(url) => {
               match tokio_tungstenite::connect_async(&url).await {
                 Ok((ws, _)) => {
-                  log::info!("Synchronizer: follower {} connected at {}", fp.name, url);
+                  log::info!("Synchronizer: follower connected");
                   let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<CapturedEvent>();
                   follower_senders.insert(fid.clone(), tx);
 
@@ -674,7 +674,7 @@ impl SynchronizerManager {
           if is_top {
             if let Some(url) = frame.get("url").and_then(|v| v.as_str()) {
               if !url.starts_with("about:") && !url.starts_with("chrome://") {
-                log::info!("Synchronizer: replaying address-bar navigation to {url}");
+                log::info!("Synchronizer: replaying address-bar navigation");
                 let nav_event = CapturedEvent {
                   event_type: "navigate".to_string(),
                   url: Some(url.to_string()),

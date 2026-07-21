@@ -15,14 +15,12 @@ jobs:
   lint-js:
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
-    secrets: inherit
     permissions:
       contents: read
 
   lint-rust:
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -41,14 +39,15 @@ jobs:
   sync-e2e:
     name: Sync E2E Tests
     uses: ./.github/workflows/sync-e2e.yml
-    secrets: inherit
     permissions:
       contents: read
 
   app-e2e:
     name: Cross-platform App E2E
     uses: ./.github/workflows/app-e2e.yml
-    secrets: inherit
+    secrets:
+      TAURI_WEBDRIVER_TOKEN: ${{ secrets.TAURI_WEBDRIVER_TOKEN }}
+      WAYFERN_TEST_TOKEN: ${{ secrets.WAYFERN_TEST_TOKEN }}
     permissions:
       contents: read
 

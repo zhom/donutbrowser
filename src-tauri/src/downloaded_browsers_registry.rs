@@ -1262,7 +1262,7 @@ pub async fn ensure_active_browsers_downloaded(
   app_handle: tauri::AppHandle,
 ) -> Result<Vec<String>, String> {
   #[cfg(feature = "e2e")]
-  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+  if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
     log::info!("E2E: skipping proactive browser download");
@@ -1419,7 +1419,7 @@ pub async fn ensure_all_binaries_exist(
   app_handle: tauri::AppHandle,
 ) -> Result<Vec<String>, String> {
   #[cfg(feature = "e2e")]
-  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+  if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
     log::info!("E2E: skipping proactive binary and GeoIP downloads");

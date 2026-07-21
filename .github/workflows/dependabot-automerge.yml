@@ -30,7 +30,8 @@ jobs:
     name: Lint JavaScript/TypeScript
     if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/lint-js.yml
-    secrets: inherit
+    with:
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
     permissions:
       contents: read
 
@@ -38,7 +39,8 @@ jobs:
     name: Lint Rust
     if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/lint-rs.yml
-    secrets: inherit
+    with:
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
     permissions:
       contents: read
 
@@ -46,7 +48,8 @@ jobs:
     name: CodeQL
     if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/codeql.yml
-    secrets: inherit
+    with:
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
     permissions:
       security-events: write
       contents: read
@@ -57,7 +60,8 @@ jobs:
     name: Spell Check
     if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/spellcheck.yml
-    secrets: inherit
+    with:
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
     permissions:
       contents: read
 

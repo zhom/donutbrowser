@@ -609,9 +609,8 @@ impl CloudAuthManager {
 
     if !response.status().is_success() {
       let status = response.status();
-      let body = response.text().await.unwrap_or_default();
-      log::warn!("Token refresh failed ({status}): {body}");
-      return Err(format!("Token refresh failed ({status}): {body}"));
+      log::warn!("Token refresh failed ({status})");
+      return Err(format!("Token refresh failed ({status})"));
     }
 
     let result: RefreshTokenResponse = response
@@ -923,14 +922,12 @@ impl CloudAuthManager {
 
           let status = response.status();
           if status == reqwest::StatusCode::FORBIDDEN {
-            let body = response.text().await.unwrap_or_default();
-            log::warn!("Proxy config returned 403: {body}");
+            log::warn!("Proxy config returned 403");
             return Err("__403__".to_string());
           }
 
           if !response.status().is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("Proxy config fetch failed ({status}): {body}"));
+            return Err(format!("Proxy config fetch failed ({status})"));
           }
 
           response
@@ -1192,8 +1189,7 @@ impl CloudAuthManager {
 
           if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("Wayfern token request failed ({status}): {body}"));
+            return Err(format!("Wayfern token request failed ({status})"));
           }
 
           let result: WayfernTokenResponse = response
@@ -1209,17 +1205,10 @@ impl CloudAuthManager {
     let token = match result {
       Ok(token) => token,
       Err(e) => {
-        // The backend returns 403 (ForbiddenException) for paid-feature blocks:
-        // token-reuse throttle, "active subscription required", and the
-        // primary-device restriction (see donutbrowser-infra wayfern.service.ts).
-        // This is distinct from a 401 (dead access token) — the session is still
-        // valid, the user is just temporarily/conditionally not entitled. So we
-        // do NOT invalidate the session. Instead: drop the stale wayfern token so
-        // no browser launches half-authenticated, re-fetch the profile so the
-        // cached plan reflects the backend's real state (it may have changed),
-        // and signal the UI so the user learns why automation stopped working.
+        // A 403 rejects the entitlement without invalidating the login session.
+        // Clear the browser token and refresh account state before notifying UI.
         if e.contains("(403") || e.contains("Forbidden") {
-          log::warn!("Wayfern token blocked by backend (403): {e}");
+          log::warn!("Wayfern token blocked by backend (403)");
           self.clear_wayfern_token().await;
           if let Err(fetch_err) = self.fetch_profile().await {
             log::warn!("Profile re-fetch after wayfern block failed: {fetch_err}");
@@ -1239,7 +1228,7 @@ impl CloudAuthManager {
   /// Get the current wayfern token, if any.
   pub async fn get_wayfern_token(&self) -> Option<String> {
     #[cfg(feature = "e2e")]
-    if tauri_plugin_cross_platform_webdriver::automation_enabled() {
+    if crate::e2e_automation_enabled() {
       if let Some(token) = std::env::var_os("WAYFERN_TEST_TOKEN")
         .filter(|token| !token.is_empty())
         .and_then(|token| token.into_string().ok())

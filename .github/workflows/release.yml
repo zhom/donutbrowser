@@ -37,7 +37,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -45,7 +44,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -53,7 +51,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: CodeQL
     uses: ./.github/workflows/codeql.yml
-    secrets: inherit
     permissions:
       security-events: write
       contents: read
@@ -64,7 +61,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: Spell Check
     uses: ./.github/workflows/spellcheck.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -218,6 +214,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TARGET: ${{ matrix.target }}
           # tauri-action invokes `pnpm tauri build`, which runs
           # `beforeBuildCommand` from tauri.conf.json. That rebuilds the
           # frontend in its own subprocess, so the env var MUST be forwarded
@@ -559,7 +556,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Cloudflare Pages deployment
-        run: curl -fsSL -X POST "${{ secrets.CLOUDFLARE_WEB_DEPLOYMENT_HOOK }}"
+        env:
+          DEPLOYMENT_HOOK: ${{ secrets.CLOUDFLARE_WEB_DEPLOYMENT_HOOK }}
+        run: curl -fsSL -X POST "$DEPLOYMENT_HOOK"
 
   docker:
     if: github.repository == 'zhom/donutbrowser'
@@ -567,7 +566,9 @@ jobs:
     uses: ./.github/workflows/docker-sync.yml
     with:
       tag: ${{ github.ref_name }}
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   update-flake:
     if: github.repository == 'zhom/donutbrowser'

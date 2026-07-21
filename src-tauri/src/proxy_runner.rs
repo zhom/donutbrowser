@@ -11,6 +11,44 @@ lazy_static::lazy_static! {
 }
 
 static SIDECAR_VERSION_VERIFIED: AtomicBool = AtomicBool::new(false);
+const RETAINED_PROXY_LOGS: usize = 20;
+
+fn prune_stale_proxy_logs(temp_dir: &Path, retain: usize) {
+  let active_ids = PROXY_PROCESSES
+    .lock()
+    .map(|processes| processes.keys().cloned().collect::<Vec<_>>())
+    .unwrap_or_default();
+  let Ok(entries) = std::fs::read_dir(temp_dir) else {
+    return;
+  };
+  let mut logs = entries
+    .flatten()
+    .filter_map(|entry| {
+      let file_name = entry.file_name();
+      let file_name = file_name.to_str()?;
+      let id = file_name
+        .strip_prefix("donut-proxy-")?
+        .strip_suffix(".log")?;
+      if active_ids.iter().any(|active_id| active_id == id) {
+        return None;
+      }
+      let modified = entry
+        .metadata()
+        .and_then(|metadata| metadata.modified())
+        .unwrap_or(std::time::UNIX_EPOCH);
+      Some((modified, entry.path()))
+    })
+    .collect::<Vec<_>>();
+  logs.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.0));
+  for (_, path) in logs.into_iter().skip(retain) {
+    if let Err(error) = std::fs::remove_file(&path) {
+      log::debug!(
+        "Failed to prune stale proxy log {}: {error}",
+        path.display()
+      );
+    }
+  }
+}
 
 fn target_binary_name(base_name: &str) -> Option<String> {
   let target = std::env::var("TARGET").ok()?;
@@ -277,6 +315,10 @@ pub async fn start_proxy_process_with_profile(
   // Spawn proxy worker process in the background using std::process::Command
   // This ensures proper process detachment on Unix systems
   let exe = find_sidecar_executable("donut-proxy")?;
+  let temp_dir = std::env::temp_dir();
+  let log_path = temp_dir.join(format!("donut-proxy-{id}.log"));
+  let log_file = crate::app_dirs::create_owner_only(&log_path);
+  prune_stale_proxy_logs(&temp_dir, RETAINED_PROXY_LOGS);
 
   #[cfg(unix)]
   {
@@ -288,13 +330,14 @@ pub async fn start_proxy_process_with_profile(
     cmd.arg("start");
     cmd.arg("--id");
     cmd.arg(&id);
+    cmd.env_remove("DONUT_PROXY_USERNAME");
+    cmd.env_remove("DONUT_PROXY_PASSWORD");
 
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
 
     // Always log to file for diagnostics (both debug and release builds)
-    let log_path = std::env::temp_dir().join(format!("donut-proxy-{}.log", id));
-    if let Ok(file) = std::fs::File::create(&log_path) {
+    if let Ok(file) = log_file {
       log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
     } else {
@@ -365,13 +408,14 @@ pub async fn start_proxy_process_with_profile(
     cmd.arg("start");
     cmd.arg("--id");
     cmd.arg(&id);
+    cmd.env_remove("DONUT_PROXY_USERNAME");
+    cmd.env_remove("DONUT_PROXY_PASSWORD");
 
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
 
     // Log to file for diagnostics (matching Unix behavior)
-    let log_path = std::env::temp_dir().join(format!("donut-proxy-{}.log", id));
-    if let Ok(file) = std::fs::File::create(&log_path) {
+    if let Ok(file) = log_file {
       log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
     } else {
@@ -521,7 +565,9 @@ pub async fn stop_all_proxy_processes() -> Result<(), Box<dyn std::error::Error>
 
 #[cfg(test)]
 mod tests {
-  use super::parse_sidecar_version;
+  use super::{parse_sidecar_version, prune_stale_proxy_logs};
+  use std::fs;
+  use std::time::Duration;
 
   #[test]
   fn parses_exact_sidecar_version_output() {
@@ -544,5 +590,22 @@ mod tests {
       parse_sidecar_version(b"donut-proxy v0.28.2\nunexpected"),
       None
     );
+  }
+
+  #[test]
+  fn prunes_only_old_proxy_logs() {
+    let temp = tempfile::tempdir().unwrap();
+    for id in ["oldest", "middle", "newest"] {
+      fs::write(temp.path().join(format!("donut-proxy-{id}.log")), id).unwrap();
+      std::thread::sleep(Duration::from_millis(10));
+    }
+    fs::write(temp.path().join("unrelated.log"), "keep").unwrap();
+
+    prune_stale_proxy_logs(temp.path(), 2);
+
+    assert!(!temp.path().join("donut-proxy-oldest.log").exists());
+    assert!(temp.path().join("donut-proxy-middle.log").exists());
+    assert!(temp.path().join("donut-proxy-newest.log").exists());
+    assert!(temp.path().join("unrelated.log").exists());
   }
 }

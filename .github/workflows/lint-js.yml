@@ -4,6 +4,12 @@ name: Lint Node.js
 
 on:
   workflow_call:
+    inputs:
+      checkout_ref:
+        description: Optional commit to check out instead of the triggering ref
+        required: false
+        type: string
+        default: ""
   push:
     branches:
       - main
@@ -35,6 +41,8 @@ jobs:
 
       - name: Checkout repository code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7.0.0
+        with:
+          ref: ${{ inputs.checkout_ref }}
 
       - name: Set up pnpm package manager
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 #v6.0.9

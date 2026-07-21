@@ -18,12 +18,20 @@ static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 fn e2e_automation_enabled() -> bool {
   #[cfg(feature = "e2e")]
   {
-    tauri_plugin_cross_platform_webdriver::automation_enabled()
+    std::env::var("TAURI_AUTOMATION")
+      .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
   }
   #[cfg(not(feature = "e2e"))]
   {
     false
   }
+}
+
+#[cfg(feature = "e2e")]
+fn e2e_automation_profile_dir() -> Option<std::path::PathBuf> {
+  e2e_automation_enabled()
+    .then(|| std::env::var_os("TAURI_AUTOMATION_PROFILE_DIR").map(std::path::PathBuf::from))
+    .flatten()
 }
 
 mod api_client;
@@ -47,6 +55,7 @@ mod geolocation;
 mod group_manager;
 mod human_typing;
 mod ip_utils;
+mod log_redaction;
 mod platform_browser;
 mod profile;
 mod profile_importer;
@@ -239,7 +248,7 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
 // Called internally for deep-link / startup URL handling — not invoked from the
 // frontend, so it is intentionally not a `#[tauri::command]`.
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
-  log::info!("handle_url_open called with URL: {url}");
+  log::info!("Handling URL open request");
 
   // Check if the main window exists and is ready
   if let Some(window) = app.get_webview_window("main") {
@@ -1382,11 +1391,18 @@ fn setup_system_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::E
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  run_with_builder(|builder| builder);
+}
+
+#[doc(hidden)]
+pub fn run_with_builder(
+  configure_builder: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry>,
+) {
   let args: Vec<String> = env::args().collect();
   let startup_url = args.iter().find(|arg| arg.starts_with("http")).cloned();
 
   if let Some(url) = startup_url.clone() {
-    log::info!("Found startup URL in command line: {url}");
+    log::info!("Found startup URL in command line");
     let mut pending = PENDING_URLS.lock().unwrap();
     pending.push(url.clone());
   }
@@ -1405,10 +1421,7 @@ pub fn run() {
     }),
   };
 
-  let builder = tauri::Builder::default();
-
-  #[cfg(feature = "e2e")]
-  let builder = builder.plugin(tauri_plugin_cross_platform_webdriver::init());
+  let builder = configure_builder(tauri::Builder::default());
 
   let builder = builder.plugin(
     tauri_plugin_log::Builder::new()
@@ -1416,11 +1429,10 @@ pub fn run() {
       .target(Target::new(TargetKind::Stdout))
       .target(Target::new(TargetKind::Webview))
       .target(file_log_target)
-      // 5 MB per rotated file × KeepAll — the previous 100 KB limit
-      // truncated useful context in customer support reports; 50 MB
-      // turned out to be excessive disk pressure.
+      // Keep enough context for customer support without letting a long-running
+      // installation accumulate logs without bound.
       .max_file_size(5 * 1024 * 1024)
-      .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+      .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(10))
       .level(log::LevelFilter::Info)
       .format(|out, message, record| {
         use chrono::Local;
@@ -1503,8 +1515,7 @@ pub fn run() {
         .visible(true);
 
       #[cfg(feature = "e2e")]
-      let win_builder =
-        match tauri_plugin_cross_platform_webdriver::automation_profile_dir() {
+      let win_builder = match e2e_automation_profile_dir() {
           Some(profile_dir) => win_builder
             .data_directory(profile_dir.join("webview"))
             // WKWebView ignores data_directory on macOS. Incognito gives every
@@ -1514,7 +1525,7 @@ pub fn run() {
             // DONUTBROWSER_DATA_ROOT; only browser-engine storage is ephemeral.
             .incognito(true),
           None => win_builder,
-        };
+      };
 
       #[cfg(target_os = "windows")]
       let win_builder = win_builder.decorations(false);
@@ -1601,7 +1612,7 @@ pub fn run() {
 
             for url in urls {
               let url_string = url.to_string();
-              log::info!("Deep link received: {url_string}");
+              log::info!("Processing deep link URL");
               let handle_clone = handle.clone();
 
               tauri::async_runtime::spawn(async move {
@@ -1617,7 +1628,7 @@ pub fn run() {
       if let Some(startup_url) = startup_url {
         let handle_clone = handle.clone();
         tauri::async_runtime::spawn(async move {
-          log::info!("Processing startup URL from command line: {startup_url}");
+          log::info!("Processing startup URL from command line");
           if let Err(e) = handle_url_open(handle_clone, startup_url.clone()).await {
             log::error!("Failed to handle startup URL: {e}");
           }
@@ -1828,7 +1839,7 @@ pub fn run() {
         };
 
         for url in pending_urls {
-          log::info!("Processing pending URL: {url}");
+          log::info!("Processing pending URL");
           if let Err(e) = handle_url_open(handle_pending.clone(), url).await {
             log::error!("Failed to handle pending URL: {e}");
           }

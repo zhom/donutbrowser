@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { allCoveredCommands, commandCoverage } from "../coverage-map.mjs";
+import { seedWayfern } from "../lib/fixtures.mjs";
 import { WebDriverClient } from "../lib/webdriver.mjs";
 
 function registeredCommands(source) {
@@ -58,10 +67,15 @@ test("every Tauri command has exactly one E2E owner and evidence level", async (
       continue;
     }
 
-    const suiteSource = await readFile(
+    const evidenceFiles = [
       path.join(root, "e2e", "tests", `${entry.suite}.test.mjs`),
-      "utf8",
-    );
+      ...(entry.suite === "browser"
+        ? [path.join(root, "e2e", "lib", "fixtures.mjs")]
+        : []),
+    ];
+    const suiteSource = (
+      await Promise.all(evidenceFiles.map((file) => readFile(file, "utf8")))
+    ).join("\n");
     for (const command of entry.commands) {
       assert.equal(
         commandHasExecutableEvidence(suiteSource, command),
@@ -93,4 +107,39 @@ test("WebDriver client preserves application values that contain an error field"
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("Wayfern fixtures are copied into the isolated data root, never linked", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "donut-wayfern-copy-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source =
+    process.platform === "darwin"
+      ? path.join(root, "source", "Wayfern.app", "Contents", "MacOS", "Wayfern")
+      : path.join(
+          root,
+          "source",
+          process.platform === "win32" ? "Wayfern.exe" : "wayfern",
+        );
+  await mkdir(path.dirname(source), { recursive: true });
+  await writeFile(source, "source-fixture");
+  const bundlePath =
+    process.platform === "darwin"
+      ? path.join(root, "source", "Wayfern.app")
+      : source;
+  const installDir = await seedWayfern(path.join(root, "isolated"), {
+    bundlePath,
+    executable: source,
+    version: "1.2.3.4",
+  });
+  const destination =
+    process.platform === "darwin"
+      ? path.join(installDir, "Wayfern.app", "Contents", "MacOS", "Wayfern")
+      : path.join(
+          installDir,
+          process.platform === "win32" ? "wayfern.exe" : "wayfern",
+        );
+
+  assert.equal((await lstat(destination)).isSymbolicLink(), false);
+  await writeFile(destination, "isolated-mutation");
+  assert.equal(await readFile(source, "utf8"), "source-fixture");
 });

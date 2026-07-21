@@ -192,7 +192,7 @@
       "copyLogs": "复制日志",
       "openLogDir": "打开日志文件夹",
       "copyLogsSuccess": "日志已复制到剪贴板",
-      "copyLogsDescription": "将最近的日志文件（最多 5 MB）合并到剪贴板，便于在反馈问题时分享。"
+      "copyLogsDescription": "复制经过脱敏的近期日志包（最多 5 MB）。脱敏无法识别所有类型的个人数据，请在分享前检查内容。"
     },
     "disableAutoUpdates": "禁用应用自动更新",
     "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。",

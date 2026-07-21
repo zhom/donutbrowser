@@ -231,7 +231,7 @@ impl Downloader {
     let download_url = self
       .resolve_download_url(browser_type.clone(), version, download_info)
       .await?;
-    log::info!("Download URL resolved: {}", download_url);
+    log::info!("Download URL resolved");
 
     // In-session resume: a large (~1GB) download over a flaky connection can
     // drop mid-stream. Rather than surfacing the first stall/chunk error as a

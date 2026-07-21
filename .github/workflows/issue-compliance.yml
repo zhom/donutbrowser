@@ -29,8 +29,8 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
-          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
+          printf '%s' "$ISSUE_TITLE" | node scripts/redact-sensitive-text.mjs > /tmp/issue-title.txt
+          printf '%s' "${ISSUE_BODY:-}" | node scripts/redact-sensitive-text.mjs --issue-body > /tmp/issue-body.txt
 
       - name: Build prompt
         run: |
@@ -92,11 +92,9 @@ jobs:
           sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
           if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
             echo "::warning::Model returned non-JSON; treating as compliant"
-            cat /tmp/raw.txt
             echo '{"is_compliant": true, "non_compliance_reasons": []}' > /tmp/result.json
           fi
-          echo "Result:"
-          cat /tmp/result.json
+          echo "Compliance response validated"
 
       - name: Build comment
         id: build

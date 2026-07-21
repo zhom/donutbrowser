@@ -192,7 +192,7 @@
       "copyLogs": "로그 복사",
       "openLogDir": "로그 폴더 열기",
       "copyLogsSuccess": "로그가 클립보드에 복사되었습니다",
-      "copyLogsDescription": "최신 로그 파일(최대 5MB)을 클립보드에 묶어 버그 보고서에서 공유할 수 있도록 합니다."
+      "copyLogsDescription": "최근 로그를 민감 정보가 제거된 묶음으로 복사합니다(최대 5MB). 모든 유형의 개인 데이터를 식별할 수는 없으므로 공유하기 전에 검토하세요."
     },
     "disableAutoUpdates": "앱 자동 업데이트 사용 안 함",
     "disableAutoUpdatesDescription": "Donut Browser 업데이트를 앱이 자동으로 확인하고 설치하지 않도록 합니다. 브라우저 업데이트는 영향을 받지 않습니다.",

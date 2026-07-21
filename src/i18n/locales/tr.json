@@ -192,7 +192,7 @@
       "copyLogs": "Günlükleri kopyala",
       "openLogDir": "Günlük klasörünü aç",
       "copyLogsSuccess": "Günlükler panoya kopyalandı",
-      "copyLogsDescription": "En son günlük dosyalarını (en fazla 5 MB) hata raporlarında paylaşmak üzere panonuza paketler."
+      "copyLogsDescription": "Son günlüklerin hassas verileri ayıklanmış bir paketini kopyalar (en fazla 5 MB). Ayıklama her tür kişisel veriyi belirleyemeyeceğinden paylaşmadan önce inceleyin."
     },
     "disableAutoUpdates": "Uygulama Otomatik Güncellemelerini Devre Dışı Bırak",
     "disableAutoUpdatesDescription": "Uygulamanın Donut Browser güncellemelerini otomatik olarak denetlemesini ve yüklemesini engelleyin. Tarayıcı güncellemeleri bundan etkilenmez.",

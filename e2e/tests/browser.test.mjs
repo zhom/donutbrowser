@@ -7,11 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment } from "../lib/app.mjs";
 import { CdpClient } from "../lib/cdp.mjs";
-import {
-  defaultWayfernPath,
-  inspectWayfern,
-  seedWayfern,
-} from "../lib/fixtures.mjs";
+import { defaultWayfernPath, prepareWayfern } from "../lib/fixtures.mjs";
 
 const fixtureUrl = process.env.DONUT_E2E_FIXTURE_URL;
 
@@ -34,30 +30,6 @@ async function request(url, { method = "GET", token, body } = {}) {
     }
   }
   return { response, value };
-}
-
-async function prepareWayfern(app) {
-  const localBundle = defaultWayfernPath(process.env.DONUT_E2E_PROJECT_ROOT);
-  if (existsSync(localBundle)) {
-    const wayfern = inspectWayfern(localBundle);
-    await seedWayfern(app.dataRoot, wayfern);
-    return { version: wayfern.version, source: "local fixture" };
-  }
-
-  await app.start();
-  const current = await app.invoke("fetch_browser_versions_with_count", {
-    browserStr: "wayfern",
-  });
-  assert.ok(
-    current.versions.length > 0,
-    "No Wayfern build is published for this platform",
-  );
-  const version = current.versions[0];
-  await app.invoke("download_browser", {
-    browserStr: "wayfern",
-    version,
-  });
-  return { version, source: "published download" };
 }
 
 function processExists(pid) {
@@ -166,11 +138,15 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
   );
   const app = appFromEnvironment("browser-wayfern", {
     seedVersionCache: hasLocalWayfern,
+    wayfernTermsAccepted: false,
   });
   let cdp;
   let browserPid;
   try {
-    const prepared = await prepareWayfern(app);
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
     if (!app.session) await app.start();
 
     assert.equal(await app.invoke("check_wayfern_downloaded"), true);

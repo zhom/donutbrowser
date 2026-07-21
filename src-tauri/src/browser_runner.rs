@@ -115,10 +115,9 @@ impl BrowserRunner {
     }
 
     let url = parsed.to_string();
-    let profile_name = profile.name.clone();
-    let profile_id = profile.id.to_string();
+    let url_label = crate::log_redaction::url_label(&url);
 
-    log::info!("Firing launch hook GET {url} for profile {profile_name} (ID: {profile_id})");
+    log::info!("Firing launch hook GET {url_label}");
 
     tokio::spawn(async move {
       let client = match reqwest::Client::builder()
@@ -127,20 +126,23 @@ impl BrowserRunner {
       {
         Ok(c) => c,
         Err(e) => {
-          log::warn!("Launch hook client build failed for {url}: {e}");
+          log::warn!(
+            "Launch hook client build failed: {}",
+            crate::log_redaction::text(&e.to_string())
+          );
           return;
         }
       };
 
       match client.get(&url).send().await {
         Ok(resp) => {
-          log::info!(
-            "Launch hook {url} for profile {profile_name} returned status {}",
-            resp.status()
-          );
+          log::info!("Launch hook {url_label} returned status {}", resp.status());
         }
         Err(e) => {
-          log::warn!("Launch hook {url} for profile {profile_name} failed: {e}");
+          log::warn!(
+            "Launch hook {url_label} failed: {}",
+            crate::log_redaction::text(&e.to_string())
+          );
         }
       }
     });
@@ -675,18 +677,18 @@ impl BrowserRunner {
       .unwrap_or_else(|| updated_profile.clone());
 
     log::info!(
-      "Browser status check - Profile: {} (ID: {}), Running: {}, URL: {:?}, PID: {:?}",
-      final_profile.name,
-      final_profile.id,
-      is_running,
-      url,
-      final_profile.process_id
+      "Browser status check: running={is_running}, URL requested={}, PID present={}",
+      url.is_some(),
+      final_profile.process_id.is_some()
     );
 
     if is_running && url.is_some() {
       // Browser is running and we have a URL to open
       if let Some(url_ref) = url.as_ref() {
-        log::info!("Opening URL in existing browser: {url_ref}");
+        log::info!(
+          "Opening {} in existing browser",
+          crate::log_redaction::url_label(url_ref)
+        );
 
         match self
           .open_url_in_existing_browser(
@@ -702,7 +704,10 @@ impl BrowserRunner {
             Ok(final_profile)
           }
           Err(e) => {
-            log::info!("Failed to open URL in existing browser: {e}");
+            log::info!(
+              "Failed to open URL in existing browser: {}",
+              crate::log_redaction::text(&e.to_string())
+            );
 
             // Fall back to launching a new instance
             log::info!(
@@ -1163,18 +1168,21 @@ impl BrowserRunner {
       ));
     }
 
-    log::info!("Opening URL '{url}' with profile '{profile_id}'");
+    log::info!("Opening URL with selected profile");
 
     // Use launch_or_open_url which handles both launching new instances and opening in existing ones
     self
       .launch_or_open_url(app_handle, &profile, Some(url.clone()), None)
       .await
       .map_err(|e| {
-        log::info!("Failed to open URL with profile '{profile_id}': {e}");
+        log::info!(
+          "Failed to open URL with selected profile: {}",
+          crate::log_redaction::text(&e.to_string())
+        );
         format!("Failed to open URL with profile: {e}")
       })?;
 
-    log::info!("Successfully opened URL '{url}' with profile '{profile_id}'");
+    log::info!("Successfully opened URL with selected profile");
     Ok(())
   }
 }

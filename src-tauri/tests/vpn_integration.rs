@@ -292,11 +292,11 @@ fn create_test_storage(temp_dir: &tempfile::TempDir) -> VpnStorage {
 #[serial]
 async fn test_wireguard_tunnel_init() {
   let config = WireGuardConfig {
-    private_key: "YEocP0e2o1WT5GlvBvQzVF7EeR6z9aCk+ZdZ5NKEuXA=".to_string(),
+    private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string(),
     address: "10.0.0.2/24".to_string(),
     dns: Some("1.1.1.1".to_string()),
     mtu: None,
-    peer_public_key: "aGnF7JlG+U5t0BqB1PVf1yOuELHrWLGGcUJb0eCK9Aw=".to_string(),
+    peer_public_key: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=".to_string(),
     peer_endpoint: "127.0.0.1:51820".to_string(),
     allowed_ips: vec!["0.0.0.0/0".to_string()],
     persistent_keepalive: Some(25),
@@ -780,13 +780,9 @@ async fn test_wireguard_traffic_flows_through_donut_proxy(
   }
 
   let binary_path = ensure_donut_proxy_binary().await?;
-  let wg_config = match test_harness::start_wireguard_server().await {
-    Ok(config) => config,
-    Err(error) => {
-      eprintln!("skipping WireGuard e2e test: {error}");
-      return Ok(());
-    }
-  };
+  let wg_config = test_harness::start_wireguard_server()
+    .await
+    .map_err(|error| format!("failed to start Docker WireGuard fixture: {error}"))?;
 
   let vpn_config = new_test_vpn_config(
     "WireGuard E2E",

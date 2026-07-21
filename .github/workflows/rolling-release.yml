@@ -44,7 +44,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -52,7 +51,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -60,7 +58,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: CodeQL
     uses: ./.github/workflows/codeql.yml
-    secrets: inherit
     permissions:
       security-events: write
       contents: read
@@ -71,7 +68,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     name: Spell Check
     uses: ./.github/workflows/spellcheck.yml
-    secrets: inherit
     permissions:
       contents: read
 
@@ -241,6 +237,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TARGET: ${{ matrix.target }}
           # tauri-action's inner `pnpm tauri build` re-runs beforeBuildCommand
           # which rebuilds dist/ in a subprocess. The env var must be here too.
           NEXT_PUBLIC_TURNSTILE: ${{ secrets.NEXT_PUBLIC_TURNSTILE }}
@@ -419,7 +416,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Cloudflare Pages deployment
-        run: curl -fsSL -X POST "${{ secrets.CLOUDFLARE_WEB_DEPLOYMENT_HOOK }}"
+        env:
+          DEPLOYMENT_HOOK: ${{ secrets.CLOUDFLARE_WEB_DEPLOYMENT_HOOK }}
+        run: curl -fsSL -X POST "$DEPLOYMENT_HOOK"
 
   notify-discord:
     if: github.repository == 'zhom/donutbrowser'

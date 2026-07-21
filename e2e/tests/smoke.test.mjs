@@ -5,59 +5,66 @@ import test from "node:test";
 import { appFromEnvironment, withApp } from "../lib/app.mjs";
 
 test("fresh app renders, completes onboarding, persists settings, and never touches real app roots", async () => {
-  await withApp("smoke-fresh", async (app) => {
-    assert.equal(typeof (await app.session.title()), "string");
-    assert.match(await app.bodyText(), /New/);
-    await app.waitForText("No profiles yet");
+  await withApp(
+    "smoke-fresh",
+    async (app) => {
+      assert.equal(typeof (await app.session.title()), "string");
+      assert.match(await app.bodyText(), /New/);
+      await app.waitForText("No profiles yet");
 
-    const initial = await app.invoke("get_app_settings");
-    assert.equal(typeof initial.onboarding_completed, "boolean");
-    await app.invoke("complete_onboarding");
-    assert.equal(await app.invoke("get_onboarding_completed"), true);
-    await app.invoke("dismiss_window_resize_warning");
-    assert.equal(await app.invoke("get_window_resize_warning_dismissed"), true);
+      const initial = await app.invoke("get_app_settings");
+      assert.equal(typeof initial.onboarding_completed, "boolean");
+      await app.invoke("complete_onboarding");
+      assert.equal(await app.invoke("get_onboarding_completed"), true);
+      await app.invoke("dismiss_window_resize_warning");
+      assert.equal(
+        await app.invoke("get_window_resize_warning_dismissed"),
+        true,
+      );
 
-    const saved = await app.invoke("save_app_settings", {
-      settings: {
-        ...initial,
-        theme: "dark",
-        language: "en",
-        onboarding_completed: true,
-        disable_auto_updates: true,
-      },
-    });
-    assert.equal(saved.theme, "dark");
-    assert.equal(saved.language, "en");
+      const saved = await app.invoke("save_app_settings", {
+        settings: {
+          ...initial,
+          theme: "dark",
+          language: "en",
+          onboarding_completed: true,
+          disable_auto_updates: true,
+        },
+      });
+      assert.equal(saved.theme, "dark");
+      assert.equal(saved.language, "en");
 
-    await app.invoke("save_table_sorting_settings", {
-      sorting: { column: "browser", direction: "desc" },
-    });
-    assert.deepEqual(await app.invoke("get_table_sorting_settings"), {
-      column: "browser",
-      direction: "desc",
-    });
-    assert.ok((await app.invoke("get_system_language")).length >= 2);
-    const system = await app.invoke("get_system_info");
-    assert.ok(system && typeof system === "object");
-    assert.equal(typeof (await app.invoke("read_log_files")), "string");
+      await app.invoke("save_table_sorting_settings", {
+        sorting: { column: "browser", direction: "desc" },
+      });
+      assert.deepEqual(await app.invoke("get_table_sorting_settings"), {
+        column: "browser",
+        direction: "desc",
+      });
+      assert.ok((await app.invoke("get_system_language")).length >= 2);
+      const system = await app.invoke("get_system_info");
+      assert.ok(system && typeof system === "object");
+      assert.equal(typeof (await app.invoke("read_log_files")), "string");
 
-    await app.restart();
-    const afterRestart = await app.invoke("get_app_settings");
-    assert.equal(afterRestart.theme, "dark");
-    assert.equal(afterRestart.language, "en");
-    assert.equal(afterRestart.onboarding_completed, true);
+      await app.restart();
+      const afterRestart = await app.invoke("get_app_settings");
+      assert.equal(afterRestart.theme, "dark");
+      assert.equal(afterRestart.language, "en");
+      assert.equal(afterRestart.onboarding_completed, true);
 
-    const settingsFile = path.join(
-      app.dataRoot,
-      "data",
-      "settings",
-      "app_settings.json",
-    );
-    await access(settingsFile);
-    const persisted = JSON.parse(await readFile(settingsFile, "utf8"));
-    assert.equal(persisted.api_token, null);
-    assert.equal(persisted.mcp_token, null);
-  });
+      const settingsFile = path.join(
+        app.dataRoot,
+        "data",
+        "settings",
+        "app_settings.json",
+      );
+      await access(settingsFile);
+      const persisted = JSON.parse(await readFile(settingsFile, "utf8"));
+      assert.equal(persisted.api_token, null);
+      assert.equal(persisted.mcp_token, null);
+    },
+    { onboardingCompleted: false },
+  );
 });
 
 test("two isolated sessions run concurrently and do not share frontend or backend state", async () => {
@@ -89,15 +96,15 @@ test("two isolated sessions run concurrently and do not share frontend or backen
 
 test("keyboard command palette and major navigation surfaces are operable through native WebDriver", async () => {
   await withApp("smoke-ui", async (app) => {
-    await app.invoke("complete_onboarding");
     const modifier =
       process.platform === "darwin" ? { meta: true } : { ctrl: true };
-    await app.pressShortcut({ key: "k", ...modifier });
     await app.waitFor(
-      () =>
-        app.execute(
+      async () => {
+        await app.pressShortcut({ key: "k", ...modifier });
+        return app.execute(
           `return Boolean(document.querySelector("[cmdk-input][placeholder='Type a command or search...']"));`,
-        ),
+        );
+      },
       { description: "open command palette" },
     );
 

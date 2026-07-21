@@ -39,7 +39,7 @@ fn is_kept(name: &str) -> bool {
 /// Identity must not rest on `Preferences` existing. Chromium writes it lazily,
 /// so a crash — or a user deleting a corrupt copy, a standard troubleshooting
 /// step since it regenerates — leaves a populated `Default/` without it. Such a
-/// directory would then be taken for junk and removed wholesale, destroying the
+/// directory would then be treated as stale and removed wholesale, destroying the
 /// Extensions and Bookmarks this feature exists to preserve.
 fn is_profile_dir_name(name: &str) -> bool {
   matches!(name, "Default" | "Guest Profile" | "System Profile")

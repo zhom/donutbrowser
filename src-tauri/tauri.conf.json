@@ -6,13 +6,24 @@
   "build": {
     "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
     "devUrl": "http://localhost:12341",
-    "beforeBuildCommand": "pnpm copy-proxy-binary && (test -d ../dist || pnpm build)",
+    "beforeBuildCommand": "pnpm copy-proxy-binary:release && (test -d ../dist || pnpm build)",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' customprotocol: asset:",
+        "connect-src": "ipc: http://ipc.localhost http: https: ws: wss:",
+        "font-src": "'self' data:",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "style-src": "'self' 'unsafe-inline'",
+        "script-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'",
+        "frame-ancestors": "'none'"
+      }
     }
   },
   "bundle": {
@@ -35,9 +46,7 @@
       "signingIdentity": null,
       "providerShortName": null,
       "entitlements": "entitlements.plist",
-      "files": {
-        "Info.plist": "Info.plist"
-      }
+      "infoPlist": "Info.plist"
     },
     "linux": {
       "deb": {

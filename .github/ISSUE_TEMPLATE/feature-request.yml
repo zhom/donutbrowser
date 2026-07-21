@@ -2,6 +2,11 @@ name: Feature Request
 description: Suggest a new feature
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include passwords, access tokens, personal information, or other secrets. Automated triage sends the issue title and body to OpenRouter after redacting common sensitive-data patterns.
+
   - type: textarea
     id: description
     attributes:

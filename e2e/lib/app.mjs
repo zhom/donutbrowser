@@ -47,6 +47,8 @@ export class AppSession {
     extraEnv = {},
     args = [],
     seedVersionCache = true,
+    onboardingCompleted = true,
+    wayfernTermsAccepted = true,
   }) {
     this.name = name;
     this.root = root;
@@ -57,6 +59,8 @@ export class AppSession {
     this.extraEnv = extraEnv;
     this.args = args;
     this.seedVersionCache = seedVersionCache;
+    this.onboardingCompleted = onboardingCompleted;
+    this.wayfernTermsAccepted = wayfernTermsAccepted;
     this.session = null;
   }
 
@@ -70,6 +74,69 @@ export class AppSession {
       mkdir(path.join(this.root, "tmp"), { recursive: true }),
       mkdir(path.join(this.root, "artifacts"), { recursive: true }),
     ]);
+    if (this.onboardingCompleted) {
+      const settingsFile = path.join(
+        this.dataRoot,
+        "data",
+        "settings",
+        "app_settings.json",
+      );
+      await mkdir(path.dirname(settingsFile), { recursive: true });
+      await writeFile(
+        settingsFile,
+        `${JSON.stringify(
+          {
+            language: "en",
+            onboarding_completed: true,
+            commercial_trial_acknowledged: true,
+            window_resize_warning_dismissed: true,
+            disable_auto_updates: true,
+          },
+          null,
+          2,
+        )}\n`,
+        { flag: "wx" },
+      ).catch((error) => {
+        if (error.code !== "EEXIST") {
+          throw error;
+        }
+      });
+    }
+    if (this.wayfernTermsAccepted) {
+      const termsFile =
+        process.platform === "darwin"
+          ? path.join(
+              this.root,
+              "home",
+              "Library",
+              "Application Support",
+              "Wayfern",
+              "license-accepted",
+            )
+          : process.platform === "win32"
+            ? path.join(
+                this.root,
+                "windows",
+                "roaming",
+                "Wayfern",
+                "license-accepted",
+              )
+            : path.join(
+                this.root,
+                "xdg",
+                "config",
+                "Wayfern",
+                "license-accepted",
+              );
+      await mkdir(path.dirname(termsFile), { recursive: true });
+      await writeFile(termsFile, `${Math.floor(Date.now() / 1000)}\n`, {
+        flag: "wx",
+      }).catch((error) => {
+        if (error.code !== "EEXIST") {
+          throw error;
+        }
+      });
+    }
     if (this.seedVersionCache) {
       const versionCache = path.join(
         this.root,
@@ -257,6 +324,44 @@ export class AppSession {
     await this.session.click(element);
   }
 
+  async clickTextIn(
+    containerSelector,
+    text,
+    { exact = true, roles = ["button", "tab", "menuitem", "link"] } = {},
+  ) {
+    const element = await this.execute(
+      `
+        const containers = [...document.querySelectorAll(arguments[0])];
+        const wanted = arguments[1];
+        const exact = arguments[2];
+        const roles = new Set(arguments[3]);
+        const visible = (node) => {
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return style.visibility !== "hidden" && style.display !== "none" &&
+            rect.width > 0 && rect.height > 0;
+        };
+        for (const container of containers.reverse()) {
+          if (!visible(container)) continue;
+          const candidates = [...container.querySelectorAll("button, a, [role], [data-slot='button']")];
+          const match = candidates.find((node) => {
+            const role = node.getAttribute("role") || (node.tagName === "A" ? "link" : "button");
+            const label = (node.getAttribute("aria-label") || node.innerText || node.textContent || "").trim();
+            return roles.has(role) && visible(node) && (exact ? label === wanted : label.includes(wanted));
+          });
+          if (match) return match;
+        }
+        return null;
+      `,
+      [containerSelector, text, exact, roles],
+    );
+    assert.ok(
+      element,
+      `No visible interactive element inside ${containerSelector} matched ${JSON.stringify(text)}`,
+    );
+    await this.session.click(element);
+  }
+
   async clickSelector(selector) {
     const element = await this.waitFor(
       () =>
@@ -366,6 +471,8 @@ export function appFromEnvironment(name, options = {}) {
     extraEnv: options.extraEnv,
     args: options.args,
     seedVersionCache: options.seedVersionCache,
+    onboardingCompleted: options.onboardingCompleted,
+    wayfernTermsAccepted: options.wayfernTermsAccepted,
   });
 }
 

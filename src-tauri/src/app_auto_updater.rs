@@ -967,7 +967,7 @@ impl AppAutoUpdater {
     // rejected before the multi-hundred-MB download, not after.
     let expected_sha256 = self.fetch_expected_checksum(update_info, &filename).await?;
 
-    log::info!("Downloading update from: {}", update_info.download_url);
+    log::info!("Downloading update");
 
     let download_path = self
       .download_update_silent(&update_info.download_url, &temp_dir, &filename)
@@ -2038,7 +2038,7 @@ rm "{}"
 #[tauri::command]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
   #[cfg(feature = "e2e")]
-  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+  if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
     log::info!("E2E: skipping automatic app update check");
@@ -2099,7 +2099,7 @@ pub async fn restart_application() -> Result<(), String> {
 #[tauri::command]
 pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
   #[cfg(feature = "e2e")]
-  if tauri_plugin_cross_platform_webdriver::automation_enabled()
+  if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
     log::info!("E2E: skipping manual app update check");

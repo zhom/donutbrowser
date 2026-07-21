@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, type HTMLMotionProps, motion } from "motion/react";
+import { type HTMLMotionProps, motion } from "motion/react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -72,20 +72,24 @@ type DialogPortalProps = Omit<
   "forceMount"
 >;
 
-function DialogPortal(props: DialogPortalProps) {
+function DialogPortal({
+  children,
+  container: portalContainer,
+  ...props
+}: DialogPortalProps) {
   const { isOpen, container } = useDialog();
 
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <DialogPrimitive.Portal
-          data-slot="dialog-portal"
-          forceMount
-          container={container ?? props.container}
-          {...props}
-        />
-      )}
-    </AnimatePresence>
+    <DialogPrimitive.Portal
+      data-slot="dialog-portal"
+      forceMount
+      container={container ?? portalContainer}
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Portal>
   );
 }
 
@@ -106,7 +110,6 @@ function DialogOverlay({
         key="dialog-overlay"
         initial={{ opacity: 0, filter: "blur(4px)" }}
         animate={{ opacity: 1, filter: "blur(0px)" }}
-        exit={{ opacity: 0, filter: "blur(4px)" }}
         transition={transition}
         className={cn("fixed inset-0 z-9999 bg-background/50", className)}
         {...props}
@@ -217,8 +220,9 @@ function DialogContent({
 
   return (
     <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+      <DialogOverlay key="dialog-overlay" />
       <DialogPrimitive.Content
+        key="dialog-content"
         asChild
         forceMount
         onOpenAutoFocus={onOpenAutoFocus}
@@ -243,22 +247,15 @@ function DialogContent({
         <motion.div
           key="dialog-content"
           data-slot="dialog-content"
-          // Open/close motion modeled on transitions.dev's modal: a subtle
-          // scale from 0.96 → 1 with opacity, eased with cubic-bezier(0.22, 1,
-          // 0.36, 1). Open is 250ms; close is a quicker 150ms. The centering
-          // translate stays in `style` so `scale` animates around the center
-          // without fighting the transform-based positioning.
+          // Open motion modeled on transitions.dev's modal: a subtle scale
+          // from 0.96 → 1 with opacity, eased with cubic-bezier(0.22, 1, 0.36,
+          // 1). The portal unmounts immediately on close so a closed Radix
+          // surface cannot linger over the app. The centering translate stays
+          // in `style` so `scale` animates around the center without fighting
+          // the transform-based positioning.
           style={{ transformOrigin: "center" }}
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{
-            opacity: 0,
-            scale: 0.96,
-            transition: transition ?? {
-              duration: 0.15,
-              ease: [0.22, 1, 0.36, 1],
-            },
-          }}
           transition={
             transition ?? { duration: 0.25, ease: [0.22, 1, 0.36, 1] }
           }
