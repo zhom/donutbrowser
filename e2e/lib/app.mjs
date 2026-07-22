@@ -4,6 +4,27 @@ import path from "node:path";
 import { WebDriverClient } from "./webdriver.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const MAX_DIAGNOSTIC_BYTES = 20 * 1024 * 1024;
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function validatedPng(encoded) {
+  assert.equal(typeof encoded, "string");
+  assert.ok(encoded.length <= Math.ceil((MAX_DIAGNOSTIC_BYTES * 4) / 3) + 4);
+  assert.match(encoded, /^[A-Za-z0-9+/]*={0,2}$/);
+  const png = Buffer.from(encoded, "base64");
+  assert.ok(png.length <= MAX_DIAGNOSTIC_BYTES);
+  assert.deepEqual(png.subarray(0, PNG_SIGNATURE.length), PNG_SIGNATURE);
+  return png;
+}
+
+function escapedDiagnosticHtml(html) {
+  assert.equal(typeof html, "string");
+  assert.ok(Buffer.byteLength(html, "utf8") <= MAX_DIAGNOSTIC_BYTES);
+  return html
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
 
 function isolatedEnvironment(root, extra = {}) {
   const home = path.join(root, "home");
@@ -431,17 +452,21 @@ export class AppSession {
     const safe = label.replace(/[^a-z0-9_.-]+/gi, "-");
     try {
       const png = await this.session.screenshot();
+      const artifact = validatedPng(png);
+      // The validated response is intentionally persisted in an isolated test directory.
       await writeFile(
         path.join(this.root, "artifacts", `${safe}.png`),
-        Buffer.from(png, "base64"),
+        artifact, // codeql[js/http-to-file-access]
       );
     } catch {
       // Best-effort diagnostics must never hide the original test failure.
     }
     try {
+      const artifact = escapedDiagnosticHtml(await this.html());
+      // Escaping makes the saved HTML inert while preserving it for diagnostics.
       await writeFile(
         path.join(this.root, "artifacts", `${safe}.html`),
-        await this.html(),
+        artifact, // codeql[js/http-to-file-access]
       );
     } catch {
       // Best-effort diagnostics must never hide the original test failure.

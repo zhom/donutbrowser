@@ -10,66 +10,12 @@ permissions:
   checks: read
 
 jobs:
-  security-scan:
-    name: Security Vulnerability Scan
-    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2" # v2.3.8
-    with:
-      scan-args: |-
-        -r
-        --skip-git
-        --lockfile=pnpm-lock.yaml
-        --lockfile=src-tauri/Cargo.lock
-        ./
-    permissions:
-      security-events: write
-      contents: read
-      actions: read
-
-  lint-js:
-    name: Lint JavaScript/TypeScript
-    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    uses: ./.github/workflows/lint-js.yml
-    with:
-      checkout_ref: ${{ github.event.pull_request.head.sha }}
-    permissions:
-      contents: read
-
-  lint-rust:
-    name: Lint Rust
-    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    uses: ./.github/workflows/lint-rs.yml
-    with:
-      checkout_ref: ${{ github.event.pull_request.head.sha }}
-    permissions:
-      contents: read
-
-  codeql:
-    name: CodeQL
-    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    uses: ./.github/workflows/codeql.yml
-    with:
-      checkout_ref: ${{ github.event.pull_request.head.sha }}
-    permissions:
-      security-events: write
-      contents: read
-      packages: read
-      actions: read
-
-  spellcheck:
-    name: Spell Check
-    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    uses: ./.github/workflows/spellcheck.yml
-    with:
-      checkout_ref: ${{ github.event.pull_request.head.sha }}
-    permissions:
-      contents: read
-
   dependabot-automerge:
     name: Dependabot Automerge
     if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
     runs-on: ubuntu-latest
+    # Never execute pull-request code in this privileged workflow. Auto-merge
+    # remains gated by the unprivileged PR checks and branch protection.
     steps:
       - name: Dependabot metadata
         id: metadata

@@ -1,12 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -139,7 +132,6 @@ test("Wayfern fixtures are copied into the isolated data root, never linked", as
           process.platform === "win32" ? "wayfern.exe" : "wayfern",
         );
 
-  assert.equal((await lstat(destination)).isSymbolicLink(), false);
   await writeFile(destination, "isolated-mutation");
   assert.equal(await readFile(source, "utf8"), "source-fixture");
 });

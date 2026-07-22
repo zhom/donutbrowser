@@ -422,6 +422,7 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
       ).toString("utf8")
     : null;
   const app = appFromEnvironment("network-visible-ui", {
+    seedVersionCache: false,
     wayfernTermsAccepted: false,
   });
   let apiPort;

@@ -343,7 +343,11 @@ test("extensions, extension groups, VPN storage, DNS rules, and event-backed ass
     const unknownVpnError = await app.invokeError("check_vpn_validity", {
       vpnId: "missing-vpn",
     });
-    assert.match(unknownVpnError, /not found|Failed to start VPN worker/i);
+    const normalizedVpnError = unknownVpnError.toLowerCase();
+    assert.ok(
+      normalizedVpnError.includes("not found") ||
+        normalizedVpnError.includes("failed to start vpn worker"),
+    );
     const importedVpn = await app.invoke("import_vpn_config", {
       content: wireGuardFixture(),
       filename: "imported.conf",

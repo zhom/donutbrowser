@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment, withApp } from "../lib/app.mjs";
@@ -58,7 +58,6 @@ test("fresh app renders, completes onboarding, persists settings, and never touc
         "settings",
         "app_settings.json",
       );
-      await access(settingsFile);
       const persisted = JSON.parse(await readFile(settingsFile, "utf8"));
       assert.equal(persisted.api_token, null);
       assert.equal(persisted.mcp_token, null);
