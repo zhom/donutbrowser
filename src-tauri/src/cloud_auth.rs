@@ -23,8 +23,7 @@ pub const CLOUD_API_URL: &str = "https://api.donutbrowser.com";
 pub const CLOUD_SYNC_URL: &str = "https://sync.donutbrowser.com";
 
 /// Default per-hour cap on local automation API / MCP requests. Mirrors the
-/// backend's DEFAULT_REQUESTS_PER_HOUR. Not enforced yet — see the inert
-/// rate-limit chokepoints in api_server / mcp_server.
+/// backend's DEFAULT_REQUESTS_PER_HOUR.
 const DEFAULT_REQUESTS_PER_HOUR: i64 = 100;
 
 /// Capability + limit set the account is entitled to, derived from its plan.
@@ -828,14 +827,24 @@ impl CloudAuthManager {
     }
   }
 
-  /// Per-hour cap on automation requests (0 when automation is unavailable).
-  /// Carried for the future local rate limiter; read by the inert chokepoints.
-  pub async fn requests_per_hour(&self) -> i64 {
-    self
-      .entitlements()
-      .await
-      .map(|e| e.requests_per_hour)
-      .unwrap_or(0)
+  /// Identity and positive per-hour cap for the shared REST/MCP automation
+  /// limiter. No active automation entitlement means no limiter entry; the
+  /// capability gates still reject paid operations independently.
+  pub async fn automation_rate_limit(&self) -> Option<(String, u64)> {
+    #[cfg(feature = "e2e")]
+    if crate::e2e_automation_enabled() {
+      if let Ok(limit) = std::env::var("DONUT_E2E_REQUESTS_PER_HOUR") {
+        if let Ok(limit) = limit.parse::<u64>() {
+          if limit > 0 {
+            return Some(("e2e-automation".to_string(), limit));
+          }
+        }
+      }
+    }
+
+    let state = self.get_user().await?;
+    let limit = state.user.entitlements().requests_per_hour;
+    (limit > 0).then_some((state.user.id, limit as u64))
   }
 
   pub async fn is_fingerprint_os_allowed(&self, fingerprint_os: Option<&str>) -> bool {
@@ -1035,126 +1044,6 @@ impl CloudAuthManager {
             .json::<Vec<LocationItem>>()
             .await
             .map_err(|e| format!("Failed to parse countries: {e}"))
-        }
-      })
-      .await
-  }
-
-  /// Fetch region list for a country from the cloud backend
-  pub async fn fetch_regions(&self, country: &str) -> Result<Vec<LocationItem>, String> {
-    let country = country.to_string();
-    self
-      .api_call_with_retry(move |access_token| {
-        let url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/regions?country={}",
-          country
-        );
-        let client = reqwest::Client::new();
-        async move {
-          let response = client
-            .get(&url)
-            .header("Authorization", format!("Bearer {access_token}"))
-            .send()
-            .await
-            .map_err(|e| format!("Failed to fetch regions: {e}"))?;
-
-          if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("Regions fetch failed ({status}): {body}"));
-          }
-
-          response
-            .json::<Vec<LocationItem>>()
-            .await
-            .map_err(|e| format!("Failed to parse regions: {e}"))
-        }
-      })
-      .await
-  }
-
-  /// Fetch city list for a country, optionally filtered by region
-  pub async fn fetch_cities(
-    &self,
-    country: &str,
-    region: Option<&str>,
-  ) -> Result<Vec<LocationItem>, String> {
-    let country = country.to_string();
-    let region = region.map(|s| s.to_string());
-    self
-      .api_call_with_retry(move |access_token| {
-        let mut url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/cities?country={}",
-          country
-        );
-        if let Some(ref r) = region {
-          url.push_str(&format!("&region={}", r));
-        }
-        let client = reqwest::Client::new();
-        async move {
-          let response = client
-            .get(&url)
-            .header("Authorization", format!("Bearer {access_token}"))
-            .send()
-            .await
-            .map_err(|e| format!("Failed to fetch cities: {e}"))?;
-
-          if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("Cities fetch failed ({status}): {body}"));
-          }
-
-          response
-            .json::<Vec<LocationItem>>()
-            .await
-            .map_err(|e| format!("Failed to parse cities: {e}"))
-        }
-      })
-      .await
-  }
-
-  /// Fetch ISP list for a country, optionally filtered by region and city
-  pub async fn fetch_isps(
-    &self,
-    country: &str,
-    region: Option<&str>,
-    city: Option<&str>,
-  ) -> Result<Vec<LocationItem>, String> {
-    let country = country.to_string();
-    let region = region.map(|s| s.to_string());
-    let city = city.map(|s| s.to_string());
-    self
-      .api_call_with_retry(move |access_token| {
-        let mut url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/isps?country={}",
-          country
-        );
-        if let Some(ref r) = region {
-          url.push_str(&format!("&region={}", r));
-        }
-        if let Some(ref c) = city {
-          url.push_str(&format!("&city={}", c));
-        }
-        let client = reqwest::Client::new();
-        async move {
-          let response = client
-            .get(&url)
-            .header("Authorization", format!("Bearer {access_token}"))
-            .send()
-            .await
-            .map_err(|e| format!("Failed to fetch ISPs: {e}"))?;
-
-          if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(format!("ISPs fetch failed ({status}): {body}"));
-          }
-
-          response
-            .json::<Vec<LocationItem>>()
-            .await
-            .map_err(|e| format!("Failed to parse ISPs: {e}"))
         }
       })
       .await
@@ -1457,30 +1346,6 @@ pub async fn cloud_refresh_wayfern_token() -> Result<Option<String>, String> {
 #[tauri::command]
 pub async fn cloud_get_countries() -> Result<Vec<LocationItem>, String> {
   CLOUD_AUTH.fetch_countries().await
-}
-
-#[tauri::command]
-pub async fn cloud_get_regions(country: String) -> Result<Vec<LocationItem>, String> {
-  CLOUD_AUTH.fetch_regions(&country).await
-}
-
-#[tauri::command]
-pub async fn cloud_get_cities(
-  country: String,
-  region: Option<String>,
-) -> Result<Vec<LocationItem>, String> {
-  CLOUD_AUTH.fetch_cities(&country, region.as_deref()).await
-}
-
-#[tauri::command]
-pub async fn cloud_get_isps(
-  country: String,
-  region: Option<String>,
-  city: Option<String>,
-) -> Result<Vec<LocationItem>, String> {
-  CLOUD_AUTH
-    .fetch_isps(&country, region.as_deref(), city.as_deref())
-    .await
 }
 
 #[tauri::command]

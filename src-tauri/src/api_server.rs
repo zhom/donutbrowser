@@ -6,9 +6,9 @@ use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
 use axum::{
   extract::{Path, Query, State},
-  http::{HeaderMap, StatusCode},
+  http::{header, HeaderMap, Method, StatusCode},
   middleware::{self, Next},
-  response::{Json, Response},
+  response::{IntoResponse, Json, Response},
   routing::get,
   Router,
 };
@@ -494,14 +494,16 @@ impl ApiServer {
             );
             listener
           }
-          Err(e) => return Err(format!("Failed to bind to any port: {e}")),
+          Err(e) => {
+            return Err(crate::backend_error_with_detail("API_PORT_UNAVAILABLE", e));
+          }
         }
       }
     };
 
     let actual_port = listener
       .local_addr()
-      .map_err(|e| format!("Failed to get local address: {e}"))?
+      .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
       .port();
 
     // Create router with OpenAPI documentation
@@ -538,8 +540,7 @@ impl ApiServer {
     let api = ApiDoc::openapi();
 
     let v1_routes = v1_routes
-      // Inert chokepoint (innermost → runs after auth) for the future per-hour
-      // automation request limit. See rate_limit_middleware.
+      // Innermost so only authenticated automation requests consume quota.
       .layer(middleware::from_fn(rate_limit_middleware))
       .layer(middleware::from_fn_with_state(
         state.clone(),
@@ -692,18 +693,47 @@ async fn request_logging_middleware(request: axum::extract::Request, next: Next)
   response
 }
 
-/// Chokepoint for the future per-hour automation request limit. The limit
-/// (`requests_per_hour`, default 100) is already plumbed through entitlements;
-/// this middleware is intentionally inert today — it resolves the limit but
-/// never blocks. To enforce, count authenticated requests per rolling hour and
-/// return `StatusCode::TOO_MANY_REQUESTS` once the limit (when > 0) is exceeded.
-async fn rate_limit_middleware(
-  request: axum::extract::Request,
-  next: Next,
-) -> Result<Response, StatusCode> {
-  let _requests_per_hour = crate::cloud_auth::CLOUD_AUTH.requests_per_hour().await;
-  // TODO(rate-limit): enforce `_requests_per_hour` for automation routes.
-  Ok(next.run(request).await)
+fn is_automation_request(method: &Method, path: &str) -> bool {
+  if method != Method::POST {
+    return false;
+  }
+
+  if matches!(path, "/v1/profiles/batch/run" | "/v1/profiles/batch/stop") {
+    return true;
+  }
+
+  let Some(profile_action) = path.strip_prefix("/v1/profiles/") else {
+    return false;
+  };
+  let mut segments = profile_action.split('/');
+  matches!(
+    (segments.next(), segments.next(), segments.next()),
+    (Some(_), Some("run" | "open-url" | "kill"), None)
+  )
+}
+
+async fn rate_limit_middleware(request: axum::extract::Request, next: Next) -> Response {
+  if !is_automation_request(request.method(), request.uri().path()) {
+    return next.run(request).await;
+  }
+
+  match crate::automation_rate_limiter::check_automation_rate_limit().await {
+    crate::automation_rate_limiter::RateLimitOutcome::Limited { retry_after_secs } => {
+      log::warn!(
+        "[api] Rejected {}: automation rate limit exceeded; retry in {}s",
+        request.uri().path(),
+        retry_after_secs
+      );
+      (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(header::RETRY_AFTER, retry_after_secs.to_string())],
+        "automation request rate limit exceeded",
+      )
+        .into_response()
+    }
+    crate::automation_rate_limiter::RateLimitOutcome::Unlimited
+    | crate::automation_rate_limiter::RateLimitOutcome::Allowed { .. } => next.run(request).await,
+  }
 }
 
 // Global API server instance
@@ -2036,6 +2066,7 @@ async fn delete_extension_group_api(
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
     (status = 409, description = "Profile is locked by another team member"),
+    (status = 429, description = "Automation request rate limit exceeded"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -2124,6 +2155,7 @@ async fn run_profile(
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
+    (status = 429, description = "Automation request rate limit exceeded"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -2165,6 +2197,7 @@ async fn open_url_in_profile(
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan required"),
     (status = 404, description = "Profile not found"),
+    (status = 429, description = "Automation request rate limit exceeded"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -2217,6 +2250,7 @@ async fn kill_profile(
     (status = 200, description = "Batch launch completed; inspect per-profile results", body = BatchRunResponse),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 429, description = "Automation request rate limit exceeded"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -2312,6 +2346,7 @@ async fn batch_run_profiles(
     (status = 200, description = "Batch stop completed; inspect per-profile results", body = BatchStopResponse),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 429, description = "Automation request rate limit exceeded"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -2672,6 +2707,35 @@ mod tests {
     assert!(!is_valid(""));
   }
 
+  #[test]
+  fn rate_limit_only_classifies_browser_automation_routes() {
+    for path in [
+      "/v1/profiles/profile-id/run",
+      "/v1/profiles/profile-id/open-url",
+      "/v1/profiles/profile-id/kill",
+      "/v1/profiles/batch/run",
+      "/v1/profiles/batch/stop",
+    ] {
+      assert!(
+        is_automation_request(&Method::POST, path),
+        "automation route was not limited: {path}"
+      );
+    }
+
+    for (method, path) in [
+      (Method::GET, "/v1/profiles/profile-id/run"),
+      (Method::POST, "/v1/profiles"),
+      (Method::POST, "/v1/profiles/import"),
+      (Method::GET, "/v1/profiles"),
+      (Method::GET, "/openapi.json"),
+    ] {
+      assert!(
+        !is_automation_request(&method, path),
+        "free or non-mutating route was limited: {method} {path}"
+      );
+    }
+  }
+
   fn schema_required(spec: &serde_json::Value, schema: &str) -> Vec<String> {
     spec["components"]["schemas"][schema]["required"]
       .as_array()
@@ -2764,5 +2828,18 @@ mod tests {
       !paths.keys().any(|p| p.contains("wayfern-token")),
       "wayfern-token endpoints were removed and must stay out of the spec"
     );
+
+    for path in [
+      "/v1/profiles/{id}/run",
+      "/v1/profiles/{id}/open-url",
+      "/v1/profiles/{id}/kill",
+      "/v1/profiles/batch/run",
+      "/v1/profiles/batch/stop",
+    ] {
+      assert!(
+        paths[path]["post"]["responses"].get("429").is_some(),
+        "automation route is missing its 429 response: {path}"
+      );
+    }
   }
 }

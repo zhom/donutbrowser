@@ -15,6 +15,14 @@ static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 // to the confirmation dialog.
 static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 
+pub(crate) fn backend_error(code: &str) -> String {
+  serde_json::json!({ "code": code }).to_string()
+}
+
+pub(crate) fn backend_error_with_detail(code: &str, detail: impl std::fmt::Display) -> String {
+  serde_json::json!({ "code": code, "params": { "detail": detail.to_string() } }).to_string()
+}
+
 fn e2e_automation_enabled() -> bool {
   #[cfg(feature = "e2e")]
   {
@@ -39,6 +47,7 @@ mod api_server;
 mod app_auto_updater;
 pub mod app_dirs;
 mod auto_updater;
+mod automation_rate_limiter;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
@@ -271,15 +280,14 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
   Ok(())
 }
 
-/// Prefix a command error with context, but pass structured `{"code": ...}`
-/// backend errors through untouched — the frontend can only translate a code
-/// when the JSON is the entire message (see src/lib/backend-errors.ts).
+/// Preserve structured backend errors and wrap lower-level diagnostics in the
+/// generic structured error shape expected by the frontend.
 pub(crate) fn wrap_backend_error(e: impl std::fmt::Display, context: &str) -> String {
   let msg = e.to_string();
   if msg.starts_with('{') {
     msg
   } else {
-    format!("{context}: {msg}")
+    backend_error_with_detail("INTERNAL_ERROR", format!("{context}: {msg}"))
   }
 }
 
@@ -531,14 +539,14 @@ async fn get_mcp_config(app_handle: tauri::AppHandle) -> Result<Option<McpConfig
 
   let port = mcp_server
     .get_port()
-    .ok_or("MCP server port not available")?;
+    .ok_or_else(|| backend_error("MCP_CONFIGURATION_UNAVAILABLE"))?;
 
   let settings_manager = settings_manager::SettingsManager::instance();
   let token = settings_manager
     .get_mcp_token(&app_handle)
     .await
-    .map_err(|e| format!("Failed to get MCP token: {e}"))?
-    .ok_or("MCP token not found")?;
+    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?
+    .ok_or_else(|| backend_error("MCP_CONFIGURATION_UNAVAILABLE"))?;
 
   Ok(Some(McpConfig { port, token }))
 }
@@ -739,13 +747,15 @@ fn update_claude_extensions_registry(
 
 async fn current_mcp_url(app_handle: &tauri::AppHandle) -> Result<String, String> {
   let mcp_server = mcp_server::McpServer::instance();
-  let port = mcp_server.get_port().ok_or("MCP server is not running")?;
+  let port = mcp_server
+    .get_port()
+    .ok_or_else(|| backend_error("MCP_SERVER_NOT_RUNNING"))?;
   let settings_manager = settings_manager::SettingsManager::instance();
   let token = settings_manager
     .get_mcp_token(app_handle)
     .await
-    .map_err(|e| format!("Failed to get MCP token: {e}"))?
-    .ok_or("MCP token not found")?;
+    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?
+    .ok_or_else(|| backend_error("MCP_CONFIGURATION_UNAVAILABLE"))?;
   Ok(format!("http://127.0.0.1:{port}/mcp/{token}"))
 }
 
@@ -761,24 +771,28 @@ async fn list_mcp_agents() -> Result<Vec<mcp_integrations::McpAgentInfo>, String
 #[tauri::command]
 async fn add_mcp_to_agent(app_handle: tauri::AppHandle, agent_id: String) -> Result<(), String> {
   if !mcp_integrations::agent_exists(&agent_id) {
-    return Err(format!("Unknown agent: {agent_id}"));
+    return Err(backend_error("MCP_AGENT_UNKNOWN"));
   }
-  if agent_id == "claude-desktop" {
-    return add_mcp_to_claude_desktop_internal(&app_handle).await;
-  }
-  let url = current_mcp_url(&app_handle).await?;
-  mcp_integrations::install_generic(&agent_id, &url)
+  let result = if agent_id == "claude-desktop" {
+    add_mcp_to_claude_desktop_internal(&app_handle).await
+  } else {
+    let url = current_mcp_url(&app_handle).await?;
+    mcp_integrations::install_generic(&agent_id, &url)
+  };
+  result.map_err(|e| backend_error_with_detail("MCP_AGENT_INSTALL_FAILED", e))
 }
 
 #[tauri::command]
 async fn remove_mcp_from_agent(agent_id: String) -> Result<(), String> {
   if !mcp_integrations::agent_exists(&agent_id) {
-    return Err(format!("Unknown agent: {agent_id}"));
+    return Err(backend_error("MCP_AGENT_UNKNOWN"));
   }
-  if agent_id == "claude-desktop" {
-    return remove_mcp_from_claude_desktop_internal();
-  }
-  mcp_integrations::uninstall_generic(&agent_id)
+  let result = if agent_id == "claude-desktop" {
+    remove_mcp_from_claude_desktop_internal()
+  } else {
+    mcp_integrations::uninstall_generic(&agent_id)
+  };
+  result.map_err(|e| backend_error_with_detail("MCP_AGENT_REMOVE_FAILED", e))
 }
 
 #[tauri::command]
@@ -2432,9 +2446,6 @@ pub fn run_with_builder(
       cloud_auth::cloud_logout,
       cloud_auth::cloud_get_proxy_usage,
       cloud_auth::cloud_get_countries,
-      cloud_auth::cloud_get_regions,
-      cloud_auth::cloud_get_cities,
-      cloud_auth::cloud_get_isps,
       cloud_auth::create_cloud_location_proxy,
       cloud_auth::restart_sync_service,
       cloud_auth::cloud_get_wayfern_token,
@@ -2480,6 +2491,24 @@ pub fn run_with_builder(
 #[cfg(test)]
 mod tests {
   use std::fs;
+
+  #[test]
+  fn backend_error_helpers_preserve_codes_and_structure_diagnostics() {
+    let coded = super::backend_error("PROFILE_NOT_FOUND");
+    assert_eq!(
+      serde_json::from_str::<serde_json::Value>(&coded).unwrap()["code"],
+      "PROFILE_NOT_FOUND"
+    );
+    assert_eq!(super::wrap_backend_error(&coded, "ignored"), coded);
+
+    let wrapped = super::wrap_backend_error("disk unavailable", "Failed to save");
+    let parsed = serde_json::from_str::<serde_json::Value>(&wrapped).unwrap();
+    assert_eq!(parsed["code"], "INTERNAL_ERROR");
+    assert_eq!(
+      parsed["params"]["detail"],
+      "Failed to save: disk unavailable"
+    );
+  }
 
   #[test]
   fn test_no_unused_tauri_commands() {

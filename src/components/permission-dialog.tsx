@@ -40,24 +40,20 @@ export function PermissionDialog({
   const { t } = useTranslation();
   const [isRequesting, setIsRequesting] = useState(false);
   const [isWaitingForGrant, setIsWaitingForGrant] = useState(false);
-  const [isMacOS, setIsMacOS] = useState(false);
   const {
     requestPermission,
     isMicrophoneAccessGranted,
     isCameraAccessGranted,
-  } = usePermissions();
+    isInitialized,
+    requiresSystemPermissions,
+  } = usePermissions(isOpen);
 
-  // Check if we're on macOS and close dialog if not
+  // This gate only exists for macOS TCC permissions.
   useEffect(() => {
-    const userAgent = navigator.userAgent;
-    const isMac = userAgent.includes("Mac");
-    setIsMacOS(isMac);
-
-    // If not macOS, close the dialog as permissions aren't needed
-    if (!isMac) {
+    if (isOpen && isInitialized && !requiresSystemPermissions) {
       onClose();
     }
-  }, [onClose]);
+  }, [isInitialized, isOpen, onClose, requiresSystemPermissions]);
 
   // Get current permission status
   const isCurrentPermissionGranted =
@@ -158,7 +154,9 @@ export function PermissionDialog({
   const handleRequestPermission = async () => {
     setIsRequesting(true);
     try {
-      await requestPermission(permissionType);
+      const granted = await requestPermission(permissionType);
+      if (granted) return;
+
       // The macOS permission poll runs every 5 s, so the new state can take
       // a moment to surface. Keep the grant button in its busy state for
       // that window so the user has clear feedback, and notify them if the
@@ -187,7 +185,7 @@ export function PermissionDialog({
   };
 
   // Don't render if not macOS
-  if (!isMacOS) {
+  if (!requiresSystemPermissions) {
     return null;
   }
 

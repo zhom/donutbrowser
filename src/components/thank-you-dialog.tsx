@@ -1,7 +1,7 @@
 "use client";
 
 import confetti from "canvas-confetti";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/components/icons/logo";
@@ -20,9 +20,10 @@ export function ThankYouDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || reduceMotion) return;
     const fire = (options: confetti.Options) => {
       void confetti({ origin: { y: 0.7 }, ...options });
     };
@@ -39,7 +40,7 @@ export function ThankYouDialog({
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [isOpen]);
+  }, [isOpen, reduceMotion]);
 
   return (
     <Dialog
@@ -48,12 +49,15 @@ export function ThankYouDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="p-4 sm:max-w-md sm:p-6">
         <div className="flex flex-col items-center gap-6 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.6, rotate: -12 }}
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={{ ...spring, delay: 0.05 }}
+            transition={{
+              ...(reduceMotion ? { duration: 0.15 } : spring),
+              delay: reduceMotion ? 0 : 0.05,
+            }}
             className="text-foreground"
           >
             <Logo className="size-14" />
@@ -66,8 +70,11 @@ export function ThankYouDialog({
             <motion.p
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ ...spring, delay: 0.15 }}
-              className="mx-auto max-w-[46ch] text-sm/6 text-pretty text-muted-foreground"
+              transition={{
+                ...(reduceMotion ? { duration: 0.15 } : spring),
+                delay: reduceMotion ? 0 : 0.15,
+              }}
+              className="mx-auto max-w-[46ch] text-base/7 text-pretty text-muted-foreground sm:text-sm/6"
             >
               {t("onboarding.thankYou.body")}
             </motion.p>

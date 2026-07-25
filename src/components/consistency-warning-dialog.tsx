@@ -29,14 +29,6 @@ export interface ConsistencyResult {
 const GLOBAL_DISABLE_KEY = "consistency-warn-disabled";
 const perProfileKey = (id: string) => `consistency-warn-skip-${id}`;
 
-export function isConsistencyWarningEnabled(): boolean {
-  try {
-    return localStorage.getItem(GLOBAL_DISABLE_KEY) !== "1";
-  } catch {
-    return true;
-  }
-}
-
 export function isConsistencyWarningSuppressed(profileId: string): boolean {
   try {
     return (

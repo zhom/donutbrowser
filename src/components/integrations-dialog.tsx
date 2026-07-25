@@ -213,8 +213,7 @@ export function IntegrationsDialog({
     } catch (e) {
       console.error("Failed to toggle API:", e);
       showErrorToast(t("integrations.apiToggleFailed"), {
-        description:
-          e instanceof Error ? e.message : t("integrations.apiUnknownError"),
+        description: translateBackendError(t, e),
       });
     } finally {
       setIsApiStarting(false);
@@ -245,8 +244,7 @@ export function IntegrationsDialog({
     } catch (e) {
       console.error("Failed to toggle MCP server:", e);
       showErrorToast(t("integrations.mcpToggleFailed"), {
-        description:
-          e instanceof Error ? e.message : t("integrations.apiUnknownError"),
+        description: translateBackendError(t, e),
       });
     } finally {
       setIsMcpStarting(false);
@@ -452,10 +450,7 @@ export function IntegrationsDialog({
                                 showErrorToast(
                                   t("integrations.apiStartFailed"),
                                   {
-                                    description:
-                                      e instanceof Error
-                                        ? e.message
-                                        : t("integrations.apiUnknownError"),
+                                    description: translateBackendError(t, e),
                                   },
                                 );
                               } finally {

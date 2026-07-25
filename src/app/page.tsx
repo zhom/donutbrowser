@@ -69,6 +69,7 @@ import { translateBackendError } from "@/lib/backend-errors";
 import { getEntitlements } from "@/lib/entitlements";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import {
+  ONBOARDING_TOUR_CLOSED_EVENT,
   ONBOARDING_TOUR_FINISHED_EVENT,
   setOnboardingActive,
 } from "@/lib/onboarding-signal";
@@ -113,31 +114,46 @@ export default function Home() {
   const onboardingHandledRef = useRef(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [thankYouOpen, setThankYouOpen] = useState(false);
-  // null = onboarding decision pending; false = not a first-run onboarding (run
-  // the normal permission checks); true = first-run onboarding, so the welcome
-  // flow drives permissions and the standalone permission dialog is suppressed.
+  // null = onboarding decision pending; false = not a first-run session (run
+  // normal permission checks); true = first-run session, so "Not now" really
+  // defers the standalone permission dialog until a later launch.
   const [firstRunOnboarding, setFirstRunOnboarding] = useState<boolean | null>(
     null,
   );
+
+  const persistOnboardingComplete = useCallback(() => {
+    void invoke("complete_onboarding").catch((err: unknown) => {
+      console.error("Failed to persist onboarding completion:", err);
+    });
+  }, []);
 
   // Welcome flow finished. Existing-profile users are done after the welcome +
   // commercial-use steps; users with no profile yet continue into the in-app
   // product tour that walks them through creating their first profile.
   const handleWelcomeComplete = useCallback(() => {
     setWelcomeOpen(false);
-    setFirstRunOnboarding(false);
     if (profiles.length === 0) {
       startOnborda(ONBOARDING_TOUR);
+    } else {
+      persistOnboardingComplete();
     }
-  }, [startOnborda, profiles.length]);
+  }, [persistOnboardingComplete, profiles.length, startOnborda]);
 
-  // The product tour finished (user clicked "Finish", not "Skip") → celebrate.
+  // Finishing or explicitly skipping the product tour completes the one-shot
+  // onboarding. Only reaching the end triggers the celebration.
   useEffect(() => {
-    const handler = () => setThankYouOpen(true);
-    window.addEventListener(ONBOARDING_TOUR_FINISHED_EVENT, handler);
-    return () =>
-      window.removeEventListener(ONBOARDING_TOUR_FINISHED_EVENT, handler);
-  }, []);
+    const handleClosed = () => persistOnboardingComplete();
+    const handleFinished = () => setThankYouOpen(true);
+    window.addEventListener(ONBOARDING_TOUR_CLOSED_EVENT, handleClosed);
+    window.addEventListener(ONBOARDING_TOUR_FINISHED_EVENT, handleFinished);
+    return () => {
+      window.removeEventListener(ONBOARDING_TOUR_CLOSED_EVENT, handleClosed);
+      window.removeEventListener(
+        ONBOARDING_TOUR_FINISHED_EVENT,
+        handleFinished,
+      );
+    };
+  }, [persistOnboardingComplete]);
 
   // Suppress the global browser-download toasts while onboarding (welcome or
   // tour) is active — the welcome dialog shows setup progress itself.
@@ -162,8 +178,9 @@ export default function Home() {
     return () => window.removeEventListener("scroll", pin, true);
   }, [isOnbordaVisible]);
 
-  // On the very first launch, always show the welcome + commercial-use steps
-  // (one-shot: the backend flag is set immediately so it can't trigger again).
+  // On the very first launch, always show the welcome + commercial-use steps.
+  // The completion flag is only persisted after the user finishes or skips the
+  // full flow, so an interrupted setup can recover on the next launch.
   // The welcome dialog itself decides whether to continue into the browser
   // download + profile-creation flow — only when the user has no profile yet.
   useEffect(() => {
@@ -176,7 +193,6 @@ export default function Home() {
           setFirstRunOnboarding(false);
           return;
         }
-        await invoke("complete_onboarding");
         setFirstRunOnboarding(true);
         setWelcomeOpen(true);
       } catch (err) {
@@ -191,8 +207,11 @@ export default function Home() {
   useEffect(() => {
     if (isOnbordaVisible && currentStep === 0 && profiles.length > 0) {
       // Small delay so the new profile row (and its DNS dropdown target) has
-      // mounted before Onborda re-points at it.
-      setCurrentStep(1, 300);
+      // mounted before Onborda re-points at it. Owning the timeout here lets
+      // cleanup cancel it if the tour closes, instead of reopening a dismissed
+      // tour when Onborda's delayed setter eventually fires.
+      const timeout = window.setTimeout(() => setCurrentStep(1), 300);
+      return () => window.clearTimeout(timeout);
     }
   }, [isOnbordaVisible, currentStep, profiles.length, setCurrentStep]);
 

@@ -3,23 +3,15 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-type Platform = "macos" | "windows" | "linux";
-
-function detectPlatform(): Platform {
-  const userAgent = navigator.userAgent.toLowerCase();
-  if (userAgent.includes("mac")) return "macos";
-  if (userAgent.includes("win")) return "windows";
-  return "linux";
-}
+import { getCurrentOS, type OperatingSystem } from "@/lib/platform";
 
 export function WindowDragArea() {
   const { t } = useTranslation();
-  const [platform, setPlatform] = useState<Platform | null>(null);
+  const [platform, setPlatform] = useState<OperatingSystem | null>(null);
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
-    setPlatform(detectPlatform());
+    setPlatform(getCurrentOS());
   }, []);
 
   useEffect(() => {
@@ -64,7 +56,7 @@ export function WindowDragArea() {
   };
 
   // Linux: system decorations handle everything
-  if (!platform || platform === "linux") {
+  if (!platform || platform === "linux" || platform === "unknown") {
     return null;
   }
 

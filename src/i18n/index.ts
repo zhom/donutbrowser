@@ -27,7 +27,7 @@ export const SUPPORTED_LANGUAGES = [
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]["code"];
 
-export const LANGUAGE_FALLBACKS: Record<string, string[]> = {
+const LANGUAGE_FALLBACKS: Record<string, string[]> = {
   uk: ["ru", "en"],
   be: ["ru", "en"],
   "zh-TW": ["zh", "en"],

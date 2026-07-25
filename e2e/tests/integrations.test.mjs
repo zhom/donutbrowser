@@ -52,6 +52,11 @@ async function invokeContract(app, command, args = {}) {
   }
 }
 
+async function assertCommandErrorCode(app, command, code, args = {}) {
+  const error = await app.invokeError(command, args);
+  assert.match(error, new RegExp(`"code":"${code}"`));
+}
+
 test("authenticated REST API serves its complete OpenAPI contract and CRUD lifecycle", async () => {
   await withApp("integrations-rest", async (app) => {
     await seedTerms(app);
@@ -189,7 +194,17 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
 test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated agent install", async () => {
   await withApp("integrations-mcp", async (app) => {
     await seedTerms(app);
+    await assertCommandErrorCode(
+      app,
+      "stop_mcp_server",
+      "MCP_SERVER_NOT_RUNNING",
+    );
     const port = await app.invoke("start_mcp_server");
+    await assertCommandErrorCode(
+      app,
+      "start_mcp_server",
+      "MCP_SERVER_ALREADY_RUNNING",
+    );
     assert.equal(await app.invoke("get_mcp_server_status"), true);
     const config = await app.invoke("get_mcp_config");
     assert.equal(config.port, port);
@@ -263,6 +278,9 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
 
     const agents = await app.invoke("list_mcp_agents");
     assert.ok(agents.some((agent) => agent.id === "cursor"));
+    await assertCommandErrorCode(app, "add_mcp_to_agent", "MCP_AGENT_UNKNOWN", {
+      agentId: "missing-e2e-agent",
+    });
     await app.invoke("add_mcp_to_agent", { agentId: "cursor" });
     assert.equal(
       (await app.invoke("list_mcp_agents")).find(
@@ -291,113 +309,225 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
   });
 });
 
-test("offline cloud, update, team-lock, trial, and synchronizer contracts are deterministic", async () => {
-  await withApp("integrations-contracts", async (app) => {
-    assert.equal(await app.invoke("cloud_get_user"), null);
-    assert.equal(await app.invoke("cloud_get_proxy_usage"), null);
-    assert.ok(await app.invoke("cloud_get_wayfern_token"));
-    assert.deepEqual(await app.invoke("get_team_locks"), []);
-    assert.equal(
-      await app.invoke("get_team_lock_status", {
-        profileId: "00000000-0000-0000-0000-000000000000",
-      }),
-      null,
-    );
-    assert.deepEqual(await app.invoke("get_sync_sessions"), []);
-    const startResult = await invokeContract(app, "start_sync_session", {
-      leaderProfileId: "00000000-0000-0000-0000-000000000001",
-      followerProfileIds: ["00000000-0000-0000-0000-000000000002"],
-    });
-    assert.equal(startResult.ok, false);
-    const stopError = await app.invokeError("stop_sync_session", {
-      sessionId: "missing",
-    });
-    assert.match(stopError, /not found|session/i);
-    const removeError = await app.invokeError("remove_sync_follower", {
-      sessionId: "missing",
-      followerProfileId: "missing",
-    });
-    assert.match(removeError, /not found|session/i);
-
-    assert.equal(await app.invoke("check_for_app_updates"), null);
-    assert.equal(await app.invoke("check_for_app_updates_manual"), null);
-    assert.ok(
-      await invokeContract(app, "cloud_exchange_device_code", {
-        code: "DONUT-E2E-INVALID-CODE",
-      }),
-    );
-    assert.ok(await invokeContract(app, "cloud_refresh_profile"));
-    assert.ok(await invokeContract(app, "cloud_get_countries"));
-    assert.ok(
-      await invokeContract(app, "cloud_get_regions", {
-        country: "ZZ",
-      }),
-    );
-    assert.ok(
-      await invokeContract(app, "cloud_get_cities", {
-        country: "ZZ",
-        region: null,
-      }),
-    );
-    assert.ok(
-      await invokeContract(app, "cloud_get_isps", {
-        country: "ZZ",
-        region: null,
-        city: null,
-      }),
-    );
-    assert.ok(
-      await invokeContract(app, "create_cloud_location_proxy", {
-        name: "E2E unavailable cloud proxy",
-        country: "ZZ",
-        region: null,
-        city: null,
-        isp: null,
-      }),
-    );
-    assert.ok(await invokeContract(app, "cloud_refresh_wayfern_token"));
-
-    assert.ok(await invokeContract(app, "trigger_manual_version_update"));
-    assert.ok(await invokeContract(app, "clear_all_version_cache_and_refetch"));
-    assert.ok(await invokeContract(app, "check_for_browser_updates"));
-    await app.invoke("dismiss_update_notification", {
-      notificationId: "missing-e2e-notification",
-    });
-    assert.deepEqual(
-      await app.invoke("complete_browser_update_with_auto_update", {
-        browser: "wayfern",
-        newVersion: "150.0.7871.100",
-      }),
-      [],
-    );
-    const prepareError = await app.invokeError(
-      "download_and_prepare_app_update",
-      {
-        updateInfo: {
-          current_version: "0.0.0",
-          new_version: "0.0.1-e2e",
-          release_notes: "E2E invalid update contract",
-          download_url: `${process.env.DONUT_E2E_FIXTURE_URL}/invalid-update.zip`,
-          is_nightly: false,
-          published_at: "2026-01-01T00:00:00Z",
-          manual_update_required: false,
-          release_page_url: null,
-          repo_update: false,
-          checksums_url: null,
-          asset_digest: null,
+test("REST and MCP share the browser automation rate limit", async () => {
+  await withApp(
+    "integrations-rate-limit",
+    async (app) => {
+      await seedTerms(app);
+      const settings = await app.invoke("get_app_settings");
+      const saved = await app.invoke("save_app_settings", {
+        settings: {
+          ...settings,
+          api_enabled: true,
+          api_port: 0,
+          api_token: null,
+          onboarding_completed: true,
         },
-      },
-    );
-    assert.match(prepareError, /checksum|verif|Failed to download/i);
-    const versionStatus = await app.invoke("get_version_update_status");
-    assert.ok(versionStatus && typeof versionStatus === "object");
-    assert.equal(typeof (await app.invoke("is_default_browser")), "boolean");
+      });
 
-    const trial = await app.invoke("get_commercial_trial_status");
-    assert.ok(trial && typeof trial === "object");
-    await app.invoke("acknowledge_trial_expiration");
-    assert.equal(await app.invoke("has_acknowledged_trial_expiration"), true);
-    await app.invoke("cloud_logout");
-    assert.equal(await app.invoke("cloud_get_user"), null);
-  });
+      const apiPort = await app.invoke("start_api_server", { port: 0 });
+      const mcpPort = await app.invoke("start_mcp_server");
+      const mcpConfig = await app.invoke("get_mcp_config");
+      const apiBase = `http://127.0.0.1:${apiPort}`;
+      const mcpUrl = `http://127.0.0.1:${mcpPort}/mcp/${mcpConfig.token}`;
+
+      const initialized = await jsonRequest(mcpUrl, {
+        method: "POST",
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: { name: "donut-e2e-rate-limit", version: "1" },
+          },
+        },
+      });
+      assert.equal(initialized.response.status, 200);
+      const mcpHeaders = {
+        "mcp-session-id": initialized.response.headers.get("mcp-session-id"),
+      };
+
+      const missingProfileId = "00000000-0000-0000-0000-000000000000";
+      const first = await jsonRequest(
+        `${apiBase}/v1/profiles/${missingProfileId}/run`,
+        {
+          method: "POST",
+          token: saved.api_token,
+          body: {},
+        },
+      );
+      assert.equal(first.response.status, 404);
+
+      const second = await jsonRequest(mcpUrl, {
+        method: "POST",
+        headers: mcpHeaders,
+        body: {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "run_profile",
+            arguments: { profile_id: missingProfileId },
+          },
+        },
+      });
+      assert.equal(second.response.status, 200);
+      assert.equal(second.value.error.code, -32000);
+
+      const restLimited = await jsonRequest(
+        `${apiBase}/v1/profiles/${missingProfileId}/run`,
+        {
+          method: "POST",
+          token: saved.api_token,
+          body: {},
+        },
+      );
+      assert.equal(restLimited.response.status, 429);
+      assert.ok(Number(restLimited.response.headers.get("retry-after")) > 0);
+
+      const mcpLimited = await jsonRequest(mcpUrl, {
+        method: "POST",
+        headers: mcpHeaders,
+        body: {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "run_profile",
+            arguments: { profile_id: missingProfileId },
+          },
+        },
+      });
+      assert.equal(mcpLimited.response.status, 429);
+      assert.ok(Number(mcpLimited.response.headers.get("retry-after")) > 0);
+
+      const freeCall = await jsonRequest(mcpUrl, {
+        method: "POST",
+        headers: mcpHeaders,
+        body: {
+          jsonrpc: "2.0",
+          id: 4,
+          method: "tools/call",
+          params: { name: "list_profiles", arguments: {} },
+        },
+      });
+      assert.equal(freeCall.response.status, 200);
+      assert.equal(freeCall.value.error, undefined);
+
+      await app.invoke("stop_mcp_server");
+      await app.invoke("stop_api_server");
+    },
+    {
+      extraEnv: {
+        DONUT_E2E_REQUESTS_PER_HOUR: "2",
+        WAYFERN_TEST_TOKEN: "donut-e2e-rate-limit",
+      },
+    },
+  );
+});
+
+test("offline cloud, update, team-lock, trial, and synchronizer contracts are deterministic", async () => {
+  await withApp(
+    "integrations-contracts",
+    async (app) => {
+      await assertCommandErrorCode(
+        app,
+        "start_mcp_server",
+        "WAYFERN_TERMS_REQUIRED",
+      );
+      assert.equal(await app.invoke("cloud_get_user"), null);
+      assert.equal(await app.invoke("cloud_get_proxy_usage"), null);
+      assert.ok(await app.invoke("cloud_get_wayfern_token"));
+      assert.deepEqual(await app.invoke("get_team_locks"), []);
+      assert.equal(
+        await app.invoke("get_team_lock_status", {
+          profileId: "00000000-0000-0000-0000-000000000000",
+        }),
+        null,
+      );
+      assert.deepEqual(await app.invoke("get_sync_sessions"), []);
+      const startResult = await invokeContract(app, "start_sync_session", {
+        leaderProfileId: "00000000-0000-0000-0000-000000000001",
+        followerProfileIds: ["00000000-0000-0000-0000-000000000002"],
+      });
+      assert.equal(startResult.ok, false);
+      const stopError = await app.invokeError("stop_sync_session", {
+        sessionId: "missing",
+      });
+      assert.match(stopError, /not found|session/i);
+      const removeError = await app.invokeError("remove_sync_follower", {
+        sessionId: "missing",
+        followerProfileId: "missing",
+      });
+      assert.match(removeError, /not found|session/i);
+
+      assert.equal(await app.invoke("check_for_app_updates"), null);
+      assert.equal(await app.invoke("check_for_app_updates_manual"), null);
+      assert.ok(
+        await invokeContract(app, "cloud_exchange_device_code", {
+          code: "DONUT-E2E-INVALID-CODE",
+        }),
+      );
+      assert.ok(await invokeContract(app, "cloud_refresh_profile"));
+      assert.ok(await invokeContract(app, "cloud_get_countries"));
+      assert.ok(
+        await invokeContract(app, "create_cloud_location_proxy", {
+          name: "E2E unavailable cloud proxy",
+          country: "ZZ",
+          region: null,
+          city: null,
+          isp: null,
+        }),
+      );
+      assert.ok(await invokeContract(app, "cloud_refresh_wayfern_token"));
+
+      assert.ok(await invokeContract(app, "trigger_manual_version_update"));
+      assert.ok(
+        await invokeContract(app, "clear_all_version_cache_and_refetch"),
+      );
+      assert.ok(await invokeContract(app, "check_for_browser_updates"));
+      await app.invoke("dismiss_update_notification", {
+        notificationId: "missing-e2e-notification",
+      });
+      assert.deepEqual(
+        await app.invoke("complete_browser_update_with_auto_update", {
+          browser: "wayfern",
+          newVersion: "150.0.7871.100",
+        }),
+        [],
+      );
+      const prepareError = await app.invokeError(
+        "download_and_prepare_app_update",
+        {
+          updateInfo: {
+            current_version: "0.0.0",
+            new_version: "0.0.1-e2e",
+            release_notes: "E2E invalid update contract",
+            download_url: `${process.env.DONUT_E2E_FIXTURE_URL}/invalid-update.zip`,
+            is_nightly: false,
+            published_at: "2026-01-01T00:00:00Z",
+            manual_update_required: false,
+            release_page_url: null,
+            repo_update: false,
+            checksums_url: null,
+            asset_digest: null,
+          },
+        },
+      );
+      assert.match(prepareError, /checksum|verif|Failed to download/i);
+      const versionStatus = await app.invoke("get_version_update_status");
+      assert.ok(versionStatus && typeof versionStatus === "object");
+      assert.equal(typeof (await app.invoke("is_default_browser")), "boolean");
+
+      const trial = await app.invoke("get_commercial_trial_status");
+      assert.ok(trial && typeof trial === "object");
+      await app.invoke("acknowledge_trial_expiration");
+      assert.equal(await app.invoke("has_acknowledged_trial_expiration"), true);
+      await app.invoke("cloud_logout");
+      assert.equal(await app.invoke("cloud_get_user"), null);
+    },
+    { wayfernTermsAccepted: false },
+  );
 });

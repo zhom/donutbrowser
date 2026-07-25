@@ -137,9 +137,7 @@ export function SettingsDialog({
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
   const [requestingPermission, setRequestingPermission] =
     useState<PermissionType | null>(null);
-  const [isMacOS, setIsMacOS] = useState(false);
   const [dnsBlocklistDialogOpen, setDnsBlocklistDialogOpen] = useState(false);
-  const [isLinux, setIsLinux] = useState(false);
   const [hasE2ePassword, setHasE2ePassword] = useState(false);
   const [e2ePassword, setE2ePassword] = useState("");
   const [e2ePasswordConfirm, setE2ePasswordConfirm] = useState("");
@@ -168,7 +166,10 @@ export function SettingsDialog({
     requestPermission,
     isMicrophoneAccessGranted,
     isCameraAccessGranted,
-  } = usePermissions();
+    currentOS,
+  } = usePermissions(isOpen);
+  const isMacOS = currentOS === "macos";
+  const isLinux = currentOS === "linux";
   const { trialStatus } = useCommercialTrial();
   const { user: cloudUser } = useCloudAuth();
   // Encryption is available to everyone except team members who aren't owners
@@ -630,14 +631,7 @@ export function SettingsDialog({
         console.error(err);
       });
 
-      // Check if we're on macOS
-      const userAgent = navigator.userAgent;
-      const isMac = userAgent.includes("Mac");
-      setIsMacOS(isMac);
-      const isLin = !userAgent.includes("Mac") && !userAgent.includes("Win");
-      setIsLinux(isLin);
-
-      if (isMac) {
+      if (isMacOS) {
         loadPermissions();
       }
 
@@ -653,7 +647,13 @@ export function SettingsDialog({
         clearInterval(intervalId);
       };
     }
-  }, [isOpen, loadPermissions, checkDefaultBrowserStatus, loadSettings]);
+  }, [
+    isOpen,
+    isMacOS,
+    loadPermissions,
+    checkDefaultBrowserStatus,
+    loadSettings,
+  ]);
 
   // Initialize language selection when dialog opens or language loads
   useEffect(() => {
@@ -1023,7 +1023,7 @@ export function SettingsDialog({
                                   });
                                 }}
                               >
-                                Grant
+                                {t("common.buttons.grant")}
                               </LoadingButton>
                             )}
                           </div>
@@ -1032,10 +1032,8 @@ export function SettingsDialog({
                     </div>
                   )}
 
-                  <p className="text-xs text-muted-foreground">
-                    These permissions allow browsers launched from Donut Browser
-                    to access system resources. Each website will still ask for
-                    your permission individually.
+                  <p className="text-base/7 text-pretty text-muted-foreground sm:text-sm/6">
+                    {t("settings.permissions.description")}
                   </p>
                 </div>
               )}
@@ -1045,7 +1043,7 @@ export function SettingsDialog({
                 <Label className="text-base font-medium">
                   {t("settings.integrations.title")}
                 </Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-base/7 text-pretty text-muted-foreground sm:text-sm/6">
                   {t("settings.integrations.description")}
                 </p>
                 <RippleButton

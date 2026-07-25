@@ -5,6 +5,9 @@
 
 import { FaChrome, FaExclamationTriangle, FaFire } from "react-icons/fa";
 import { LuLock } from "react-icons/lu";
+import { getCurrentOS } from "@/lib/platform";
+
+export { getCurrentOS } from "@/lib/platform";
 
 /**
  * Map internal browser names to display names
@@ -44,16 +47,6 @@ export function getProfileIcon(profile: {
   if (profile.ephemeral) return FaFire;
   return getBrowserIcon(profile.browser);
 }
-
-export const getCurrentOS = () => {
-  if (typeof window !== "undefined") {
-    const userAgent = window.navigator.userAgent;
-    if (userAgent.includes("Win")) return "windows";
-    if (userAgent.includes("Mac")) return "macos";
-    if (userAgent.includes("Linux")) return "linux";
-  }
-  return "unknown";
-};
 
 export function isCrossOsProfile(profile: {
   host_os?: string;

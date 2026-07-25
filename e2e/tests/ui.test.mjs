@@ -335,6 +335,62 @@ test("settings tabs, command palette filtering, and responsive layout survive re
   });
 });
 
+test("first-run onboarding stays recoverable, responsive, and platform-aware", async () => {
+  await withApp(
+    "ui-onboarding",
+    async (app) => {
+      await app.waitForText("Welcome to Donut Browser");
+      assert.equal(await app.invoke("get_onboarding_completed"), false);
+
+      await app.session.command("POST", "/window/rect", {
+        width: 640,
+        height: 400,
+      });
+      const layout = await app.execute(`
+        const dialog = document.querySelector("[role='dialog']");
+        const progress = dialog?.querySelector("[role='progressbar']");
+        if (!dialog || !progress) return null;
+        const rect = dialog.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          viewportWidth: innerWidth,
+          viewportHeight: innerHeight,
+          progressNow: progress.getAttribute("aria-valuenow"),
+        };
+      `);
+      assert.ok(layout);
+      assert.ok(layout.left >= 0 && layout.right <= layout.viewportWidth);
+      assert.ok(layout.top >= 0 && layout.bottom <= layout.viewportHeight);
+      assert.equal(layout.progressNow, "1");
+
+      await app.clickText("Next", { roles: ["button"] });
+      await app.waitForText("Licensing");
+      await app.clickText("I understand", { roles: ["button"] });
+
+      await app.waitFor(
+        async () =>
+          /Allow microphone & camera|Setting things up|Setup failed/.test(
+            await app.bodyText(),
+          ),
+        { description: "platform-appropriate onboarding step" },
+      );
+      const body = await app.bodyText();
+      if (process.platform !== "darwin") {
+        assert.doesNotMatch(body, /Allow microphone & camera/);
+        assert.match(body, /Setting things up|Setup failed/);
+      }
+
+      // Setup and the optional product tour are still unfinished, so a crash
+      // or restart must be able to resume onboarding.
+      assert.equal(await app.invoke("get_onboarding_completed"), false);
+    },
+    { onboardingCompleted: false },
+  );
+});
+
 test("predefined theme remains rendered across navigation and restart", async () => {
   await withApp("ui-theme-predefined", async (app) => {
     await app.clickSelector('[aria-label="Settings"]');

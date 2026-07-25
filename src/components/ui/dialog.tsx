@@ -263,7 +263,7 @@ function DialogContent({
             // w-[calc(100%-2rem)] (not w-full + max-w) keeps the 1rem window
             // gutter even when callers override max-w-*: tailwind-merge drops
             // a base max-w in favor of the caller's, but leaves width alone.
-            "surface-material fixed top-[50%] left-[50%] z-10000 grid max-h-[calc(100vh-3rem)] w-[calc(100%-2rem)] max-w-lg -translate-[50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg",
+            "surface-material fixed top-[50%] left-[50%] z-10000 grid max-h-[calc(100dvh-3rem)] w-[calc(100%-2rem)] max-w-lg -translate-[50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg",
             className,
           )}
           {...props}

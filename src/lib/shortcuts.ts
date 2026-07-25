@@ -5,6 +5,8 @@
  * the ⌘ glyph while everyone else sees `Ctrl`.
  */
 
+import { isMacOS } from "@/lib/platform";
+
 export type ShortcutGroup =
   | "navigation"
   | "actions"
@@ -137,17 +139,8 @@ export function formatGroupShortcut(digit: number): string[] {
   return [mac ? "⌘" : "Ctrl", String(digit)];
 }
 
-export function isMac(): boolean {
-  if (typeof navigator === "undefined") return false;
-  // userAgentData is preferred but not in all browsers; fall back to platform.
-  // `navigator.platform` is deprecated but still works in Tauri's webview.
-  const ua = navigator.userAgent || "";
-  const platform =
-    (navigator as unknown as { userAgentData?: { platform?: string } })
-      .userAgentData?.platform ??
-    navigator.platform ??
-    "";
-  return /Mac|iPhone|iPad|iPod/.test(platform) || /Mac OS X/.test(ua);
+function isMac(): boolean {
+  return isMacOS();
 }
 
 /**

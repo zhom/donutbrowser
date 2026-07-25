@@ -283,27 +283,3 @@ export function showSyncProgressToast(
     },
   });
 }
-
-export function showUnifiedVersionUpdateToast(
-  title: string,
-  options?: {
-    id?: string;
-    description?: string;
-    progress?: {
-      current: number;
-      total: number;
-      found: number;
-      current_browser?: string;
-    };
-    duration?: number;
-    onCancel?: () => void;
-  },
-) {
-  return showToast({
-    type: "version-update",
-    title,
-    id: "unified-version-update",
-    duration: Number.POSITIVE_INFINITY, // Keep showing until completed
-    ...options,
-  });
-}

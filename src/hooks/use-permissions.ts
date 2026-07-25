@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getCurrentOS, type OperatingSystem } from "@/lib/platform";
 
 // Platform-specific imports
 let macOSPermissions:
@@ -25,21 +26,23 @@ interface UsePermissionsReturn {
   isMicrophoneAccessGranted: boolean;
   isCameraAccessGranted: boolean;
   isInitialized: boolean;
+  currentOS: OperatingSystem | null;
+  requiresSystemPermissions: boolean;
 }
 
-export function usePermissions(): UsePermissionsReturn {
+export function usePermissions(active = true): UsePermissionsReturn {
   const [isMicrophoneAccessGranted, setIsMicrophoneAccessGranted] =
     useState(false);
   const [isCameraAccessGranted, setIsCameraAccessGranted] = useState(false);
-  const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
+  const [currentOS, setCurrentOS] = useState<OperatingSystem | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Check permissions status
   const checkPermissions = useCallback(async () => {
-    if (!currentPlatform) return;
+    if (!currentOS) return;
 
-    if (currentPlatform !== "macos") {
+    if (currentOS !== "macos") {
       // Windows/Linux - assume permissions are granted
       setIsMicrophoneAccessGranted(true);
       setIsCameraAccessGranted(true);
@@ -58,19 +61,19 @@ export function usePermissions(): UsePermissionsReturn {
 
         setIsMicrophoneAccessGranted(micGranted);
         setIsCameraAccessGranted(camGranted);
-        setIsInitialized(true);
       }
     } catch (error) {
       console.error("Failed to check permissions on macOS:", error);
+    } finally {
       setIsInitialized(true);
     }
-  }, [currentPlatform]);
+  }, [currentOS]);
 
   // Request permission
   const requestPermission = useCallback(
     async (type: PermissionType): Promise<boolean> => {
       // Non-macOS platforms do not require this permission gate.
-      if (!currentPlatform || currentPlatform !== "macos") return true;
+      if ((currentOS ?? getCurrentOS()) !== "macos") return true;
 
       // macOS - use the permissions API
       try {
@@ -96,59 +99,34 @@ export function usePermissions(): UsePermissionsReturn {
           await permissions.requestCameraPermission();
         }
 
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          const granted = await readPermission();
-          if (granted) return true;
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-
+        // Read once immediately. The hook's macOS poll keeps watching for
+        // delayed TCC propagation without holding this request (and any next
+        // system prompt) open for several extra seconds.
         return readPermission();
       } catch (error) {
         console.error(`Failed to request ${type} permission on macOS:`, error);
         return false;
       }
     },
-    [currentPlatform],
+    [currentOS],
   );
 
   // Initialize platform detection and start interval checking
   useEffect(() => {
-    const initializePlatform = () => {
-      try {
-        // Detect platform - on macOS we need permissions, on others we don't
-        const userAgent = navigator.userAgent;
-        let platformName = "unknown";
-
-        if (userAgent.includes("Mac")) {
-          platformName = "macos";
-        } else if (userAgent.includes("Win")) {
-          platformName = "windows";
-        } else if (userAgent.includes("Linux")) {
-          platformName = "linux";
-        }
-
-        setCurrentPlatform(platformName);
-      } catch (error) {
-        console.error("Failed to detect platform:", error);
-        // Fallback - assume non-macOS
-        setCurrentPlatform("unknown");
-      }
-    };
-
-    initializePlatform();
+    setCurrentOS(getCurrentOS());
   }, []);
 
   // Set up interval checking when platform is determined.
   // On non-macOS platforms, permissions are always granted — a single check
   // is enough and we skip the interval entirely to avoid burning CPU.
   useEffect(() => {
-    if (!currentPlatform) return;
+    if (!currentOS || !active) return;
 
     // Initial check
     void checkPermissions();
 
     // Only poll on macOS where permissions can change at runtime
-    if (currentPlatform !== "macos") return;
+    if (currentOS !== "macos") return;
 
     intervalRef.current = setInterval(() => {
       void checkPermissions();
@@ -160,12 +138,14 @@ export function usePermissions(): UsePermissionsReturn {
         intervalRef.current = null;
       }
     };
-  }, [currentPlatform, checkPermissions]);
+  }, [active, currentOS, checkPermissions]);
 
   return {
     requestPermission,
     isMicrophoneAccessGranted,
     isCameraAccessGranted,
     isInitialized,
+    currentOS,
+    requiresSystemPermissions: currentOS === "macos",
   };
 }

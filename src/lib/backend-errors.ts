@@ -54,6 +54,15 @@ export type BackendErrorCode =
   | "UNSUPPORTED_DNS_RULES_FORMAT"
   | "DNS_RULES_SAVE_FAILED"
   | "DNS_RULES_EXPORT_FAILED"
+  | "WAYFERN_TERMS_REQUIRED"
+  | "API_PORT_UNAVAILABLE"
+  | "MCP_SERVER_ALREADY_RUNNING"
+  | "MCP_SERVER_NOT_RUNNING"
+  | "MCP_PORT_UNAVAILABLE"
+  | "MCP_CONFIGURATION_UNAVAILABLE"
+  | "MCP_AGENT_UNKNOWN"
+  | "MCP_AGENT_INSTALL_FAILED"
+  | "MCP_AGENT_REMOVE_FAILED"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -211,6 +220,28 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.dnsRulesSaveFailed");
     case "DNS_RULES_EXPORT_FAILED":
       return t("backendErrors.dnsRulesExportFailed");
+    case "WAYFERN_TERMS_REQUIRED":
+      return t("backendErrors.wayfernTermsRequired");
+    case "API_PORT_UNAVAILABLE":
+      return t("backendErrors.apiPortUnavailable");
+    case "MCP_SERVER_ALREADY_RUNNING":
+      return t("backendErrors.mcpServerAlreadyRunning");
+    case "MCP_SERVER_NOT_RUNNING":
+      return t("backendErrors.mcpServerNotRunning");
+    case "MCP_PORT_UNAVAILABLE":
+      return t("backendErrors.mcpPortUnavailable");
+    case "MCP_CONFIGURATION_UNAVAILABLE":
+      return t("backendErrors.mcpConfigurationUnavailable");
+    case "MCP_AGENT_UNKNOWN":
+      return t("backendErrors.mcpAgentUnknown");
+    case "MCP_AGENT_INSTALL_FAILED":
+      return t("backendErrors.mcpAgentInstallFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "MCP_AGENT_REMOVE_FAILED":
+      return t("backendErrors.mcpAgentRemoveFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
     case "CLEAR_ON_CLOSE_UNAVAILABLE":
       return t("backendErrors.clearOnCloseUnavailable");
     case "INTERNAL_ERROR":

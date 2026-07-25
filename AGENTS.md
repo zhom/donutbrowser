@@ -31,6 +31,7 @@ donutbrowser/
 │   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
 │   │   ├── mcp_server.rs            # MCP protocol server
+│   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
 │   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management
@@ -160,6 +161,7 @@ Handlers route manager errors through `manager_error_response`, which maps messa
 - `404` — entity not found (`… not found` / `*_NOT_FOUND`).
 - `400` — validation, duplicates, empty names, invalid/unsupported/unavailable input.
 - `409` — conflicts: browser version already being downloaded, profile locked by another team member (run), browser running during cookie import.
+- `429` — authenticated automation request quota exceeded (`Retry-After` header included).
 - `500` — internal failures (IO, network, poisoned locks).
 
 Error bodies are plain-text diagnostics; some are the JSON `{"code": ...}` strings shared with the Tauri commands (e.g. `NAME_CANNOT_BE_EMPTY`, `GROUP_ALREADY_EXISTS`). The translated-error rule above applies to Tauri commands, not to REST bodies.
