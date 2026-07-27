@@ -56,6 +56,7 @@ donutbrowser/
 │   ├── app/                        # Test-only Tauri harness that injects the private driver
 │   ├── lib/                        # WebDriver, CDP, fixtures, app-session helpers
 │   └── tests/                      # Smoke, UI, entity, integration, sync, browser suites
+├── patches/                        # pnpm compatibility patches for secured dependencies
 ├── flake.nix                       # Nix development environment
 └── .github/workflows/              # CI/CD pipelines
 ```

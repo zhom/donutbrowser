@@ -22,7 +22,7 @@ confirmModulesPurge: false
 overrides:
   picomatch@>=4.0.0 <4.0.4: '>=4.0.4'
   path-to-regexp@>=8.0.0 <8.4.0: '>=8.4.0'
-  postcss@<8.5.10: '>=8.5.12'
+  postcss@<8.5.18: '>=8.5.18'
   fast-xml-parser@<5.7.0: '>=5.7.2'
   fast-uri@<3.1.2: '>=3.1.2 <4'
   fast-xml-builder@<1.2.0: '>=1.2.0'
@@ -34,9 +34,7 @@ overrides:
   js-yaml@<3.15.0: '>=3.15.0 <4'
   js-yaml@>=4.0.0 <4.3.0: '>=4.3.0 <5'
   '@babel/core@<7.29.6': '>=7.29.6 <8'
-  brace-expansion@<1.1.16: '>=1.1.16 <2'
-  brace-expansion@>=2.0.0 <2.1.2: '>=2.1.2 <3'
-  brace-expansion@>=3.0.0 <5.0.7: '>=5.0.7 <6'
+  brace-expansion@<5.0.8: 5.0.8
   sharp@<0.35.0: '>=0.35.0 <0.36'
 
 allowBuilds:
@@ -97,3 +95,6 @@ minimumReleaseAgeExclude:
   - '@aws-sdk/nested-clients@3.997.29'
   - '@aws-sdk/s3-request-presigner@3.1081.0'
   - '@aws-sdk/token-providers@3.1081.0'
+
+patchedDependencies:
+  brace-expansion@5.0.8: patches/brace-expansion@5.0.8.patch

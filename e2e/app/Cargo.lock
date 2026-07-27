@@ -7980,8 +7980,9 @@ dependencies = [
 
 [[package]]
 name = "wayland-scanner"
-version = "0.31.10"
-source = "git+https://github.com/Smithay/wayland-rs?rev=d07c4f91f28b42e5a485823ffd9d8d5a210b1053#d07c4f91f28b42e5a485823ffd9d8d5a210b1053"
+version = "0.31.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "338e30461b3a2b67d70eb30a6d89f8e0c93a833e07d2ae89085cd070c4a00ac0"
 dependencies = [
  "proc-macro2",
  "quick-xml",

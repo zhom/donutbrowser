@@ -1742,16 +1742,16 @@ impl AppAutoUpdater {
     let proxy_ids: Vec<String> = proxy_configs.into_iter().map(|config| config.id).collect();
     let vpn_ids: Vec<String> = vpn_configs.into_iter().map(|config| config.id).collect();
 
-    let stop_proxies = futures_util::future::join_all(
-      proxy_ids
-        .iter()
-        .map(|id| crate::proxy_runner::stop_proxy_process(id)),
-    );
-    let stop_vpns = futures_util::future::join_all(
-      vpn_ids
-        .iter()
-        .map(|id| crate::vpn_worker_runner::stop_vpn_worker(id)),
-    );
+    let stop_proxies = futures_util::future::join_all(proxy_ids.iter().map(|id| async move {
+      crate::proxy_runner::stop_proxy_process(id)
+        .await
+        .map_err(|error| error.to_string())
+    }));
+    let stop_vpns = futures_util::future::join_all(vpn_ids.iter().map(|id| async move {
+      crate::vpn_worker_runner::stop_vpn_worker(id)
+        .await
+        .map_err(|error| error.to_string())
+    }));
     let (proxy_results, vpn_results) = tokio::join!(stop_proxies, stop_vpns);
 
     for result in proxy_results.into_iter().chain(vpn_results) {
@@ -2324,6 +2324,13 @@ not-a-hash  Donut_0.29.0_amd64.deb
     assert!(hooks.contains("taskkill.exe"));
     assert!(hooks.contains("donut-proxy.exe"));
     assert!(hooks.contains("Delete \"$INSTDIR\\donut-proxy.exe\""));
+  }
+
+  #[test]
+  fn test_windows_installer_preparation_future_is_send() {
+    fn assert_send<T: Send>(_: T) {}
+
+    assert_send(AppAutoUpdater::prepare_windows_installer());
   }
 
   #[test]

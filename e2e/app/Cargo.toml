@@ -7,6 +7,3 @@ publish = false
 [dependencies]
 donutbrowser-lib = { package = "donutbrowser", path = "../../src-tauri", features = ["e2e"] }
 tauri-plugin-cross-platform-webdriver = { path = "../../../tauri-cross-platform-webdriver/crates/tauri-plugin-cross-platform-webdriver" }
-
-[patch.crates-io]
-wayland-scanner = { git = "https://github.com/Smithay/wayland-rs", rev = "d07c4f91f28b42e5a485823ffd9d8d5a210b1053" }
