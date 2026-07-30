@@ -196,6 +196,17 @@ async fn main() {
         ),
     )
     .subcommand(
+      Command::new("xray-worker")
+        .about("Run an Xray-core worker process (internal use)")
+        .arg(Arg::new("action").required(true).help("Action (start)"))
+        .arg(
+          Arg::new("config-path")
+            .long("config-path")
+            .required(true)
+            .help("Direct path to the Xray worker config JSON file"),
+        ),
+    )
+    .subcommand(
       Command::new("mcp-bridge")
         .about("Bridge stdio MCP to a local HTTP MCP server")
         .arg(
@@ -507,6 +518,25 @@ async fn main() {
       }
     } else {
       log::error!("Invalid action for vpn-worker. Use 'start'");
+      process::exit(1);
+    }
+  } else if let Some(xray_matches) = matches.subcommand_matches("xray-worker") {
+    let action = xray_matches
+      .get_one::<String>("action")
+      .expect("action is required");
+    let config_path = xray_matches
+      .get_one::<String>("config-path")
+      .expect("config-path is required");
+    if action != "start" {
+      log::error!("Invalid action for xray-worker. Use 'start'");
+      process::exit(1);
+    }
+
+    set_high_priority();
+    if let Err(error) =
+      donutbrowser_lib::xray_worker_runner::run_xray_worker(std::path::Path::new(config_path)).await
+    {
+      log::error!("Xray worker failed: {error}");
       process::exit(1);
     }
   } else if let Some(bridge_matches) = matches.subcommand_matches("mcp-bridge") {

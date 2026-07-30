@@ -63,6 +63,10 @@ export type BackendErrorCode =
   | "MCP_AGENT_UNKNOWN"
   | "MCP_AGENT_INSTALL_FAILED"
   | "MCP_AGENT_REMOVE_FAILED"
+  | "VLESS_CONFIG_INVALID"
+  | "XRAY_UNAVAILABLE"
+  | "XRAY_UNSUPPORTED_OS"
+  | "XRAY_START_FAILED"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -242,6 +246,14 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.mcpAgentRemoveFailed", {
         detail: parsed.params?.detail ?? "",
       });
+    case "VLESS_CONFIG_INVALID":
+      return t("backendErrors.vlessConfigInvalid");
+    case "XRAY_UNAVAILABLE":
+      return t("backendErrors.xrayUnavailable");
+    case "XRAY_UNSUPPORTED_OS":
+      return t("backendErrors.xrayUnsupportedOs");
+    case "XRAY_START_FAILED":
+      return t("backendErrors.xrayStartFailed");
     case "CLEAR_ON_CLOSE_UNAVAILABLE":
       return t("backendErrors.clearOnCloseUnavailable");
     case "INTERNAL_ERROR":

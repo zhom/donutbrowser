@@ -72,7 +72,7 @@ jobs:
         with:
           repository: ${{ vars.TAURI_WEBDRIVER_REPOSITORY }}
           token: ${{ secrets.TAURI_WEBDRIVER_TOKEN || github.token }}
-          path: tauri-cross-platform-webdriver
+          path: tauri-wd
           persist-credentials: false
 
       - name: Install pnpm
@@ -98,7 +98,7 @@ jobs:
           workspaces: |
             donutbrowser/src-tauri -> target
             donutbrowser/e2e/app -> target
-            tauri-cross-platform-webdriver -> target
+            tauri-wd -> target
 
       - name: Install Tauri dependencies
         if: runner.os == 'Linux'
@@ -147,7 +147,7 @@ jobs:
         with:
           repository: ${{ vars.TAURI_WEBDRIVER_REPOSITORY }}
           token: ${{ secrets.TAURI_WEBDRIVER_TOKEN || github.token }}
-          path: tauri-cross-platform-webdriver
+          path: tauri-wd
           persist-credentials: false
 
       - name: Install pnpm
@@ -173,7 +173,7 @@ jobs:
           workspaces: |
             donutbrowser/src-tauri -> target
             donutbrowser/e2e/app -> target
-            tauri-cross-platform-webdriver -> target
+            tauri-wd -> target
 
       - name: Install app dependencies
         working-directory: donutbrowser
@@ -214,7 +214,7 @@ jobs:
         with:
           repository: ${{ vars.TAURI_WEBDRIVER_REPOSITORY }}
           token: ${{ secrets.TAURI_WEBDRIVER_TOKEN || github.token }}
-          path: tauri-cross-platform-webdriver
+          path: tauri-wd
           persist-credentials: false
 
       - name: Install pnpm
@@ -240,7 +240,7 @@ jobs:
           workspaces: |
             donutbrowser/src-tauri -> target
             donutbrowser/e2e/app -> target
-            tauri-cross-platform-webdriver -> target
+            tauri-wd -> target
 
       - name: Install Tauri dependencies
         run: |

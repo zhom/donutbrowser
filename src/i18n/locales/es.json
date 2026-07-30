@@ -459,7 +459,13 @@
       "hostPortRequired": "Host y puerto son obligatorios",
       "ssCipherRequired": "Para Shadowsocks se requieren cifrado y contraseña",
       "selectType": "Selecciona el tipo de proxy",
-      "saveFailed": "Error al guardar el proxy: {{error}}"
+      "saveFailed": "Error al guardar el proxy: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "URI de VLESS",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "Requiere XTLS Vision y REALITY.",
+      "vlessUriRequired": "Introduce un URI de VLESS.",
+      "vlessUriInvalid": "Introduce un URI de VLESS válido con host y puerto."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "La configuración del servidor MCP no está disponible. Reinicia el servidor e inténtalo de nuevo.",
     "mcpAgentUnknown": "Este cliente MCP no es compatible.",
     "mcpAgentInstallFailed": "No se pudo añadir Donut Browser al cliente MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "No se pudo eliminar Donut Browser del cliente MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "No se pudo eliminar Donut Browser del cliente MCP: {{detail}}",
+    "vlessConfigInvalid": "El URI de VLESS no es válido.",
+    "xrayUnavailable": "Xray-core no está disponible en este sistema.",
+    "xrayUnsupportedOs": "VLESS requiere macOS 12 o posterior.",
+    "xrayStartFailed": "No se pudo iniciar Xray-core."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2068,8 +2078,13 @@
     "title": "Acerca de",
     "version": "Versión {{version}}",
     "portableBadge": "portable",
-    "licenseNotice": "Navegador anti-detección de código abierto, con licencia AGPL-3.0.",
-    "website": "Sitio web"
+    "licenseNotice": "Navegador anti-detección de código abierto.",
+    "website": "Sitio web",
+    "github": "GitHub",
+    "licenses": "Licencias",
+    "searchLicenses": "Buscar licencias…",
+    "noMatchingLicenses": "No hay licencias que coincidan.",
+    "openSource": "Ver el código fuente de {{name}}"
   },
   "clearOnClose": {
     "label": "Borrar datos al cerrar",

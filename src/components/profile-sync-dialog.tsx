@@ -267,7 +267,7 @@ export function ProfileSyncDialog({
                   {syncMode === "Encrypted" &&
                     !hasE2ePassword &&
                     userChangedMode && (
-                      <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                      <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive-text">
                         {t("sync.mode.noPasswordWarning")}
                       </div>
                     )}

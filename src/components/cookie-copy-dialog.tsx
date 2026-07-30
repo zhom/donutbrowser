@@ -407,7 +407,7 @@ export function CookieCopyDialog({
                     >
                       {p.name}
                       {runningProfiles.has(p.id) && (
-                        <span className="text-xs text-destructive">
+                        <span className="text-xs text-destructive-text">
                           {t("cookies.copy.running")}
                         </span>
                       )}
@@ -451,7 +451,7 @@ export function CookieCopyDialog({
                   <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
               ) : error ? (
-                <div className="rounded-md bg-destructive/10 p-4 text-center text-destructive">
+                <div className="rounded-md bg-destructive/10 p-4 text-center text-destructive-text">
                   {error}
                 </div>
               ) : filteredDomains.length === 0 ? (
@@ -547,7 +547,7 @@ function DomainRow({
 
   return (
     <AnimatedDisclosureItem>
-      <div className="flex items-center gap-2 rounded p-2 hover:bg-accent/50">
+      <div className="flex items-center gap-2 rounded p-2 hover:bg-muted">
         <Checkbox
           checked={isAllSelected || isPartial}
           onCheckedChange={() => {

@@ -937,8 +937,8 @@ impl McpServer {
             },
             "proxy_type": {
               "type": "string",
-              "enum": ["http", "https", "socks4", "socks5"],
-              "description": "The type of proxy (for regular proxies)"
+              "enum": ["http", "https", "socks4", "socks5", "vless"],
+              "description": "The proxy protocol"
             },
             "host": {
               "type": "string",
@@ -955,9 +955,13 @@ impl McpServer {
             "password": {
               "type": "string",
               "description": "Optional password for authentication (for regular proxies)"
+            },
+            "vless_uri": {
+              "type": "string",
+              "description": "VLESS + XTLS Vision + REALITY share URI"
             }
           },
-          "required": ["name", "proxy_type", "host", "port"]
+          "required": ["name", "proxy_type"]
         }),
       },
       McpTool {
@@ -976,8 +980,8 @@ impl McpServer {
             },
             "proxy_type": {
               "type": "string",
-              "enum": ["http", "https", "socks4", "socks5"],
-              "description": "The type of proxy (for regular proxies)"
+              "enum": ["http", "https", "socks4", "socks5", "vless"],
+              "description": "The proxy protocol"
             },
             "host": {
               "type": "string",
@@ -994,6 +998,10 @@ impl McpServer {
             "password": {
               "type": "string",
               "description": "Optional password for authentication (for regular proxies)"
+            },
+            "vless_uri": {
+              "type": "string",
+              "description": "VLESS + XTLS Vision + REALITY share URI"
             }
           },
           "required": ["proxy_id"]
@@ -3000,28 +3008,45 @@ impl McpServer {
 
     // The tool schema declares an enum, but JSON-Schema enums are advisory only;
     // enforce it here so a bad value can't produce a non-functional proxy.
-    if !matches!(proxy_type, "http" | "https" | "socks4" | "socks5") {
+    if !matches!(proxy_type, "http" | "https" | "socks4" | "socks5" | "vless") {
       return Err(McpError {
         code: -32602,
-        message: "proxy_type must be one of: http, https, socks4, socks5".to_string(),
+        message: "proxy_type must be one of: http, https, socks4, socks5, vless".to_string(),
       });
     }
 
-    let host = arguments
-      .get("host")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing host".to_string(),
-      })?;
-
-    let port = arguments
-      .get("port")
-      .and_then(|v| v.as_u64())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing port".to_string(),
-      })? as u16;
+    let vless_uri = arguments
+      .get("vless_uri")
+      .and_then(|value| value.as_str())
+      .map(str::to_string);
+    let (host, port) = if proxy_type == "vless" {
+      if vless_uri.is_none() {
+        return Err(McpError {
+          code: -32602,
+          message: "Missing vless_uri".to_string(),
+        });
+      }
+      (String::new(), 1)
+    } else {
+      let host = arguments
+        .get("host")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: "Missing host".to_string(),
+        })?
+        .to_string();
+      let port = arguments
+        .get("port")
+        .and_then(|value| value.as_u64())
+        .and_then(|port| u16::try_from(port).ok())
+        .filter(|port| *port != 0)
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: "Missing or invalid port".to_string(),
+        })?;
+      (host, port)
+    };
 
     let username = arguments
       .get("username")
@@ -3034,10 +3059,11 @@ impl McpServer {
 
     let proxy_settings = ProxySettings {
       proxy_type: proxy_type.to_string(),
-      host: host.to_string(),
+      host,
       port,
       username,
       password,
+      vless_uri,
     };
 
     let proxy = PROXY_MANAGER
@@ -3075,7 +3101,10 @@ impl McpServer {
     // Build proxy_settings if any settings fields are provided
     let has_settings = arguments.get("proxy_type").is_some()
       || arguments.get("host").is_some()
-      || arguments.get("port").is_some();
+      || arguments.get("port").is_some()
+      || arguments.get("username").is_some()
+      || arguments.get("password").is_some()
+      || arguments.get("vless_uri").is_some();
 
     let proxy_settings = if has_settings {
       // Get existing proxy to use as defaults
@@ -3093,6 +3122,15 @@ impl McpServer {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .unwrap_or_else(|| existing.proxy_settings.proxy_type.clone());
+      if !matches!(
+        proxy_type.as_str(),
+        "http" | "https" | "socks4" | "socks5" | "vless"
+      ) {
+        return Err(McpError {
+          code: -32602,
+          message: "proxy_type must be one of: http, https, socks4, socks5, vless".to_string(),
+        });
+      }
 
       let host = arguments
         .get("host")
@@ -3100,11 +3138,17 @@ impl McpServer {
         .map(|s| s.to_string())
         .unwrap_or_else(|| existing.proxy_settings.host.clone());
 
-      let port = arguments
-        .get("port")
-        .and_then(|v| v.as_u64())
-        .map(|p| p as u16)
-        .unwrap_or(existing.proxy_settings.port);
+      let port = match arguments.get("port") {
+        Some(value) => value
+          .as_u64()
+          .and_then(|port| u16::try_from(port).ok())
+          .filter(|port| *port != 0)
+          .ok_or_else(|| McpError {
+            code: -32602,
+            message: "Invalid port".to_string(),
+          })?,
+        None => existing.proxy_settings.port,
+      };
 
       let username = arguments
         .get("username")
@@ -3117,6 +3161,11 @@ impl McpServer {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .or_else(|| existing.proxy_settings.password.clone());
+      let vless_uri = arguments
+        .get("vless_uri")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+        .or_else(|| existing.proxy_settings.vless_uri.clone());
 
       Some(ProxySettings {
         proxy_type,
@@ -3124,6 +3173,7 @@ impl McpServer {
         port,
         username,
         password,
+        vless_uri,
       })
     } else {
       None
@@ -5558,6 +5608,29 @@ mod tests {
   fn test_mcp_server_initial_state() {
     let server = McpServer::new();
     assert!(!server.is_running());
+  }
+
+  #[test]
+  fn proxy_tool_schema_exposes_vless_reality_without_requiring_regular_endpoint_fields() {
+    let server = McpServer::new();
+    let tools = server.get_tools();
+    let create = tools
+      .iter()
+      .find(|tool| tool.name == "create_proxy")
+      .expect("create_proxy tool");
+    let properties = &create.input_schema["properties"];
+    assert!(properties["proxy_type"]["enum"]
+      .as_array()
+      .is_some_and(|values| values.iter().any(|value| value == "vless")));
+    assert!(properties["vless_uri"].is_object());
+
+    let required = create.input_schema["required"]
+      .as_array()
+      .expect("required fields");
+    assert!(required.iter().any(|field| field == "name"));
+    assert!(required.iter().any(|field| field == "proxy_type"));
+    assert!(!required.iter().any(|field| field == "host"));
+    assert!(!required.iter().any(|field| field == "port"));
   }
 
   #[test]

@@ -30,6 +30,7 @@ export interface ThemeColors extends Record<string, string> {
 export interface Theme {
   id: string;
   name: string;
+  mode: "light" | "dark";
   colors: ThemeColors;
 }
 
@@ -37,6 +38,7 @@ export const THEMES: Theme[] = [
   {
     id: "donut-mono",
     name: "Donut Mono",
+    mode: "dark",
     colors: {
       "--background": "#070707",
       "--foreground": "#ffffff",
@@ -69,6 +71,7 @@ export const THEMES: Theme[] = [
   {
     id: "tokyo-night",
     name: "Tokyo Night",
+    mode: "dark",
     colors: {
       "--background": "#1a1b26",
       "--foreground": "#c0caf5",
@@ -101,23 +104,24 @@ export const THEMES: Theme[] = [
   {
     id: "dracula",
     name: "Dracula",
+    mode: "dark",
     colors: {
       "--background": "#282a36",
-      "--foreground": "#f8f8f2",
+      "--foreground": "#fcfcfa",
       "--card": "#44475a",
-      "--card-foreground": "#f8f8f2",
+      "--card-foreground": "#fcfcfa",
       "--popover": "#44475a",
-      "--popover-foreground": "#f8f8f2",
+      "--popover-foreground": "#fcfcfa",
       "--primary": "#bd93f9",
       "--primary-foreground": "#282a36",
       "--secondary": "#8be9fd",
       "--secondary-foreground": "#282a36",
       "--muted": "#6272a4",
-      "--muted-foreground": "#f8f8f2",
+      "--muted-foreground": "#fcfcfa",
       "--accent": "#ff79c6",
       "--accent-foreground": "#282a36",
       "--destructive": "#ff5555",
-      "--destructive-foreground": "#f8f8f2",
+      "--destructive-foreground": "#282a36",
       "--success": "#50fa7b",
       "--success-foreground": "#282a36",
       "--warning": "#ffb86c",
@@ -133,6 +137,7 @@ export const THEMES: Theme[] = [
   {
     id: "matchalk",
     name: "Matchalk",
+    mode: "dark",
     colors: {
       "--background": "#273136",
       "--foreground": "#D1DED3",
@@ -145,7 +150,7 @@ export const THEMES: Theme[] = [
       "--secondary": "#d2b48c",
       "--secondary-foreground": "#273136",
       "--muted": "#323e45",
-      "--muted-foreground": "#7ea4b0",
+      "--muted-foreground": "#8badb8",
       "--accent": "#d2b48c",
       "--accent-foreground": "#273136",
       "--destructive": "#ff819f",
@@ -165,6 +170,7 @@ export const THEMES: Theme[] = [
   {
     id: "houston",
     name: "Houston",
+    mode: "dark",
     colors: {
       "--background": "#17191e",
       "--foreground": "#f7f7f8",
@@ -175,13 +181,13 @@ export const THEMES: Theme[] = [
       "--primary": "#5755d9",
       "--primary-foreground": "#f7f7f8",
       "--secondary": "#f25f4c",
-      "--secondary-foreground": "#f7f7f8",
+      "--secondary-foreground": "#17191e",
       "--muted": "#2a2e39",
       "--muted-foreground": "#9ca3af",
       "--accent": "#0ea5e9",
-      "--accent-foreground": "#f7f7f8",
+      "--accent-foreground": "#17191e",
       "--destructive": "#ef4444",
-      "--destructive-foreground": "#f7f7f8",
+      "--destructive-foreground": "#17191e",
       "--success": "#22c55e",
       "--success-foreground": "#17191e",
       "--warning": "#f59e0b",
@@ -197,6 +203,7 @@ export const THEMES: Theme[] = [
   {
     id: "ayu-dark",
     name: "Ayu Dark",
+    mode: "dark",
     colors: {
       "--background": "#0a0e14",
       "--foreground": "#b3b1ad",
@@ -209,11 +216,11 @@ export const THEMES: Theme[] = [
       "--secondary": "#ffb454",
       "--secondary-foreground": "#0a0e14",
       "--muted": "#1f2430",
-      "--muted-foreground": "#5c6773",
+      "--muted-foreground": "#858d96",
       "--accent": "#d2a6ff",
       "--accent-foreground": "#0a0e14",
       "--destructive": "#f07178",
-      "--destructive-foreground": "#b3b1ad",
+      "--destructive-foreground": "#0a0e14",
       "--success": "#c2d94c",
       "--success-foreground": "#0a0e14",
       "--warning": "#ffb454",
@@ -229,6 +236,7 @@ export const THEMES: Theme[] = [
   {
     id: "ayu-light",
     name: "Ayu Light",
+    mode: "light",
     // Source: ayu-theme/ayu-colors light.yaml. Primary uses the iconic
     // Ayu orange instead of blue — that's the colour the theme is known for.
     colors: {
@@ -239,19 +247,19 @@ export const THEMES: Theme[] = [
       "--popover": "#ffffff",
       "--popover-foreground": "#5c6166",
       "--primary": "#f29718",
-      "--primary-foreground": "#ffffff",
+      "--primary-foreground": "#0a0e14",
       "--secondary": "#399ee6",
-      "--secondary-foreground": "#ffffff",
+      "--secondary-foreground": "#0a0e14",
       "--muted": "#ebeef0",
-      "--muted-foreground": "#828e9f",
+      "--muted-foreground": "#626b78",
       "--accent": "#a37acc",
-      "--accent-foreground": "#ffffff",
+      "--accent-foreground": "#0a0e14",
       "--destructive": "#e65050",
-      "--destructive-foreground": "#ffffff",
+      "--destructive-foreground": "#0a0e14",
       "--success": "#86b300",
-      "--success-foreground": "#ffffff",
+      "--success-foreground": "#0a0e14",
       "--warning": "#fa8532",
-      "--warning-foreground": "#ffffff",
+      "--warning-foreground": "#0a0e14",
       "--border": "#c8d0d6",
       "--chart-1": "#f29718",
       "--chart-2": "#86b300",
@@ -263,6 +271,7 @@ export const THEMES: Theme[] = [
   {
     id: "catppuccin-latte",
     name: "Catppuccin Latte",
+    mode: "light",
     // Source: github.com/catppuccin/palette/blob/main/palette.json
     // Primary uses mauve (purple) — the colour Catppuccin is most known
     // for — instead of blue, to differentiate from the many blue themes.
@@ -270,25 +279,25 @@ export const THEMES: Theme[] = [
     // mid-points between Latte and Mocha and added little variety.
     colors: {
       "--background": "#eff1f5",
-      "--foreground": "#4c4f69",
+      "--foreground": "#484b64",
       "--card": "#ccd0da",
-      "--card-foreground": "#4c4f69",
+      "--card-foreground": "#484b64",
       "--popover": "#ccd0da",
-      "--popover-foreground": "#4c4f69",
+      "--popover-foreground": "#484b64",
       "--primary": "#8839ef",
       "--primary-foreground": "#eff1f5",
       "--secondary": "#1e66f5",
-      "--secondary-foreground": "#eff1f5",
+      "--secondary-foreground": "#ffffff",
       "--muted": "#bcc0cc",
-      "--muted-foreground": "#6c6f85",
+      "--muted-foreground": "#4b4d5c",
       "--accent": "#ea76cb",
-      "--accent-foreground": "#eff1f5",
+      "--accent-foreground": "#353637",
       "--destructive": "#d20f39",
       "--destructive-foreground": "#eff1f5",
       "--success": "#40a02b",
-      "--success-foreground": "#eff1f5",
+      "--success-foreground": "#242525",
       "--warning": "#df8e1d",
-      "--warning-foreground": "#eff1f5",
+      "--warning-foreground": "#363637",
       "--border": "#9ca0b0",
       "--chart-1": "#8839ef",
       "--chart-2": "#40a02b",
@@ -300,6 +309,7 @@ export const THEMES: Theme[] = [
   {
     id: "catppuccin-mocha",
     name: "Catppuccin Mocha",
+    mode: "dark",
     // Source: github.com/catppuccin/palette/blob/main/palette.json
     // Primary uses mauve (purple) — Catppuccin's signature colour.
     colors: {
@@ -314,7 +324,7 @@ export const THEMES: Theme[] = [
       "--secondary": "#89b4fa",
       "--secondary-foreground": "#1e1e2e",
       "--muted": "#45475a",
-      "--muted-foreground": "#a6adc8",
+      "--muted-foreground": "#bac2de",
       "--accent": "#f5c2e7",
       "--accent-foreground": "#1e1e2e",
       "--destructive": "#f38ba8",
@@ -334,6 +344,7 @@ export const THEMES: Theme[] = [
   {
     id: "nord",
     name: "Nord",
+    mode: "dark",
     // Source: nordtheme.com/docs/colors-and-palettes (Polar Night / Snow Storm / Frost / Aurora)
     colors: {
       "--background": "#2e3440",
@@ -349,9 +360,9 @@ export const THEMES: Theme[] = [
       "--muted": "#434c5e",
       "--muted-foreground": "#d8dee9",
       "--accent": "#b48ead",
-      "--accent-foreground": "#2e3440",
+      "--accent-foreground": "#2b313c",
       "--destructive": "#bf616a",
-      "--destructive-foreground": "#eceff4",
+      "--destructive-foreground": "#111112",
       "--success": "#a3be8c",
       "--success-foreground": "#2e3440",
       "--warning": "#ebcb8b",
@@ -367,6 +378,7 @@ export const THEMES: Theme[] = [
   {
     id: "gruvbox-dark",
     name: "Gruvbox Dark",
+    mode: "dark",
     // Source: github.com/morhetz/gruvbox medium-contrast dark palette.
     // Primary uses the iconic Gruvbox orange instead of blue.
     colors: {
@@ -381,11 +393,11 @@ export const THEMES: Theme[] = [
       "--secondary": "#83a598",
       "--secondary-foreground": "#282828",
       "--muted": "#504945",
-      "--muted-foreground": "#a89984",
+      "--muted-foreground": "#d5c4a1",
       "--accent": "#d3869b",
       "--accent-foreground": "#282828",
       "--destructive": "#fb4934",
-      "--destructive-foreground": "#282828",
+      "--destructive-foreground": "#222222",
       "--success": "#b8bb26",
       "--success-foreground": "#282828",
       "--warning": "#fabd2f",
@@ -401,6 +413,7 @@ export const THEMES: Theme[] = [
   {
     id: "gruvbox-light",
     name: "Gruvbox Light",
+    mode: "light",
     // Source: github.com/morhetz/gruvbox medium-contrast light palette.
     // Primary uses the iconic Gruvbox orange instead of blue.
     colors: {
@@ -415,15 +428,15 @@ export const THEMES: Theme[] = [
       "--secondary": "#076678",
       "--secondary-foreground": "#fbf1c7",
       "--muted": "#d5c4a1",
-      "--muted-foreground": "#7c6f64",
+      "--muted-foreground": "#595048",
       "--accent": "#8f3f71",
       "--accent-foreground": "#fbf1c7",
       "--destructive": "#9d0006",
       "--destructive-foreground": "#fbf1c7",
       "--success": "#79740e",
-      "--success-foreground": "#fbf1c7",
+      "--success-foreground": "#fdf9e6",
       "--warning": "#b57614",
-      "--warning-foreground": "#fbf1c7",
+      "--warning-foreground": "#1b1a16",
       "--border": "#a89984",
       "--chart-1": "#af3a03",
       "--chart-2": "#79740e",
@@ -435,24 +448,25 @@ export const THEMES: Theme[] = [
   {
     id: "solarized-dark",
     name: "Solarized Dark",
+    mode: "dark",
     // Source: ethanschoonover.com/solarized — base03 / base02 / base01 / base00 / base0 / base1
     colors: {
       "--background": "#002b36",
-      "--foreground": "#839496",
+      "--foreground": "#8d9d9f",
       "--card": "#073642",
-      "--card-foreground": "#839496",
+      "--card-foreground": "#8d9d9f",
       "--popover": "#073642",
-      "--popover-foreground": "#839496",
+      "--popover-foreground": "#8d9d9f",
       "--primary": "#268bd2",
-      "--primary-foreground": "#002b36",
+      "--primary-foreground": "#002028",
       "--secondary": "#2aa198",
       "--secondary-foreground": "#002b36",
       "--muted": "#073642",
       "--muted-foreground": "#93a1a1",
       "--accent": "#6c71c4",
-      "--accent-foreground": "#fdf6e3",
+      "--accent-foreground": "#070706",
       "--destructive": "#dc322f",
-      "--destructive-foreground": "#fdf6e3",
+      "--destructive-foreground": "#fffefd",
       "--success": "#859900",
       "--success-foreground": "#002b36",
       "--warning": "#b58900",
@@ -468,28 +482,29 @@ export const THEMES: Theme[] = [
   {
     id: "solarized-light",
     name: "Solarized Light",
+    mode: "light",
     // Source: ethanschoonover.com/solarized — same accents, inverted base scale
     colors: {
       "--background": "#fdf6e3",
-      "--foreground": "#657b83",
+      "--foreground": "#576a71",
       "--card": "#eee8d5",
-      "--card-foreground": "#657b83",
+      "--card-foreground": "#576a71",
       "--popover": "#eee8d5",
-      "--popover-foreground": "#657b83",
+      "--popover-foreground": "#576a71",
       "--primary": "#268bd2",
-      "--primary-foreground": "#fdf6e3",
+      "--primary-foreground": "#1d1d1a",
       "--secondary": "#2aa198",
-      "--secondary-foreground": "#fdf6e3",
+      "--secondary-foreground": "#2a2926",
       "--muted": "#eee8d5",
-      "--muted-foreground": "#93a1a1",
+      "--muted-foreground": "#606969",
       "--accent": "#6c71c4",
-      "--accent-foreground": "#fdf6e3",
+      "--accent-foreground": "#070706",
       "--destructive": "#dc322f",
-      "--destructive-foreground": "#fdf6e3",
+      "--destructive-foreground": "#fffefd",
       "--success": "#859900",
-      "--success-foreground": "#fdf6e3",
+      "--success-foreground": "#292825",
       "--warning": "#b58900",
-      "--warning-foreground": "#fdf6e3",
+      "--warning-foreground": "#292825",
       "--border": "#cdc7b3",
       "--chart-1": "#268bd2",
       "--chart-2": "#859900",
@@ -501,6 +516,7 @@ export const THEMES: Theme[] = [
   {
     id: "one-dark",
     name: "One Dark",
+    mode: "dark",
     // Source: github.com/atom/atom one-dark-syntax/styles/colors.less (mono-1, hue-1..6)
     colors: {
       "--background": "#282c34",
@@ -514,11 +530,11 @@ export const THEMES: Theme[] = [
       "--secondary": "#56b6c2",
       "--secondary-foreground": "#282c34",
       "--muted": "#3e4451",
-      "--muted-foreground": "#7d8590",
+      "--muted-foreground": "#abb2bf",
       "--accent": "#c678dd",
       "--accent-foreground": "#282c34",
       "--destructive": "#e06c75",
-      "--destructive-foreground": "#282c34",
+      "--destructive-foreground": "#252830",
       "--success": "#98c379",
       "--success-foreground": "#282c34",
       "--warning": "#e5c07b",
@@ -534,6 +550,7 @@ export const THEMES: Theme[] = [
   {
     id: "monokai-pro",
     name: "Monokai Pro",
+    mode: "dark",
     // Source: classic Monokai filter (monokai-pro.nvim palette/classic.lua).
     // Primary uses Monokai's signature green instead of cyan.
     colors: {
@@ -548,11 +565,11 @@ export const THEMES: Theme[] = [
       "--secondary": "#66d9ef",
       "--secondary-foreground": "#272822",
       "--muted": "#3b3c35",
-      "--muted-foreground": "#919288",
+      "--muted-foreground": "#a6a79f",
       "--accent": "#ae81ff",
       "--accent-foreground": "#272822",
       "--destructive": "#f92672",
-      "--destructive-foreground": "#fdfff1",
+      "--destructive-foreground": "#1a1a19",
       "--success": "#a6e22e",
       "--success-foreground": "#272822",
       "--warning": "#e6db74",
@@ -568,6 +585,7 @@ export const THEMES: Theme[] = [
   {
     id: "rose-pine",
     name: "Rosé Pine",
+    mode: "dark",
     // Source: github.com/rose-pine/palette/blob/main/palette.json.
     // Primary uses iris (purple) — the iconic Rosé Pine accent — and
     // success uses pine. Destructive stays love (pink), which is correct
@@ -590,7 +608,7 @@ export const THEMES: Theme[] = [
       "--destructive": "#eb6f92",
       "--destructive-foreground": "#191724",
       "--success": "#31748f",
-      "--success-foreground": "#e0def4",
+      "--success-foreground": "#f1f0fa",
       "--warning": "#f6c177",
       "--warning-foreground": "#191724",
       "--border": "#403d52",
@@ -604,6 +622,7 @@ export const THEMES: Theme[] = [
   {
     id: "rose-pine-dawn",
     name: "Rosé Pine Dawn",
+    mode: "light",
     // Source: github.com/rose-pine/palette/blob/main/palette.json (dawn variant).
     // Primary uses iris (purple) for parity with the dark variant.
     colors: {
@@ -614,19 +633,19 @@ export const THEMES: Theme[] = [
       "--popover": "#fffaf3",
       "--popover-foreground": "#575279",
       "--primary": "#907aa9",
-      "--primary-foreground": "#faf4ed",
+      "--primary-foreground": "#1a1a19",
       "--secondary": "#56949f",
-      "--secondary-foreground": "#faf4ed",
+      "--secondary-foreground": "#242322",
       "--muted": "#f2e9e1",
-      "--muted-foreground": "#797593",
+      "--muted-foreground": "#696680",
       "--accent": "#d7827e",
-      "--accent-foreground": "#faf4ed",
+      "--accent-foreground": "#32302f",
       "--destructive": "#b4637a",
-      "--destructive-foreground": "#faf4ed",
+      "--destructive-foreground": "#0e0e0e",
       "--success": "#286983",
       "--success-foreground": "#faf4ed",
       "--warning": "#ea9d34",
-      "--warning-foreground": "#faf4ed",
+      "--warning-foreground": "#42403e",
       "--border": "#cecacd",
       "--chart-1": "#907aa9",
       "--chart-2": "#56949f",
@@ -638,6 +657,7 @@ export const THEMES: Theme[] = [
   {
     id: "github-dark",
     name: "GitHub Dark",
+    mode: "dark",
     // Source: github.com/primer/primitives base color tokens (dark default)
     colors: {
       "--background": "#0d1117",
@@ -647,17 +667,17 @@ export const THEMES: Theme[] = [
       "--popover": "#151b23",
       "--popover-foreground": "#f0f6fc",
       "--primary": "#1f6feb",
-      "--primary-foreground": "#f0f6fc",
+      "--primary-foreground": "#fefeff",
       "--secondary": "#58a6ff",
       "--secondary-foreground": "#0d1117",
       "--muted": "#212830",
       "--muted-foreground": "#9198a1",
       "--accent": "#8957e5",
-      "--accent-foreground": "#f0f6fc",
+      "--accent-foreground": "#ffffff",
       "--destructive": "#da3633",
-      "--destructive-foreground": "#f0f6fc",
+      "--destructive-foreground": "#ffffff",
       "--success": "#238636",
-      "--success-foreground": "#f0f6fc",
+      "--success-foreground": "#fefeff",
       "--warning": "#d29922",
       "--warning-foreground": "#0d1117",
       "--border": "#3d444d",
@@ -671,6 +691,7 @@ export const THEMES: Theme[] = [
   {
     id: "github-light",
     name: "GitHub Light",
+    mode: "light",
     // Source: github.com/primer/primitives base color tokens (light default)
     colors: {
       "--background": "#ffffff",
@@ -682,7 +703,7 @@ export const THEMES: Theme[] = [
       "--primary": "#0969da",
       "--primary-foreground": "#ffffff",
       "--secondary": "#54aeff",
-      "--secondary-foreground": "#ffffff",
+      "--secondary-foreground": "#25292e",
       "--muted": "#eff2f5",
       "--muted-foreground": "#59636e",
       "--accent": "#8250df",
@@ -692,7 +713,7 @@ export const THEMES: Theme[] = [
       "--success": "#1a7f37",
       "--success-foreground": "#ffffff",
       "--warning": "#bf8700",
-      "--warning-foreground": "#ffffff",
+      "--warning-foreground": "#25292e",
       "--border": "#d1d9e0",
       "--chart-1": "#0969da",
       "--chart-2": "#1a7f37",
@@ -702,6 +723,112 @@ export const THEMES: Theme[] = [
     },
   },
 ];
+
+const LEGACY_PRESET_OVERRIDES: Record<string, Partial<ThemeColors>> = {
+  dracula: {
+    "--foreground": "#f8f8f2",
+    "--card-foreground": "#f8f8f2",
+    "--popover-foreground": "#f8f8f2",
+    "--muted-foreground": "#f8f8f2",
+    "--destructive-foreground": "#f8f8f2",
+  },
+  matchalk: {
+    "--muted-foreground": "#7ea4b0",
+  },
+  houston: {
+    "--secondary-foreground": "#f7f7f8",
+    "--accent-foreground": "#f7f7f8",
+    "--destructive-foreground": "#f7f7f8",
+  },
+  "ayu-dark": {
+    "--muted-foreground": "#5c6773",
+    "--destructive-foreground": "#b3b1ad",
+  },
+  "ayu-light": {
+    "--primary-foreground": "#ffffff",
+    "--secondary-foreground": "#ffffff",
+    "--muted-foreground": "#828e9f",
+    "--accent-foreground": "#ffffff",
+    "--destructive-foreground": "#ffffff",
+    "--success-foreground": "#ffffff",
+    "--warning-foreground": "#ffffff",
+  },
+  "catppuccin-latte": {
+    "--foreground": "#4c4f69",
+    "--card-foreground": "#4c4f69",
+    "--popover-foreground": "#4c4f69",
+    "--secondary-foreground": "#eff1f5",
+    "--muted-foreground": "#6c6f85",
+    "--accent-foreground": "#eff1f5",
+    "--success-foreground": "#eff1f5",
+    "--warning-foreground": "#eff1f5",
+  },
+  "catppuccin-mocha": {
+    "--muted-foreground": "#a6adc8",
+  },
+  nord: {
+    "--accent-foreground": "#2e3440",
+    "--destructive-foreground": "#eceff4",
+  },
+  "gruvbox-dark": {
+    "--muted-foreground": "#a89984",
+    "--destructive-foreground": "#282828",
+  },
+  "gruvbox-light": {
+    "--muted-foreground": "#7c6f64",
+    "--success-foreground": "#fbf1c7",
+    "--warning-foreground": "#fbf1c7",
+  },
+  "solarized-dark": {
+    "--foreground": "#839496",
+    "--card-foreground": "#839496",
+    "--popover-foreground": "#839496",
+    "--primary-foreground": "#002b36",
+    "--accent-foreground": "#fdf6e3",
+    "--destructive-foreground": "#fdf6e3",
+  },
+  "solarized-light": {
+    "--foreground": "#657b83",
+    "--card-foreground": "#657b83",
+    "--popover-foreground": "#657b83",
+    "--primary-foreground": "#fdf6e3",
+    "--secondary-foreground": "#fdf6e3",
+    "--muted-foreground": "#93a1a1",
+    "--accent-foreground": "#fdf6e3",
+    "--destructive-foreground": "#fdf6e3",
+    "--success-foreground": "#fdf6e3",
+    "--warning-foreground": "#fdf6e3",
+  },
+  "one-dark": {
+    "--muted-foreground": "#7d8590",
+    "--destructive-foreground": "#282c34",
+  },
+  "monokai-pro": {
+    "--muted-foreground": "#919288",
+    "--destructive-foreground": "#fdfff1",
+  },
+  "rose-pine": {
+    "--success-foreground": "#e0def4",
+  },
+  "rose-pine-dawn": {
+    "--primary-foreground": "#faf4ed",
+    "--secondary-foreground": "#faf4ed",
+    "--muted-foreground": "#797593",
+    "--accent-foreground": "#faf4ed",
+    "--destructive-foreground": "#faf4ed",
+    "--warning-foreground": "#faf4ed",
+  },
+  "github-dark": {
+    "--primary-foreground": "#f0f6fc",
+    "--accent-foreground": "#f0f6fc",
+    "--destructive-foreground": "#f0f6fc",
+    "--success-foreground": "#f0f6fc",
+  },
+  "github-light": {
+    "--secondary-foreground": "#ffffff",
+    "--warning-foreground": "#ffffff",
+  },
+};
 
 export const THEME_VARIABLES: Array<{ key: keyof ThemeColors; label: string }> =
   [
@@ -740,24 +867,312 @@ export function getThemeById(id: string): Theme | undefined {
 export function getThemeByColors(
   colors: Record<string, string>,
 ): Theme | undefined {
+  const matches = (expected: Record<string, string>) =>
+    THEME_VARIABLES.every(({ key }) => expected[key] === colors[key]);
+  const current = THEMES.find((theme) => matches(theme.colors));
+  if (current) return current;
+
   return THEMES.find((theme) => {
-    return THEME_VARIABLES.every(({ key }) => {
-      return theme.colors[key] === colors[key];
-    });
+    const overrides = LEGACY_PRESET_OVERRIDES[theme.id];
+    if (!overrides) return false;
+    const legacyColors: Record<string, string> = { ...theme.colors };
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value !== undefined) legacyColors[key] = value;
+    }
+    return matches(legacyColors);
   });
 }
 
+export function normalizeThemeColors(
+  colors: Record<string, string>,
+): Record<string, string> {
+  return getThemeByColors(colors)?.colors ?? colors;
+}
+
+interface RgbaColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+export const DERIVED_THEME_VARIABLES = [
+  "--primary-text",
+  "--destructive-text",
+  "--success-text",
+  "--warning-text",
+  "--input",
+  "--ring",
+  "--sidebar",
+  "--sidebar-foreground",
+  "--sidebar-primary",
+  "--sidebar-primary-foreground",
+  "--sidebar-accent",
+  "--sidebar-accent-foreground",
+  "--sidebar-border",
+  "--sidebar-ring",
+] as const;
+
+function parseCssColor(value: string | undefined): RgbaColor | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  const hex = normalized.match(/^#([\da-f]{3,8})$/)?.[1];
+  if (hex) {
+    if (hex.length === 3 || hex.length === 4) {
+      return {
+        r: Number.parseInt(`${hex[0]}${hex[0]}`, 16),
+        g: Number.parseInt(`${hex[1]}${hex[1]}`, 16),
+        b: Number.parseInt(`${hex[2]}${hex[2]}`, 16),
+        a:
+          hex.length === 4
+            ? Number.parseInt(`${hex[3]}${hex[3]}`, 16) / 255
+            : 1,
+      };
+    }
+    if (hex.length === 6 || hex.length === 8) {
+      return {
+        r: Number.parseInt(hex.slice(0, 2), 16),
+        g: Number.parseInt(hex.slice(2, 4), 16),
+        b: Number.parseInt(hex.slice(4, 6), 16),
+        a: hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1,
+      };
+    }
+  }
+
+  const rgb = normalized.match(
+    /^rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/,
+  );
+  if (!rgb) return null;
+  const alpha = rgb[4]?.endsWith("%")
+    ? Number.parseFloat(rgb[4]) / 100
+    : Number.parseFloat(rgb[4] ?? "1");
+  const channels = rgb.slice(1, 4).map(Number);
+  if (
+    channels.some((channel) => !Number.isFinite(channel)) ||
+    !Number.isFinite(alpha)
+  ) {
+    return null;
+  }
+  return {
+    r: Math.min(255, Math.max(0, channels[0])),
+    g: Math.min(255, Math.max(0, channels[1])),
+    b: Math.min(255, Math.max(0, channels[2])),
+    a: Math.min(1, Math.max(0, alpha)),
+  };
+}
+
+function mixColor(from: RgbaColor, to: RgbaColor, amount: number): RgbaColor {
+  return {
+    r: from.r + (to.r - from.r) * amount,
+    g: from.g + (to.g - from.g) * amount,
+    b: from.b + (to.b - from.b) * amount,
+    a: from.a + (to.a - from.a) * amount,
+  };
+}
+
+function compositeColor(foreground: RgbaColor, background: RgbaColor) {
+  const alpha = foreground.a + background.a * (1 - foreground.a);
+  if (alpha === 0) return { r: 0, g: 0, b: 0, a: 0 };
+  return {
+    r:
+      (foreground.r * foreground.a +
+        background.r * background.a * (1 - foreground.a)) /
+      alpha,
+    g:
+      (foreground.g * foreground.a +
+        background.g * background.a * (1 - foreground.a)) /
+      alpha,
+    b:
+      (foreground.b * foreground.a +
+        background.b * background.a * (1 - foreground.a)) /
+      alpha,
+    a: alpha,
+  };
+}
+
+function relativeLuminance(color: RgbaColor) {
+  const linear = [color.r, color.g, color.b].map((channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(foreground: RgbaColor, background: RgbaColor) {
+  const opaqueForeground = compositeColor(foreground, background);
+  const foregroundLuminance = relativeLuminance(opaqueForeground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function colorToCss(color: RgbaColor) {
+  const channels = [color.r, color.g, color.b].map((channel) =>
+    Math.round(channel).toString(16).padStart(2, "0"),
+  );
+  if (color.a >= 0.999) return `#${channels.join("")}`;
+  return `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(
+    color.b,
+  )}, ${color.a.toFixed(3)})`;
+}
+
+function findReadableColor(
+  sourceValue: string | undefined,
+  surfaceValues: Array<string | undefined>,
+  minimumContrast: number,
+  fallback: string,
+  includeTintedSurfaces = false,
+  tintSurfaceValues = surfaceValues,
+) {
+  const source = parseCssColor(sourceValue);
+  const surfaces = surfaceValues
+    .map(parseCssColor)
+    .filter((surface): surface is RgbaColor => surface !== null);
+  const tintSurfaces = tintSurfaceValues
+    .map(parseCssColor)
+    .filter((surface): surface is RgbaColor => surface !== null);
+  if (!source || surfaces.length === 0) return fallback;
+
+  const testedSurfaces = includeTintedSurfaces
+    ? [
+        ...surfaces,
+        ...tintSurfaces.flatMap((surface) =>
+          [0.1, 0.2].map((opacity) =>
+            compositeColor({ ...source, a: source.a * opacity }, surface),
+          ),
+        ),
+      ]
+    : surfaces;
+  const targetContrast = minimumContrast + 0.05;
+  const isReadable = (candidate: RgbaColor) =>
+    testedSurfaces.every(
+      (surface) => contrastRatio(candidate, surface) >= targetContrast,
+    );
+  if (isReadable(source)) return sourceValue ?? fallback;
+
+  const targets: RgbaColor[] = [
+    { r: 0, g: 0, b: 0, a: 1 },
+    { r: 255, g: 255, b: 255, a: 1 },
+  ];
+  for (let step = 1; step <= 1000; step += 1) {
+    const amount = step / 1000;
+    for (const target of targets) {
+      const candidate = mixColor(source, target, amount);
+      if (isReadable(candidate)) return colorToCss(candidate);
+    }
+  }
+  return fallback;
+}
+
+export function getThemeMode(colors: Record<string, string>): "light" | "dark" {
+  const preset = getThemeByColors(colors);
+  if (preset) return preset.mode;
+
+  const background = parseCssColor(colors["--background"]);
+  if (!background) return "dark";
+  const opaqueBackground = compositeColor(background, {
+    r: 255,
+    g: 255,
+    b: 255,
+    a: 1,
+  });
+  const blackContrast = contrastRatio(
+    { r: 0, g: 0, b: 0, a: 1 },
+    opaqueBackground,
+  );
+  const whiteContrast = contrastRatio(
+    { r: 255, g: 255, b: 255, a: 1 },
+    opaqueBackground,
+  );
+  return blackContrast >= whiteContrast ? "light" : "dark";
+}
+
+export function getDerivedThemeColors(
+  colors: Record<string, string>,
+): Record<(typeof DERIVED_THEME_VARIABLES)[number], string> {
+  const surfaces = [
+    colors["--background"],
+    colors["--card"],
+    colors["--popover"],
+    colors["--muted"],
+  ];
+  const tintSurfaces = surfaces.slice(0, 3);
+  const foreground = colors["--foreground"] ?? "#ffffff";
+  const primaryText = findReadableColor(
+    colors["--primary"],
+    surfaces,
+    4.5,
+    foreground,
+    true,
+    tintSurfaces,
+  );
+  const destructiveText = findReadableColor(
+    colors["--destructive"],
+    surfaces,
+    4.5,
+    foreground,
+    true,
+    tintSurfaces,
+  );
+  const successText = findReadableColor(
+    colors["--success"],
+    surfaces,
+    4.5,
+    foreground,
+    true,
+    tintSurfaces,
+  );
+  const warningText = findReadableColor(
+    colors["--warning"],
+    surfaces,
+    4.5,
+    foreground,
+    true,
+    tintSurfaces,
+  );
+  const input = findReadableColor(colors["--border"], surfaces, 3, foreground);
+
+  return {
+    "--primary-text": primaryText,
+    "--destructive-text": destructiveText,
+    "--success-text": successText,
+    "--warning-text": warningText,
+    "--input": input,
+    "--ring": primaryText,
+    "--sidebar": colors["--background"],
+    "--sidebar-foreground": colors["--foreground"],
+    "--sidebar-primary": colors["--primary"],
+    "--sidebar-primary-foreground": colors["--primary-foreground"],
+    "--sidebar-accent": colors["--accent"],
+    "--sidebar-accent-foreground": colors["--accent-foreground"],
+    "--sidebar-border": colors["--border"],
+    "--sidebar-ring": primaryText,
+  };
+}
+
 export function applyThemeColors(colors: Record<string, string>): void {
+  const normalizedColors = normalizeThemeColors(colors);
   const root = document.documentElement;
-  Object.entries(colors).forEach(([key, value]) => {
+  root.classList.remove("light", "dark");
+  root.classList.add(getThemeMode(normalizedColors));
+  Object.entries(normalizedColors).forEach(([key, value]) => {
     root.style.setProperty(key, value, "important");
   });
+  Object.entries(getDerivedThemeColors(normalizedColors)).forEach(
+    ([key, value]) => {
+      root.style.setProperty(key, value, "important");
+    },
+  );
 }
 
 export function clearThemeColors(): void {
   const root = document.documentElement;
   THEME_VARIABLES.forEach(({ key }) => {
     root.style.removeProperty(key as string);
+  });
+  DERIVED_THEME_VARIABLES.forEach((key) => {
+    root.style.removeProperty(key);
   });
 }
 

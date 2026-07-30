@@ -205,7 +205,7 @@ export function PermissionDialog({
         <div className="space-y-4">
           {!isCurrentPermissionGranted && (
             <div className="rounded-lg bg-warning/10 p-3">
-              <p className="text-sm text-warning">
+              <p className="text-sm text-warning-text">
                 {permissionType === "microphone"
                   ? t("permissionDialog.notGrantedMicrophone")
                   : t("permissionDialog.notGrantedCamera")}

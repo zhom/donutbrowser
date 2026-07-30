@@ -1,5 +1,7 @@
 fn main() {
   println!("cargo::rustc-check-cfg=cfg(mobile)");
+  let build_target = std::env::var("TARGET").expect("Cargo must provide TARGET");
+  println!("cargo:rustc-env=DONUT_BUILD_TARGET={build_target}");
 
   // Ensure dist folder exists for tauri::generate_context!() macro
   // This allows running cargo test without building the frontend first
@@ -98,8 +100,13 @@ fn external_binaries_exist() -> bool {
   } else {
     format!("donut-proxy-{}", target)
   };
+  let xray_name = if target.contains("windows") {
+    format!("xray-{}.exe", target)
+  } else {
+    format!("xray-{}", target)
+  };
 
-  binaries_dir.join(&donut_proxy_name).exists()
+  binaries_dir.join(&donut_proxy_name).exists() && binaries_dir.join(&xray_name).exists()
 }
 
 fn ensure_dist_folder_exists() {

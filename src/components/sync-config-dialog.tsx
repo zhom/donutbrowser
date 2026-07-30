@@ -412,7 +412,7 @@ export function SyncConfigDialog({
                             onClick={() => {
                               setShowToken(!showToken);
                             }}
-                            className="absolute top-1/2 right-3 -translate-y-1/2 transform rounded-sm p-1 transition-colors hover:bg-accent"
+                            className="absolute top-1/2 right-3 -translate-y-1/2 transform rounded-sm p-1 transition-colors hover:bg-accent hover:text-accent-foreground"
                             aria-label={
                               showToken
                                 ? t("common.aria.hideToken")

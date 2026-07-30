@@ -459,7 +459,13 @@
       "hostPortRequired": "Host and port are required",
       "ssCipherRequired": "Cipher and password are required for Shadowsocks",
       "selectType": "Select proxy type",
-      "saveFailed": "Failed to save proxy: {{error}}"
+      "saveFailed": "Failed to save proxy: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "VLESS URI",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "Requires XTLS Vision and REALITY.",
+      "vlessUriRequired": "Enter a VLESS URI.",
+      "vlessUriInvalid": "Enter a valid VLESS URI with a host and port."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "The MCP server configuration is unavailable. Restart the server and try again.",
     "mcpAgentUnknown": "This MCP client is not supported.",
     "mcpAgentInstallFailed": "Could not add Donut Browser to the MCP client: {{detail}}",
-    "mcpAgentRemoveFailed": "Could not remove Donut Browser from the MCP client: {{detail}}"
+    "mcpAgentRemoveFailed": "Could not remove Donut Browser from the MCP client: {{detail}}",
+    "vlessConfigInvalid": "The VLESS URI is invalid.",
+    "xrayUnavailable": "Xray-core is unavailable on this system.",
+    "xrayUnsupportedOs": "VLESS requires macOS 12 or newer.",
+    "xrayStartFailed": "Xray-core could not start."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2068,8 +2078,13 @@
     "title": "About",
     "version": "Version {{version}}",
     "portableBadge": "portable",
-    "licenseNotice": "Open-source anti-detect browser, licensed under AGPL-3.0.",
-    "website": "Website"
+    "licenseNotice": "Open-source anti-detect browser.",
+    "website": "Website",
+    "github": "GitHub",
+    "licenses": "Licenses",
+    "searchLicenses": "Search licenses…",
+    "noMatchingLicenses": "No matching licenses.",
+    "openSource": "View {{name}} source code"
   },
   "clearOnClose": {
     "label": "Clear data on close",

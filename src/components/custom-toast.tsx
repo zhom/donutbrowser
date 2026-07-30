@@ -330,7 +330,7 @@ export function UnifiedToast(props: ToastProps) {
                     })}`}
                 </p>
                 {progress.failed_count > 0 && (
-                  <p className="mt-0.5 text-xs text-destructive">
+                  <p className="mt-0.5 text-xs text-destructive-text">
                     {t("toasts.progress.filesFailed", {
                       count: progress.failed_count,
                     })}

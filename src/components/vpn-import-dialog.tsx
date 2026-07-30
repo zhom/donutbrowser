@@ -282,7 +282,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
           {step === "vpn-preview" && vpnPreview && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-4">
-                <LuShield className="size-8 text-primary" />
+                <LuShield className="size-8 text-primary-text" />
                 <div>
                   <div className="font-medium">
                     {t("vpns.import.configurationLabel", {
@@ -332,9 +332,9 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
               >
                 {vpnImportResult.success ? (
                   <div className="flex items-center gap-3">
-                    <LuShield className="size-8 text-success" />
+                    <LuShield className="size-8 text-success-text" />
                     <div>
-                      <div className="font-medium text-success">
+                      <div className="font-medium text-success-text">
                         {t("vpns.import.importedSuccess")}
                       </div>
                       <div className="text-sm text-muted-foreground">
@@ -344,10 +344,10 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <div className="font-medium text-destructive">
+                    <div className="font-medium text-destructive-text">
                       {t("vpns.import.importFailed")}
                     </div>
-                    <div className="text-sm text-destructive">
+                    <div className="text-sm text-destructive-text">
                       {vpnImportResult.error}
                     </div>
                   </div>

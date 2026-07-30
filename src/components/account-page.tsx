@@ -222,7 +222,7 @@ export function AccountPage({
               <AnimatedTabsContent value="account" className="mt-4">
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-foreground">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
                       <LuUser className="size-6" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -305,7 +305,7 @@ export function AccountPage({
                     user &&
                     getEntitlements(user).browserAutomation &&
                     user.isPrimaryDevice === false && (
-                      <p className="text-xs text-warning">
+                      <p className="text-xs text-warning-text">
                         {t("account.automationPrimaryOnly")}
                       </p>
                     )}
@@ -314,7 +314,7 @@ export function AccountPage({
                     getEntitlements(user).browserAutomation &&
                     user.isPrimaryDevice === true &&
                     (user.deviceCount ?? 1) > 1 && (
-                      <p className="text-xs text-success">
+                      <p className="text-xs text-success-text">
                         {t("account.automationActiveHere")}
                       </p>
                     )}

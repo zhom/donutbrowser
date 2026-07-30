@@ -487,7 +487,7 @@ export function CookieManagementDialog({
             {importResult && (
               <div className="space-y-4">
                 <div className="rounded-lg bg-success/10 p-4">
-                  <div className="font-medium text-success">
+                  <div className="font-medium text-success-text">
                     {t("cookies.management.importedSuccess", {
                       imported: importResult.cookies_imported,
                       replaced: importResult.cookies_replaced,
@@ -634,7 +634,7 @@ function ExportDomainRow({
 
   return (
     <AnimatedDisclosureItem>
-      <div className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/50">
+      <div className="flex items-center gap-2 rounded p-1.5 hover:bg-muted">
         <Checkbox
           checked={isAllSelected || isPartial}
           onCheckedChange={() => {

@@ -18,6 +18,7 @@ donutbrowser/
 │   ├── components/                   # 50+ React components (dialogs, tables, UI)
 │   ├── hooks/                        # Event-driven React hooks
 │   ├── i18n/locales/                 # Translations (en, es, fr, ja, ko, pt, ru, tr, vi, zh)
+│   ├── generated/                    # Build-generated third-party license inventory
 │   ├── lib/                          # Utilities (themes, toast, browser-utils)
 │   └── types.ts                      # Shared TypeScript interfaces
 ├── src-tauri/                        # Rust backend (Tauri)
@@ -34,6 +35,9 @@ donutbrowser/
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
+│   │   ├── xray/                    # VLESS + XTLS Vision + REALITY config/URI support
+│   │   ├── xray_worker_runner.rs    # Xray-core sidecar lifecycle
+│   │   ├── xray_worker_storage.rs   # Private Xray worker state and runtime files
 │   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management
 │   │   ├── downloader.rs           # Browser binary downloader
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)

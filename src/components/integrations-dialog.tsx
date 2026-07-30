@@ -535,7 +535,7 @@ export function IntegrationsDialog({
                         <p className="text-xs text-muted-foreground">
                           {t("integrations.mcpEnableDescription")}
                           {!termsAccepted && (
-                            <span className="ml-1 text-warning">
+                            <span className="ml-1 text-warning-text">
                               {t("integrations.mcpAcceptTermsFirst")}
                             </span>
                           )}
@@ -622,7 +622,7 @@ export function IntegrationsDialog({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="size-8 text-muted-foreground hover:text-destructive"
+                                    className="size-8 text-muted-foreground hover:text-destructive-text"
                                     disabled={busy}
                                     onClick={() =>
                                       void handleRemoveAgent(agent)

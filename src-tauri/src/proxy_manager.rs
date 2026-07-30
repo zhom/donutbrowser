@@ -32,6 +32,8 @@ pub struct ExportedProxy {
   pub username: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub password: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub vless_uri: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +51,8 @@ pub struct ParsedProxyLine {
   pub port: u16,
   pub username: Option<String>,
   pub password: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub vless_uri: Option<String>,
   pub original_line: String,
 }
 
@@ -418,6 +422,31 @@ impl ProxyManager {
     Ok(())
   }
 
+  fn normalize_proxy_settings(mut proxy_settings: ProxySettings) -> Result<ProxySettings, String> {
+    if !proxy_settings.proxy_type.eq_ignore_ascii_case("vless") {
+      proxy_settings.vless_uri = None;
+      return Ok(proxy_settings);
+    }
+
+    let uri = proxy_settings
+      .vless_uri
+      .as_deref()
+      .filter(|uri| !uri.is_empty())
+      .ok_or_else(|| crate::backend_error("VLESS_CONFIG_INVALID"))?;
+    let parsed = crate::xray::parse_vless_uri(uri)
+      .map_err(|error| crate::backend_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+    let canonical_uri = crate::xray::export_vless_uri(&parsed.config, parsed.name.as_deref())
+      .map_err(|error| crate::backend_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+
+    proxy_settings.proxy_type = "vless".to_string();
+    proxy_settings.host = parsed.config.address;
+    proxy_settings.port = parsed.config.port;
+    proxy_settings.username = None;
+    proxy_settings.password = None;
+    proxy_settings.vless_uri = Some(canonical_uri);
+    Ok(proxy_settings)
+  }
+
   // Create a new stored proxy
   pub fn create_stored_proxy(
     &self,
@@ -437,6 +466,7 @@ impl ProxyManager {
       }
     }
 
+    let proxy_settings = Self::normalize_proxy_settings(proxy_settings)?;
     let stored_proxy = StoredProxy::new(name, proxy_settings);
 
     {
@@ -670,6 +700,7 @@ impl ProxyManager {
       port: base_proxy.proxy_settings.port,
       username: Some(geo_username),
       password: base_proxy.proxy_settings.password.clone(),
+      vless_uri: None,
     };
 
     // Check if name already exists
@@ -821,6 +852,10 @@ impl ProxyManager {
     if name.as_deref().is_some_and(|n| n.trim().is_empty()) {
       return Err(serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" }).to_string());
     }
+
+    let proxy_settings = proxy_settings
+      .map(Self::normalize_proxy_settings)
+      .transpose()?;
 
     // First, check for conflicts without holding a mutable reference
     {
@@ -1063,6 +1098,10 @@ impl ProxyManager {
   // a password containing `/`, `#`, `?` or `@` otherwise breaks the URL
   // authority and silently retargets the request at the wrong host.
   pub fn build_proxy_url(proxy_settings: &ProxySettings) -> String {
+    if proxy_settings.proxy_type.eq_ignore_ascii_case("vless") {
+      return proxy_settings.vless_uri.clone().unwrap_or_default();
+    }
+
     let mut url = format!("{}://", proxy_settings.proxy_type);
 
     if let (Some(username), Some(password)) = (&proxy_settings.username, &proxy_settings.password) {
@@ -1090,9 +1129,22 @@ impl ProxyManager {
     proxy_id: &str,
     proxy_settings: &ProxySettings,
   ) -> Result<ProxyCheckResult, String> {
-    let upstream_url = Self::build_proxy_url(proxy_settings);
+    let mut xray_worker_id = None;
+    let effective_proxy_settings = if proxy_settings.proxy_type.eq_ignore_ascii_case("vless") {
+      let uri = proxy_settings
+        .vless_uri
+        .as_deref()
+        .ok_or_else(|| crate::backend_error("VLESS_CONFIG_INVALID"))?;
+      let worker = crate::xray_worker_runner::start_xray_worker(None, uri)
+        .await
+        .map_err(|error| error.to_string())?;
+      xray_worker_id = Some(worker.id.clone());
+      worker.local_proxy_settings()
+    } else {
+      proxy_settings.clone()
+    };
+    let upstream_url = Self::build_proxy_url(&effective_proxy_settings);
 
-    // Try process-based check first (identical to browser launch path)
     // Try process-based check first (identical to browser launch path).
     // If the proxy worker fails to start (e.g. Gatekeeper, antivirus, signing
     // restrictions), fall back to a direct reqwest check.
@@ -1130,13 +1182,21 @@ impl ProxyManager {
         result
       }
       Err(err_msg) => {
-        log::warn!(
-          "Proxy worker failed to start ({}), falling back to direct check",
-          err_msg
-        );
-        ip_utils::fetch_public_ip(Some(&upstream_url)).await
+        if xray_worker_id.is_some() {
+          log::warn!("Local proxy worker failed to start in front of Xray-core: {err_msg}");
+          Err(ip_utils::IpError::Network(err_msg))
+        } else {
+          log::warn!(
+            "Proxy worker failed to start ({}), falling back to direct check",
+            err_msg
+          );
+          ip_utils::fetch_public_ip(Some(&upstream_url)).await
+        }
       }
     };
+    if let Some(worker_id) = xray_worker_id {
+      let _ = crate::xray_worker_runner::stop_xray_worker(&worker_id).await;
+    }
 
     let ip = match ip_result {
       Ok(ip) => ip,
@@ -1195,6 +1255,7 @@ impl ProxyManager {
         port: p.proxy_settings.port,
         username: p.proxy_settings.username.clone(),
         password: p.proxy_settings.password.clone(),
+        vless_uri: p.proxy_settings.vless_uri.clone(),
       })
       .collect();
 
@@ -1248,6 +1309,7 @@ impl ProxyManager {
             port,
             username: None,
             password: None,
+            vless_uri: None,
             original_line: line.to_string(),
           });
         }
@@ -1283,6 +1345,7 @@ impl ProxyManager {
               port,
               username: Some(parts[2].to_string()),
               password: Some(parts[3].to_string()),
+              vless_uri: None,
               original_line: line.to_string(),
             })
           }
@@ -1295,6 +1358,7 @@ impl ProxyManager {
               port,
               username: Some(parts[0].to_string()),
               password: Some(parts[1].to_string()),
+              vless_uri: None,
               original_line: line.to_string(),
             })
           }
@@ -1322,6 +1386,24 @@ impl ProxyManager {
 
   // Try to parse URL format: protocol://username:password@host:port
   fn try_parse_url_format(line: &str) -> Option<ProxyParseResult> {
+    if line.starts_with("vless://") {
+      return Some(match crate::xray::parse_vless_uri(line) {
+        Ok(parsed) => ProxyParseResult::Parsed(ParsedProxyLine {
+          proxy_type: "vless".to_string(),
+          host: parsed.config.address,
+          port: parsed.config.port,
+          username: None,
+          password: None,
+          vless_uri: Some(line.to_string()),
+          original_line: line.to_string(),
+        }),
+        Err(error) => ProxyParseResult::Invalid {
+          line: line.to_string(),
+          reason: error.to_string(),
+        },
+      });
+    }
+
     // Check for protocol prefix using strip_prefix
     let (protocol, rest) = if let Some(rest) = line.strip_prefix("http://") {
       ("http", rest)
@@ -1367,6 +1449,7 @@ impl ProxyManager {
             port,
             username,
             password,
+            vless_uri: None,
             original_line: line.to_string(),
           }));
         }
@@ -1382,6 +1465,7 @@ impl ProxyManager {
             port,
             username: None,
             password: None,
+            vless_uri: None,
             original_line: line.to_string(),
           }));
         }
@@ -1419,6 +1503,7 @@ impl ProxyManager {
             port,
             username,
             password,
+            vless_uri: None,
             original_line: line.to_string(),
           }));
         }
@@ -1447,6 +1532,7 @@ impl ProxyManager {
         port: exported.port,
         username: exported.username,
         password: exported.password,
+        vless_uri: exported.vless_uri,
       };
 
       match self.create_stored_proxy(app_handle, exported.name.clone(), proxy_settings) {
@@ -1489,6 +1575,7 @@ impl ProxyManager {
         port: parsed.port,
         username: parsed.username,
         password: parsed.password,
+        vless_uri: parsed.vless_uri,
       };
 
       match self.create_stored_proxy(app_handle, proxy_name.clone(), proxy_settings) {
@@ -1564,6 +1651,7 @@ impl ProxyManager {
                 port: existing.local_port,
                 username: None,
                 password: None,
+                vless_uri: None,
               });
             }
             // Need to add this PID to the mapping - we'll do that after starting
@@ -1604,6 +1692,7 @@ impl ProxyManager {
               port: existing.local_port,
               username: None,
               password: None,
+              vless_uri: None,
             });
           }
           // Profile ID changed - we'll create a new proxy but don't stop the old one
@@ -1769,6 +1858,7 @@ impl ProxyManager {
       port: proxy_info.local_port,
       username: None,
       password: None,
+      vless_uri: None,
     })
   }
 
@@ -1914,28 +2004,29 @@ impl ProxyManager {
   /// placeholder until `update_proxy_pid` runs, so it is not a reliable way to
   /// find the worker for a profile mid-launch. Safe on the reuse
   /// path — it simply rewrites `browser_pid` to the new live PID. A `browser_pid`
-  /// of 0 (launch failed to report a PID) is ignored so the worker never
-  /// self-exits against a bogus PID.
-  pub fn set_browser_pid_for_profile(&self, profile_id: &str, browser_pid: u32) {
+  /// of 0 (launch failed to report a PID) is rejected so the caller can abort
+  /// the launch instead of leaving a worker without a verified browser owner.
+  pub fn set_browser_pid_for_profile(&self, profile_id: &str, browser_pid: u32) -> bool {
     if browser_pid == 0 {
-      return;
+      return false;
     }
     let proxy_id = {
       let map = self.profile_active_proxy_ids.lock().unwrap();
       match map.get(profile_id) {
         Some(id) => id.clone(),
-        None => return, // No local worker for this profile — nothing to tag.
+        None => return false,
       }
     };
-    if let Some(mut cfg) = crate::proxy_storage::get_proxy_config(&proxy_id) {
-      cfg.browser_pid = Some(browser_pid);
-      if crate::proxy_storage::update_proxy_config(&cfg) {
-        log::info!(
-          "Recorded browser PID {browser_pid} on proxy config {proxy_id} for self-reaping"
-        );
-      } else {
-        log::warn!("Failed to persist browser_pid {browser_pid} to proxy config {proxy_id}");
-      }
+    let Some(mut cfg) = crate::proxy_storage::get_proxy_config(&proxy_id) else {
+      return false;
+    };
+    cfg.browser_pid = Some(browser_pid);
+    if crate::proxy_storage::update_proxy_config(&cfg) {
+      log::info!("Recorded browser PID {browser_pid} on proxy config {proxy_id} for self-reaping");
+      true
+    } else {
+      log::warn!("Failed to persist browser_pid {browser_pid} to proxy config {proxy_id}");
+      false
     }
   }
 
@@ -2220,6 +2311,24 @@ impl ProxyManager {
       }
     }
 
+    {
+      use crate::proxy_storage::process_identity_matches;
+      use crate::xray_worker_storage::{list_xray_worker_configs, unstarted_worker_is_stale};
+
+      for worker in list_xray_worker_configs() {
+        let dead = worker
+          .pid
+          .is_some_and(|pid| !process_identity_matches(pid, worker.pid_start_time));
+        if dead || unstarted_worker_is_stale(&worker) {
+          log::info!(
+            "Cleaning up orphaned Xray-core worker config: {}",
+            worker.id
+          );
+          let _ = crate::xray_worker_runner::stop_xray_worker(&worker.id).await;
+        }
+      }
+    }
+
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
@@ -2355,6 +2464,7 @@ mod tests {
       port: 8080,
       username: Some("user".to_string()),
       password: Some("pass".to_string()),
+      vless_uri: None,
     };
 
     assert!(
@@ -2382,6 +2492,7 @@ mod tests {
       port: 0,
       username: None,
       password: None,
+      vless_uri: None,
     };
 
     assert!(
@@ -2536,6 +2647,7 @@ mod tests {
       port: 8080,
       username: Some("user".to_string()),
       password: Some("pass".to_string()),
+      vless_uri: None,
     };
 
     // Test command arguments match expected format
@@ -3175,6 +3287,7 @@ mod tests {
       port: 8080,
       username: None,
       password: None,
+      vless_uri: None,
     });
     assert_eq!(url, "http://1.2.3.4:8080");
 
@@ -3185,6 +3298,7 @@ mod tests {
       port: 1080,
       username: Some("user".to_string()),
       password: Some("p@ss".to_string()),
+      vless_uri: None,
     });
     assert_eq!(url, "socks5://user:p%40ss@proxy.example.com:1080");
 
@@ -3195,8 +3309,99 @@ mod tests {
       port: 3128,
       username: Some("justuser".to_string()),
       password: None,
+      vless_uri: None,
     });
     assert_eq!(url, "http://justuser@host.io:3128");
+  }
+
+  fn valid_vless_uri() -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+    let public_key = URL_SAFE_NO_PAD.encode([7_u8; 32]);
+    format!(
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@127.0.0.1:443?\
+       encryption=none&flow=xtls-rprx-vision&security=reality&\
+       sni=www.example.com&fp=chrome&pbk={public_key}&\
+       sid=0123456789abcdef&spx=%2F&type=tcp&headerType=none#Local"
+    )
+  }
+
+  #[test]
+  fn vless_settings_are_validated_canonicalized_and_stripped_of_unused_credentials() {
+    let uri = valid_vless_uri();
+    let normalized = ProxyManager::normalize_proxy_settings(ProxySettings {
+      proxy_type: "VLESS".to_string(),
+      host: "ignored.invalid".to_string(),
+      port: 1,
+      username: Some("unused-user".to_string()),
+      password: Some("unused-password".to_string()),
+      vless_uri: Some(uri.clone()),
+    })
+    .unwrap();
+
+    assert_eq!(normalized.proxy_type, "vless");
+    assert_eq!(normalized.host, "127.0.0.1");
+    assert_eq!(normalized.port, 443);
+    assert!(normalized.username.is_none());
+    assert!(normalized.password.is_none());
+    assert_eq!(normalized.vless_uri.as_deref(), Some(uri.as_str()));
+
+    let invalid = uri.replace("security=reality", "security=tls");
+    let error = ProxyManager::normalize_proxy_settings(ProxySettings {
+      proxy_type: "vless".to_string(),
+      host: "127.0.0.1".to_string(),
+      port: 443,
+      username: None,
+      password: None,
+      vless_uri: Some(invalid.clone()),
+    })
+    .unwrap_err();
+    assert!(error.contains("VLESS_CONFIG_INVALID"));
+    assert!(!error.contains(&invalid));
+  }
+
+  #[test]
+  fn vless_stored_proxy_persistence_and_exports_preserve_the_canonical_uri() {
+    let temp = tempfile::tempdir().unwrap();
+    let _data_guard = crate::app_dirs::set_test_data_dir(temp.path().to_path_buf());
+    let manager = ProxyManager::new();
+    let settings = ProxyManager::normalize_proxy_settings(ProxySettings {
+      proxy_type: "vless".to_string(),
+      host: "ignored.invalid".to_string(),
+      port: 1,
+      username: Some("unused".to_string()),
+      password: Some("unused".to_string()),
+      vless_uri: Some(valid_vless_uri()),
+    })
+    .unwrap();
+    let stored = StoredProxy::new("Local Reality".to_string(), settings);
+    manager.save_proxy(&stored).unwrap();
+    manager.upsert_stored_proxy(stored.clone());
+
+    let json: ProxyExportData =
+      serde_json::from_str(&manager.export_proxies_json().unwrap()).unwrap();
+    assert_eq!(json.proxies.len(), 1);
+    assert_eq!(json.proxies[0].proxy_type, "vless");
+    assert_eq!(json.proxies[0].vless_uri, stored.proxy_settings.vless_uri);
+    assert_eq!(
+      manager.export_proxies_txt(),
+      stored.proxy_settings.vless_uri.clone().unwrap()
+    );
+
+    let reloaded = ProxyManager::new()
+      .get_stored_proxies()
+      .into_iter()
+      .find(|candidate| candidate.id == stored.id)
+      .expect("persisted VLESS proxy should reload");
+    assert_eq!(reloaded.proxy_settings, stored.proxy_settings);
+
+    let parsed = ProxyManager::parse_txt_proxies(&manager.export_proxies_txt());
+    assert!(matches!(
+      parsed.as_slice(),
+      [ProxyParseResult::Parsed(proxy)]
+        if proxy.proxy_type == "vless"
+          && proxy.vless_uri == stored.proxy_settings.vless_uri
+    ));
   }
 
   #[test]
@@ -3270,6 +3475,7 @@ mod tests {
         port: 80,
         username: None,
         password: None,
+        vless_uri: None,
       },
       sync_enabled: false,
       last_sync: None,

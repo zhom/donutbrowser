@@ -1147,13 +1147,13 @@ export function ExtensionManagementDialog({
                     disabled={limitedMode}
                   >
                     <span>{t("extensions.extensionsTab")}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
+                    <span className="text-xs tabular-nums">
                       {extensions.length}
                     </span>
                   </AnimatedTabsTrigger>
                   <AnimatedTabsTrigger value="groups" disabled={limitedMode}>
                     <span>{t("extensions.groupsTab")}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
+                    <span className="text-xs tabular-nums">
                       {extensionGroups.length}
                     </span>
                   </AnimatedTabsTrigger>
@@ -1696,7 +1696,7 @@ export function ExtensionManagementDialog({
                           href={editingExtension.homepage_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex min-w-0 items-center gap-1 text-primary hover:underline"
+                          className="flex min-w-0 items-center gap-1 text-primary-text hover:underline"
                         >
                           <span className="truncate">
                             {editingExtension.homepage_url}
@@ -1849,7 +1849,7 @@ export function ExtensionManagementDialog({
             tooltip={t("common.buttons.delete")}
             variant="destructive"
             size="icon"
-            className="border-destructive bg-destructive/50 hover:bg-destructive/70"
+            className="border-destructive bg-destructive hover:bg-destructive"
             onClick={() => {
               setBulkExtDeleteOpen(true);
             }}
@@ -1875,7 +1875,7 @@ export function ExtensionManagementDialog({
             tooltip={t("common.buttons.delete")}
             variant="destructive"
             size="icon"
-            className="border-destructive bg-destructive/50 hover:bg-destructive/70"
+            className="border-destructive bg-destructive hover:bg-destructive"
             onClick={() => {
               setBulkGroupDeleteOpen(true);
             }}

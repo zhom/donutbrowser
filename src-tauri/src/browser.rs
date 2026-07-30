@@ -2,13 +2,15 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ProxySettings {
-  pub proxy_type: String, // "http", "https", "socks4", "socks5", or "ss" (Shadowsocks)
+  pub proxy_type: String,
   pub host: String,
   pub port: u16,
   pub username: Option<String>,
   pub password: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub vless_uri: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -581,6 +583,7 @@ mod tests {
       port: 8080,
       username: None,
       password: None,
+      vless_uri: None,
     };
 
     // Test that it can be serialized (implements Serialize)

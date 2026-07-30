@@ -159,6 +159,10 @@ export class AppSession {
       });
     }
     if (this.seedVersionCache) {
+      const seededVersion =
+        typeof this.seedVersionCache === "string"
+          ? this.seedVersionCache
+          : "150.0.7871.100";
       const versionCache = path.join(
         this.root,
         "donut",
@@ -170,7 +174,7 @@ export class AppSession {
       await writeFile(
         versionCache,
         `${JSON.stringify({
-          releases: [{ version: "150.0.7871.100", date: "2026-07-01" }],
+          releases: [{ version: seededVersion, date: "2026-07-01" }],
           timestamp: Math.floor(Date.now() / 1000),
         })}\n`,
         { flag: "wx" },
@@ -228,7 +232,7 @@ export class AppSession {
     return this.session.execute(script, args);
   }
 
-  async invoke(command, args = {}) {
+  async invoke(command, args = {}, timeoutMs = 330_000) {
     assert.ok(this.session, `${this.name} is not started`);
     const result = await this.session.executeAsync(
       `
@@ -243,6 +247,7 @@ export class AppSession {
           }));
       `,
       [command, args],
+      timeoutMs,
     );
     if (!result?.ok) {
       throw new Error(
@@ -314,6 +319,27 @@ export class AppSession {
     });
   }
 
+  async clickElement(element, description = "element") {
+    await this.waitFor(
+      () =>
+        this.execute(
+          `
+            const node = arguments[0];
+            if (!(node instanceof Element) || !node.isConnected) return false;
+            node.scrollIntoView({ block: "center", inline: "center" });
+            const rect = node.getBoundingClientRect();
+            const x = Math.floor(rect.left + rect.width / 2);
+            const y = Math.floor(rect.top + rect.height / 2);
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && (hit === node || node.contains(hit)));
+          `,
+          [element],
+        ),
+      { description: `pointer-interactable ${description}` },
+    );
+    await this.session.click(element);
+  }
+
   async clickText(
     text,
     { exact = true, roles = ["button", "tab", "menuitem", "link"] } = {},
@@ -342,7 +368,7 @@ export class AppSession {
       element,
       `No visible interactive element matched ${JSON.stringify(text)}`,
     );
-    await this.session.click(element);
+    await this.clickElement(element, JSON.stringify(text));
   }
 
   async clickTextIn(
@@ -380,7 +406,10 @@ export class AppSession {
       element,
       `No visible interactive element inside ${containerSelector} matched ${JSON.stringify(text)}`,
     );
-    await this.session.click(element);
+    await this.clickElement(
+      element,
+      `${JSON.stringify(text)} inside ${containerSelector}`,
+    );
   }
 
   async clickSelector(selector) {
@@ -399,7 +428,7 @@ export class AppSession {
         ),
       { description: `visible selector ${selector}` },
     );
-    await this.session.click(element);
+    await this.clickElement(element, selector);
   }
 
   async fillSelector(selector, value) {
@@ -421,28 +450,28 @@ export class AppSession {
     alt = false,
     shift = false,
   }) {
-    await this.execute(
-      `
-        window.dispatchEvent(new KeyboardEvent("keydown", {
-          key: arguments[0],
-          code: arguments[1],
-          metaKey: arguments[2],
-          ctrlKey: arguments[3],
-          altKey: arguments[4],
-          shiftKey: arguments[5],
-          bubbles: true,
-          cancelable: true
-        }));
-      `,
-      [
-        key,
-        key.length === 1 ? `Key${key.toUpperCase()}` : key,
-        meta,
-        ctrl,
-        alt,
-        shift,
-      ],
-    );
+    const modifiers = [
+      ...(meta ? ["\uE03D"] : []),
+      ...(ctrl ? ["\uE009"] : []),
+      ...(alt ? ["\uE00A"] : []),
+      ...(shift ? ["\uE008"] : []),
+    ];
+    const value = key === "Escape" ? "\uE00C" : key;
+    const actions = [
+      ...modifiers.map((modifier) => ({ type: "keyDown", value: modifier })),
+      { type: "keyDown", value },
+      { type: "keyUp", value },
+      ...modifiers
+        .toReversed()
+        .map((modifier) => ({ type: "keyUp", value: modifier })),
+    ];
+    try {
+      await this.session.command("POST", "/actions", {
+        actions: [{ type: "key", id: "keyboard", actions }],
+      });
+    } finally {
+      await this.session.command("DELETE", "/actions");
+    }
   }
 
   async capture(label) {

@@ -68,13 +68,18 @@ impl ConsistencyResult {
   }
 }
 
-/// URL for handing this proxy to reqwest, or None for upstreams reqwest can't
-/// drive (Shadowsocks).
-fn proxy_url(settings: &crate::browser::ProxySettings) -> Option<String> {
+/// URL for handing this proxy to reqwest. VLESS is reached through the
+/// authenticated loopback Xray-core worker already serving the profile.
+fn proxy_url(settings: &crate::browser::ProxySettings, profile_id: Option<&str>) -> Option<String> {
   match settings.proxy_type.to_lowercase().as_str() {
     "http" | "https" | "socks4" | "socks5" => Some(
       crate::proxy_manager::ProxyManager::build_proxy_url(settings),
     ),
+    "vless" => profile_id
+      .and_then(crate::xray_worker_storage::find_xray_worker_by_profile_id)
+      .map(|worker| {
+        crate::proxy_manager::ProxyManager::build_proxy_url(&worker.local_proxy_settings())
+      }),
     _ => None,
   }
 }
@@ -125,8 +130,14 @@ pub async fn check_profile_consistency(
   let Some(settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) else {
     return Ok(ConsistencyResult::skip());
   };
-  let Some(url) = proxy_url(&settings) else {
+  let profile_id = profile.id.to_string();
+  let Some(url) = proxy_url(&settings, Some(&profile_id)) else {
     return Ok(ConsistencyResult::skip());
+  };
+  let cache_identity = if settings.proxy_type.eq_ignore_ascii_case("vless") {
+    settings.vless_uri.clone().unwrap_or_else(|| url.clone())
+  } else {
+    url.clone()
   };
 
   let now = crate::proxy_manager::now_secs();
@@ -137,7 +148,9 @@ pub async fn check_profile_consistency(
     let cache = EXIT_CACHE.lock().unwrap();
     cache
       .get(proxy_id)
-      .filter(|c| c.proxy_url == url && now.saturating_sub(c.fetched_at) < EXIT_CACHE_TTL_SECS)
+      .filter(|c| {
+        c.proxy_url == cache_identity && now.saturating_sub(c.fetched_at) < EXIT_CACHE_TTL_SECS
+      })
       .cloned()
   };
 
@@ -163,7 +176,7 @@ pub async fn check_profile_consistency(
           proxy_id.clone(),
           CachedExit {
             fetched_at: now,
-            proxy_url: url.clone(),
+            proxy_url: cache_identity,
             timezone: tz.clone(),
             country_code: cc.clone(),
             ip: ip.clone(),
@@ -339,8 +352,9 @@ mod tests {
       port: 8080,
       username: Some("u".into()),
       password: Some("p".into()),
+      vless_uri: None,
     };
-    assert_eq!(proxy_url(&http).as_deref(), Some("http://u:p@h:8080"));
+    assert_eq!(proxy_url(&http, None).as_deref(), Some("http://u:p@h:8080"));
 
     // A password with URL-reserved characters must not break the authority —
     // unencoded, the `/` truncates the host and reqwest targets `u` instead.
@@ -350,9 +364,10 @@ mod tests {
       port: 8080,
       username: Some("user".into()),
       password: Some("ab/cd@ef".into()),
+      vless_uri: None,
     };
     assert_eq!(
-      proxy_url(&reserved).as_deref(),
+      proxy_url(&reserved, None).as_deref(),
       Some("http://user:ab%2Fcd%40ef@gw.provider.io:8080")
     );
 
@@ -363,9 +378,10 @@ mod tests {
       port: 1080,
       username: Some("justuser".into()),
       password: None,
+      vless_uri: None,
     };
     assert_eq!(
-      proxy_url(&user_only).as_deref(),
+      proxy_url(&user_only, None).as_deref(),
       Some("socks5://justuser@h:1080")
     );
 
@@ -375,7 +391,8 @@ mod tests {
       port: 8080,
       username: None,
       password: None,
+      vless_uri: None,
     };
-    assert_eq!(proxy_url(&ss), None);
+    assert_eq!(proxy_url(&ss, None), None);
   }
 }

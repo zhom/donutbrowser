@@ -51,8 +51,11 @@ import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
+  applyThemeColors,
+  clearThemeColors,
   getThemeByColors,
   getThemeById,
+  normalizeThemeColors,
   THEME_VARIABLES,
   THEMES,
   withThemeTransition,
@@ -238,19 +241,13 @@ export function SettingsDialog({
 
   const applyCustomTheme = useCallback((vars: Record<string, string>) => {
     withThemeTransition(() => {
-      const root = document.documentElement;
-      Object.entries(vars).forEach(([k, v]) => {
-        root.style.setProperty(k, v, "important");
-      });
+      applyThemeColors(vars);
     });
   }, []);
 
   const clearCustomTheme = useCallback(() => {
     withThemeTransition(() => {
-      const root = document.documentElement;
-      THEME_VARIABLES.forEach(({ key }) => {
-        root.style.removeProperty(key as string);
-      });
+      clearThemeColors();
     });
   }, []);
 
@@ -267,7 +264,7 @@ export function SettingsDialog({
         custom_theme:
           appSettings.custom_theme &&
           Object.keys(appSettings.custom_theme).length > 0
-            ? appSettings.custom_theme
+            ? normalizeThemeColors(appSettings.custom_theme)
             : tokyoNightTheme.colors,
       };
       setSettings(merged);
@@ -490,24 +487,15 @@ export function SettingsDialog({
       if (settings.theme === "custom") {
         if (Object.keys(customThemeState.colors).length > 0) {
           try {
-            const root = document.documentElement;
-            // Clear any previous custom vars first
-            THEME_VARIABLES.forEach(({ key }) => {
-              root.style.removeProperty(key as string);
-            });
-            Object.entries(customThemeState.colors).forEach(([k, v]) => {
-              root.style.setProperty(k, v, "important");
-            });
+            clearThemeColors();
+            applyThemeColors(customThemeState.colors);
           } catch {
             /* empty */
           }
         }
       } else {
         try {
-          const root = document.documentElement;
-          THEME_VARIABLES.forEach(({ key }) => {
-            root.style.removeProperty(key as string);
-          });
+          clearThemeColors();
         } catch {
           /* empty */
         }
@@ -569,6 +557,7 @@ export function SettingsDialog({
       applyCustomTheme(originalSettings.custom_theme);
     } else {
       clearCustomTheme();
+      setTheme(originalSettings.theme);
     }
 
     // Reset custom theme state to original
@@ -587,6 +576,7 @@ export function SettingsDialog({
     applyCustomTheme,
     clearCustomTheme,
     onClose,
+    setTheme,
   ]);
 
   // Only clear custom theme when switching away from custom, don't apply live
@@ -596,8 +586,9 @@ export function SettingsDialog({
   useEffect(() => {
     if (hasLoadedSettings && settings.theme !== "custom") {
       clearCustomTheme();
+      setTheme(settings.theme);
     }
-  }, [hasLoadedSettings, settings.theme, clearCustomTheme]);
+  }, [hasLoadedSettings, settings.theme, clearCustomTheme, setTheme]);
 
   // Unmount-safe theme restore: rail navigation unmounts this dialog without
   // calling handleClose, which used to leave the theme vars wiped for the
@@ -606,21 +597,17 @@ export function SettingsDialog({
     return () => {
       const s = originalSettingsRef.current;
       if (!hasLoadedSettingsRef.current || !s) return;
-      const root = document.documentElement;
       if (s.theme === "custom" && s.custom_theme) {
-        Object.entries(s.custom_theme).forEach(([k, v]) => {
-          root.style.setProperty(k, v, "important");
-        });
+        applyThemeColors(s.custom_theme);
       } else {
         // A non-custom persisted theme (light/dark/system) uses the
         // stylesheet palette — strip any leftover inline custom vars so a
         // just-saved switch away from custom isn't reverted on unmount.
-        THEME_VARIABLES.forEach(({ key }) => {
-          root.style.removeProperty(key as string);
-        });
+        clearThemeColors();
+        setTheme(s.theme);
       }
     };
-  }, []);
+  }, [setTheme]);
 
   useEffect(() => {
     if (isOpen) {
@@ -1177,7 +1164,9 @@ export function SettingsDialog({
                       }}
                     />
                     {e2eError && (
-                      <p className="text-sm text-destructive">{e2eError}</p>
+                      <p className="text-sm text-destructive-text">
+                        {e2eError}
+                      </p>
                     )}
                     <LoadingButton
                       variant="default"
@@ -1249,7 +1238,7 @@ export function SettingsDialog({
                     // customer reads like a billing error, so swap in a
                     // subscription-active badge instead.
                     <div className="space-y-1">
-                      <p className="text-sm font-medium text-success">
+                      <p className="text-sm font-medium text-success-text">
                         {t("settings.commercial.subscriptionActive", {
                           plan: cloudUser.plan,
                         })}
@@ -1272,7 +1261,7 @@ export function SettingsDialog({
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <p className="text-sm font-medium text-warning">
+                      <p className="text-sm font-medium text-warning-text">
                         {t("settings.commercial.trialExpired")}
                       </p>
                       <p className="text-xs text-muted-foreground">

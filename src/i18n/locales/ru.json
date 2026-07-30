@@ -459,7 +459,13 @@
       "hostPortRequired": "Требуются хост и порт",
       "ssCipherRequired": "Для Shadowsocks требуется шифр и пароль",
       "selectType": "Выберите тип прокси",
-      "saveFailed": "Не удалось сохранить прокси: {{error}}"
+      "saveFailed": "Не удалось сохранить прокси: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "URI VLESS",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "Требуются XTLS Vision и REALITY.",
+      "vlessUriRequired": "Введите URI VLESS.",
+      "vlessUriInvalid": "Введите корректный URI VLESS с адресом и портом."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "Конфигурация сервера MCP недоступна. Перезапустите сервер и повторите попытку.",
     "mcpAgentUnknown": "Этот клиент MCP не поддерживается.",
     "mcpAgentInstallFailed": "Не удалось добавить Donut Browser в клиент MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "Не удалось удалить Donut Browser из клиента MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "Не удалось удалить Donut Browser из клиента MCP: {{detail}}",
+    "vlessConfigInvalid": "URI VLESS недействителен.",
+    "xrayUnavailable": "Xray-core недоступен в этой системе.",
+    "xrayUnsupportedOs": "Для VLESS требуется macOS 12 или новее.",
+    "xrayStartFailed": "Не удалось запустить Xray-core."
   },
   "rail": {
     "profiles": "Профили",
@@ -2068,8 +2078,13 @@
     "title": "О приложении",
     "version": "Версия {{version}}",
     "portableBadge": "портативная",
-    "licenseNotice": "Антидетект-браузер с открытым исходным кодом, распространяется по лицензии AGPL-3.0.",
-    "website": "Веб-сайт"
+    "licenseNotice": "Антидетект-браузер с открытым исходным кодом.",
+    "website": "Веб-сайт",
+    "github": "GitHub",
+    "licenses": "Лицензии",
+    "searchLicenses": "Поиск лицензий…",
+    "noMatchingLicenses": "Совпадающих лицензий нет.",
+    "openSource": "Открыть исходный код {{name}}"
   },
   "clearOnClose": {
     "label": "Очищать данные при закрытии",

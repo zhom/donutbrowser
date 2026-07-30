@@ -319,8 +319,8 @@ export function RailNav({
                   className={cn(
                     "relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
                     active
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   {active && <ActiveIndicator />}
@@ -347,8 +347,8 @@ export function RailNav({
             className={cn(
               "grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
               moreOpen
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             <GoKebabHorizontal className="size-3.5" />
@@ -369,8 +369,8 @@ export function RailNav({
             className={cn(
               "relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
               currentPage === "settings"
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             {currentPage === "settings" && <ActiveIndicator />}
@@ -404,7 +404,7 @@ export function RailNav({
                   setMoreOpen(false);
                   onNavigate(page);
                 }}
-                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
               >
                 <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
                   <Icon className="size-3" />
@@ -426,7 +426,7 @@ export function RailNav({
                 setMoreOpen(false);
                 onOpenAbout();
               }}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
             >
               <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
                 <LuInfo className="size-3" />

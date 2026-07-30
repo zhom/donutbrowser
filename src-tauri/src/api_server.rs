@@ -2772,6 +2772,18 @@ mod tests {
       "proxy_settings must be optional on update, required list: {update_proxy:?}"
     );
 
+    let proxy_settings = schema_required(&spec, "ProxySettings");
+    for field in ["username", "password", "vless_uri"] {
+      assert!(
+        !proxy_settings.iter().any(|candidate| candidate == field),
+        "{field} must be optional in proxy settings, required list: {proxy_settings:?}"
+      );
+      assert!(
+        spec["components"]["schemas"]["ProxySettings"]["properties"][field].is_object(),
+        "{field} must be present in the served ProxySettings schema"
+      );
+    }
+
     let import_profiles = schema_required(&spec, "ImportProfilesRequest");
     for field in ["group_id", "duplicate_strategy", "wayfern_config"] {
       assert!(

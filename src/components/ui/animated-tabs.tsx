@@ -122,7 +122,8 @@ function AnimatedTabsTrigger({
       className={cn(
         "relative inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors duration-150",
         "text-muted-foreground hover:text-foreground",
-        isActive && "text-foreground",
+        isActive && !showIndicator && "text-foreground",
+        showIndicator && "text-accent-foreground hover:text-accent-foreground",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none",
         "disabled:pointer-events-none disabled:opacity-50",
         className,
@@ -132,6 +133,7 @@ function AnimatedTabsTrigger({
       {showIndicator && (
         <motion.span
           layoutId={`animated-tabs-indicator-${indicatorId}`}
+          data-slot="animated-tabs-indicator"
           className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-accent"
           transition={{ type: "spring", stiffness: 360, damping: 32 }}
         />

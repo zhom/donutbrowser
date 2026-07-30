@@ -202,19 +202,24 @@ pub fn generate_proxy_id() -> String {
   )
 }
 
-pub fn is_process_running(pid: u32) -> bool {
+pub fn process_start_time(pid: u32) -> Option<u64> {
   use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
   let pid = sysinfo::Pid::from_u32(pid);
-  // Refresh only the queried PID with the minimal refresh kind: this is a
-  // pure existence check, and callers (worker supervisors every 15s, GUI
-  // cleanup loops) must not pay for a full system process-table scan.
   let mut system = System::new();
   system.refresh_processes_specifics(
     ProcessesToUpdate::Some(&[pid]),
     true,
     ProcessRefreshKind::nothing(),
   );
-  system.process(pid).is_some()
+  system.process(pid).map(sysinfo::Process::start_time)
+}
+
+pub fn is_process_running(pid: u32) -> bool {
+  process_start_time(pid).is_some()
+}
+
+pub fn process_identity_matches(pid: u32, expected_start_time: Option<u64>) -> bool {
+  expected_start_time.is_some_and(|expected| process_start_time(pid) == Some(expected))
 }
 
 #[cfg(test)]
@@ -234,6 +239,18 @@ mod tests {
       url,
       "http://user%40domain.com:pass%20word%21@test.example.com:8080"
     );
+  }
+
+  #[test]
+  fn process_identity_requires_the_observed_start_time() {
+    let pid = std::process::id();
+    let start_time = process_start_time(pid).expect("current process should be visible");
+    assert!(process_identity_matches(pid, Some(start_time)));
+    assert!(!process_identity_matches(
+      pid,
+      Some(start_time.saturating_add(1))
+    ));
+    assert!(!process_identity_matches(pid, None));
   }
 
   #[test]

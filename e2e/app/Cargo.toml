@@ -6,4 +6,4 @@ publish = false
 
 [dependencies]
 donutbrowser-lib = { package = "donutbrowser", path = "../../src-tauri", features = ["e2e"] }
-tauri-plugin-cross-platform-webdriver = { path = "../../../tauri-cross-platform-webdriver/crates/tauri-plugin-cross-platform-webdriver" }
+tauri-wd = { path = "../../../tauri-wd/crates/tauri-wd" }

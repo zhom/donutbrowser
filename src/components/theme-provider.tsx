@@ -59,9 +59,7 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
   const setTheme = useCallback((newTheme: string) => {
     setThemeState(newTheme);
     withThemeTransition(() => {
-      if (newTheme === "custom") {
-        applyClassToHtml("dark");
-      } else {
+      if (newTheme !== "custom") {
         applyClassToHtml(newTheme);
       }
     });
@@ -77,7 +75,6 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
 
         if (themeValue === "custom") {
           setThemeState("custom");
-          applyClassToHtml("dark");
           if (
             settings.custom_theme &&
             Object.keys(settings.custom_theme).length > 0
@@ -87,6 +84,8 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
             } catch (error) {
               console.warn("Failed to apply custom theme variables:", error);
             }
+          } else {
+            applyClassToHtml("dark");
           }
         } else if (
           themeValue === "light" ||

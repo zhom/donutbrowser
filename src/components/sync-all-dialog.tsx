@@ -168,7 +168,7 @@ export function SyncAllDialog({ isOpen, onClose }: SyncAllDialogProps) {
                   }}
                   className="flex items-center gap-3 rounded-lg border border-border/60 bg-card/50 p-3 transition-colors hover:bg-card"
                 >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary-text">
                     <Icon className="size-4" />
                   </div>
                   <div className="min-w-0 flex-1 truncate text-sm font-medium">

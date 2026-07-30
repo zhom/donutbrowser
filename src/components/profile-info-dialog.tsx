@@ -870,7 +870,7 @@ function ProfileInfoLayout({
           type="button"
           aria-label={t("common.buttons.close")}
           onClick={onClose}
-          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground"
+          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
         >
           <LuX className="size-3.5" />
         </button>
@@ -893,7 +893,7 @@ function ProfileInfoLayout({
                     "flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors duration-100",
                     active
                       ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   <span className="shrink-0">{it.icon}</span>
@@ -913,7 +913,7 @@ function ProfileInfoLayout({
                 type="button"
                 onClick={deleteAction.onClick}
                 disabled={deleteAction.disabled}
-                className="flex h-7 items-center gap-2 rounded-md px-2 text-xs text-destructive transition-colors duration-100 hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                className="flex h-7 items-center gap-2 rounded-md px-2 text-xs text-destructive-text transition-colors duration-100 hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
               >
                 <LuTrash2 className="size-3.5 shrink-0" />
                 <span className="flex-1 text-left">
@@ -1181,8 +1181,8 @@ function _SectionAction({
       className={cn(
         "flex h-9 items-center gap-2 rounded-md px-3 text-left text-xs transition-colors",
         destructive
-          ? "text-destructive hover:bg-destructive/10"
-          : "hover:bg-accent",
+          ? "text-destructive-text hover:bg-destructive/10"
+          : "hover:bg-accent hover:text-accent-foreground",
         "disabled:pointer-events-none disabled:opacity-50",
       )}
     >
@@ -1254,11 +1254,11 @@ function LaunchHookEditor({
         className="font-mono text-xs"
       />
       {showInvalidHint && (
-        <p className="text-xs text-warning">
+        <p className="text-xs text-warning-text">
           {t("profileInfo.launchHook.invalidUrlHint")}
         </p>
       )}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
       <div className="flex items-center gap-2">
         <Button
           size="sm"
@@ -1360,11 +1360,13 @@ function SyncSectionInline({
             {t(`profileInfo.syncStatusValue.${syncStatus.status}`)}
           </p>
           {syncStatus.error && (
-            <p className="mt-1 text-xs text-destructive">{syncStatus.error}</p>
+            <p className="mt-1 text-xs text-destructive-text">
+              {syncStatus.error}
+            </p>
           )}
         </div>
       )}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>
   );
 }
@@ -1500,7 +1502,7 @@ function NetworkSectionInline({
         </Select>
       </div>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>
   );
 }
@@ -1604,7 +1606,7 @@ function ExtensionsSectionInline({
           </SelectContent>
         </Select>
       </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>
   );
 }
@@ -1812,7 +1814,7 @@ function CookiesSectionInline({
               </ul>
             </div>
           )}
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-xs text-destructive-text">{error}</p>}
         </>
       )}
     </div>
@@ -1928,8 +1930,10 @@ function FingerprintSectionInline({
         profileBrowser={profile.browser}
       />
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      {success && !error && <p className="text-xs text-success">{success}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
+      {success && !error && (
+        <p className="text-xs text-success-text">{success}</p>
+      )}
 
       <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
         <Button
@@ -2102,7 +2106,7 @@ function SecuritySectionInline({
             }}
             className={cn(
               "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
-              "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             {t("profilePassword.modes.validate")}
@@ -2117,7 +2121,7 @@ function SecuritySectionInline({
               "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
               mode === "change"
                 ? "border-transparent bg-accent text-accent-foreground"
-                : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             {t("profilePassword.modes.change")}
@@ -2131,8 +2135,8 @@ function SecuritySectionInline({
             className={cn(
               "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
               mode === "remove"
-                ? "border-transparent bg-destructive/10 text-destructive"
-                : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                ? "border-transparent bg-destructive/10 text-destructive-text"
+                : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             {t("profilePassword.modes.remove")}
@@ -2182,8 +2186,10 @@ function SecuritySectionInline({
         )}
       </div>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      {success && !error && <p className="text-xs text-success">{success}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
+      {success && !error && (
+        <p className="text-xs text-success-text">{success}</p>
+      )}
 
       {isRunning && (
         <p className="text-xs text-muted-foreground">
@@ -2395,7 +2401,7 @@ export function ProfileDnsBlocklistDialog({
             href="https://github.com/hagezi/dns-blocklists"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary hover:underline"
+            className="text-primary-text hover:underline"
           >
             {t("common.buttons.moreInfo")}
           </a>
@@ -2408,8 +2414,8 @@ export function ProfileDnsBlocklistDialog({
               onClick={() => setLevel(option.value)}
               className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
                 level === option.value
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "hover:bg-accent border border-transparent"
+                  ? "border border-primary/30 bg-primary/10 text-primary-text"
+                  : "border border-transparent hover:bg-accent hover:text-accent-foreground"
               }`}
             >
               {option.label}
@@ -2531,7 +2537,7 @@ export function ProfileBypassRulesDialog({
                       onClick={() => {
                         handleRemoveRule(rule);
                       }}
-                      className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                      className="shrink-0 text-muted-foreground transition-colors hover:text-destructive-text"
                     >
                       <LuX className="size-3.5" />
                     </button>

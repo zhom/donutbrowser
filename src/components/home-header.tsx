@@ -221,7 +221,7 @@ const HomeHeader = ({
                     behavior: "smooth",
                   });
               }}
-              className="absolute top-1/2 left-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+              className="absolute top-1/2 left-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <LuChevronLeft className="size-3" />
             </button>
@@ -295,7 +295,7 @@ const HomeHeader = ({
                     behavior: "smooth",
                   });
               }}
-              className="absolute top-1/2 right-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+              className="absolute top-1/2 right-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <LuChevronRight className="size-3" />
             </button>
@@ -323,7 +323,7 @@ const HomeHeader = ({
               onClick={() => {
                 onSearchQueryChange("");
               }}
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 transform rounded-sm p-0.5 transition-colors hover:bg-accent"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 transform rounded-sm p-0.5 transition-colors hover:bg-accent hover:text-accent-foreground"
               aria-label={t("header.clearSearch")}
             >
               <LuX className="size-3.5 text-muted-foreground hover:text-foreground" />

@@ -459,7 +459,13 @@
       "hostPortRequired": "Hôte et port sont requis",
       "ssCipherRequired": "Le chiffrement et le mot de passe sont requis pour Shadowsocks",
       "selectType": "Sélectionnez le type de proxy",
-      "saveFailed": "Échec de la sauvegarde du proxy : {{error}}"
+      "saveFailed": "Échec de la sauvegarde du proxy : {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "URI VLESS",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "Nécessite XTLS Vision et REALITY.",
+      "vlessUriRequired": "Saisissez une URI VLESS.",
+      "vlessUriInvalid": "Saisissez une URI VLESS valide avec un hôte et un port."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "La configuration du serveur MCP est indisponible. Redémarrez le serveur et réessayez.",
     "mcpAgentUnknown": "Ce client MCP n’est pas pris en charge.",
     "mcpAgentInstallFailed": "Impossible d’ajouter Donut Browser au client MCP : {{detail}}",
-    "mcpAgentRemoveFailed": "Impossible de retirer Donut Browser du client MCP : {{detail}}"
+    "mcpAgentRemoveFailed": "Impossible de retirer Donut Browser du client MCP : {{detail}}",
+    "vlessConfigInvalid": "L’URI VLESS n’est pas valide.",
+    "xrayUnavailable": "Xray-core n’est pas disponible sur ce système.",
+    "xrayUnsupportedOs": "VLESS nécessite macOS 12 ou une version ultérieure.",
+    "xrayStartFailed": "Impossible de démarrer Xray-core."
   },
   "rail": {
     "profiles": "Profils",
@@ -2068,8 +2078,13 @@
     "title": "À propos",
     "version": "Version {{version}}",
     "portableBadge": "portable",
-    "licenseNotice": "Navigateur anti-détection open source, sous licence AGPL-3.0.",
-    "website": "Site web"
+    "licenseNotice": "Navigateur anti-détection open source.",
+    "website": "Site web",
+    "github": "GitHub",
+    "licenses": "Licences",
+    "searchLicenses": "Rechercher des licences…",
+    "noMatchingLicenses": "Aucune licence correspondante.",
+    "openSource": "Voir le code source de {{name}}"
   },
   "clearOnClose": {
     "label": "Effacer les données à la fermeture",

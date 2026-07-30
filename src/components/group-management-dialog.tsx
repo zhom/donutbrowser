@@ -569,9 +569,15 @@ export function GroupManagementDialog({
 
           <div className="@container flex min-h-0 w-full flex-1 flex-col">
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-accent px-3 text-sm font-medium whitespace-nowrap text-foreground">
+              <div
+                data-slot="group-summary-pill"
+                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-accent px-3 text-sm font-medium whitespace-nowrap text-accent-foreground"
+              >
                 <span>{t("groups.pageTitle")}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span
+                  data-slot="group-summary-count"
+                  className="text-xs tabular-nums"
+                >
                   {groups.length}
                 </span>
               </div>
@@ -591,7 +597,7 @@ export function GroupManagementDialog({
             </div>
 
             {error && (
-              <div className="mt-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="mt-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive-text">
                 {error}
               </div>
             )}
@@ -708,7 +714,7 @@ export function GroupManagementDialog({
             onClick={() => setBulkDeleteOpen(true)}
             size="icon"
             variant="destructive"
-            className="border-destructive bg-destructive/50 hover:bg-destructive/70"
+            className="border-destructive bg-destructive hover:bg-destructive"
           >
             <LuTrash2 />
           </DataTableActionBarAction>

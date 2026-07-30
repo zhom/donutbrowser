@@ -92,6 +92,9 @@ mod version_updater;
 pub mod vpn;
 pub mod vpn_worker_runner;
 pub mod vpn_worker_storage;
+pub mod xray;
+pub mod xray_worker_runner;
+pub mod xray_worker_storage;
 
 use browser_runner::{
   check_browser_exists, kill_browser_profile, launch_browser_profile, open_url_with_profile,

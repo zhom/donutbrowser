@@ -459,7 +459,13 @@
       "hostPortRequired": "Sunucu ve bağlantı noktası zorunludur",
       "ssCipherRequired": "Shadowsocks için şifreleme algoritması ve parola zorunludur",
       "selectType": "Proxy türünü seçin",
-      "saveFailed": "Proxy kaydedilemedi: {{error}}"
+      "saveFailed": "Proxy kaydedilemedi: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "VLESS URI'si",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "XTLS Vision ve REALITY gerektirir.",
+      "vlessUriRequired": "Bir VLESS URI'si girin.",
+      "vlessUriInvalid": "Sunucu ve bağlantı noktası içeren geçerli bir VLESS URI'si girin."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "MCP sunucusu yapılandırması kullanılamıyor. Sunucuyu yeniden başlatıp tekrar deneyin.",
     "mcpAgentUnknown": "Bu MCP istemcisi desteklenmiyor.",
     "mcpAgentInstallFailed": "Donut Browser MCP istemcisine eklenemedi: {{detail}}",
-    "mcpAgentRemoveFailed": "Donut Browser MCP istemcisinden kaldırılamadı: {{detail}}"
+    "mcpAgentRemoveFailed": "Donut Browser MCP istemcisinden kaldırılamadı: {{detail}}",
+    "vlessConfigInvalid": "VLESS URI'si geçersiz.",
+    "xrayUnavailable": "Xray-core bu sistemde kullanılamıyor.",
+    "xrayUnsupportedOs": "VLESS için macOS 12 veya sonraki bir sürüm gerekir.",
+    "xrayStartFailed": "Xray-core başlatılamadı."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2068,8 +2078,13 @@
     "title": "Hakkında",
     "version": "Sürüm {{version}}",
     "portableBadge": "taşınabilir",
-    "licenseNotice": "AGPL-3.0 lisanslı, açık kaynak anti-detect tarayıcı.",
-    "website": "Web sitesi"
+    "licenseNotice": "Açık kaynaklı anti-detect tarayıcı.",
+    "website": "Web sitesi",
+    "github": "GitHub",
+    "licenses": "Lisanslar",
+    "searchLicenses": "Lisanslarda ara…",
+    "noMatchingLicenses": "Eşleşen lisans yok.",
+    "openSource": "{{name}} kaynak kodunu görüntüle"
   },
   "clearOnClose": {
     "label": "Kapatırken verileri temizle",

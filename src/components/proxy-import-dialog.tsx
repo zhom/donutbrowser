@@ -420,7 +420,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                         key={`${proxy.original_line}-${i}`}
                         className="rounded bg-muted/30 p-2 font-mono text-xs break-all"
                       >
-                        <span className="text-primary">
+                        <span className="text-primary-text">
                           {proxy.proxy_type}://
                         </span>
                         {proxy.username && (
@@ -487,7 +487,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                   <span className="text-sm">
                     {t("proxies.importDialog.imported")}
                   </span>
-                  <span className="text-sm font-medium text-success">
+                  <span className="text-sm font-medium text-success-text">
                     {importResult.imported_count}
                   </span>
                 </div>
@@ -496,7 +496,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                     <span className="text-sm">
                       {t("proxies.importDialog.skippedDuplicates")}
                     </span>
-                    <span className="text-sm font-medium text-warning">
+                    <span className="text-sm font-medium text-warning-text">
                       {importResult.skipped_count}
                     </span>
                   </div>
@@ -506,7 +506,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                     <span className="text-sm">
                       {t("proxies.importDialog.errors")}
                     </span>
-                    <span className="text-sm font-medium text-destructive">
+                    <span className="text-sm font-medium text-destructive-text">
                       {importResult.errors.length}
                     </span>
                   </div>
@@ -521,7 +521,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                       {importResult.errors.map((error, i) => (
                         <div
                           key={`error-${i}`}
-                          className="text-xs text-destructive"
+                          className="text-xs text-destructive-text"
                         >
                           {error}
                         </div>

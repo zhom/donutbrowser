@@ -459,7 +459,13 @@
       "hostPortRequired": "主机和端口为必填项",
       "ssCipherRequired": "Shadowsocks 需要密码学和密码",
       "selectType": "选择代理类型",
-      "saveFailed": "保存代理失败: {{error}}"
+      "saveFailed": "保存代理失败: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "VLESS URI",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "需要 XTLS Vision 和 REALITY。",
+      "vlessUriRequired": "请输入 VLESS URI。",
+      "vlessUriInvalid": "请输入包含主机和端口的有效 VLESS URI。"
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "MCP 服务器配置不可用。请重启服务器后重试。",
     "mcpAgentUnknown": "不支持此 MCP 客户端。",
     "mcpAgentInstallFailed": "无法将 Donut Browser 添加到 MCP 客户端：{{detail}}",
-    "mcpAgentRemoveFailed": "无法从 MCP 客户端移除 Donut Browser：{{detail}}"
+    "mcpAgentRemoveFailed": "无法从 MCP 客户端移除 Donut Browser：{{detail}}",
+    "vlessConfigInvalid": "VLESS URI 无效。",
+    "xrayUnavailable": "此系统无法使用 Xray-core。",
+    "xrayUnsupportedOs": "VLESS 需要 macOS 12 或更高版本。",
+    "xrayStartFailed": "无法启动 Xray-core。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2068,8 +2078,13 @@
     "title": "关于",
     "version": "版本 {{version}}",
     "portableBadge": "便携版",
-    "licenseNotice": "开源反检测浏览器,基于 AGPL-3.0 许可证发布。",
-    "website": "官网"
+    "licenseNotice": "开源反检测浏览器。",
+    "website": "官网",
+    "github": "GitHub",
+    "licenses": "许可证",
+    "searchLicenses": "搜索许可证…",
+    "noMatchingLicenses": "没有匹配的许可证。",
+    "openSource": "查看 {{name}} 源代码"
   },
   "clearOnClose": {
     "label": "关闭时清除数据",

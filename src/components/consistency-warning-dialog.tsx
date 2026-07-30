@@ -98,7 +98,7 @@ export function ConsistencyWarningDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <LuTriangleAlert className="size-5 text-warning" />
+            <LuTriangleAlert className="size-5 text-warning-text" />
             {t("consistencyWarning.title")}
           </DialogTitle>
         </DialogHeader>

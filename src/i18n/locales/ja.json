@@ -459,7 +459,13 @@
       "hostPortRequired": "ホストとポートが必要です",
       "ssCipherRequired": "Shadowsocks には暗号とパスワードが必要です",
       "selectType": "プロキシの種類を選択",
-      "saveFailed": "プロキシの保存に失敗しました: {{error}}"
+      "saveFailed": "プロキシの保存に失敗しました: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "VLESS URI",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "XTLS Vision と REALITY が必要です。",
+      "vlessUriRequired": "VLESS URI を入力してください。",
+      "vlessUriInvalid": "ホストとポートを含む有効な VLESS URI を入力してください。"
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "MCPサーバーの設定を取得できません。サーバーを再起動して、もう一度お試しください。",
     "mcpAgentUnknown": "このMCPクライアントはサポートされていません。",
     "mcpAgentInstallFailed": "MCPクライアントにDonut Browserを追加できませんでした：{{detail}}",
-    "mcpAgentRemoveFailed": "MCPクライアントからDonut Browserを削除できませんでした：{{detail}}"
+    "mcpAgentRemoveFailed": "MCPクライアントからDonut Browserを削除できませんでした：{{detail}}",
+    "vlessConfigInvalid": "VLESS URI が無効です。",
+    "xrayUnavailable": "このシステムでは Xray-core を利用できません。",
+    "xrayUnsupportedOs": "VLESS には macOS 12 以降が必要です。",
+    "xrayStartFailed": "Xray-core を起動できませんでした。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2068,8 +2078,13 @@
     "title": "このアプリについて",
     "version": "バージョン {{version}}",
     "portableBadge": "ポータブル",
-    "licenseNotice": "AGPL-3.0 ライセンスのオープンソース・アンチディテクトブラウザです。",
-    "website": "ウェブサイト"
+    "licenseNotice": "オープンソースのアンチディテクトブラウザです。",
+    "website": "ウェブサイト",
+    "github": "GitHub",
+    "licenses": "ライセンス",
+    "searchLicenses": "ライセンスを検索…",
+    "noMatchingLicenses": "一致するライセンスはありません。",
+    "openSource": "{{name}} のソースコードを表示"
   },
   "clearOnClose": {
     "label": "終了時にデータを消去",

@@ -15,6 +15,7 @@ import {
   readFile,
   rename,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
@@ -27,10 +28,7 @@ import { createSafeDiagnostics } from "./lib/diagnostics.mjs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(dirname, "..");
-const webdriverRoot = path.resolve(
-  projectRoot,
-  "../tauri-cross-platform-webdriver",
-);
+const webdriverRoot = path.resolve(projectRoot, "../tauri-wd");
 const isWindows = process.platform === "win32";
 const executableSuffix = isWindows ? ".exe" : "";
 const appBinary = path.join(
@@ -246,6 +244,7 @@ function buildAll() {
   }
   run("pnpm", ["build"], projectRoot);
   run("pnpm", ["copy-proxy-binary"], projectRoot);
+  run(process.execPath, ["src-tauri/download-xray.mjs"], projectRoot);
   run(
     "cargo",
     ["build", "--locked", "--manifest-path", "e2e/app/Cargo.toml"],
@@ -520,6 +519,178 @@ function dockerAvailable() {
   return !result.error && result.status === 0;
 }
 
+function hostRustTarget() {
+  const result = spawnSync("rustc", ["-vV"], {
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `Could not determine the host Rust target: ${result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`}`,
+    );
+  }
+  const target = result.stdout.match(/^host:\s*(.+)$/m)?.[1]?.trim();
+  if (!target) {
+    throw new Error("rustc -vV did not report a host target");
+  }
+  return target;
+}
+
+function xrayBinaryPath() {
+  const target = hostRustTarget();
+  return path.join(
+    projectRoot,
+    "src-tauri",
+    "binaries",
+    `xray-${target}${target.includes("windows") ? ".exe" : ""}`,
+  );
+}
+
+async function waitForPort(port, timeoutMs, processRecord) {
+  const started = Date.now();
+  let lastError;
+  while (Date.now() - started < timeoutMs) {
+    if (processRecord?.process.exitCode !== null) {
+      throw new Error(
+        `${processRecord.name} exited early with ${processRecord.process.exitCode}; see ${processRecord.logPath}`,
+      );
+    }
+    try {
+      await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ host: "127.0.0.1", port });
+        socket.setTimeout(1_000);
+        socket.once("connect", () => {
+          socket.destroy();
+          resolve();
+        });
+        socket.once("timeout", () => {
+          socket.destroy();
+          reject(new Error("connection timed out"));
+        });
+        socket.once("error", reject);
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `Timed out waiting for 127.0.0.1:${port}: ${lastError?.message ?? lastError}`,
+  );
+}
+
+async function startXrayInfrastructure(runRoot, options, records) {
+  const executable = xrayBinaryPath();
+  if (!existsSync(executable)) {
+    throw new Error(
+      `The Xray-core E2E binary is missing: ${executable}. Run node src-tauri/download-xray.mjs first.`,
+    );
+  }
+
+  const keyResult = spawnSync(executable, ["x25519"], {
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  if (keyResult.error || keyResult.status !== 0) {
+    throw new Error(
+      `Xray-core key generation failed: ${keyResult.error?.message ?? keyResult.stderr?.trim() ?? `exit ${keyResult.status}`}`,
+    );
+  }
+  const privateKey = keyResult.stdout.match(/^PrivateKey:\s*(\S+)\s*$/m)?.[1];
+  const publicKey = keyResult.stdout.match(
+    /^(?:Password \(PublicKey\)|PublicKey):\s*(\S+)\s*$/m,
+  )?.[1];
+  if (!privateKey || !publicKey) {
+    throw new Error("Xray-core key generation returned an unknown format");
+  }
+
+  const port = await freePort();
+  const id = "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4";
+  const shortId = "0123456789abcdef";
+  const serverName = "www.cloudflare.com";
+  const accessLog = path.join(runRoot, "logs", "xray-access.log");
+  const configPath = path.join(runRoot, "xray-server.json");
+  const config = {
+    log: {
+      access: accessLog,
+      loglevel: "warning",
+    },
+    inbounds: [
+      {
+        tag: "vless-reality",
+        listen: "127.0.0.1",
+        port,
+        protocol: "vless",
+        settings: {
+          clients: [{ id, flow: "xtls-rprx-vision" }],
+          decryption: "none",
+        },
+        streamSettings: {
+          network: "raw",
+          security: "reality",
+          realitySettings: {
+            show: false,
+            target: `${serverName}:443`,
+            xver: 0,
+            serverNames: [serverName],
+            privateKey,
+            shortIds: [shortId],
+          },
+        },
+      },
+    ],
+    outbounds: [{ tag: "direct", protocol: "freedom" }],
+  };
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
+    mode: 0o600,
+  });
+
+  const validation = spawnSync(executable, ["run", "-test", "-c", configPath], {
+    encoding: "utf8",
+    timeout: 15_000,
+  });
+  if (validation.error || validation.status !== 0) {
+    throw new Error(
+      `Xray-core server configuration is invalid: ${validation.error?.message ?? validation.stderr?.trim() ?? `exit ${validation.status}`}`,
+    );
+  }
+
+  const server = startProcess(
+    "xray-server",
+    executable,
+    ["run", "-c", configPath],
+    {
+      cwd: projectRoot,
+      env: process.env,
+      runRoot,
+      verbose: options.verbose,
+    },
+  );
+  records.push(server);
+  await waitForPort(port, 15_000, server);
+
+  const uri = new URL(`vless://${id}@127.0.0.1:${port}`);
+  uri.searchParams.set("encryption", "none");
+  uri.searchParams.set("flow", "xtls-rprx-vision");
+  uri.searchParams.set("security", "reality");
+  uri.searchParams.set("sni", serverName);
+  uri.searchParams.set("fp", "chrome");
+  uri.searchParams.set("pbk", publicKey);
+  uri.searchParams.set("sid", shortId);
+  uri.searchParams.set("spx", "/");
+  uri.searchParams.set("type", "tcp");
+  uri.searchParams.set("headerType", "none");
+  uri.hash = "Local Xray E2E";
+
+  return {
+    accessLog,
+    configPath,
+    privateKey,
+    uri: uri.href,
+  };
+}
+
 async function startWireGuardInfrastructure() {
   if (!dockerAvailable()) {
     throw new Error(
@@ -633,6 +804,7 @@ async function main() {
   const records = [];
   let fixture;
   let wireGuard;
+  let xray;
   let failed = false;
   const sensitiveValues = [
     "donut-e2e-sync-token-0123456789abcdef",
@@ -645,6 +817,9 @@ async function main() {
     }
     if (wireGuard) {
       runDocker(["rm", "-f", wireGuard.name], { allowFailure: true });
+    }
+    if (xray) {
+      await rm(xray.configPath, { force: true });
     }
     if (!options.keep && !failed) {
       await rm(runRoot, { recursive: true, force: true });
@@ -686,7 +861,7 @@ async function main() {
         "--startup-timeout",
         "120",
         "--command-timeout",
-        "330",
+        "630",
         "--log",
         options.verbose ? "debug" : "info",
       ],
@@ -715,6 +890,10 @@ async function main() {
     }
     if (networkEnabled && process.env.DONUT_E2E_SKIP_VPN_TUNNEL !== "1") {
       wireGuard = await startWireGuardInfrastructure();
+    }
+    if (networkEnabled) {
+      xray = await startXrayInfrastructure(runRoot, options, records);
+      sensitiveValues.push(xray.privateKey);
     }
 
     const localValues = await loadLocalValues([
@@ -767,6 +946,8 @@ async function main() {
           : "",
         DONUT_E2E_WIREGUARD_TARGET_URL: wireGuard?.targetUrl ?? "",
         DONUT_E2E_WIREGUARD_CONTAINER: wireGuard?.name ?? "",
+        DONUT_E2E_VLESS_URI: xray?.uri ?? "",
+        DONUT_E2E_XRAY_ACCESS_LOG: xray?.accessLog ?? "",
       },
       stdio: "inherit",
     });

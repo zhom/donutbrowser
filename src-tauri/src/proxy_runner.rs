@@ -50,27 +50,23 @@ fn prune_stale_proxy_logs(temp_dir: &Path, retain: usize) {
   }
 }
 
-fn target_binary_name(base_name: &str) -> Option<String> {
-  let target = std::env::var("TARGET").ok()?;
-
+fn target_binary_name(base_name: &str) -> String {
+  let target = env!("DONUT_BUILD_TARGET");
   #[cfg(windows)]
   {
-    Some(format!("{base_name}-{target}.exe"))
+    format!("{base_name}-{target}.exe")
   }
 
   #[cfg(not(windows))]
   {
-    Some(format!("{base_name}-{target}"))
+    format!("{base_name}-{target}")
   }
 }
 
 fn unsuffixed_binary_name(base_name: &str) -> String {
   #[cfg(windows)]
   {
-    match base_name {
-      "donut-proxy" => "donut-proxy.exe".to_string(),
-      _ => String::new(),
-    }
+    format!("{base_name}.exe")
   }
 
   #[cfg(not(windows))]
@@ -79,19 +75,24 @@ fn unsuffixed_binary_name(base_name: &str) -> String {
   }
 }
 
-fn binary_matches_prefix(path: &Path, base_name: &str) -> bool {
-  let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+fn is_executable_file(path: &Path) -> bool {
+  let Ok(metadata) = path.metadata() else {
     return false;
   };
-
+  if !metadata.is_file() {
+    return false;
+  }
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+  }
   #[cfg(windows)]
   {
-    file_name.starts_with(&format!("{base_name}-")) && file_name.ends_with(".exe")
-  }
-
-  #[cfg(not(windows))]
-  {
-    file_name.starts_with(&format!("{base_name}-"))
+    path
+      .extension()
+      .and_then(|extension| extension.to_str())
+      .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
   }
 }
 
@@ -156,10 +157,10 @@ pub(crate) fn find_sidecar_executable(
     Some(manifest_dir.join("target").join("release")),
   );
 
-  let mut exact_names = vec![unsuffixed_binary_name(base_name)];
-  if let Some(target_name) = target_binary_name(base_name) {
-    exact_names.push(target_name);
-  }
+  let exact_names = [
+    unsuffixed_binary_name(base_name),
+    target_binary_name(base_name),
+  ];
 
   for dir in &search_dirs {
     for name in &exact_names {
@@ -168,17 +169,8 @@ pub(crate) fn find_sidecar_executable(
       }
 
       let candidate = dir.join(name);
-      if candidate.exists() {
+      if is_executable_file(&candidate) {
         return Ok(candidate);
-      }
-    }
-
-    if let Ok(entries) = std::fs::read_dir(dir) {
-      for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() && binary_matches_prefix(&path, base_name) {
-          return Ok(path);
-        }
       }
     }
   }
@@ -565,7 +557,9 @@ pub async fn stop_all_proxy_processes() -> Result<(), Box<dyn std::error::Error>
 
 #[cfg(test)]
 mod tests {
-  use super::{parse_sidecar_version, prune_stale_proxy_logs};
+  use super::{
+    is_executable_file, parse_sidecar_version, prune_stale_proxy_logs, target_binary_name,
+  };
   use std::fs;
   use std::time::Duration;
 
@@ -590,6 +584,27 @@ mod tests {
       parse_sidecar_version(b"donut-proxy v0.28.2\nunexpected"),
       None
     );
+  }
+
+  #[test]
+  fn sidecar_target_name_is_exact_and_metadata_files_are_not_executables() {
+    let target_name = target_binary_name("xray");
+    assert!(target_name.starts_with("xray-"));
+    assert!(target_name.contains(env!("DONUT_BUILD_TARGET")));
+
+    let temp = tempfile::tempdir().unwrap();
+    let marker = temp.path().join(format!("{target_name}.source.json"));
+    fs::write(&marker, "{}").unwrap();
+    assert!(!is_executable_file(&marker));
+
+    let executable = temp.path().join(target_name);
+    fs::write(&executable, "binary").unwrap();
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    assert!(is_executable_file(&executable));
   }
 
   #[test]

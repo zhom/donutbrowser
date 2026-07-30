@@ -459,7 +459,13 @@
       "hostPortRequired": "호스트와 포트는 필수입니다",
       "ssCipherRequired": "Shadowsocks에는 암호화와 비밀번호가 필요합니다",
       "selectType": "프록시 유형 선택",
-      "saveFailed": "프록시 저장 실패: {{error}}"
+      "saveFailed": "프록시 저장 실패: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "VLESS URI",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "XTLS Vision 및 REALITY가 필요합니다.",
+      "vlessUriRequired": "VLESS URI를 입력하세요.",
+      "vlessUriInvalid": "호스트와 포트가 포함된 올바른 VLESS URI를 입력하세요."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "MCP 서버 구성을 사용할 수 없습니다. 서버를 다시 시작한 후 다시 시도하세요.",
     "mcpAgentUnknown": "이 MCP 클라이언트는 지원되지 않습니다.",
     "mcpAgentInstallFailed": "MCP 클라이언트에 Donut Browser를 추가하지 못했습니다: {{detail}}",
-    "mcpAgentRemoveFailed": "MCP 클라이언트에서 Donut Browser를 제거하지 못했습니다: {{detail}}"
+    "mcpAgentRemoveFailed": "MCP 클라이언트에서 Donut Browser를 제거하지 못했습니다: {{detail}}",
+    "vlessConfigInvalid": "VLESS URI가 올바르지 않습니다.",
+    "xrayUnavailable": "이 시스템에서는 Xray-core를 사용할 수 없습니다.",
+    "xrayUnsupportedOs": "VLESS를 사용하려면 macOS 12 이상이 필요합니다.",
+    "xrayStartFailed": "Xray-core를 시작할 수 없습니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -2068,8 +2078,13 @@
     "title": "정보",
     "version": "버전 {{version}}",
     "portableBadge": "포터블",
-    "licenseNotice": "AGPL-3.0 라이선스의 오픈 소스 안티 디텍트 브라우저입니다.",
-    "website": "웹사이트"
+    "licenseNotice": "오픈 소스 안티 디텍트 브라우저입니다.",
+    "website": "웹사이트",
+    "github": "GitHub",
+    "licenses": "라이선스",
+    "searchLicenses": "라이선스 검색…",
+    "noMatchingLicenses": "일치하는 라이선스가 없습니다.",
+    "openSource": "{{name}} 소스 코드 보기"
   },
   "clearOnClose": {
     "label": "닫을 때 데이터 지우기",

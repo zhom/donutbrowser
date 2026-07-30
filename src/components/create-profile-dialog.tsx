@@ -741,7 +741,7 @@ export function CreateProfileDialog({
                                   autoComplete="new-password"
                                 />
                                 {passwordError && (
-                                  <p className="text-sm text-destructive">
+                                  <p className="text-sm text-destructive-text">
                                     {passwordError}
                                   </p>
                                 )}
@@ -764,7 +764,7 @@ export function CreateProfileDialog({
                             )}
                             {!isLoadingReleaseTypes && releaseTypesError && (
                               <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3">
-                                <p className="flex-1 text-sm text-destructive">
+                                <p className="flex-1 text-sm text-destructive-text">
                                   {releaseTypesError}
                                 </p>
                                 <RippleButton
@@ -783,7 +783,7 @@ export function CreateProfileDialog({
                               !releaseTypesError &&
                               !getBestAvailableVersion("wayfern") && (
                                 <div className="flex items-center gap-3 rounded-md border border-warning/50 bg-warning/10 p-3">
-                                  <p className="text-sm text-warning">
+                                  <p className="text-sm text-warning-text">
                                     {t("createProfile.platformUnavailable", {
                                       browser: "Wayfern",
                                     })}
@@ -910,7 +910,7 @@ export function CreateProfileDialog({
                                 {!isLoadingReleaseTypes &&
                                   releaseTypesError && (
                                     <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3">
-                                      <p className="flex-1 text-sm text-destructive">
+                                      <p className="flex-1 text-sm text-destructive-text">
                                         {releaseTypesError}
                                       </p>
                                       <RippleButton
@@ -1272,7 +1272,7 @@ export function CreateProfileDialog({
                               )}
                               {!isLoadingReleaseTypes && releaseTypesError && (
                                 <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3">
-                                  <p className="flex-1 text-sm text-destructive">
+                                  <p className="flex-1 text-sm text-destructive-text">
                                     {releaseTypesError}
                                   </p>
                                   <RippleButton

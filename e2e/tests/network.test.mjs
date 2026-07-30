@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import test from "node:test";
@@ -405,6 +405,330 @@ function wireGuardTargetWasReached() {
     ).status === 0
   );
 }
+
+function processIsRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+async function createXrayProfile(app, version) {
+  return app.invoke("create_browser_profile_new", {
+    name: "Xray Reality Profile",
+    browserStr: "wayfern",
+    version,
+    releaseType: "stable",
+    proxyId: null,
+    vpnId: null,
+    wayfernConfig: {
+      fingerprint: null,
+      randomize_fingerprint_on_launch: false,
+      geoip: false,
+    },
+    groupId: null,
+    ephemeral: false,
+    dnsBlocklist: null,
+    launchHook: null,
+  });
+}
+
+test("VLESS Reality persists, imports, routes through Xray-core, records traffic, and cleans up", async () => {
+  const vlessUri = process.env.DONUT_E2E_VLESS_URI;
+  const accessLog = process.env.DONUT_E2E_XRAY_ACCESS_LOG;
+  assert.ok(vlessUri, "The network harness must provide a VLESS Reality URI");
+  assert.ok(accessLog, "The network harness must provide an Xray access log");
+
+  const app = appFromEnvironment("network-xray-reality", {
+    seedVersionCache: false,
+    wayfernTermsAccepted: false,
+  });
+  let apiPort;
+  let activeCdp;
+  let profile;
+  let worker;
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    if (!(await app.invoke("check_wayfern_terms_accepted"))) {
+      await app.invoke("accept_wayfern_terms");
+      await app.restart();
+    }
+
+    const invalidUri = vlessUri.replace("security=reality", "security=tls");
+    const invalidCreate = await app.invokeError("create_stored_proxy", {
+      name: "Invalid VLESS",
+      proxySettings: {
+        proxy_type: "vless",
+        host: "ignored.invalid",
+        port: 1,
+        username: "must-be-cleared",
+        password: "must-be-cleared",
+        vless_uri: invalidUri,
+      },
+    });
+    assert.match(invalidCreate, /VLESS_CONFIG_INVALID/);
+
+    const created = await app.invoke("create_stored_proxy", {
+      name: "Local VLESS Reality",
+      proxySettings: {
+        proxy_type: "VLESS",
+        host: "ignored.invalid",
+        port: 1,
+        username: "must-be-cleared",
+        password: "must-be-cleared",
+        vless_uri: vlessUri,
+      },
+    });
+    assert.equal(created.proxy_settings.proxy_type, "vless");
+    assert.equal(created.proxy_settings.host, "127.0.0.1");
+    assert.equal(created.proxy_settings.port, Number(new URL(vlessUri).port));
+    assert.equal(created.proxy_settings.username, null);
+    assert.equal(created.proxy_settings.password, null);
+    assert.equal(created.proxy_settings.vless_uri, vlessUri);
+
+    const updated = await app.invoke("update_stored_proxy", {
+      proxyId: created.id,
+      name: "Updated VLESS Reality",
+      proxySettings: {
+        proxy_type: "vless",
+        host: "still-ignored.invalid",
+        port: 2,
+        username: "still-cleared",
+        password: "still-cleared",
+        vless_uri: vlessUri,
+      },
+    });
+    assert.equal(updated.name, "Updated VLESS Reality");
+    assert.equal(updated.proxy_settings.host, "127.0.0.1");
+    assert.equal(updated.proxy_settings.username, null);
+    assert.equal(updated.proxy_settings.password, null);
+
+    const exportedJson = await app.invoke("export_proxies", {
+      format: "json",
+    });
+    const exported = JSON.parse(exportedJson);
+    assert.equal(exported.proxies.length, 1);
+    assert.deepEqual(exported.proxies[0], {
+      name: "Updated VLESS Reality",
+      type: "vless",
+      host: "127.0.0.1",
+      port: Number(new URL(vlessUri).port),
+      vless_uri: vlessUri,
+    });
+    assert.equal(
+      await app.invoke("export_proxies", { format: "txt" }),
+      vlessUri,
+    );
+
+    const parsed = await app.invoke("parse_txt_proxies", {
+      content: `${vlessUri}\n${invalidUri}\n`,
+    });
+    assert.equal(parsed.length, 2);
+    assert.equal(parsed[0].status, "parsed");
+    assert.equal(parsed[0].proxy_type, "vless");
+    assert.equal(parsed[0].vless_uri, vlessUri);
+    assert.equal(parsed[1].status, "invalid");
+
+    await app.restart();
+    const persisted = (await app.invoke("get_stored_proxies")).find(
+      (candidate) => candidate.id === created.id,
+    );
+    assert.ok(persisted, "VLESS proxy did not survive an app restart");
+    assert.equal(persisted.proxy_settings.vless_uri, vlessUri);
+
+    await app.invoke("delete_stored_proxy", { proxyId: created.id });
+    const imported = await app.invoke("import_proxies_json", {
+      content: exportedJson,
+    });
+    assert.equal(imported.imported_count, 1);
+    assert.equal(imported.skipped_count, 0);
+    assert.deepEqual(imported.errors, []);
+    assert.equal(imported.proxies[0].proxy_settings.vless_uri, vlessUri);
+    const proxy = imported.proxies[0];
+
+    const invalidImport = await app.invoke("import_proxies_json", {
+      content: JSON.stringify({
+        version: "1.0",
+        source: "DonutBrowser",
+        exported_at: new Date().toISOString(),
+        proxies: [
+          {
+            name: "Rejected VLESS",
+            type: "vless",
+            host: "127.0.0.1",
+            port: 443,
+            vless_uri: invalidUri,
+          },
+        ],
+      }),
+    });
+    assert.equal(invalidImport.imported_count, 0);
+    assert.equal(invalidImport.errors.length, 1);
+    assert.match(invalidImport.errors[0], /VLESS_CONFIG_INVALID/);
+
+    profile = await createXrayProfile(app, prepared.version);
+    await app.invoke("update_profile_proxy", {
+      profileId: profile.id,
+      proxyId: proxy.id,
+    });
+    const assigned = (await app.invoke("list_browser_profiles")).find(
+      (candidate) => candidate.id === profile.id,
+    );
+    assert.equal(assigned.proxy_id, proxy.id);
+
+    const settings = await app.invoke("get_app_settings");
+    const saved = await app.invoke("save_app_settings", {
+      settings: {
+        ...settings,
+        api_enabled: true,
+        api_port: 0,
+        api_token: null,
+      },
+    });
+    apiPort = await app.invoke("start_api_server", { port: 0 });
+    const base = `http://127.0.0.1:${apiPort}`;
+    const launched = await runProfile(
+      app,
+      base,
+      saved.api_token,
+      profile.id,
+      "https://api.ipify.org/",
+    );
+    activeCdp = launched.cdp;
+    const exitIp = await activeCdp.waitFor(
+      `(() => {
+        const value = document.body?.innerText?.trim() ?? "";
+        return /^[0-9a-f:.]+$/i.test(value) ? value : false;
+      })()`,
+      { timeoutMs: 30_000, description: "VLESS Reality exit IP" },
+    );
+    assert.ok(isIP(exitIp), `Unexpected exit IP response: ${exitIp}`);
+
+    const workerDirectory = path.join(app.dataRoot, "cache", "proxy_workers");
+    await app.waitFor(
+      async () => {
+        const workerFiles = await readdir(workerDirectory).catch(() => []);
+        const workerFile = workerFiles.find(
+          (file) => file.startsWith("xray_worker_") && file.endsWith(".json"),
+        );
+        if (!workerFile) return false;
+        worker = JSON.parse(
+          await readFile(path.join(workerDirectory, workerFile), "utf8"),
+        );
+        return worker.profile_id === profile.id;
+      },
+      { description: "profile-scoped Xray worker configuration" },
+    );
+    assert.ok(processIsRunning(worker.pid), "Xray supervisor is not running");
+    assert.ok(processIsRunning(worker.xray_pid), "Xray-core is not running");
+    assert.equal(worker.vless_uri, vlessUri);
+
+    const workerPath = path.join(
+      workerDirectory,
+      `xray_worker_${worker.id}.json`,
+    );
+    const runtimePath = path.join(
+      workerDirectory,
+      `xray_runtime_${worker.id}.json`,
+    );
+    if (process.platform !== "win32") {
+      assert.equal((await stat(workerPath)).mode & 0o777, 0o600);
+      assert.equal((await stat(runtimePath)).mode & 0o777, 0o600);
+    }
+    const runtime = JSON.parse(await readFile(runtimePath, "utf8"));
+    assert.equal(runtime.inbounds[0].protocol, "socks");
+    assert.equal(runtime.inbounds[0].listen, "127.0.0.1");
+    assert.equal(runtime.outbounds[0].protocol, "vless");
+    assert.equal(runtime.outbounds[0].streamSettings.security, "reality");
+    assert.equal(
+      runtime.outbounds[0].settings.vnext[0].users[0].flow,
+      "xtls-rprx-vision",
+    );
+
+    await app.waitFor(
+      async () =>
+        (await readFile(accessLog, "utf8").catch(() => "")).includes(
+          "api.ipify.org:443",
+        ),
+      {
+        timeoutMs: 15_000,
+        description: "request in Xray-core server access log",
+      },
+    );
+    const liveTraffic = await app.waitFor(
+      async () => {
+        const snapshot = await app.invoke("get_profile_traffic_snapshot", {
+          profileId: profile.id,
+        });
+        return snapshot?.total_bytes_sent > 0 &&
+          snapshot?.total_bytes_received > 0
+          ? snapshot
+          : false;
+      },
+      {
+        timeoutMs: 15_000,
+        description: "local traffic snapshot for VLESS profile",
+      },
+    );
+    assert.ok(liveTraffic.total_requests > 0);
+
+    const supervisorPid = worker.pid;
+    const xrayPid = worker.xray_pid;
+    await stopProfile(app, base, saved.api_token, profile.id, activeCdp);
+    activeCdp = null;
+    await app.waitFor(
+      async () => {
+        const files = await readdir(workerDirectory).catch(() => []);
+        return (
+          !files.includes(`xray_worker_${worker.id}.json`) &&
+          !processIsRunning(supervisorPid) &&
+          !processIsRunning(xrayPid)
+        );
+      },
+      {
+        timeoutMs: 15_000,
+        description: "Xray worker process and configuration cleanup",
+      },
+    );
+    await assert.rejects(readFile(runtimePath), { code: "ENOENT" });
+
+    const persistedTraffic = await app.invoke("get_profile_traffic_snapshot", {
+      profileId: profile.id,
+    });
+    assert.ok(
+      persistedTraffic.total_bytes_sent >= liveTraffic.total_bytes_sent,
+    );
+    assert.ok(
+      persistedTraffic.total_bytes_received >= liveTraffic.total_bytes_received,
+    );
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    activeCdp?.close();
+    if (app.session) {
+      if (apiPort) await app.invoke("stop_api_server").catch(() => {});
+      if (profile) {
+        const latest = (
+          await app.invoke("list_browser_profiles").catch(() => [])
+        ).find((candidate) => candidate.id === profile.id);
+        if (latest?.process_id) {
+          await app
+            .invoke("kill_browser_profile", { profile: latest })
+            .catch(() => {});
+        }
+      }
+    }
+    await app.close();
+  }
+});
 
 test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions, and extension groups", async () => {
   const httpSettings = proxySettings(

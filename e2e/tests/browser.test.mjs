@@ -7,7 +7,11 @@ import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment } from "../lib/app.mjs";
 import { CdpClient } from "../lib/cdp.mjs";
-import { defaultWayfernPath, prepareWayfern } from "../lib/fixtures.mjs";
+import {
+  defaultWayfernPath,
+  inspectWayfern,
+  prepareWayfern,
+} from "../lib/fixtures.mjs";
 
 const fixtureUrl = process.env.DONUT_E2E_FIXTURE_URL;
 
@@ -133,11 +137,14 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
   assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
   const realTermsFile = realWayfernTermsPath();
   const realTermsBefore = await snapshotFile(realTermsFile);
-  const hasLocalWayfern = existsSync(
-    defaultWayfernPath(process.env.DONUT_E2E_PROJECT_ROOT),
+  const localWayfernPath = defaultWayfernPath(
+    process.env.DONUT_E2E_PROJECT_ROOT,
   );
+  const localWayfernVersion = existsSync(localWayfernPath)
+    ? inspectWayfern(localWayfernPath).version
+    : null;
   const app = appFromEnvironment("browser-wayfern", {
-    seedVersionCache: hasLocalWayfern,
+    seedVersionCache: localWayfernVersion ?? false,
     wayfernTermsAccepted: false,
   });
   let cdp;

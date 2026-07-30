@@ -165,7 +165,7 @@ export function ProxyCheckButton({
                   <FiCheck className="absolute right-[-4px] bottom-[-6px]" />
                 </span>
               ) : result && !result.is_valid ? (
-                <span className="text-sm text-destructive">✕</span>
+                <span className="text-sm text-destructive-text">✕</span>
               ) : (
                 <FiCheck className="size-3" />
               )}
@@ -185,10 +185,10 @@ export function ProxyCheckButton({
               {[result.city, result.country].filter(Boolean).join(", ") ||
                 t("proxyCheck.unknownLocation")}
             </p>
-            <p className="text-xs text-primary-foreground/70">
+            <p className="text-xs text-primary-foreground">
               {t("proxyCheck.tooltipIp", { ip: result.ip })}
             </p>
-            <p className="text-xs text-primary-foreground/70">
+            <p className="text-xs text-primary-foreground">
               {t("proxyCheck.tooltipChecked", {
                 time: formatRelativeTime(result.timestamp),
               })}
@@ -197,7 +197,7 @@ export function ProxyCheckButton({
         ) : result && !result.is_valid ? (
           <div>
             <p>{t("proxyCheck.tooltipFailedTitle")}</p>
-            <p className="text-xs text-primary-foreground/70">
+            <p className="text-xs text-primary-foreground">
               {t("proxyCheck.tooltipFailed", {
                 time: formatRelativeTime(result.timestamp),
               })}

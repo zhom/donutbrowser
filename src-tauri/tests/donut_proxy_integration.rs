@@ -156,6 +156,281 @@ async fn test_sidecar_reports_build_version() -> Result<(), Box<dyn std::error::
   Ok(())
 }
 
+struct XrayChainCleanup {
+  outer_id: Option<String>,
+  xray_id: Option<String>,
+}
+
+impl XrayChainCleanup {
+  fn new() -> Self {
+    Self {
+      outer_id: None,
+      xray_id: None,
+    }
+  }
+
+  async fn cleanup(&mut self) {
+    if let Some(id) = self.outer_id.take() {
+      let _ = donutbrowser_lib::proxy_runner::stop_proxy_process(&id).await;
+    }
+    if let Some(id) = self.xray_id.take() {
+      let _ = donutbrowser_lib::xray_worker_runner::stop_xray_worker(&id).await;
+    }
+  }
+}
+
+impl Drop for XrayChainCleanup {
+  fn drop(&mut self) {
+    fn terminate_process_tree(pid: u32) {
+      #[cfg(unix)]
+      {
+        let _ = std::process::Command::new("kill")
+          .args(["-TERM", &format!("-{pid}")])
+          .output();
+      }
+      #[cfg(windows)]
+      {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = std::process::Command::new("taskkill")
+          .args(["/T", "/F", "/PID", &pid.to_string()])
+          .creation_flags(CREATE_NO_WINDOW)
+          .output();
+      }
+    }
+
+    if let Some(id) = self.outer_id.take() {
+      if let Some(config) = donutbrowser_lib::proxy_storage::get_proxy_config(&id) {
+        if let Some(pid) = config.pid {
+          terminate_process_tree(pid);
+        }
+      }
+      donutbrowser_lib::proxy_storage::delete_proxy_config(&id);
+    }
+    if let Some(id) = self.xray_id.take() {
+      if let Some(config) = donutbrowser_lib::xray_worker_storage::get_xray_worker_config(&id) {
+        if let Some(pid) = config.pid {
+          terminate_process_tree(pid);
+        }
+      }
+      donutbrowser_lib::xray_worker_storage::delete_xray_worker_config(&id);
+    }
+  }
+}
+
+struct EnvironmentRestore {
+  name: &'static str,
+  previous: Option<std::ffi::OsString>,
+}
+
+impl EnvironmentRestore {
+  fn set_path(name: &'static str, value: &std::path::Path) -> Self {
+    let previous = std::env::var_os(name);
+    std::env::set_var(name, value);
+    Self { name, previous }
+  }
+}
+
+impl Drop for EnvironmentRestore {
+  fn drop(&mut self) {
+    if let Some(previous) = &self.previous {
+      std::env::set_var(self.name, previous);
+    } else {
+      std::env::remove_var(self.name);
+    }
+  }
+}
+
+/// End-to-end VLESS + XTLS Vision + REALITY test.
+///
+/// This is intentionally opt-in because it requires a live official Xray-core
+/// server. Set `DONUT_E2E_VLESS_URI`; optionally set
+/// `DONUT_E2E_XRAY_TARGET_URL` to a controlled plain-HTTP endpoint. When the
+/// VLESS endpoint itself is loopback, the test supplies an isolated local HTTP
+/// target automatically.
+#[tokio::test]
+#[serial]
+async fn test_xray_reality_chain_and_local_traffic_monitoring(
+) -> Result<(), Box<dyn std::error::Error>> {
+  let Some(vless_uri) = std::env::var("DONUT_E2E_VLESS_URI")
+    .ok()
+    .filter(|value| !value.is_empty())
+  else {
+    println!("skipping Xray-core integration test: DONUT_E2E_VLESS_URI is not set");
+    return Ok(());
+  };
+
+  let parsed = donutbrowser_lib::xray::parse_vless_uri(&vless_uri)?;
+  let endpoint_is_loopback = parsed.config.address == "localhost"
+    || parsed
+      .config
+      .address
+      .parse::<std::net::IpAddr>()
+      .is_ok_and(|address| address.is_loopback());
+  let mut local_target = None;
+  let target_url = if let Ok(url) = std::env::var("DONUT_E2E_XRAY_TARGET_URL") {
+    url
+  } else if endpoint_is_loopback {
+    let (port, server) = start_mock_http_server("XRAY-REALITY-INTEGRATION-OK").await;
+    local_target = Some(server);
+    format!("http://127.0.0.1:{port}/xray-reality")
+  } else {
+    "http://httpbin.org/anything".to_string()
+  };
+  let target = url::Url::parse(&target_url)?;
+  if target.scheme() != "http" {
+    return Err(
+      "DONUT_E2E_XRAY_TARGET_URL must use plain HTTP for exact payload accounting".into(),
+    );
+  }
+  let target_host = target.host_str().ok_or("Xray target URL has no host")?;
+  let target_port = target
+    .port_or_known_default()
+    .ok_or("Xray target URL has no port")?;
+  let host_header = if target_port == 80 {
+    target_host.to_string()
+  } else {
+    format!("{target_host}:{target_port}")
+  };
+
+  let isolated_root = tempfile::tempdir()?;
+  let _data_root = EnvironmentRestore::set_path("DONUTBROWSER_DATA_ROOT", isolated_root.path());
+  let _binary_path = setup_test().await.map_err(|error| error.to_string())?;
+  let profile_id = format!("xray-integration-{}", uuid::Uuid::new_v4());
+  let payload = b"donut-xray-monitor-payload";
+  let mut cleanup = XrayChainCleanup::new();
+
+  let (first_worker, concurrent_worker) = tokio::join!(
+    donutbrowser_lib::xray_worker_runner::start_xray_worker(Some(&profile_id), &vless_uri),
+    donutbrowser_lib::xray_worker_runner::start_xray_worker(Some(&profile_id), &vless_uri),
+  );
+  let xray_worker = first_worker?;
+  let concurrent_worker = concurrent_worker?;
+  assert_eq!(
+    concurrent_worker.id, xray_worker.id,
+    "concurrent starts for one profile must reuse one Xray worker"
+  );
+  cleanup.xray_id = Some(xray_worker.id.clone());
+
+  let upstream_url = format!(
+    "socks5://{}:{}@127.0.0.1:{}",
+    urlencoding::encode(&xray_worker.username),
+    urlencoding::encode(&xray_worker.password),
+    xray_worker.local_port
+  );
+  let mut outer = donutbrowser_lib::proxy_runner::start_proxy_process_with_profile(
+    Some(upstream_url),
+    None,
+    Some(profile_id.clone()),
+    Vec::new(),
+    None,
+    false,
+    Some("http".to_string()),
+  )
+  .await?;
+  cleanup.outer_id = Some(outer.id.clone());
+  outer.browser_pid = Some(std::process::id());
+  assert!(
+    donutbrowser_lib::proxy_storage::update_proxy_config(&outer),
+    "outer traffic-monitor config should remain writable"
+  );
+
+  let local_port = outer.local_port.ok_or("outer proxy has no local port")?;
+  let request = format!(
+    "POST {target_url} HTTP/1.1\r\nHost: {host_header}\r\nContent-Type: \
+     application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+    payload.len()
+  );
+  let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await?;
+  stream.write_all(request.as_bytes()).await?;
+  stream.write_all(payload).await?;
+  let mut response = Vec::new();
+  tokio::time::timeout(Duration::from_secs(30), stream.read_to_end(&mut response))
+    .await
+    .map_err(|_| "HTTP request through Xray-core timed out")??;
+
+  let header_end = response
+    .windows(4)
+    .position(|window| window == b"\r\n\r\n")
+    .map(|position| position + 4)
+    .ok_or("proxy returned an invalid HTTP response")?;
+  let status_line = String::from_utf8_lossy(&response[..header_end])
+    .lines()
+    .next()
+    .unwrap_or_default()
+    .to_string();
+  if !status_line.contains(" 200 ") {
+    return Err(
+      format!(
+        "HTTP request through Xray-core failed ({status_line}): {}",
+        String::from_utf8_lossy(&response[header_end..])
+      )
+      .into(),
+    );
+  }
+  let response_body = &response[header_end..];
+  if endpoint_is_loopback && std::env::var_os("DONUT_E2E_XRAY_TARGET_URL").is_none() {
+    assert_eq!(response_body, b"XRAY-REALITY-INTEGRATION-OK");
+  } else {
+    assert!(
+      !response_body.is_empty(),
+      "controlled Xray target returned an empty body"
+    );
+  }
+
+  let stats = tokio::time::timeout(Duration::from_secs(10), async {
+    loop {
+      if let Some(stats) = donutbrowser_lib::traffic_stats::load_traffic_stats(&profile_id) {
+        if stats.total_requests > 0 {
+          break stats;
+        }
+      }
+      sleep(Duration::from_millis(100)).await;
+    }
+  })
+  .await
+  .map_err(|_| "traffic monitor did not flush Xray session statistics")?;
+
+  assert_eq!(stats.total_requests, 1);
+  assert_eq!(stats.total_bytes_sent, payload.len() as u64);
+  assert_eq!(stats.total_bytes_received, response_body.len() as u64);
+  let domain = stats
+    .domains
+    .get(target_host)
+    .ok_or("traffic monitor did not attribute the target domain")?;
+  assert_eq!(domain.request_count, 1);
+  assert_eq!(domain.bytes_sent, payload.len() as u64);
+  assert_eq!(domain.bytes_received, response_body.len() as u64);
+
+  let outer_id = outer.id.clone();
+  let outer_pid = outer.pid;
+  let xray_id = xray_worker.id.clone();
+  let supervisor_pid = xray_worker.pid;
+  let xray_pid = xray_worker.xray_pid;
+  cleanup.cleanup().await;
+  if let Some(server) = local_target.take() {
+    server.abort();
+  }
+
+  assert!(donutbrowser_lib::proxy_storage::get_proxy_config(&outer_id).is_none());
+  assert!(donutbrowser_lib::xray_worker_storage::get_xray_worker_config(&xray_id).is_none());
+  assert!(!donutbrowser_lib::xray_worker_storage::xray_runtime_config_path(&xray_id).exists());
+  for pid in [outer_pid, supervisor_pid, xray_pid].into_iter().flatten() {
+    for _ in 0..20 {
+      if !donutbrowser_lib::proxy_storage::is_process_running(pid) {
+        break;
+      }
+      sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+      !donutbrowser_lib::proxy_storage::is_process_running(pid),
+      "worker process {pid} survived cleanup"
+    );
+  }
+
+  Ok(())
+}
+
 /// Test starting a local proxy without upstream proxy (DIRECT)
 #[tokio::test]
 #[serial]

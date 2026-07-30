@@ -155,7 +155,7 @@ export function SyncFollowerDialog({
                       return (
                         <div
                           key={profile.id}
-                          className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent"
+                          className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent hover:text-accent-foreground"
                           onClick={() => {
                             handleToggle(
                               profile.id,
@@ -182,7 +182,7 @@ export function SyncFollowerDialog({
                               <TooltipTrigger asChild>
                                 <Badge
                                   variant="outline"
-                                  className="shrink-0 border-warning/50 px-1.5 py-0 text-[10px] text-warning"
+                                  className="shrink-0 border-warning/50 px-1.5 py-0 text-[10px] text-warning-text"
                                 >
                                   {t("profiles.synchronizer.flakyBadge")}
                                 </Badge>

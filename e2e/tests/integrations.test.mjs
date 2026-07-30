@@ -4,6 +4,9 @@ import path from "node:path";
 import test from "node:test";
 import { withApp } from "../lib/app.mjs";
 
+const VLESS_URI =
+  "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@127.0.0.1:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.example.com&fp=chrome&pbk=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&sid=0123456789abcdef&spx=%2F&type=tcp&headerType=none#MCP";
+
 async function jsonRequest(
   url,
   { method = "GET", token, body, headers = {} } = {},
@@ -139,6 +142,49 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
       token: saved.api_token,
     });
     assert.equal(fetchedProxy.value.name, "REST Proxy");
+    const createdVless = await jsonRequest(`${base}/v1/proxies`, {
+      method: "POST",
+      token: saved.api_token,
+      body: {
+        name: "REST VLESS Reality",
+        proxy_settings: {
+          proxy_type: "vless",
+          host: "127.0.0.1",
+          port: 443,
+          username: null,
+          password: null,
+          vless_uri: VLESS_URI,
+        },
+      },
+    });
+    assert.equal(createdVless.response.status, 200);
+    assert.equal(createdVless.value.proxy_settings.vless_uri, VLESS_URI);
+    assert.equal(createdVless.value.proxy_settings.host, "127.0.0.1");
+    assert.equal(createdVless.value.proxy_settings.port, 443);
+    const vlessProxyId = createdVless.value.id;
+    const invalidVless = await jsonRequest(
+      `${base}/v1/proxies/${vlessProxyId}`,
+      {
+        method: "PUT",
+        token: saved.api_token,
+        body: {
+          proxy_settings: {
+            ...createdVless.value.proxy_settings,
+            vless_uri: VLESS_URI.replace("security=reality", "security=tls"),
+          },
+        },
+      },
+    );
+    assert.equal(invalidVless.response.status, 400);
+    assert.match(JSON.stringify(invalidVless.value), /VLESS_CONFIG_INVALID/);
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/proxies/${vlessProxyId}`, {
+          token: saved.api_token,
+        })
+      ).value.proxy_settings.vless_uri,
+      VLESS_URI,
+    );
     const imported = await jsonRequest(`${base}/v1/proxies/import`, {
       method: "POST",
       token: saved.api_token,
@@ -165,6 +211,15 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
     assert.equal(
       (
         await jsonRequest(`${base}/v1/proxies/${proxyId}`, {
+          method: "DELETE",
+          token: saved.api_token,
+        })
+      ).response.status,
+      204,
+    );
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/proxies/${vlessProxyId}`, {
           method: "DELETE",
           token: saved.api_token,
         })
@@ -257,6 +312,8 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
       "create_profile",
       "run_profile",
       "list_proxies",
+      "create_proxy",
+      "update_proxy",
       "get_page_content",
       "get_interactive_elements",
     ]) {
@@ -275,6 +332,80 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
     assert.equal(listed.response.status, 200);
     assert.equal(listed.value.error, undefined);
     assert.ok(listed.value.result);
+
+    const createdVless = await jsonRequest(`${base}/mcp/${config.token}`, {
+      method: "POST",
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          name: "create_proxy",
+          arguments: {
+            name: "MCP VLESS Reality",
+            proxy_type: "vless",
+            vless_uri: VLESS_URI,
+          },
+        },
+      },
+    });
+    assert.equal(createdVless.response.status, 200);
+    assert.equal(createdVless.value.error, undefined);
+    let vlessProxy = (await app.invoke("get_stored_proxies")).find(
+      (proxy) => proxy.name === "MCP VLESS Reality",
+    );
+    assert.ok(vlessProxy);
+    assert.equal(vlessProxy.proxy_settings.proxy_type, "vless");
+    assert.equal(vlessProxy.proxy_settings.vless_uri, VLESS_URI);
+
+    const updatedVless = await jsonRequest(`${base}/mcp/${config.token}`, {
+      method: "POST",
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/call",
+        params: {
+          name: "update_proxy",
+          arguments: {
+            proxy_id: vlessProxy.id,
+            name: "MCP VLESS Updated",
+            vless_uri: VLESS_URI,
+          },
+        },
+      },
+    });
+    assert.equal(updatedVless.value.error, undefined);
+    vlessProxy = (await app.invoke("get_stored_proxies")).find(
+      (proxy) => proxy.id === vlessProxy.id,
+    );
+    assert.equal(vlessProxy.name, "MCP VLESS Updated");
+
+    const invalidVless = await jsonRequest(`${base}/mcp/${config.token}`, {
+      method: "POST",
+      headers: mcpHeaders,
+      body: {
+        jsonrpc: "2.0",
+        id: 6,
+        method: "tools/call",
+        params: {
+          name: "update_proxy",
+          arguments: {
+            proxy_id: vlessProxy.id,
+            vless_uri: VLESS_URI.replace("security=reality", "security=tls"),
+          },
+        },
+      },
+    });
+    assert.match(invalidVless.value.error.message, /VLESS_CONFIG_INVALID/);
+    assert.equal(
+      (await app.invoke("get_stored_proxies")).find(
+        (proxy) => proxy.id === vlessProxy.id,
+      ).proxy_settings.vless_uri,
+      VLESS_URI,
+    );
+    await app.invoke("delete_stored_proxy", { proxyId: vlessProxy.id });
 
     const agents = await app.invoke("list_mcp_agents");
     assert.ok(agents.some((agent) => agent.id === "cursor"));

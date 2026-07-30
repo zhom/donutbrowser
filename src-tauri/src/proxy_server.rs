@@ -139,22 +139,28 @@ impl BlocklistMatcher {
   }
 }
 
-/// Wrapper stream that counts bytes read and written
+#[derive(Clone, Copy)]
+enum TrafficDirection {
+  Sent,
+  Received,
+}
+
+/// Wrapper stream that counts bytes successfully relayed to its destination.
 struct CountingStream<S> {
   inner: S,
-  bytes_read: Arc<AtomicU64>,
   bytes_written: Arc<AtomicU64>,
+  write_direction: TrafficDirection,
   // Resolved once per stream: the global tracker is fixed after init, so the
   // hot poll paths avoid taking the global RwLock on every packet
   tracker: Option<Arc<LiveTrafficTracker>>,
 }
 
 impl<S> CountingStream<S> {
-  fn new(inner: S) -> Self {
+  fn new(inner: S, write_direction: TrafficDirection) -> Self {
     Self {
       inner,
-      bytes_read: Arc::new(AtomicU64::new(0)),
       bytes_written: Arc::new(AtomicU64::new(0)),
+      write_direction,
       tracker: get_traffic_tracker(),
     }
   }
@@ -166,21 +172,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for CountingStream<S> {
     cx: &mut Context<'_>,
     buf: &mut ReadBuf<'_>,
   ) -> Poll<io::Result<()>> {
-    let filled_before = buf.filled().len();
-    let result = Pin::new(&mut self.inner).poll_read(cx, buf);
-    if let Poll::Ready(Ok(())) = &result {
-      let bytes_read = buf.filled().len() - filled_before;
-      if bytes_read > 0 {
-        self
-          .bytes_read
-          .fetch_add(bytes_read as u64, Ordering::Relaxed);
-        // Update global tracker - count as received (data coming into proxy)
-        if let Some(tracker) = &self.tracker {
-          tracker.add_bytes_received(bytes_read as u64);
-        }
-      }
-    }
-    result
+    Pin::new(&mut self.inner).poll_read(cx, buf)
   }
 }
 
@@ -193,9 +185,11 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for CountingStream<S> {
     let result = Pin::new(&mut self.inner).poll_write(cx, buf);
     if let Poll::Ready(Ok(n)) = &result {
       self.bytes_written.fetch_add(*n as u64, Ordering::Relaxed);
-      // Update global tracker - count as sent (data going out of proxy)
       if let Some(tracker) = &self.tracker {
-        tracker.add_bytes_sent(*n as u64);
+        match self.write_direction {
+          TrafficDirection::Sent => tracker.add_bytes_sent(*n as u64),
+          TrafficDirection::Received => tracker.add_bytes_received(*n as u64),
+        }
       }
     }
     result
@@ -2145,9 +2139,11 @@ pub(crate) async fn tunnel_streams(
   target_stream: BoxedAsyncStream,
   domain: String,
 ) {
-  // Wrap streams to count bytes transferred
-  let mut counting_client = CountingStream::new(client_stream);
-  let mut counting_target = CountingStream::new(target_stream);
+  // Count each payload byte once, when it is successfully written to its
+  // destination. Writes to the target are uploads; writes to the client are
+  // downloads.
+  let mut counting_client = CountingStream::new(client_stream, TrafficDirection::Received);
+  let mut counting_target = CountingStream::new(target_stream, TrafficDirection::Sent);
 
   log::trace!("Starting bidirectional tunnel");
 
@@ -2165,10 +2161,8 @@ pub(crate) async fn tunnel_streams(
   }
 
   // Log final byte counts and update domain stats
-  let final_sent = counting_client.bytes_read.load(Ordering::Relaxed)
-    + counting_target.bytes_written.load(Ordering::Relaxed);
-  let final_recv = counting_target.bytes_read.load(Ordering::Relaxed)
-    + counting_client.bytes_written.load(Ordering::Relaxed);
+  let final_sent = counting_target.bytes_written.load(Ordering::Relaxed);
+  let final_recv = counting_client.bytes_written.load(Ordering::Relaxed);
   log::trace!("Tunnel closed - sent: {final_sent} bytes, received: {final_recv} bytes");
 
   // Update domain-specific byte counts now that tunnel is complete
@@ -2512,6 +2506,123 @@ mod tests {
        fails the request instead of forwarding a short response"
     );
     feeder.abort();
+  }
+
+  #[tokio::test]
+  #[serial_test::serial]
+  async fn tunnel_traffic_counts_chunked_duplex_bytes_once_per_direction() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let _cache_guard = crate::app_dirs::set_test_cache_dir(temp_dir.path().to_path_buf());
+    let profile_id = "traffic-counting-profile";
+    let domain = "counting.example";
+    init_traffic_tracker("traffic-counting-proxy".into(), Some(profile_id.into()));
+    let tracker = get_traffic_tracker().unwrap();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (browser_result, accepted_result) =
+      tokio::join!(TcpStream::connect(addr), listener.accept());
+    let browser_stream = browser_result.unwrap();
+    let (proxy_client_stream, _) = accepted_result.unwrap();
+
+    // Keep the duplex buffer deliberately small so client-to-target writes
+    // must make partial progress while both directions remain active.
+    let (proxy_target_stream, target_stream) = tokio::io::duplex(11);
+    let tunnel = tokio::spawn(tunnel_streams(
+      proxy_client_stream,
+      Box::new(proxy_target_stream),
+      domain.into(),
+    ));
+
+    let upload_chunks = vec![vec![0x11; 3], vec![0x22; 31], vec![0x33; 8_193]];
+    let download_chunks = vec![vec![0x44; 5], vec![0x55; 47], vec![0x66; 5_003]];
+    let expected_upload = upload_chunks.concat();
+    let expected_download = download_chunks.concat();
+    let upload_len = expected_upload.len();
+    let download_len = expected_download.len();
+
+    let (browser_reader, mut browser_writer) = browser_stream.into_split();
+    let (target_reader, mut target_writer) = tokio::io::split(target_stream);
+    let transfer = async move {
+      let send_upload = async move {
+        for chunk in upload_chunks {
+          browser_writer.write_all(&chunk).await.unwrap();
+          tokio::task::yield_now().await;
+        }
+        browser_writer.flush().await.unwrap();
+        browser_writer
+      };
+      let send_download = async move {
+        for chunk in download_chunks {
+          target_writer.write_all(&chunk).await.unwrap();
+          tokio::task::yield_now().await;
+        }
+        target_writer.flush().await.unwrap();
+        target_writer
+      };
+      let receive_upload = async move {
+        let mut target_reader = target_reader;
+        let mut bytes = vec![0; upload_len];
+        target_reader.read_exact(&mut bytes).await.unwrap();
+        (target_reader, bytes)
+      };
+      let receive_download = async move {
+        let mut browser_reader = browser_reader;
+        let mut bytes = vec![0; download_len];
+        browser_reader.read_exact(&mut bytes).await.unwrap();
+        (browser_reader, bytes)
+      };
+
+      tokio::join!(send_upload, send_download, receive_upload, receive_download)
+    };
+
+    let (
+      mut browser_writer,
+      mut target_writer,
+      (target_reader, actual_upload),
+      (browser_reader, actual_download),
+    ) = tokio::time::timeout(std::time::Duration::from_secs(5), transfer)
+      .await
+      .expect("duplex transfer timed out");
+
+    assert_eq!(actual_upload, expected_upload);
+    assert_eq!(actual_download, expected_download);
+    assert!(
+      !tunnel.is_finished(),
+      "the tunnel should remain live until its peers close"
+    );
+    assert_eq!(
+      tracker.get_snapshot(),
+      (upload_len as u64, download_len as u64, 0),
+      "global counters must update in real time without double-counting"
+    );
+
+    let (browser_shutdown, target_shutdown) =
+      tokio::join!(browser_writer.shutdown(), target_writer.shutdown());
+    browser_shutdown.unwrap();
+    target_shutdown.unwrap();
+    drop((browser_writer, target_writer, browser_reader, target_reader));
+    tokio::time::timeout(std::time::Duration::from_secs(5), tunnel)
+      .await
+      .expect("tunnel did not close")
+      .expect("tunnel task panicked");
+
+    assert_eq!(
+      tracker.get_snapshot(),
+      (upload_len as u64, download_len as u64, 0),
+      "closing the tunnel must not add another copy of its traffic"
+    );
+    assert_eq!(
+      tracker.flush_to_disk().unwrap(),
+      Some((upload_len as u64, download_len as u64))
+    );
+
+    let stats = crate::traffic_stats::load_traffic_stats(profile_id).unwrap();
+    assert_eq!(stats.total_bytes_sent, upload_len as u64);
+    assert_eq!(stats.total_bytes_received, download_len as u64);
+    let domain_stats = stats.domains.get(domain).unwrap();
+    assert_eq!(domain_stats.bytes_sent, upload_len as u64);
+    assert_eq!(domain_stats.bytes_received, download_len as u64);
   }
 
   #[test]

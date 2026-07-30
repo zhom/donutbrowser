@@ -370,7 +370,7 @@ function ExtCell({
         <button
           type="button"
           disabled={isSaving}
-          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
+          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >
           <LuPuzzle className="size-3 shrink-0" />
           <span className="flex-1 truncate" title={label}>
@@ -457,7 +457,7 @@ function DnsCell({
           type="button"
           data-onborda="dns-blocklist"
           disabled={isSaving}
-          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
+          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
           title={
             level
               ? meta.t("profiles.table.dnsLevel", { level })
@@ -681,7 +681,7 @@ const TagsCell = React.memo<{
             "flex h-6 w-full cursor-pointer items-center gap-1 overflow-hidden rounded border-none bg-transparent px-2 py-1",
             isDisabled
               ? "cursor-not-allowed opacity-60"
-              : "cursor-pointer hover:bg-accent/50",
+              : "cursor-pointer hover:bg-muted",
           )}
           onClick={() => {
             if (!isDisabled) setOpenTagsEditorFor(profile.id);
@@ -894,7 +894,7 @@ const ProxyCellTrigger = React.memo<{
               "flex max-w-full min-w-0 items-center gap-2 rounded px-2 py-1",
               isDisabled
                 ? "pointer-events-none cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:bg-accent/50",
+                : "cursor-pointer hover:bg-muted",
             )}
           >
             {vpnBadge && (
@@ -1043,7 +1043,7 @@ const NoteCell = React.memo<{
                   "flex min-h-6 w-full min-w-0 items-center rounded border-none bg-transparent px-2 py-1 text-left",
                   isDisabled
                     ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-accent/50",
+                    : "cursor-pointer hover:bg-muted",
                 )}
                 onClick={() => {
                   if (!isDisabled) {
@@ -2362,7 +2362,7 @@ export function ProfilesDataTable({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <LuTriangleAlert className="size-4 text-warning" />
+                      <LuTriangleAlert className="size-4 text-warning-text" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -2390,7 +2390,7 @@ export function ProfilesDataTable({
                         canLaunch && "cursor-pointer",
                         isFollower && "border-accent",
                         isRunning &&
-                          "bg-destructive/10 text-destructive hover:bg-destructive/20",
+                          "bg-destructive/10 text-destructive-text hover:bg-destructive/20",
                       )}
                       onClick={() =>
                         isRunning
@@ -2611,7 +2611,7 @@ export function ProfilesDataTable({
                 "mr-auto h-6 max-w-full min-w-0 overflow-hidden rounded border-none bg-transparent px-2 py-1 text-left",
                 isCrossOsBlocked
                   ? "cursor-not-allowed opacity-60"
-                  : "cursor-pointer hover:bg-accent/50",
+                  : "cursor-pointer hover:bg-muted",
               )}
               onClick={() => {
                 if (isCrossOsBlocked) return;
@@ -3325,7 +3325,7 @@ export function ProfilesDataTable({
                         title={crossOsTitle}
                         style={{ height: `${ROW_HEIGHT}px` }}
                         className={cn(
-                          "overflow-visible border-0! hover:bg-accent/50",
+                          "overflow-visible border-0! hover:bg-muted",
                           rowIsCrossOs && "opacity-60",
                         )}
                       >
@@ -3514,7 +3514,7 @@ export function ProfilesDataTable({
             onClick={onBulkDelete}
             size="icon"
             variant="destructive"
-            className="border-destructive bg-destructive/50 hover:bg-destructive/70"
+            className="border-destructive bg-destructive hover:bg-destructive"
           >
             <LuTrash2 />
           </DataTableActionBarAction>

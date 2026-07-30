@@ -847,10 +847,11 @@ export function ImportProfileDialog({
                           <span
                             className={cn(
                               "shrink-0 text-xs font-medium",
-                              item.status === "imported" && "text-success",
+                              item.status === "imported" && "text-success-text",
                               item.status === "skipped" &&
                                 "text-muted-foreground",
-                              item.status === "failed" && "text-destructive",
+                              item.status === "failed" &&
+                                "text-destructive-text",
                             )}
                           >
                             {item.status === "imported" &&
@@ -864,7 +865,7 @@ export function ImportProfileDialog({
                             {item.name || item.source_path}
                           </span>
                           {item.error && (
-                            <span className="min-w-0 flex-1 truncate text-xs text-destructive">
+                            <span className="min-w-0 flex-1 truncate text-xs text-destructive-text">
                               {translateBackendError(t, new Error(item.error))}
                             </span>
                           )}

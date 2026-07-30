@@ -459,7 +459,13 @@
       "hostPortRequired": "Host và cổng là bắt buộc",
       "ssCipherRequired": "Cipher và mật khẩu là bắt buộc cho Shadowsocks",
       "selectType": "Chọn loại proxy",
-      "saveFailed": "Lưu proxy thất bại: {{error}}"
+      "saveFailed": "Lưu proxy thất bại: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "URI VLESS",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "Yêu cầu XTLS Vision và REALITY.",
+      "vlessUriRequired": "Nhập URI VLESS.",
+      "vlessUriInvalid": "Nhập URI VLESS hợp lệ có máy chủ và cổng."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "Cấu hình máy chủ MCP không khả dụng. Hãy khởi động lại máy chủ rồi thử lại.",
     "mcpAgentUnknown": "Ứng dụng MCP này không được hỗ trợ.",
     "mcpAgentInstallFailed": "Không thể thêm Donut Browser vào ứng dụng MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "Không thể xóa Donut Browser khỏi ứng dụng MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "Không thể xóa Donut Browser khỏi ứng dụng MCP: {{detail}}",
+    "vlessConfigInvalid": "URI VLESS không hợp lệ.",
+    "xrayUnavailable": "Xray-core không khả dụng trên hệ thống này.",
+    "xrayUnsupportedOs": "VLESS yêu cầu macOS 12 trở lên.",
+    "xrayStartFailed": "Không thể khởi động Xray-core."
   },
   "rail": {
     "profiles": "Profile",
@@ -2068,8 +2078,13 @@
     "title": "Giới thiệu",
     "version": "Phiên bản {{version}}",
     "portableBadge": "bản portable",
-    "licenseNotice": "Trình duyệt chống phát hiện mã nguồn mở, được cấp phép theo AGPL-3.0.",
-    "website": "Trang web"
+    "licenseNotice": "Trình duyệt chống phát hiện mã nguồn mở.",
+    "website": "Trang web",
+    "github": "GitHub",
+    "licenses": "Giấy phép",
+    "searchLicenses": "Tìm kiếm giấy phép…",
+    "noMatchingLicenses": "Không có giấy phép phù hợp.",
+    "openSource": "Xem mã nguồn của {{name}}"
   },
   "clearOnClose": {
     "label": "Xóa dữ liệu khi đóng",

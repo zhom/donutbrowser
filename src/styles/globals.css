@@ -32,6 +32,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -40,10 +41,13 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-text: var(--success-text);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-text: var(--warning-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -73,6 +77,7 @@
   --popover-foreground: oklch(0.141 0.005 285.823);
   --primary: oklch(0.21 0.006 285.885);
   --primary-foreground: oklch(0.985 0 0);
+  --primary-text: oklch(0.21 0.006 285.885);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.967 0.001 286.375);
@@ -81,10 +86,13 @@
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
+  --destructive-text: #b91c1c;
   --success: oklch(0.6 0.2 145);
   --success-foreground: oklch(0.985 0 0);
+  --success-text: #15753a;
   --warning: oklch(0.75 0.15 75);
   --warning-foreground: oklch(0.141 0.005 285.823);
+  --warning-text: #854d0e;
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -118,6 +126,7 @@
   --popover-foreground: #e4e4e4;
   --primary: #ffffff;
   --primary-foreground: #070707;
+  --primary-text: #ffffff;
   --secondary: #161616;
   --secondary-foreground: #e4e4e4;
   --muted: #161616;
@@ -126,10 +135,13 @@
   --accent-foreground: #ffffff;
   --destructive: #ec6a5e;
   --destructive-foreground: #070707;
+  --destructive-text: #ec6a5e;
   --success: #61c554;
   --success-foreground: #070707;
+  --success-text: #61c554;
   --warning: #f4be4f;
   --warning-foreground: #070707;
+  --warning-text: #f4be4f;
   --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.1);
   --ring: #6b6b6b;

@@ -109,9 +109,9 @@ export function VpnCheckButton({
               {isCurrentlyChecking ? (
                 <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
               ) : result?.is_valid ? (
-                <FiCheck className="size-3 text-success" />
+                <FiCheck className="size-3 text-success-text" />
               ) : result && !result.is_valid ? (
-                <span className="text-sm text-destructive">✕</span>
+                <span className="text-sm text-destructive-text">✕</span>
               ) : (
                 <FiCheck className="size-3" />
               )}
@@ -125,7 +125,7 @@ export function VpnCheckButton({
         ) : result?.is_valid ? (
           <div className="space-y-1">
             <p>{t("vpnCheck.tooltipValid")}</p>
-            <p className="text-xs text-primary-foreground/70">
+            <p className="text-xs text-primary-foreground">
               {t("vpnCheck.tooltipChecked", {
                 time: formatRelativeTime(result.timestamp),
               })}
@@ -134,7 +134,7 @@ export function VpnCheckButton({
         ) : result && !result.is_valid ? (
           <div>
             <p>{t("vpnCheck.tooltipInvalid")}</p>
-            <p className="text-xs text-primary-foreground/70">
+            <p className="text-xs text-primary-foreground">
               {t("vpnCheck.tooltipChecked", {
                 time: formatRelativeTime(result.timestamp),
               })}

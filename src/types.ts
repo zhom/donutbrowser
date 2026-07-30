@@ -1,9 +1,10 @@
 export interface ProxySettings {
-  proxy_type: string; // "http", "https", "socks4", "socks5", or "ss" (Shadowsocks)
+  proxy_type: string;
   host: string;
   port: number;
   username?: string;
   password?: string;
+  vless_uri?: string;
 }
 
 export interface TableSortingSettings {
@@ -545,6 +546,7 @@ export interface ParsedProxyLine {
   port: number;
   username?: string;
   password?: string;
+  vless_uri?: string;
   original_line: string;
 }
 

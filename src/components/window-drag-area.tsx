@@ -167,7 +167,7 @@ export function WindowDragArea() {
         onClick={() => {
           void handleClose();
         }}
-        className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive/90 hover:text-destructive-foreground"
+        className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
         aria-label={t("common.buttons.close")}
       >
         <svg

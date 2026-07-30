@@ -459,7 +459,13 @@
       "hostPortRequired": "Host e porta são obrigatórios",
       "ssCipherRequired": "Cifra e senha são obrigatórias para Shadowsocks",
       "selectType": "Selecione o tipo de proxy",
-      "saveFailed": "Falha ao salvar o proxy: {{error}}"
+      "saveFailed": "Falha ao salvar o proxy: {{error}}",
+      "vlessType": "VLESS · Vision · REALITY",
+      "vlessUri": "URI VLESS",
+      "vlessUriPlaceholder": "vless://…",
+      "vlessUriHint": "Requer XTLS Vision e REALITY.",
+      "vlessUriRequired": "Insira um URI VLESS.",
+      "vlessUriInvalid": "Insira um URI VLESS válido com host e porta."
     },
     "types": {
       "http": "HTTP",
@@ -1841,7 +1847,11 @@
     "mcpConfigurationUnavailable": "A configuração do servidor MCP não está disponível. Reinicie o servidor e tente novamente.",
     "mcpAgentUnknown": "Este cliente MCP não é compatível.",
     "mcpAgentInstallFailed": "Não foi possível adicionar o Donut Browser ao cliente MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "Não foi possível remover o Donut Browser do cliente MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "Não foi possível remover o Donut Browser do cliente MCP: {{detail}}",
+    "vlessConfigInvalid": "O URI VLESS é inválido.",
+    "xrayUnavailable": "O Xray-core não está disponível neste sistema.",
+    "xrayUnsupportedOs": "O VLESS requer macOS 12 ou posterior.",
+    "xrayStartFailed": "Não foi possível iniciar o Xray-core."
   },
   "rail": {
     "profiles": "Perfis",
@@ -2068,8 +2078,13 @@
     "title": "Sobre",
     "version": "Versão {{version}}",
     "portableBadge": "portátil",
-    "licenseNotice": "Navegador anti-detecção de código aberto, licenciado sob AGPL-3.0.",
-    "website": "Site"
+    "licenseNotice": "Navegador anti-detecção de código aberto.",
+    "website": "Site",
+    "github": "GitHub",
+    "licenses": "Licenças",
+    "searchLicenses": "Pesquisar licenças…",
+    "noMatchingLicenses": "Nenhuma licença encontrada.",
+    "openSource": "Ver o código-fonte de {{name}}"
   },
   "clearOnClose": {
     "label": "Limpar dados ao fechar",

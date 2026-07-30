@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  cp,
+  mkdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -69,6 +77,42 @@ async function cloneAppBundle(source, destination) {
   }
 }
 
+async function cacheDownloadedWayfern(app, projectRoot, version) {
+  if (process.env.DONUT_E2E_WAYFERN_PATH) return;
+  const destination = defaultWayfernPath(projectRoot);
+  if (existsSync(destination)) return;
+
+  const installDir = path.join(
+    app.dataRoot,
+    "data",
+    "binaries",
+    "wayfern",
+    version,
+  );
+  const source =
+    process.platform === "darwin"
+      ? path.join(installDir, "Wayfern.app")
+      : path.join(
+          installDir,
+          process.platform === "win32" ? "wayfern.exe" : "wayfern",
+        );
+  const staging = `${destination}.tmp-${process.pid}`;
+  await rm(staging, { recursive: true, force: true });
+  try {
+    if (process.platform === "darwin") {
+      await cloneAppBundle(source, staging);
+    } else {
+      await mkdir(path.dirname(staging), { recursive: true });
+      await copyFile(source, staging);
+      if (process.platform !== "win32") await chmod(staging, 0o755);
+    }
+    await rename(staging, destination);
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true });
+    if (!existsSync(destination)) throw error;
+  }
+}
+
 export async function seedWayfern(dataRoot, wayfern) {
   const installDir = path.join(
     dataRoot,
@@ -130,10 +174,20 @@ export async function prepareWayfern(app, projectRoot) {
     "No Wayfern build is published for this platform",
   );
   const version = current.versions[0];
-  await app.invoke("download_browser", {
-    browserStr: "wayfern",
-    version,
-  });
+  await app.session.setTimeouts({ script: 600_000 });
+  try {
+    await app.invoke(
+      "download_browser",
+      {
+        browserStr: "wayfern",
+        version,
+      },
+      620_000,
+    );
+  } finally {
+    await app.session.setTimeouts();
+  }
+  await cacheDownloadedWayfern(app, projectRoot, version);
   return { version, source: "published download" };
 }
 

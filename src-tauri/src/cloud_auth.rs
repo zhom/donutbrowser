@@ -973,6 +973,7 @@ impl CloudAuthManager {
           port: config.port,
           username: config.username,
           password: config.password,
+          vless_uri: None,
         };
         match PROXY_MANAGER.upsert_cloud_proxy(settings) {
           Ok(_) => {

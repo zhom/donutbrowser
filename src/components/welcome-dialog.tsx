@@ -316,7 +316,7 @@ export function WelcomeDialog({
 
               <dl className="flex flex-col gap-3">
                 <div className="flex items-start gap-3 rounded-lg border p-4">
-                  <LuHeart className="mt-0.5 size-4 shrink-0 text-success" />
+                  <LuHeart className="mt-0.5 size-4 shrink-0 text-success-text" />
                   <div className="flex flex-col gap-0.5 text-left">
                     <dt className="text-base/7 font-medium text-foreground sm:text-sm/6">
                       {t("welcome.license.personalTitle")}
@@ -331,7 +331,7 @@ export function WelcomeDialog({
                   <div className="flex flex-col gap-0.5 text-left">
                     <dt className="flex flex-wrap items-center gap-2 text-base/7 font-medium text-foreground sm:text-sm/6">
                       {t("welcome.license.commercialTitle")}
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary-text">
                         {t("welcome.license.trialBadge")}
                       </span>
                     </dt>
@@ -389,7 +389,7 @@ export function WelcomeDialog({
                   initial={{ opacity: 0, scale: 0.85, rotate: -8 }}
                   animate={{ opacity: 1, scale: 1, rotate: 0 }}
                   transition={panelTransition}
-                  className="flex size-12 items-center justify-center gap-1.5 rounded-full bg-primary/10 text-primary"
+                  className="flex size-12 items-center justify-center gap-1.5 rounded-full bg-primary/10 text-primary-text"
                   aria-hidden="true"
                 >
                   <LuMic className="size-4 shrink-0" />
@@ -445,7 +445,7 @@ export function WelcomeDialog({
               {setup.phase === "error" ? (
                 <>
                   <div className="flex flex-col items-center gap-2">
-                    <h2 className="flex items-center justify-center gap-2 text-2xl font-semibold tracking-tight text-balance text-destructive">
+                    <h2 className="flex items-center justify-center gap-2 text-2xl font-semibold tracking-tight text-balance text-destructive-text">
                       <LuTriangleAlert className="size-5 shrink-0" />
                       {t("welcome.ready.errorTitle")}
                     </h2>

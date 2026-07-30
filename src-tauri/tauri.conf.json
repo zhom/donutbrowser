@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
     "devUrl": "http://localhost:12341",
-    "beforeBuildCommand": "pnpm copy-proxy-binary:release && (test -d ../dist || pnpm build)",
+    "beforeBuildCommand": "pnpm copy-proxy-binary:release && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -30,7 +30,10 @@
     "active": true,
     "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
     "category": "Productivity",
-    "externalBin": ["binaries/donut-proxy"],
+    "externalBin": ["binaries/donut-proxy", "binaries/xray"],
+    "resources": {
+      "binaries/xray-LICENSE.txt": "licenses/Xray-core-LICENSE.txt"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import Color from "color";
+import { getDerivedThemeColors, THEMES } from "../../src/lib/themes.ts";
 import { withApp } from "../lib/app.mjs";
 
 const THEME_VARIABLES = [
@@ -31,34 +33,8 @@ const THEME_VARIABLES = [
   "--chart-5",
 ];
 
-const DRACULA_THEME = {
-  "--background": "#282a36",
-  "--foreground": "#f8f8f2",
-  "--card": "#44475a",
-  "--card-foreground": "#f8f8f2",
-  "--popover": "#44475a",
-  "--popover-foreground": "#f8f8f2",
-  "--primary": "#bd93f9",
-  "--primary-foreground": "#282a36",
-  "--secondary": "#8be9fd",
-  "--secondary-foreground": "#282a36",
-  "--muted": "#6272a4",
-  "--muted-foreground": "#f8f8f2",
-  "--accent": "#ff79c6",
-  "--accent-foreground": "#282a36",
-  "--destructive": "#ff5555",
-  "--destructive-foreground": "#f8f8f2",
-  "--success": "#50fa7b",
-  "--success-foreground": "#282a36",
-  "--warning": "#ffb86c",
-  "--warning-foreground": "#282a36",
-  "--border": "#6272a4",
-  "--chart-1": "#bd93f9",
-  "--chart-2": "#50fa7b",
-  "--chart-3": "#ff79c6",
-  "--chart-4": "#8be9fd",
-  "--chart-5": "#ffb86c",
-};
+const DRACULA_THEME = THEMES.find((theme) => theme.id === "dracula").colors;
+const AYU_LIGHT_THEME = THEMES.find((theme) => theme.id === "ayu-light").colors;
 
 async function dismissSurface(app) {
   await app.pressShortcut({ key: "Escape" });
@@ -105,6 +81,90 @@ async function waitForTheme(app, predicate, description) {
 function themeVariablesEqual(actual, expected) {
   return THEME_VARIABLES.every(
     (key) => actual[key]?.toLowerCase() === expected[key]?.toLowerCase(),
+  );
+}
+
+async function applyThemeForContrastAudit(app, theme) {
+  await app.execute(
+    `
+      const [colors, derived, mode] = arguments;
+      const root = document.documentElement;
+      root.classList.remove("light", "dark");
+      root.classList.add(mode);
+      for (const [key, value] of Object.entries({ ...colors, ...derived })) {
+        root.style.setProperty(key, value, "important");
+      }
+    `,
+    [theme.colors, getDerivedThemeColors(theme.colors), theme.mode],
+  );
+  await new Promise((resolve) => setTimeout(resolve, 200));
+}
+
+async function animatedTabContrastSnapshot(app) {
+  return app.execute(`
+    const rootStyle = getComputedStyle(document.documentElement);
+    const triggers = [
+      ...document.querySelectorAll('[data-slot="animated-tabs-trigger"]'),
+    ];
+    const active = triggers.find(
+      (trigger) => trigger.getAttribute("data-state") === "active",
+    );
+    const inactive = triggers.find(
+      (trigger) => trigger.getAttribute("data-state") === "inactive",
+    );
+    const content = (trigger) =>
+      [...(trigger?.children ?? [])].filter(
+        (child) =>
+          child.getAttribute("data-slot") !== "animated-tabs-indicator",
+      );
+    const activeContent = content(active);
+    const inactiveContent = content(inactive);
+    const indicator = active?.querySelector(
+      '[data-slot="animated-tabs-indicator"]',
+    );
+    return {
+      mode: document.documentElement.classList.contains("light")
+        ? "light"
+        : "dark",
+      background: rootStyle.getPropertyValue("--background").trim(),
+      accent: rootStyle.getPropertyValue("--accent").trim(),
+      accentForeground: rootStyle
+        .getPropertyValue("--accent-foreground")
+        .trim(),
+      mutedForeground: rootStyle
+        .getPropertyValue("--muted-foreground")
+        .trim(),
+      activeTitle: activeContent[0]
+        ? getComputedStyle(activeContent[0]).color
+        : null,
+      activeCount: activeContent[1]
+        ? getComputedStyle(activeContent[1]).color
+        : null,
+      activeBackground: indicator
+        ? getComputedStyle(indicator).backgroundColor
+        : null,
+      inactiveTitle: inactiveContent[0]
+        ? getComputedStyle(inactiveContent[0]).color
+        : null,
+      inactiveCount: inactiveContent[1]
+        ? getComputedStyle(inactiveContent[1]).color
+        : null,
+    };
+  `);
+}
+
+function assertColorEquals(actual, expected, description) {
+  assert.ok(actual, `${description} is missing`);
+  assert.equal(Color(actual).hex(), Color(expected).hex(), description);
+}
+
+function assertContrast(foreground, background, minimum, description) {
+  assert.ok(foreground, `${description} foreground is missing`);
+  assert.ok(background, `${description} background is missing`);
+  const ratio = Color(foreground).contrast(Color(background));
+  assert.ok(
+    ratio >= minimum,
+    `${description} is ${ratio.toFixed(2)}:1; expected at least ${minimum}:1`,
   );
 }
 
@@ -204,13 +264,15 @@ async function dragBackgroundColorPicker(app) {
   const pointerEvents = await app.execute(
     `return window.__donutE2eThemePointerEvents ?? [];`,
   );
-  assert.deepEqual(
-    pointerEvents.map((event) => event.type),
-    ["pointermove", "pointerdown", "pointermove", "pointerup"],
-  );
+  assert.equal(pointerEvents[0]?.type, "pointermove");
+  assert.equal(pointerEvents[1]?.type, "pointerdown");
+  assert.equal(pointerEvents.at(-1)?.type, "pointerup");
+  const dragMoves = pointerEvents.slice(2, -1);
+  assert.ok(dragMoves.length >= 1);
+  assert.ok(dragMoves.every((event) => event.type === "pointermove"));
   assert.match(pointerEvents[1].target, /cursor-pointer/);
-  assert.match(pointerEvents[2].target, /cursor-pointer/);
-  assert.equal(pointerEvents[2].buttons, 1);
+  assert.match(dragMoves.at(-1).target, /cursor-pointer/);
+  assert.equal(dragMoves.at(-1).buttons, 1);
   await app.waitFor(
     () =>
       app.execute(
@@ -271,6 +333,325 @@ test("all primary navigation buttons and sub-page tabs render and remain interac
     );
     assert.match(await app.bodyText(), /profile/i);
     await dismissSurface(app);
+  });
+});
+
+test("every custom theme keeps tabs, counts, group pills, and rail states readable", async () => {
+  await withApp("ui-theme-contrast", async (app) => {
+    await app.clickSelector('[aria-label="Extensions"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelectorAll('[data-slot="animated-tabs-trigger"]').length === 2;`,
+        ),
+      { description: "Extension tabs" },
+    );
+
+    for (const theme of THEMES) {
+      await applyThemeForContrastAudit(app, theme);
+      const snapshot = await animatedTabContrastSnapshot(app);
+      assert.equal(snapshot.mode, theme.mode, `${theme.id} appearance mode`);
+      assertColorEquals(
+        snapshot.activeBackground,
+        snapshot.accent,
+        `${theme.id} active tab background`,
+      );
+      for (const [label, color] of [
+        ["active tab title", snapshot.activeTitle],
+        ["active tab count", snapshot.activeCount],
+      ]) {
+        assertColorEquals(
+          color,
+          snapshot.accentForeground,
+          `${theme.id} ${label} token`,
+        );
+        assertContrast(
+          color,
+          snapshot.activeBackground,
+          4.5,
+          `${theme.id} ${label}`,
+        );
+      }
+      for (const [label, color] of [
+        ["inactive tab title", snapshot.inactiveTitle],
+        ["inactive tab count", snapshot.inactiveCount],
+      ]) {
+        assertColorEquals(
+          color,
+          snapshot.mutedForeground,
+          `${theme.id} ${label} token`,
+        );
+        assertContrast(color, snapshot.background, 4.5, `${theme.id} ${label}`);
+      }
+
+      await app.clickSelector(
+        '[data-slot="animated-tabs-trigger"][data-state="inactive"]',
+      );
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return Boolean(document.querySelector(
+              '[data-slot="animated-tabs-trigger"][data-state="active"] [data-slot="animated-tabs-indicator"]'
+            ));`,
+          ),
+        { description: `${theme.id} tab indicator after switching` },
+      );
+    }
+
+    await app.clickSelector('[aria-label="Groups"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector('[data-slot="group-summary-pill"]'));`,
+        ),
+      { description: "Profile groups summary pill" },
+    );
+
+    for (const theme of THEMES) {
+      await applyThemeForContrastAudit(app, theme);
+      const snapshot = await app.execute(`
+        const rootStyle = getComputedStyle(document.documentElement);
+        const pill = document.querySelector(
+          '[data-slot="group-summary-pill"]',
+        );
+        const count = pill?.querySelector(
+          '[data-slot="group-summary-count"]',
+        );
+        const title = pill?.firstElementChild;
+        const rail = document.querySelector('nav [aria-current="page"]');
+        return {
+          pillBackground: pill ? getComputedStyle(pill).backgroundColor : null,
+          pillTitle: title ? getComputedStyle(title).color : null,
+          pillCount: count ? getComputedStyle(count).color : null,
+          railBackground: rail
+            ? getComputedStyle(rail).backgroundColor
+            : null,
+          railForeground: rail ? getComputedStyle(rail).color : null,
+          accent: rootStyle.getPropertyValue("--accent").trim(),
+          accentForeground: rootStyle
+            .getPropertyValue("--accent-foreground")
+            .trim(),
+        };
+      `);
+      assertColorEquals(
+        snapshot.pillBackground,
+        snapshot.accent,
+        `${theme.id} group pill background`,
+      );
+      for (const [label, color] of [
+        ["group pill title", snapshot.pillTitle],
+        ["group pill count", snapshot.pillCount],
+      ]) {
+        assertColorEquals(
+          color,
+          snapshot.accentForeground,
+          `${theme.id} ${label} token`,
+        );
+        assertContrast(
+          color,
+          snapshot.pillBackground,
+          4.5,
+          `${theme.id} ${label}`,
+        );
+      }
+      assertContrast(
+        snapshot.railForeground,
+        snapshot.railBackground,
+        3,
+        `${theme.id} selected rail icon`,
+      );
+    }
+  });
+});
+
+test("VLESS proxy form keeps the share URI as one clear, validated input", async () => {
+  await withApp("ui-vless-proxy-form", async (app) => {
+    const uri =
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@vpn.example.com:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.example.com&fp=chrome&pbk=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&sid=0123456789abcdef&type=tcp#E2E";
+
+    await app.clickSelector('[aria-label="Network"]');
+    await app.waitForText("New proxy");
+    await app.clickSelector('[aria-label="New proxy"]');
+    await app.waitForText("Add Proxy");
+    await app.fillSelector("#proxy-name", "E2E VLESS");
+    await chooseSelectOption(app, "#proxy-type", "VLESS · Vision · REALITY");
+
+    assert.equal(
+      await app.execute(
+        `return document.querySelector("#proxy-vless-uri") instanceof HTMLTextAreaElement;`,
+      ),
+      true,
+    );
+    assert.equal(
+      await app.execute(
+        `return document.querySelector("#proxy-host") === null &&
+          document.querySelector("#proxy-port") === null &&
+          document.querySelector("#proxy-username") === null &&
+          document.querySelector("#proxy-password") === null;`,
+      ),
+      true,
+    );
+
+    await app.fillSelector(
+      "#proxy-vless-uri",
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@vpn.example.com",
+    );
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector("#proxy-vless-uri")?.getAttribute("aria-invalid") === "true";`,
+        ),
+      { description: "invalid VLESS endpoint feedback" },
+    );
+    assert.equal(
+      await app.execute(
+        `return [...document.querySelectorAll("[role='dialog'] button")]
+          .find((button) => button.textContent?.trim() === "Add Proxy")
+          ?.disabled === true;`,
+      ),
+      true,
+    );
+
+    await app.fillSelector("#proxy-vless-uri", uri);
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector("#proxy-vless-uri")?.getAttribute("aria-invalid") === "false";`,
+        ),
+      { description: "valid VLESS endpoint feedback" },
+    );
+    await app.clickTextIn('[role="dialog"]', "Add Proxy", {
+      roles: ["button"],
+    });
+    await app.waitForText("E2E VLESS");
+
+    const proxy = (await app.invoke("get_stored_proxies")).find(
+      (item) => item.name === "E2E VLESS",
+    );
+    assert.ok(proxy);
+    assert.equal(proxy.proxy_settings.proxy_type, "vless");
+    assert.equal(proxy.proxy_settings.host, "vpn.example.com");
+    assert.equal(proxy.proxy_settings.port, 443);
+    assert.equal(proxy.proxy_settings.username, null);
+    assert.equal(proxy.proxy_settings.password, null);
+    assert.match(proxy.proxy_settings.vless_uri, /^vless:\/\//);
+
+    await app.invoke("delete_stored_proxy", { proxyId: proxy.id });
+  });
+});
+
+test("About exposes a searchable, responsive third-party license inventory", async () => {
+  await withApp("ui-about-licenses", async (app) => {
+    await app.clickSelector('[aria-label="More"]');
+    await app.waitFor(
+      () =>
+        app.execute(`return Boolean(document.querySelector("[role='menu']"));`),
+      { description: "More menu" },
+    );
+    await app.clickText("About Donut Browser", {
+      exact: false,
+      roles: ["menuitem"],
+    });
+    await app.waitForText("Open-source anti-detect browser.");
+
+    const aboutText = await app.execute(
+      `return document.querySelector("[role='dialog']")?.textContent ?? "";`,
+    );
+    assert.doesNotMatch(aboutText, /AGPL-3\.0|licensed under/i);
+
+    await app.clickText("Licenses", { roles: ["button"] });
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector("[role='dialog'] [data-slot='dialog-title']")?.textContent === "Licenses";`,
+        ),
+      { description: "Licenses view" },
+    );
+
+    await app.session.command("POST", "/window/rect", {
+      width: 640,
+      height: 400,
+    });
+    const inventory = await app.execute(`
+      const dialog = document.querySelector("[role='dialog']");
+      const list = dialog?.querySelector(".scroll-fade");
+      const search = dialog?.querySelector('input[type="search"]');
+      const rows = [...(dialog?.querySelectorAll("li") ?? [])].map((row) =>
+        [...row.children].map((child) => (child.textContent || "").trim())
+      );
+      const rect = dialog?.getBoundingClientRect();
+      return {
+        activeSearch: document.activeElement === search,
+        rows,
+        scrollable: Boolean(list && list.scrollHeight > list.clientHeight),
+        bounds: rect
+          ? {
+              left: rect.left,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+              viewportWidth: innerWidth,
+              viewportHeight: innerHeight,
+            }
+          : null,
+      };
+    `);
+    assert.equal(inventory.activeSearch, true);
+    assert.equal(inventory.scrollable, true);
+    assert.ok(inventory.bounds);
+    assert.ok(inventory.bounds.left >= 0);
+    assert.ok(inventory.bounds.top >= 0);
+    assert.ok(inventory.bounds.right <= inventory.bounds.viewportWidth);
+    assert.ok(inventory.bounds.bottom <= inventory.bounds.viewportHeight);
+    assert.ok(
+      inventory.rows.some(
+        ([name, license]) => name === "Xray-core" && license === "MPL-2.0",
+      ),
+    );
+    assert.ok(
+      inventory.rows.some(
+        ([name, license]) =>
+          name === "Donut Browser" && license === "AGPL-3.0-only",
+      ),
+    );
+    assert.ok(
+      inventory.rows.some(
+        ([name, license]) =>
+          name === "tauri-plugin-opener" && license === "Apache-2.0 OR MIT",
+      ),
+    );
+    assert.ok(inventory.rows.every((row) => row.length === 2));
+
+    const search = await app.session.findCss('input[type="search"]');
+    await app.session.sendKeys(search, "xray");
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelectorAll("[role='dialog'] li").length === 1;`,
+        ),
+      { description: "license search result" },
+    );
+    assert.match(
+      await app.execute(
+        `return document.querySelector("[role='dialog'] li")?.textContent ?? "";`,
+      ),
+      /Xray-core.*MPL-2\.0/s,
+    );
+
+    await app.clickSelector('button[aria-label="Back"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector("[role='dialog'] [data-slot='dialog-title']")?.textContent === "About";`,
+        ),
+      { description: "About view after returning from licenses" },
+    );
+    assert.equal(
+      await app.execute(
+        `return document.activeElement?.textContent?.trim() === "Licenses";`,
+      ),
+      true,
+    );
   });
 });
 
@@ -500,6 +881,37 @@ test("preset and manually customized themes survive navigation and restart", asy
       async () =>
         JSON.stringify(await themeSnapshot(app)) === JSON.stringify(customized),
       { description: "manually customized theme after restart" },
+    );
+  });
+});
+
+test("a light custom preset keeps light component behavior after restart", async () => {
+  await withApp("ui-theme-custom-light", async (app) => {
+    await app.clickSelector('[aria-label="Settings"]');
+    await app.waitForText("Appearance");
+    await chooseSelectOption(app, "#theme-select", "Custom");
+    await chooseSelectOption(app, "#theme-preset-select", "Ayu Light");
+    await saveSettings(app);
+
+    const selected = await waitForTheme(
+      app,
+      (snapshot) =>
+        snapshot.mode === "light" &&
+        themeVariablesEqual(snapshot.inline, AYU_LIGHT_THEME) &&
+        themeVariablesEqual(snapshot.resolved, AYU_LIGHT_THEME),
+      "Ayu Light variables and light mode to render",
+    );
+    await assertThemeAcrossNavigation(app, selected);
+
+    await app.restart();
+    assert.deepEqual(
+      (await app.invoke("get_app_settings")).custom_theme,
+      AYU_LIGHT_THEME,
+    );
+    await app.waitFor(
+      async () =>
+        JSON.stringify(await themeSnapshot(app)) === JSON.stringify(selected),
+      { description: "Ayu Light preset after restart" },
     );
   });
 });

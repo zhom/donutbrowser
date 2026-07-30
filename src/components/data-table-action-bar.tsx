@@ -98,7 +98,7 @@ function DataTableActionBarAction({
       variant="secondary"
       size={size}
       className={cn(
-        "gap-1.5 border border-secondary bg-secondary/50 hover:bg-secondary/70 [&>svg]:size-3.5",
+        "gap-1.5 border border-secondary bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground [&>svg]:size-3.5",
         size === "icon" ? "size-7" : "h-7",
         className,
       )}
@@ -120,7 +120,7 @@ function DataTableActionBarAction({
       <TooltipTrigger asChild>{trigger}</TooltipTrigger>
       <TooltipContent
         sideOffset={6}
-        className="border bg-accent font-semibold text-foreground dark:bg-card [&>span]:hidden"
+        className="border bg-accent font-semibold text-accent-foreground [&>span]:hidden"
       >
         <p>{tooltip}</p>
       </TooltipContent>
@@ -161,7 +161,7 @@ function DataTableActionBarSelection<TData>({
         </TooltipTrigger>
         <TooltipContent
           sideOffset={10}
-          className="flex items-center gap-2 border bg-accent px-2 py-1 font-semibold text-foreground dark:bg-card [&>span]:hidden"
+          className="flex items-center gap-2 border bg-accent px-2 py-1 font-semibold text-accent-foreground [&>span]:hidden"
         >
           <p>{t("dataTableActionBar.clearSelection")}</p>
           <kbd className="rounded border bg-background px-1.5 py-px font-mono text-[0.7rem] font-normal text-foreground shadow-xs select-none">
