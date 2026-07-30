@@ -25,19 +25,19 @@
 
 ## Features
 
-- **Unlimited browser profiles**: each fully isolated with its own fingerprint, cookies, extensions, and data
-- **Anti-detect Chromium engine**: powered by [Wayfern](https://wayfern.com), which is privacy-focused Chromium fork that comes with advanced fingerprint spoofing which naturally hides information in a way that is not detected by Cloudflare, reCaptcha v3, and other browser fingerprinting and anti-bot services.
-- **DNS AdBlocker** - block ads, trackers, and other unwanted content with per-profile DNS blocking
-- **Proxy support**: HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
-- **VPN support**: WireGuard configs per profile
-- **Local API & MCP**: REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
-- **Profile groups**: organize profiles and apply bulk settings
-- **Import profiles**: migrate from Chrome, Edge, Brave, or other Chromium browsers
-- **Cookie & extension management**: import/export cookies, manage extensions per profile
-- **Default browser**: set Donut as your default browser and choose which profile opens each link
-- **Cloud sync**: sync profiles, proxies, and groups across devices (self-hostable)
-- **E2E encryption**: optional end-to-end encrypted sync with a password only you know
-- **Zero telemetry**: no tracking or device fingerprinting
+- Unlimited browser profiles: each fully isolated with its own fingerprint, cookies, extensions, and data
+- Anti-detect Chromium engine: powered by [Wayfern](https://wayfern.com), a privacy-focused Chromium fork whose fingerprint spoofing is not detected by Cloudflare, reCaptcha v3, or other browser fingerprinting and anti-bot services
+- DNS AdBlocker: block ads, trackers, and other unwanted content with per-profile DNS blocking
+- Proxy support: HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
+- VPN support: WireGuard configs per profile
+- Local API & MCP: REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
+- Profile groups: organize profiles and apply bulk settings
+- Import profiles: migrate from Chrome, Edge, Brave, or other Chromium browsers
+- Cookie & extension management: import/export cookies, manage extensions per profile
+- Default browser: set Donut as your default browser and choose which profile opens each link
+- Cloud sync: sync profiles, proxies, and groups across devices (self-hostable)
+- E2E encryption: optional end-to-end encrypted sync with a password only you know
+- Zero telemetry: no tracking or device fingerprinting
 
 ## Install
 
@@ -76,13 +76,13 @@ curl -fsSL https://donutbrowser.com/install.sh | sh
 <details>
 <summary>Troubleshooting AppImage</summary>
 
-If the AppImage segfaults on launch, install **libfuse2** (`sudo apt install libfuse2` / `yay -S libfuse2` / `sudo dnf install fuse-libs`), or bypass FUSE entirely:
+If the AppImage segfaults on launch, install libfuse2 (`sudo apt install libfuse2` / `yay -S libfuse2` / `sudo dnf install fuse-libs`), or bypass FUSE entirely:
 
 ```bash
 APPIMAGE_EXTRACT_AND_RUN=1 ./Donut.Browser_x.x.x_amd64.AppImage
 ```
 
-If that gives an EGL display error, try adding `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `GDK_BACKEND=x11` to the command above. If issues persist, the **.deb** / **.rpm** packages are a more reliable alternative.
+If that gives an EGL display error, add `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `GDK_BACKEND=x11` to the command above. If issues persist, the .deb and .rpm packages are more reliable.
 
 </details>
 
@@ -94,16 +94,18 @@ nix run github:zhom/donutbrowser#release-start
 
 ## Self-Hosting Sync
 
-Donut Browser supports syncing profiles, proxies, and groups across devices via a self-hosted sync server, which makes sync completely free. See the [Self-Hosting Donut Sync guide](https://donutbrowser.com/docs/self-hosting) for Docker-based setup instructions.
+Run your own sync server to sync profiles, proxies, and groups across devices for free. See the [Self-Hosting Donut Sync guide](https://donutbrowser.com/docs/self-hosting) for Docker-based setup instructions.
 
-## Development
+## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Donut Browser is built by the people who use it, and plenty of the most useful help involves no code at all.
 
-## Community
-
-- **Issues**: [GitHub Issues](https://github.com/zhom/donutbrowser/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
+- Tell other people about Donut. Word of mouth is how most users find the project, so talking about it is a real contribution.
+- Report bugs and request features in [GitHub Issues](https://github.com/zhom/donutbrowser/issues).
+- Answer questions in [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions).
+- Fix and improve translations in `src/i18n/locales`.
+- Write code. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+- Star the repo so more people see it.
 
 ## Star History
 
@@ -207,8 +209,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contact
 
-Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com).
+For urgent questions or security vulnerability reports, email [contact@donutbrowser.com](mailto:contact@donutbrowser.com).
 
 ## License
 
-This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the AGPL-3.0 License. See the [LICENSE](LICENSE) file for details.

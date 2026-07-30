@@ -14,11 +14,15 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  models: read
 
 env:
   # Single source of truth for the model used by both triage and composer.
-  TRIAGE_MODEL: z-ai/glm-5.1
-  COMPOSER_MODEL: z-ai/glm-5.1
+  # GitHub Models (free, billed to the repo's plan) takes `publisher/name` model
+  # ids. gpt-4.1 is the most capable model actually reachable on the free tier:
+  # the gpt-5 family returns unavailable_model and o3/o3-mini return 403.
+  TRIAGE_MODEL: openai/gpt-4.1
+  COMPOSER_MODEL: openai/gpt-4.1
 
 jobs:
   analyze-issue:
@@ -94,13 +98,13 @@ jobs:
           cat > /tmp/scope-and-pricing.md <<'EOF'
           # PROJECT SCOPE
 
-          - **Donut Browser** — this repo. A Tauri desktop launcher (Rust + Next.js) that
+          - Donut Browser: this repo. A Tauri desktop launcher (Rust + Next.js) that
             downloads, manages, and launches anti-detect browser profiles. In-scope for bug
             reports about profile management, downloads, sync, proxy, VPN, the launcher UI,
             its API, MCP server, and the bundled `donut-sync` self-hosted server.
-          - **Wayfern** — a Chromium fork maintained by zhom (the same maintainer). Wayfern
+          - Wayfern: a Chromium fork maintained by zhom (the same maintainer). Wayfern
             bugs are in-scope here unless they are obviously upstream Chromium issues.
-          - **Forks of Wayfern** (e.g. CloverLabsAI, VulpineOS) are NOT
+          - Forks of Wayfern (e.g. CloverLabsAI, VulpineOS) are NOT
             supported. Feature requests asking for them are out of scope.
 
           # PAID vs FREE FEATURES
@@ -115,9 +119,9 @@ jobs:
           - Profile Management API & MCP (list / create / launch / kill / config)
           - Cookie & Extension Management
           - Set as default browser
-          - **Profile sync IS FREE if the user self-hosts the `donut-sync` server**
+          - Profile sync IS FREE if the user self-hosts the `donut-sync` server
 
-          ## Pro ($16/mo) — adds:
+          ## Pro ($16/mo) adds:
           - Browser Manipulation API & MCP (`type_text`, `click_element`,
             `evaluate_javascript`, `screenshot`, `navigate`, etc.)
           - Cross-OS fingerprinting (e.g. macOS user appearing as Windows)
@@ -125,24 +129,24 @@ jobs:
           - 20 cloud profile backup (cloud sync via donutbrowser.com)
           - Commercial use license
 
-          ## Team ($80/mo) — adds:
+          ## Team ($80/mo) adds:
           - 100 cloud profile sync
           - Team collaboration, profile sharing, unlimited seats
 
           # ANTI-PATTERNS
 
-          - **Regression**: user explicitly mentions a previous version that worked
+          - Regression: user explicitly mentions a previous version that worked
             differently ("worked in 0.21", "went from 2 to 8 false positives"). Do NOT
             dismiss as "known issue" / "expected" / "false positive in Tauri apps". Ask
             which exact version was the last working one and what changed.
-          - **Fork-support request**: asks the maintainer to support an alternative
-            Wayfern fork. Acknowledge in one neutral sentence — do NOT call it
+          - Fork-support request: asks the maintainer to support an alternative
+            Wayfern fork. Acknowledge in one neutral sentence. Do NOT call it
             "clear", "reasonable", "well-thought-out", etc.
-          - **AI-generated / template-violating report**: report doesn't follow the
+          - AI-generated / template-violating report: report doesn't follow the
             template, may cite "official documentation" via context7, deepwiki, or any
             non-`donutbrowser.com` / non-`github.com/zhom` URL. The only authoritative
             sources are this GitHub repo and donutbrowser.com.
-          - **Speculation about internals**: never write a "Possible cause" / "Likely
+          - Speculation about internals: never write a "Possible cause" / "Likely
             cause" / "Root cause" section. Never cite internal file paths or line
             numbers. Never speculate about how subscription / paid-plan checks work.
 
@@ -150,27 +154,27 @@ jobs:
           # Easiest path for the user: Donut → Settings → Advanced → Copy logs
           # (puts the latest rotated log on the clipboard). If they prefer to
           # attach files directly, the active log is `DonutBrowser.log`; older
-          # rotated copies sit next to it (`DonutBrowser.log.YYYY-MM-DD-…`).
+          # rotated copies sit next to it (`DonutBrowser.log.YYYY-MM-DD-...`).
 
           - macOS:   `~/Library/Logs/com.donutbrowser/DonutBrowser.log`
           - Linux:   `~/.local/share/com.donutbrowser/logs/DonutBrowser.log`
           - Windows: `%LOCALAPPDATA%\com.donutbrowser\logs\DonutBrowser.log`
 
-          # KNOWN ERROR SIGNATURES (truth, not guesses — match these
+          # KNOWN ERROR SIGNATURES (truth, not guesses; match these
           # verbatim before suggesting anything else)
 
-          - **`CDP not ready after N attempts on port X: HTTP 5xx ...`** —
-            an HTTP 5xx (503 / 502) response from a freshly-launched
+          - `CDP not ready after N attempts on port X: HTTP 5xx ...`
+            An HTTP 5xx (503 / 502) response from a freshly-launched
             browser's `/json/version` endpoint always means *something on
             the loopback path is intercepting the connection*: a firewall,
             an antivirus web-shield (Kaspersky, Bitdefender, ESET, Avast /
             AVG, Yandex Protect on Windows; Little Snitch, LuLu on macOS),
             a VPN client that hijacks 127.0.0.1, or a corporate MDM /
             proxy (Zscaler, Cisco AnyConnect, Netskope). Chrome's
-            DevTools endpoint never returns 5xx itself — only synthetic
-            responses from interception layers do. **Do NOT speculate
+            DevTools endpoint never returns 5xx itself; only synthetic
+            responses from interception layers do. Do NOT speculate
             about Gatekeeper, first-launch verification, code signing, or
-            quarantine** — none of those cause a 5xx response, and
+            quarantine. None of those cause a 5xx response, and
             Gatekeeper never delays a launch long enough to surface as
             "120 attempts". Lead with: which AV / web-shield / firewall /
             VPN / MDM is installed, and ask the user to try with the AV's
@@ -180,9 +184,8 @@ jobs:
       - name: Build triage system prompt
         run: |
           # The static system prompt has apostrophes ("doesn't", "official docs"
-          # etc.) that collide with shell single-quoting if embedded directly in
-          # the jq filter. Build the full prompt to a file instead, then load it
-          # via --rawfile in the next step.
+          # etc.) that collide with shell single-quoting inside the jq filter.
+          # Build it to a file instead and load it via --rawfile in the next step.
           {
             cat <<'TRIAGE_HEAD'
           You are a triage classifier for the Donut Browser GitHub repo. Classify the issue and pick at most 20 source files for a composer to read.
@@ -218,9 +221,9 @@ jobs:
           } > /tmp/triage-system.txt
           wc -c /tmp/triage-system.txt
 
-      - name: Stage 1 — Triage and file selection
+      - name: Stage 1 (triage and file selection)
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # The triage call returns ONLY JSON. It classifies the issue and picks a
           # short list of source files for the composer to read.
@@ -240,8 +243,10 @@ jobs:
               ]
             }')
 
-          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GH_MODELS_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
@@ -296,7 +301,7 @@ jobs:
           # gymnastics. Build it to a file, load via --rawfile.
           {
             cat <<'COMPOSER_HEAD'
-          You are a triage assistant for Donut Browser. You compose ONE short GitHub comment in response to a freshly opened issue. The triage step has already classified the issue — use the classification verbatim, do not re-litigate it.
+          You are a triage assistant for Donut Browser. You compose ONE short GitHub comment in response to a freshly opened issue. The triage step has already classified the issue. Use the classification verbatim, do not re-litigate it.
 
           COMPOSER_HEAD
             cat /tmp/scope-and-pricing.md
@@ -304,16 +309,17 @@ jobs:
             cat /tmp/repo-context.txt
             cat <<'COMPOSER_TAIL'
 
-          # RULES — STRICT
+          # STRICT RULES
 
           ## Output shape
           - One sentence acknowledging the report.
-          - Then **Missing information** — only if there is anything actually missing. Skip this section if the user already provided OS, Donut Browser version, Wayfern version, repro steps, and any logs the situation calls for.
+          - Then a line reading exactly `Missing information:`, only if something is actually missing. Skip this section if the user already provided OS, Donut Browser version, Wayfern version, repro steps, and any logs the situation calls for.
           - Maximum 15 lines.
-          - No labels, no `Label:` line, no markdown headings other than `**Missing information**`.
+          - No labels, no `Label:` line, no markdown headings, and no bold. `Missing information:` is a plain line, not a heading.
           - No closing pleasantries ("please let me know", "happy to help", etc.).
+          - Write plainly: no em dashes, no emoji, no bold.
 
-          ## Forbidden — never do these
+          ## Forbidden: never do these
           - NEVER include a `Possible cause` / `Likely cause` / `Root cause` / `Probably caused by` section. You do not have enough information; speculation is always wrong here.
           - NEVER cite internal file paths or line numbers in the comment. Internal references rot and confuse non-developers.
           - NEVER reference how subscription / paid-plan checks work internally. You do not know whether the user's claim is correct.
@@ -339,8 +345,8 @@ jobs:
           If the issue body is not in English, write the comment in English (the maintainer reads English). The FIRST line must politely ask the user to communicate in English so the maintainer can help. Then continue with the normal triage response, in English.
 
           ## OS-specific log paths
-          Recommend Settings → Advanced → Copy logs first — it bundles the
-          latest rotated log onto the clipboard without the user hunting for
+          Recommend Settings → Advanced → Copy logs first. It puts the
+          latest rotated log on the clipboard without the user hunting for
           a directory. If they want to attach files directly, point at the
           path that matches `triage.operating_system`. The active log is
           always `DonutBrowser.log`; rotated copies sit next to it.
@@ -351,26 +357,26 @@ jobs:
 
           ## Known error signatures (apply BEFORE asking generic questions)
           If the issue body contains any of these, lead with the matching
-          response — do NOT speculate about other causes:
+          response. Do NOT speculate about other causes:
 
-          - `CDP not ready after N attempts on port X: HTTP 5xx ...` —
-            this is loopback interception by a firewall / antivirus
+          - `CDP not ready after N attempts on port X: HTTP 5xx ...`
+            This is loopback interception by a firewall / antivirus
             web-shield / VPN / MDM. Lead with that question (specifically:
             Kaspersky, Bitdefender, ESET, Avast/AVG, Yandex Protect on
             Windows; Little Snitch, LuLu, corporate MDM on macOS; any
             VPN). Suggest temporarily disabling the AV's web-shield
             component (NOT the whole AV) and retrying. Do NOT mention
             Gatekeeper, first-launch verification, code signing, or
-            quarantine — none of those cause an HTTP 5xx response, and
+            quarantine. None of those cause an HTTP 5xx response, and
             Gatekeeper never delays a launch long enough to produce a
             "120 attempts" failure.
           COMPOSER_TAIL
           } > /tmp/composer-system.txt
           wc -c /tmp/composer-system.txt
 
-      - name: Stage 2 — Compose response
+      - name: Stage 2 (compose response)
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           IS_FIRST_TIME: ${{ steps.check-first-time.outputs.is_first_time }}
         run: |
@@ -378,7 +384,7 @@ jobs:
           if [ "$IS_FIRST_TIME" = "true" ]; then
             # Use printf with %s so the apostrophe inside the string never has to
             # cross a shell single-quote boundary.
-            printf '%s' 'This is the first issue from this user — start the comment with "Thanks for opening your first issue!" on its own line.' > /tmp/greeting.txt
+            printf '%s' 'This is the first issue from this user. Start the comment with "Thanks for opening your first issue!" on its own line.' > /tmp/greeting.txt
           else
             : > /tmp/greeting.txt
           fi
@@ -409,8 +415,10 @@ jobs:
               ]
             }')
 
-          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GH_MODELS_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
@@ -423,9 +431,9 @@ jobs:
 
       - name: Strip forbidden sections (defense in depth)
         run: |
-          # Even with explicit prompt rules, LLMs sometimes still emit "Possible cause"
-          # and friends. Strip any such heading + its block. Also drop any stray
-          # `Label:` lines from earlier prompt iterations.
+          # LLMs still emit "Possible cause" and friends despite the prompt rules.
+          # Strip any such heading and its block, plus stray `Label:` lines left
+          # over from earlier prompt iterations.
           python3 - <<'EOF'
           import re
           path = '/tmp/ai-comment.txt'
@@ -518,7 +526,7 @@ jobs:
       - name: Analyze PR with AI
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -557,7 +565,7 @@ jobs:
               messages: [
                 {
                   role: "system",
-                  content: ("You are a code review bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nContributing guidelines:\n" + $contributing + "\n\nYou have access to sanitized head-revision contents for changed files and a sanitized diff. Use them to give a substantive review.\n\nReview this PR and produce a single comment. Format:\n\n1. One sentence summarizing what this PR does and whether the approach is sound.\n2. **Code review** - Specific observations about the actual code changes. Mention file names and what you see in the diff. Look for:\n   - Bugs or logic errors in the changed code\n   - Security issues (SQL injection, path traversal, XSS, command injection)\n   - Missing error handling or edge cases\n   - Breaking changes to existing APIs or behavior\n   - If UI text was added or changed, verify the key exists in every JSON file under src/i18n/locales/\n   - If Tauri commands were added or removed, verify e2e/coverage-map.mjs is updated exactly once per command\n3. **Suggestions** - Concrete improvements if any. Skip if the PR looks good.\n\nRules:\n- Be substantive. Review the actual diff, not just the description.\n- Do NOT nitpick formatting or style — the project has automated linting (biome + clippy + rustfmt).\n- Do NOT just summarize the PR description back to the user — they wrote it, they know what it says.\n- If the PR is good, say so briefly.\n- Never exceed 20 lines.")
+                  content: ("You are a code review bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nContributing guidelines:\n" + $contributing + "\n\nYou have access to sanitized head-revision contents for changed files and a sanitized diff. Use them to give a substantive review.\n\nReview this PR and produce a single comment. Format:\n\n1. One sentence summarizing what this PR does and whether the approach is sound.\n2. Code review: specific observations about the actual code changes. Mention file names and what you see in the diff. Look for:\n   - Bugs or logic errors in the changed code\n   - Security issues (SQL injection, path traversal, XSS, command injection)\n   - Missing error handling or edge cases\n   - Breaking changes to existing APIs or behavior\n   - If UI text was added or changed, verify the key exists in every JSON file under src/i18n/locales/\n   - If Tauri commands were added or removed, verify e2e/coverage-map.mjs is updated exactly once per command\n3. Suggestions: concrete improvements if any. Skip if the PR looks good.\n\nRules:\n- Be substantive. Review the actual diff, not just the description.\n- Do NOT nitpick formatting or style; the project has automated linting (biome + clippy + rustfmt).\n- Do NOT just summarize the PR description back to the user. They wrote it, they know what it says.\n- If the PR is good, say so briefly.\n- Never exceed 20 lines.\n- Write plainly: no em dashes, no emoji, no bold.")
                 },
                 {
                   role: "user",
@@ -575,8 +583,10 @@ jobs:
               ]
             }')
 
-          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GH_MODELS_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 

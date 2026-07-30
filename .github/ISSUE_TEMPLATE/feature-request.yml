@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include passwords, access tokens, personal information, or other secrets. Automated triage sends the issue title and body to OpenRouter after redacting common sensitive-data patterns.
+        Do not include passwords, access tokens, personal information, or other secrets. Automated triage sends the issue title and body to GitHub Models after redacting common sensitive-data patterns.
 
   - type: textarea
     id: description
@@ -31,5 +31,16 @@ body:
         - Nice to have
         - Would improve my workflow
         - Critical for my use case
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai-usage
+    attributes:
+      label: Did you use AI to write this request?
+      description: Using AI is allowed. Hiding it is not. Undisclosed AI requests get closed. Broken English is welcome here.
+      options:
+        - "No"
+        - "Yes, AI helped me write this"
     validations:
       required: true

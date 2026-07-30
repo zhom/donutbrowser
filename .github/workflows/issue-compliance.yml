@@ -7,13 +7,17 @@ on:
 permissions:
   contents: read
   issues: write
+  models: read
 
 env:
-  MODEL: z-ai/glm-5.1
+  # GitHub Models (free, billed to the repo's plan). gpt-4.1 is the most capable
+  # model reachable on the free tier: the gpt-5 family returns
+  # unavailable_model and o3/o3-mini return 403.
+  MODEL: openai/gpt-4.1
 
 jobs:
   check-compliance:
-    # Maintainers' own issues are exempt — they open quick tracking issues
+    # Maintainers' own issues are exempt: they open quick tracking issues
     # without the template on purpose. Everyone else is checked.
     if: >-
       github.repository == 'zhom/donutbrowser' &&
@@ -42,14 +46,14 @@ jobs:
           - Feature Request (description + verification checkbox)
           - Question (free form)
 
-          ## Compliance — flag NON-compliant ONLY when at least one of these is true
+          ## Compliance: flag NON-compliant ONLY when at least one of these is true
           - The issue body is empty or contains only placeholder text from the template
           - The issue is an obvious AI-generated wall of text with no real specifics
           - A bug report has no reproduction information or no error description
           - A feature request gives no use case at all
           - The author left required fields empty (Operating System, Donut Browser version, Which browser is affected, Steps to reproduce on bug reports)
 
-          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative — a non-compliant verdict closes the issue, so only flag a genuine template violation.
+          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative. A non-compliant verdict closes the issue, so only flag a genuine template violation.
 
           ## Output schema
           {
@@ -61,9 +65,9 @@ jobs:
           {"is_compliant": true, "non_compliance_reasons": []}
           PROMPT
 
-      - name: Call OpenRouter
+      - name: Call GitHub Models
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PAYLOAD=$(jq -n \
             --arg model "$MODEL" \
@@ -80,8 +84,10 @@ jobs:
               response_format: { type: "json_object" }
             }')
 
-          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GH_MODELS_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
@@ -109,11 +115,11 @@ jobs:
           if not compliant:
               parts.append("This issue was automatically closed because it doesn't follow our [issue templates](../issues/new/choose).")
               parts.append('')
-              parts.append('**What was missing:**')
+              parts.append('What was missing:')
               for reason in reasons:
                   parts.append(f'- {reason}')
               parts.append('')
-              parts.append('If this is a real bug or feature request, please open a new issue using the **Bug Report** or **Feature Request** template and fill in the required fields. Issues that ignore the template are not triaged.')
+              parts.append('If this is a real bug or feature request, open a new issue using the Bug Report or Feature Request template and fill in the required fields. Issues that ignore the template are not triaged.')
 
           comment = '\n'.join(parts).strip()
           open('/tmp/comment.md', 'w').write(comment)

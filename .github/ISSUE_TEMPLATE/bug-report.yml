@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include passwords, access tokens, proxy credentials, personal information, or other secrets. Automated triage sends the issue title and body to OpenRouter after removing the logs/screenshots field and redacting common sensitive-data patterns.
+        Do not include passwords, access tokens, proxy credentials, personal information, or other secrets. Automated triage sends the issue title and body to GitHub Models after removing the logs/screenshots field and redacting common sensitive-data patterns.
 
   - type: textarea
     id: description
@@ -63,3 +63,14 @@ body:
       placeholder: Paste logs here or drag screenshots
     validations:
       required: false
+
+  - type: dropdown
+    id: ai-usage
+    attributes:
+      label: Did you use AI to write this report?
+      description: Using AI is allowed. Hiding it is not. Undisclosed AI reports get closed. Broken English is welcome here.
+      options:
+        - "No"
+        - "Yes, AI helped me write this"
+    validations:
+      required: true
