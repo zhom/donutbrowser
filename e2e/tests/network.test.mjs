@@ -436,6 +436,12 @@ async function createXrayProfile(app, version) {
   });
 }
 
+// Matches a whole Xray-core access log line whose destination is exactly
+// api.ipify.org:443 ("... accepted tcp:api.ipify.org:443 [outbound]"). The
+// leading delimiter keeps a lookalike host such as notapi.ipify.org:443 from
+// passing the assertion.
+const XRAY_ACCESS_LOG_TARGET = /^.*[\s:]api\.ipify\.org:443(?:\s.*)?$/;
+
 test("VLESS Reality persists, imports, routes through Xray-core, records traffic, and cleans up", async () => {
   const vlessUri = process.env.DONUT_E2E_VLESS_URI;
   const accessLog = process.env.DONUT_E2E_XRAY_ACCESS_LOG;
@@ -654,9 +660,9 @@ test("VLESS Reality persists, imports, routes through Xray-core, records traffic
 
     await app.waitFor(
       async () =>
-        (await readFile(accessLog, "utf8").catch(() => "")).includes(
-          "api.ipify.org:443",
-        ),
+        (await readFile(accessLog, "utf8").catch(() => ""))
+          .split("\n")
+          .some((line) => XRAY_ACCESS_LOG_TARGET.test(line)),
       {
         timeoutMs: 15_000,
         description: "request in Xray-core server access log",

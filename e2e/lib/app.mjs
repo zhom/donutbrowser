@@ -485,7 +485,7 @@ export class AppSession {
       // The validated response is intentionally persisted in an isolated test directory.
       await writeFile(
         path.join(this.root, "artifacts", `${safe}.png`),
-        artifact, // codeql[js/http-to-file-access]
+        artifact,
       );
     } catch {
       // Best-effort diagnostics must never hide the original test failure.
@@ -495,7 +495,7 @@ export class AppSession {
       // Escaping makes the saved HTML inert while preserving it for diagnostics.
       await writeFile(
         path.join(this.root, "artifacts", `${safe}.html`),
-        artifact, // codeql[js/http-to-file-access]
+        artifact,
       );
     } catch {
       // Best-effort diagnostics must never hide the original test failure.

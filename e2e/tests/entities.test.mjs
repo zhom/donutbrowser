@@ -364,10 +364,20 @@ test("extensions, extension groups, VPN storage, DNS rules, and event-backed ass
       allowlistMode: false,
     });
     assert.deepEqual(dns.block_domains, ["ads.example.com", "tracker.example"]);
+    assert.deepEqual(dns.allow_domains, ["safe.example"]);
     const textExport = await app.invoke("export_custom_dns_rules", {
       format: "txt",
     });
-    assert.match(textExport, /ads\.example\.com/);
+    assert.equal(
+      textExport,
+      [
+        `! source: ${process.env.DONUT_E2E_FIXTURE_URL}/dns.txt`,
+        "@@safe.example",
+        "ads.example.com",
+        "tracker.example",
+        "",
+      ].join("\n"),
+    );
     await app.invoke("import_custom_dns_rules", {
       format: "txt",
       content: "||malware.example^\n@@||allowed.example^\n",

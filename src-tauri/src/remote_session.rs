@@ -74,11 +74,12 @@ pub fn classify_backend_status(status: u16, body: &str) -> RemoteSessionError {
 
 /// Build the idempotency key for one launch attempt.
 ///
-/// Derived from the profile and a caller-supplied nonce rather than random, so
-/// a retry of the SAME user action de-duplicates while a genuinely new launch
-/// does not.
-pub fn idempotency_key(profile_id: &str, nonce: &str) -> String {
-  format!("run-remote:{profile_id}:{nonce}")
+/// Derived from the profile and a caller-supplied attempt id rather than
+/// random, so a retry of the SAME user action de-duplicates while a genuinely
+/// new launch does not. The attempt id is a plain uniqueness token, not a
+/// cryptographic value.
+pub fn idempotency_key(profile_id: &str, attempt: &str) -> String {
+  format!("run-remote:{profile_id}:{attempt}")
 }
 
 /// Ask donutbrowser-infra to start a remote session for this profile.
@@ -224,9 +225,9 @@ mod tests {
 
   #[test]
   fn idempotency_key_is_stable_for_one_attempt_and_distinct_across_attempts() {
-    let a = idempotency_key("p1", "nonce-1");
-    assert_eq!(a, idempotency_key("p1", "nonce-1"));
-    assert_ne!(a, idempotency_key("p1", "nonce-2"));
-    assert_ne!(a, idempotency_key("p2", "nonce-1"));
+    let a = idempotency_key("p1", "attempt-1");
+    assert_eq!(a, idempotency_key("p1", "attempt-1"));
+    assert_ne!(a, idempotency_key("p1", "attempt-2"));
+    assert_ne!(a, idempotency_key("p2", "attempt-1"));
   }
 }

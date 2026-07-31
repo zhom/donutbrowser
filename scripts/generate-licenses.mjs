@@ -152,12 +152,17 @@ export function prepareLicenseInventory(entries) {
 }
 
 function commandOutput(command, args) {
-  const executable =
-    process.platform === "win32" && command === "pnpm" ? "pnpm.cmd" : command;
-  return execFileSync(executable, args, {
+  // pnpm ships only a `pnpm.cmd` batch shim on Windows, and Node refuses to
+  // spawn batch files without a shell (CVE-2024-27980), so `execFileSync`
+  // fails with EINVAL there. Every argument below is a literal from this file,
+  // so routing that one call through cmd.exe interpolates nothing.
+  const needsShell = process.platform === "win32" && command === "pnpm";
+  return execFileSync(needsShell ? "pnpm.cmd" : command, args, {
     cwd: PROJECT_ROOT,
     encoding: "utf8",
     maxBuffer: MAX_COMMAND_OUTPUT,
+    shell: needsShell,
+    windowsHide: true,
   });
 }
 
