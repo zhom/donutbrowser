@@ -72,6 +72,7 @@ mod proxy_manager;
 pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
+mod remote_session;
 mod settings_manager;
 pub mod socks5_local;
 pub mod sync;

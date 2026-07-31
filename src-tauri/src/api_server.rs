@@ -40,6 +40,49 @@ pub struct ApiProfile {
   pub proxy_bypass_rules: Vec<String>,
   pub vpn_id: Option<String>,
   pub clear_on_close: bool,
+  /// Cloud sync mode: `"Disabled"`, `"Regular"` or `"Encrypted"`.
+  /// Settable via `PUT /v1/profiles/{id}`; exposed here so a caller can read
+  /// back what it set, and so a remote-launch caller can tell whether the
+  /// profile is actually available in cloud storage.
+  pub sync_mode: String,
+  /// Convenience form of `sync_mode` — true for Regular or Encrypted.
+  pub cloud_sync_enabled: bool,
+  /// OS the profile was created on (`"macos"`, `"windows"`, `"linux"`).
+  /// `null` when neither `host_os` nor the browser config records one.
+  pub host_os: Option<String>,
+  /// True when the profile belongs to a different OS than this machine.
+  /// Such a profile cannot be launched locally, and must only ever run on a
+  /// remote host of its own OS — Chromium profile state is OS-specific.
+  pub is_cross_os: bool,
+}
+
+impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
+  /// Single conversion for every profile-returning route. Previously open-coded
+  /// at three call sites, which is how `sync_mode` came to be settable but not
+  /// readable: a field added to the struct had to be remembered three times.
+  fn from(profile: &crate::profile::types::BrowserProfile) -> Self {
+    Self {
+      id: profile.id.to_string(),
+      name: profile.name.clone(),
+      browser: profile.browser.clone(),
+      version: profile.version.clone(),
+      proxy_id: profile.proxy_id.clone(),
+      launch_hook: profile.launch_hook.clone(),
+      process_id: profile.process_id,
+      last_launch: profile.last_launch,
+      release_type: profile.release_type.clone(),
+      group_id: profile.group_id.clone(),
+      tags: profile.tags.clone(),
+      is_running: profile.process_id.is_some(),
+      proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
+      vpn_id: profile.vpn_id.clone(),
+      clear_on_close: profile.clear_on_close,
+      sync_mode: format!("{:?}", profile.sync_mode),
+      cloud_sync_enabled: profile.is_sync_enabled(),
+      host_os: profile.resolved_os().map(|os| os.to_string()),
+      is_cross_os: profile.is_cross_os(),
+    }
+  }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -213,6 +256,22 @@ struct RunProfileResponse {
   profile_id: String,
   remote_debugging_port: u16,
   headless: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RunRemoteRequest {
+  /// Optional URL to open once the remote browser is up.
+  pub url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RunRemoteResponse {
+  pub profile_id: String,
+  /// Remote session id, for polling or closing the session.
+  pub session_id: String,
+  /// Operating system the session was scheduled onto — always the profile's own.
+  pub platform: String,
+  pub status: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -395,6 +454,8 @@ struct ImportProxiesResponse {
     DownloadBrowserRequest,
     DownloadBrowserResponse,
     RunProfileResponse,
+    RunRemoteRequest,
+    RunRemoteResponse,
     RunProfileRequest,
     BatchRunRequest,
     BatchRunResult,
@@ -511,6 +572,7 @@ impl ApiServer {
       .routes(routes!(get_profiles, create_profile))
       .routes(routes!(get_profile, update_profile, delete_profile))
       .routes(routes!(run_profile))
+      .routes(routes!(run_profile_remote))
       .routes(routes!(open_url_in_profile))
       .routes(routes!(kill_profile))
       .routes(routes!(batch_run_profiles))
@@ -860,26 +922,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
   match profile_manager.list_profiles() {
     Ok(profiles) => {
-      let api_profiles: Vec<ApiProfile> = profiles
-        .iter()
-        .map(|profile| ApiProfile {
-          id: profile.id.to_string(),
-          name: profile.name.clone(),
-          browser: profile.browser.clone(),
-          version: profile.version.clone(),
-          proxy_id: profile.proxy_id.clone(),
-          launch_hook: profile.launch_hook.clone(),
-          process_id: profile.process_id,
-          last_launch: profile.last_launch,
-          release_type: profile.release_type.clone(),
-          group_id: profile.group_id.clone(),
-          tags: profile.tags.clone(),
-          is_running: profile.process_id.is_some(), // Simple check based on process_id
-          proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
-          vpn_id: profile.vpn_id.clone(),
-          clear_on_close: profile.clear_on_close,
-        })
-        .collect();
+      let api_profiles: Vec<ApiProfile> = profiles.iter().map(ApiProfile::from).collect();
 
       Ok(Json(ApiProfilesResponse {
         profiles: api_profiles,
@@ -916,23 +959,7 @@ async fn get_profile(
     Ok(profiles) => {
       if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == id) {
         Ok(Json(ApiProfileResponse {
-          profile: ApiProfile {
-            id: profile.id.to_string(),
-            name: profile.name.clone(),
-            browser: profile.browser.clone(),
-            version: profile.version.clone(),
-            proxy_id: profile.proxy_id.clone(),
-            launch_hook: profile.launch_hook.clone(),
-            process_id: profile.process_id,
-            last_launch: profile.last_launch,
-            release_type: profile.release_type.clone(),
-            group_id: profile.group_id.clone(),
-            tags: profile.tags.clone(),
-            is_running: profile.process_id.is_some(), // Simple check based on process_id
-            proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
-            vpn_id: profile.vpn_id.clone(),
-            clear_on_close: profile.clear_on_close,
-          },
+          profile: ApiProfile::from(profile),
         }))
       } else {
         Err(StatusCode::NOT_FOUND)
@@ -1081,23 +1108,7 @@ async fn create_profile(
       }
 
       Ok(Json(ApiProfileResponse {
-        profile: ApiProfile {
-          id: profile.id.to_string(),
-          name: profile.name,
-          browser: profile.browser,
-          version: profile.version,
-          proxy_id: profile.proxy_id,
-          launch_hook: profile.launch_hook,
-          process_id: profile.process_id,
-          last_launch: profile.last_launch,
-          release_type: profile.release_type,
-          group_id: profile.group_id,
-          tags: profile.tags,
-          is_running: false,
-          proxy_bypass_rules: profile.proxy_bypass_rules,
-          vpn_id: profile.vpn_id,
-          clear_on_close: profile.clear_on_close,
-        },
+        profile: ApiProfile::from(&profile),
       }))
     }
     Err(e) => Err((
@@ -2141,6 +2152,111 @@ async fn run_profile(
   }
 }
 
+// API Handler - Launch this profile on a REMOTE VM of its own operating system
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/run-remote",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = RunRemoteRequest,
+  responses(
+    (status = 200, description = "Remote session started", body = RunRemoteResponse),
+    (status = 400, description = "Profile does not have cloud sync enabled"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "Profile is locked by another session"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "No remote capacity for this operating system"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn run_profile_remote(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+  Json(request): Json<RunRemoteRequest>,
+) -> Result<Json<RunRemoteResponse>, (StatusCode, String)> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .can_use_browser_automation()
+    .await
+  {
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
+  }
+
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(manager_error_response)?;
+  let profile = profiles
+    .iter()
+    .find(|p| p.id.to_string() == id)
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
+
+  // The profile must exist in cloud storage before a remote host can open it —
+  // the VM pulls it from donut-sync, and a profile that has never synced would
+  // launch an empty browser and then push that emptiness back over the real one.
+  if let Err(reason) = remote_launch_precondition(profile) {
+    return Err((StatusCode::BAD_REQUEST, reason));
+  }
+
+  // Deliberately NO is_cross_os() guard here. Local /run refuses a foreign
+  // profile because this machine is the wrong OS; running it remotely on a host
+  // of its OWN OS is precisely what this endpoint exists for.
+  let outcome =
+    crate::remote_session::start_remote_session(state.app_handle.clone(), profile, request.url)
+      .await
+      .map_err(remote_session_error_response)?;
+
+  Ok(Json(RunRemoteResponse {
+    profile_id: profile.id.to_string(),
+    session_id: outcome.session_id,
+    platform: outcome.platform,
+    status: outcome.status,
+  }))
+}
+
+/// Whether a profile may be launched on a remote host.
+///
+/// Extracted so the rule is unit-testable without a running app: it is the one
+/// gate between "the user asked" and "a browser opens somewhere else holding
+/// their cookies".
+pub fn remote_launch_precondition(
+  profile: &crate::profile::types::BrowserProfile,
+) -> Result<(), String> {
+  if !profile.is_sync_enabled() {
+    return Err(
+      "profile does not have cloud sync enabled; a remote host has no way to \
+       obtain it"
+        .to_string(),
+    );
+  }
+  if profile.resolved_os().is_none() {
+    return Err(
+      "profile has no recorded operating system, so it cannot be scheduled \
+       onto a matching host"
+        .to_string(),
+    );
+  }
+  Ok(())
+}
+
+fn remote_session_error_response(
+  err: crate::remote_session::RemoteSessionError,
+) -> (StatusCode, String) {
+  use crate::remote_session::RemoteSessionError;
+  match err {
+    RemoteSessionError::NoCapacity(m) => (StatusCode::SERVICE_UNAVAILABLE, m),
+    RemoteSessionError::Conflict(m) => (StatusCode::CONFLICT, m),
+    RemoteSessionError::NotAuthorised(m) => (StatusCode::PAYMENT_REQUIRED, m),
+    RemoteSessionError::Other(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
+  }
+}
+
 // API Handler - Open URL in existing browser
 #[utoipa::path(
   post,
@@ -2660,6 +2776,111 @@ async fn check_browser_downloaded(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::profile::types::{BrowserProfile, SyncMode};
+
+  fn profile_with(sync_mode: SyncMode, host_os: Option<&str>) -> BrowserProfile {
+    BrowserProfile {
+      id: uuid::Uuid::nil(),
+      name: "p".to_string(),
+      browser: "wayfern".to_string(),
+      version: "latest".to_string(),
+      sync_mode,
+      host_os: host_os.map(|s| s.to_string()),
+      ..Default::default()
+    }
+  }
+
+  // Cloud sync has been settable through PUT /v1/profiles/{id} but was absent
+  // from every profile RESPONSE, so a caller could turn it on and never
+  // confirm it. A remote-launch caller must be able to see this before it can
+  // decide whether the profile exists in cloud storage at all.
+  // /run-remote exists precisely so a profile can run on a host of ITS OWN OS
+  // when this machine is the wrong one. The gate is cloud sync: a remote host
+  // obtains the profile from donut-sync, so a profile that has never synced
+  // would launch an empty browser and push that emptiness over the real one.
+  #[test]
+  fn remote_launch_requires_cloud_sync() {
+    let err = remote_launch_precondition(&profile_with(SyncMode::Disabled, Some("macos")))
+      .expect_err("a non-synced profile must be refused");
+    assert!(err.contains("cloud sync"), "unhelpful message: {err}");
+
+    for mode in [SyncMode::Regular, SyncMode::Encrypted] {
+      assert!(
+        remote_launch_precondition(&profile_with(mode, Some("macos"))).is_ok(),
+        "a synced profile must be allowed"
+      );
+    }
+  }
+
+  #[test]
+  fn remote_launch_requires_a_known_operating_system() {
+    // Without one there is no way to pick a matching host, and guessing would
+    // be the cross-OS mismatch this whole design exists to prevent.
+    assert!(remote_launch_precondition(&profile_with(SyncMode::Regular, None)).is_err());
+  }
+
+  #[test]
+  fn remote_launch_allows_a_cross_os_profile() {
+    let host = crate::profile::types::get_host_os();
+    let other = if host == "windows" {
+      "macos"
+    } else {
+      "windows"
+    };
+    let foreign = profile_with(SyncMode::Regular, Some(other));
+
+    assert!(
+      foreign.is_cross_os(),
+      "test setup: profile should be foreign"
+    );
+    // Local /run refuses this; running it remotely on a host of its own OS is
+    // exactly what /run-remote is for.
+    assert!(remote_launch_precondition(&foreign).is_ok());
+  }
+
+  #[test]
+  fn api_profile_exposes_cloud_sync_state() {
+    let disabled = ApiProfile::from(&profile_with(SyncMode::Disabled, None));
+    assert_eq!(disabled.sync_mode, "Disabled");
+    assert!(!disabled.cloud_sync_enabled);
+
+    let regular = ApiProfile::from(&profile_with(SyncMode::Regular, None));
+    assert_eq!(regular.sync_mode, "Regular");
+    assert!(regular.cloud_sync_enabled);
+
+    let encrypted = ApiProfile::from(&profile_with(SyncMode::Encrypted, None));
+    assert_eq!(encrypted.sync_mode, "Encrypted");
+    assert!(encrypted.cloud_sync_enabled);
+  }
+
+  // A profile must only ever run on its own operating system: Chromium's
+  // on-disk state is OS-specific, so replaying a macOS profile on Windows is a
+  // mismatch no amount of user-agent spoofing repairs.
+  #[test]
+  fn api_profile_reports_its_operating_system() {
+    let host = crate::profile::types::get_host_os();
+    let same = ApiProfile::from(&profile_with(SyncMode::Regular, Some(&host)));
+    assert_eq!(same.host_os.as_deref(), Some(host.as_str()));
+    assert!(!same.is_cross_os);
+
+    let other = if host == "windows" {
+      "macos"
+    } else {
+      "windows"
+    };
+    let foreign = ApiProfile::from(&profile_with(SyncMode::Regular, Some(other)));
+    assert_eq!(foreign.host_os.as_deref(), Some(other));
+    assert!(foreign.is_cross_os);
+  }
+
+  #[test]
+  fn api_profile_without_a_recorded_os_is_not_cross_os() {
+    // An older profile that predates host_os must stay locally launchable
+    // rather than being treated as foreign.
+    let unknown = ApiProfile::from(&profile_with(SyncMode::Disabled, None));
+    assert_eq!(unknown.host_os, None);
+    assert!(!unknown.is_cross_os);
+  }
 
   // Removing `browser` from UpdateProfileRequest, and rejecting invalid
   // `browser` values on create, must NOT make the API reject requests that
