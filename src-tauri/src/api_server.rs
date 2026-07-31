@@ -265,6 +265,26 @@ pub struct RunRemoteRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SetCloudSyncRequest {
+  /// `Disabled`, `Regular`, or `Encrypted`.
+  ///
+  /// `Encrypted` derives its key from a passphrase that never leaves this
+  /// machine, so a profile in that mode can be synced but NOT run remotely —
+  /// a remote host would download ciphertext it cannot decrypt.
+  pub mode: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SetCloudSyncResponse {
+  pub profile_id: String,
+  pub mode: String,
+  /// Whether the profile can now be launched on a remote host.
+  pub remote_launchable: bool,
+  /// Why not, when `remote_launchable` is false.
+  pub remote_blocked_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct RunRemoteResponse {
   pub profile_id: String,
   /// Remote session id, for polling or closing the session.
@@ -573,6 +593,7 @@ impl ApiServer {
       .routes(routes!(get_profile, update_profile, delete_profile))
       .routes(routes!(run_profile))
       .routes(routes!(run_profile_remote))
+      .routes(routes!(set_profile_cloud_sync))
       .routes(routes!(open_url_in_profile))
       .routes(routes!(kill_profile))
       .routes(routes!(batch_run_profiles))
@@ -2220,6 +2241,88 @@ async fn run_profile_remote(
   }))
 }
 
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/cloud-sync",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = SetCloudSyncRequest,
+  responses(
+    (status = 200, description = "Cloud sync mode updated", body = SetCloudSyncResponse),
+    (status = 400, description = "Invalid mode, or the profile cannot be synced"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with cloud backup required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "Profile is running — stop it before enabling sync"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn set_profile_cloud_sync(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+  Json(request): Json<SetCloudSyncRequest>,
+) -> Result<Json<SetCloudSyncResponse>, (StatusCode, String)> {
+  // Remote launch requires cloud sync, and until now sync could only be turned
+  // on from the GUI — so an automation-only caller could never reach the state
+  // that makes /run-remote work.
+  let mode = match request.mode.as_str() {
+    "Disabled" | "Regular" | "Encrypted" => request.mode.clone(),
+    other => {
+      return Err((
+        StatusCode::BAD_REQUEST,
+        format!("invalid sync mode {other:?}; expected Disabled, Regular or Encrypted"),
+      ));
+    }
+  };
+
+  crate::sync::set_profile_sync_mode(state.app_handle.clone(), id.clone(), mode.clone())
+    .await
+    .map_err(sync_mode_error_response)?;
+
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(manager_error_response)?;
+  let profile = profiles
+    .iter()
+    .find(|p| p.id.to_string() == id)
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
+
+  // Reported rather than left for the caller to discover at launch time: the
+  // most common reason a caller enables sync is to run the profile remotely,
+  // and Encrypted mode silently makes that impossible.
+  let blocked = remote_launch_precondition(profile).err();
+  Ok(Json(SetCloudSyncResponse {
+    profile_id: profile.id.to_string(),
+    mode,
+    remote_launchable: blocked.is_none(),
+    remote_blocked_reason: blocked,
+  }))
+}
+
+/// Map a sync-mode failure onto the status the caller can act on.
+///
+/// `set_profile_sync_mode` reports a running profile as a JSON body rather than
+/// a plain message, because enabling sync under a live browser would race the
+/// browser's own writes.
+fn sync_mode_error_response(err: String) -> (StatusCode, String) {
+  if err.contains("PROFILE_RUNNING") {
+    return (
+      StatusCode::CONFLICT,
+      "profile is running; stop it before changing cloud sync".to_string(),
+    );
+  }
+  if err.contains("cross-OS") || err.contains("ephemeral") {
+    return (StatusCode::BAD_REQUEST, err);
+  }
+  (StatusCode::INTERNAL_SERVER_ERROR, err)
+}
+
 /// Whether a profile may be launched on a remote host.
 ///
 /// Extracted so the rule is unit-testable without a running app: it is the one
@@ -2232,6 +2335,16 @@ pub fn remote_launch_precondition(
     return Err(
       "profile does not have cloud sync enabled; a remote host has no way to \
        obtain it"
+        .to_string(),
+    );
+  }
+  if profile.is_encrypted_sync() {
+    // The key is derived from a passphrase that never leaves this machine, so
+    // the host would download ciphertext, launch Chromium on it, and push the
+    // corruption back over the user's real profile.
+    return Err(
+      "profile uses end-to-end encrypted sync; a remote host cannot decrypt \
+       it. Switch the profile to Regular sync to run it remotely."
         .to_string(),
     );
   }
@@ -2804,12 +2917,25 @@ mod tests {
       .expect_err("a non-synced profile must be refused");
     assert!(err.contains("cloud sync"), "unhelpful message: {err}");
 
-    for mode in [SyncMode::Regular, SyncMode::Encrypted] {
-      assert!(
-        remote_launch_precondition(&profile_with(mode, Some("macos"))).is_ok(),
-        "a synced profile must be allowed"
-      );
-    }
+    assert!(
+      remote_launch_precondition(&profile_with(SyncMode::Regular, Some("macos"))).is_ok(),
+      "a synced profile must be allowed"
+    );
+  }
+
+  #[test]
+  fn remote_launch_refuses_an_end_to_end_encrypted_profile() {
+    // The key is derived from a passphrase that never leaves this machine, so
+    // a remote host downloads ciphertext, launches Chromium on it, and pushes
+    // the corruption back over the user's real profile. Refusing here also
+    // saves taking the profile lock and a slot on leased hardware for a
+    // session that cannot possibly work.
+    let err = remote_launch_precondition(&profile_with(SyncMode::Encrypted, Some("macos")))
+      .expect_err("an encrypted profile must be refused");
+    assert!(
+      err.contains("encrypted") && err.contains("Regular"),
+      "the message must say what to change: {err}"
+    );
   }
 
   #[test]
