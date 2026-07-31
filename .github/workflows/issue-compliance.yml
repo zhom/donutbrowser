@@ -84,14 +84,24 @@ jobs:
               response_format: { type: "json_object" }
             }')
 
-          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+          # Never use curl -f here: a transport or quota error (402 once the repo's
+          # GitHub Models allowance is spent) must not abort the job. The whole
+          # step is fail-open, so capture the status and degrade instead.
+          STATUS=$(curl -sSL -o /tmp/response.json -w '%{http_code}' \
+            https://models.github.ai/inference/chat/completions \
             -H "Authorization: Bearer $GH_MODELS_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            -d "$PAYLOAD" || echo "000")
 
-          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/raw.txt
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::GitHub Models returned HTTP $STATUS; treating as compliant"
+            echo '{"is_compliant": true, "non_compliance_reasons": []}' > /tmp/result.json
+            exit 0
+          fi
+
+          jq -r '.choices[0].message.content // empty' /tmp/response.json > /tmp/raw.txt || : > /tmp/raw.txt
 
           # Strip accidental markdown fences and parse. On parse failure, fall back
           # to a compliant result so a flaky model never closes a legitimate issue.

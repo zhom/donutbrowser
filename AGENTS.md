@@ -91,7 +91,8 @@ donutbrowser/
 
 ### Native app E2E tests are mandatory for affected behavior
 
-The native suites use a sibling private test-driver repository and launch an `e2e`-feature build.
+The native suites use the published `tauri-wd` driver (pinned in `e2e/app/Cargo.toml`, installed
+into the ignored `e2e/.driver` root) and launch an `e2e`-feature build.
 Every session gets its own temporary Donut data/cache/log root, home directory,
 WebView store, ports, and sync bucket. Never point a suite at production or development data.
 

@@ -6,4 +6,4 @@ publish = false
 
 [dependencies]
 donutbrowser-lib = { package = "donutbrowser", path = "../../src-tauri", features = ["e2e"] }
-tauri-wd = { path = "../../../tauri-wd/crates/tauri-wd" }
+tauri-wd = "=0.1.11"

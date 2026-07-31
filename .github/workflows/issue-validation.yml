@@ -243,14 +243,23 @@ jobs:
               ]
             }')
 
-          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+          # Never use curl -f here: a transport or quota error (402 once the repo's
+          # GitHub Models allowance is spent) must not abort the job. Capture the
+          # status and fall through to the safe classification below.
+          STATUS=$(curl -sSL -o /tmp/triage-response.json -w '%{http_code}' \
+            https://models.github.ai/inference/chat/completions \
             -H "Authorization: Bearer $GH_MODELS_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            -d "$PAYLOAD" || echo "000")
 
-          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/triage-raw.txt
+          if [ "$STATUS" = "200" ]; then
+            jq -r '.choices[0].message.content // empty' /tmp/triage-response.json > /tmp/triage-raw.txt || : > /tmp/triage-raw.txt
+          else
+            echo "::warning::GitHub Models returned HTTP $STATUS for triage"
+            : > /tmp/triage-raw.txt
+          fi
 
           # Normalize optional markdown fences before parsing.
           sed -E 's/^```(json)?$//; s/```$//' /tmp/triage-raw.txt > /tmp/triage.json
@@ -375,6 +384,7 @@ jobs:
           wc -c /tmp/composer-system.txt
 
       - name: Stage 2 (compose response)
+        id: compose
         env:
           GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
@@ -415,21 +425,34 @@ jobs:
               ]
             }')
 
-          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+          # Same as triage: a quota or transport error must not fail the run. When
+          # no comment can be composed the remaining steps are skipped instead.
+          STATUS=$(curl -sSL -o /tmp/compose-response.json -w '%{http_code}' \
+            https://models.github.ai/inference/chat/completions \
             -H "Authorization: Bearer $GH_MODELS_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            -d "$PAYLOAD" || echo "000")
 
-          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
-
-          if [ ! -s /tmp/ai-comment.txt ]; then
-            echo "::error::Composer returned empty response"
-            exit 1
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::GitHub Models returned HTTP $STATUS; skipping the triage comment"
+            echo "has_comment=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          jq -r '.choices[0].message.content // empty' /tmp/compose-response.json > /tmp/ai-comment.txt || : > /tmp/ai-comment.txt
+
+          if [ ! -s /tmp/ai-comment.txt ]; then
+            echo "::warning::Composer returned empty response; skipping the triage comment"
+            echo "has_comment=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_comment=true" >> "$GITHUB_OUTPUT"
+
       - name: Strip forbidden sections (defense in depth)
+        if: steps.compose.outputs.has_comment == 'true'
         run: |
           # LLMs still emit "Possible cause" and friends despite the prompt rules.
           # Strip any such heading and its block, plus stray `Label:` lines left
@@ -452,6 +475,7 @@ jobs:
           EOF
 
       - name: Post comment (no labeling)
+        if: steps.compose.outputs.has_comment == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -524,6 +548,7 @@ jobs:
           mv /tmp/pr-file-context.safe.txt /tmp/pr-file-context.txt
 
       - name: Analyze PR with AI
+        id: analyze
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -583,21 +608,34 @@ jobs:
               ]
             }')
 
-          RESPONSE=$(curl -fsSL https://models.github.ai/inference/chat/completions \
+          # A quota or transport error must not fail the run; skip the review
+          # comment instead of red-crossing an otherwise healthy pull request.
+          STATUS=$(curl -sSL -o /tmp/pr-response.json -w '%{http_code}' \
+            https://models.github.ai/inference/chat/completions \
             -H "Authorization: Bearer $GH_MODELS_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            -d "$PAYLOAD" || echo "000")
 
-          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
-
-          if [ ! -s /tmp/ai-comment.txt ]; then
-            echo "::error::AI response was empty"
-            exit 1
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::GitHub Models returned HTTP $STATUS; skipping the review comment"
+            echo "has_comment=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          jq -r '.choices[0].message.content // empty' /tmp/pr-response.json > /tmp/ai-comment.txt || : > /tmp/ai-comment.txt
+
+          if [ ! -s /tmp/ai-comment.txt ]; then
+            echo "::warning::AI response was empty; skipping the review comment"
+            echo "has_comment=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_comment=true" >> "$GITHUB_OUTPUT"
+
       - name: Post comment
+        if: steps.analyze.outputs.has_comment == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

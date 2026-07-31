@@ -5,6 +5,7 @@ import {
   createReadStream,
   createWriteStream,
   existsSync,
+  readFileSync,
   statSync,
 } from "node:fs";
 import {
@@ -28,21 +29,19 @@ import { createSafeDiagnostics } from "./lib/diagnostics.mjs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(dirname, "..");
-const webdriverRoot = path.resolve(projectRoot, "../tauri-wd");
 const isWindows = process.platform === "win32";
 const executableSuffix = isWindows ? ".exe" : "";
+const appManifestDir = path.join(projectRoot, "e2e", "app");
 const appBinary = path.join(
-  projectRoot,
-  "e2e",
-  "app",
+  appManifestDir,
   "target",
   "debug",
   `donutbrowser-e2e${executableSuffix}`,
 );
+const driverRoot = path.join(projectRoot, "e2e", ".driver");
 const driverBinary = path.join(
-  webdriverRoot,
-  "target",
-  "debug",
+  driverRoot,
+  "bin",
   `tauri-wd${executableSuffix}`,
 );
 
@@ -238,10 +237,55 @@ async function loadLocalValues(names) {
   return values;
 }
 
-function buildAll() {
-  if (!existsSync(webdriverRoot)) {
-    throw new Error(`Missing sibling webdriver repository: ${webdriverRoot}`);
+function lockedDriverVersion() {
+  const lockfile = readFileSync(
+    path.join(appManifestDir, "Cargo.lock"),
+    "utf8",
+  );
+  const match = lockfile.match(
+    /\[\[package\]\]\s*\nname = "tauri-wd"\s*\nversion = "([^"]+)"/,
+  );
+  if (!match) {
+    throw new Error("e2e/app/Cargo.lock does not resolve a tauri-wd version");
   }
+  return match[1];
+}
+
+function installedDriverVersion() {
+  if (!existsSync(driverBinary)) {
+    return null;
+  }
+  const result = spawnSync(driverBinary, ["--version"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return null;
+  }
+  return result.stdout.trim().split(/\s+/).pop() ?? null;
+}
+
+function ensureDriver() {
+  const version = lockedDriverVersion();
+  if (installedDriverVersion() === version) {
+    log(`tauri-wd ${version} already installed at ${driverBinary}`);
+    return;
+  }
+  run(
+    "cargo",
+    [
+      "install",
+      "tauri-wd",
+      "--version",
+      version,
+      "--locked",
+      "--debug",
+      "--force",
+      "--root",
+      driverRoot,
+    ],
+    projectRoot,
+  );
+}
+
+function buildAll() {
   run("pnpm", ["build"], projectRoot);
   run("pnpm", ["copy-proxy-binary"], projectRoot);
   run(process.execPath, ["src-tauri/download-xray.mjs"], projectRoot);
@@ -250,11 +294,7 @@ function buildAll() {
     ["build", "--locked", "--manifest-path", "e2e/app/Cargo.toml"],
     projectRoot,
   );
-  run(
-    "cargo",
-    ["build", "--package", "tauri-cross-platform-webdriver"],
-    webdriverRoot,
-  );
+  ensureDriver();
 }
 
 function startFixtureServer(geoIpFixture) {
@@ -866,7 +906,7 @@ async function main() {
         options.verbose ? "debug" : "info",
       ],
       {
-        cwd: webdriverRoot,
+        cwd: projectRoot,
         env: process.env,
         runRoot,
         verbose: options.verbose,
@@ -928,7 +968,6 @@ async function main() {
         ...process.env,
         DONUT_E2E_RUN_ROOT: runRoot,
         DONUT_E2E_PROJECT_ROOT: projectRoot,
-        DONUT_E2E_WEBDRIVER_ROOT: webdriverRoot,
         DONUT_E2E_APP: appBinary,
         DONUT_E2E_DRIVER_URL: `http://127.0.0.1:${driverPort}`,
         DONUT_E2E_FIXTURE_URL: `http://127.0.0.1:${fixture.port}`,

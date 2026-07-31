@@ -1,6 +1,7 @@
 # Donut Browser native E2E tests
 
-These tests exercise the actual Tauri application through a sibling native test driver. They do
+These tests exercise the actual Tauri application through the published
+[`tauri-wd`](https://crates.io/crates/tauri-wd) native test driver. They do
 not replace Rust or React unit tests; they
 cover the process boundaries those tests cannot: WKWebView/WebView2/WebKitGTK UI, Tauri invokes,
 REST and MCP servers, two-device sync, S3 payload encryption, Wayfern, CDP, and child-process
@@ -8,15 +9,9 @@ cleanup.
 
 ## Local setup
 
-Place both repositories beside each other:
-
-```text
-Code/
-├── donutbrowser/
-└── <test-driver-checkout>/
-```
-
-Install Donut dependencies with `pnpm install`. The browser suite also needs
+Install Donut dependencies with `pnpm install`. The runner installs the driver itself with
+`cargo install`, so a working Rust toolchain is the only extra requirement. The browser suite also
+needs
 `WAYFERN_TEST_TOKEN`. The runner reads it from the environment or Donut's ignored `.env` without
 printing it. When a local browser fixture is configured, the runner copies it into the test data
 root (using an isolated APFS clone on macOS); otherwise the browser suite downloads the current
@@ -42,10 +37,13 @@ pnpm e2e:sync
 pnpm e2e:browser
 ```
 
-Run everything with `pnpm e2e`. A normal run builds the Next frontend, `donut-proxy`, the
-private harness in `e2e/app`, and `tauri-wd`. The harness enables Donut's `e2e` feature and injects
-the sibling WebDriver plugin without making the production crate depend on a private filesystem
-path. Add `--no-build` to `node e2e/run.mjs --suite=<name>` only when all four outputs are current.
+Run everything with `pnpm e2e`. A normal run builds the Next frontend, `donut-proxy`, and the
+harness in `e2e/app`, then installs the `tauri-wd` CLI into the ignored `e2e/.driver` root when the
+version pinned by `e2e/app/Cargo.lock` is not already there. The harness enables Donut's `e2e`
+feature and injects the WebDriver plugin so the production crate never depends on it. Both the
+plugin and the CLI come from the same pinned crates.io release, so they cannot drift apart. Bump
+the pin in `e2e/app/Cargo.toml` to move to a newer driver. Add `--no-build` to
+`node e2e/run.mjs --suite=<name>` only when all four outputs are current.
 `DONUT_E2E_KEEP_ARTIFACTS=1` retains successful local runs; failed runs are always retained and
 their location is printed. Raw screenshots, captured HTML, logs, and isolated app state stay local.
 The runner also creates a text-only `diagnostics/` directory whose logs are redacted and checked
@@ -87,7 +85,7 @@ requests. Pushes to `main`, weekly schedules, and manual runs execute the full m
 including MinIO-backed sync and real Wayfern automation, plus a Linux/Docker job for residential
 proxy and local WireGuard browser traffic.
 
-CI needs a `TAURI_WEBDRIVER_TOKEN` secret with read-only access and a
-`TAURI_WEBDRIVER_REPOSITORY` repository variable identifying the test-driver checkout. The full
-job also requires the `WAYFERN_TEST_TOKEN` secret. The network job requires that secret plus
+Every job restores the compiled driver from an `actions/cache` entry keyed by `e2e/app/Cargo.lock`,
+the same file the runner reads the version from, so only a driver bump pays for a rebuild. The full job requires the
+`WAYFERN_TEST_TOKEN` secret. The network job requires that secret plus
 `RESIDENTIAL_PROXY_URL_ONE_HTTP` and `RESIDENTIAL_PROXY_URL_ONE_SOCKS`.
