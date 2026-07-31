@@ -72,25 +72,36 @@ export function xrayDownloadUrl(assetName) {
   return `https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/${assetName}`;
 }
 
+// `powershell -Command "<script>" a b` appends the trailing values to the
+// command text rather than binding them to $args, so the script ran with a
+// null -LiteralPath. Handing the paths over as environment variables binds
+// them for real and sidesteps quoting of Windows paths and spaces.
+export function windowsExtractionInvocation(archive, destinationDir) {
+  return {
+    args: [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Expand-Archive -LiteralPath $env:DONUT_XRAY_ARCHIVE -DestinationPath $env:DONUT_XRAY_DESTINATION -Force",
+    ],
+    env: {
+      ...process.env,
+      DONUT_XRAY_ARCHIVE: archive,
+      DONUT_XRAY_DESTINATION: destinationDir,
+    },
+  };
+}
+
 function extractArchive(archive, destinationDir, windowsTarget) {
   if (windowsTarget) {
-    const result = spawnSync(
-      "powershell",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
-        archive,
-        destinationDir,
-      ],
-      { stdio: "inherit" },
-    );
+    const { args, env } = windowsExtractionInvocation(archive, destinationDir);
+    const result = spawnSync("powershell", args, { stdio: "inherit", env });
     if (result.status !== 0) {
       throw new Error("Failed to extract the Xray-core archive");
     }
+    // Upstream ships these lowercase inside Xray-windows-64.zip.
     return {
-      binary: join(destinationDir, "Xray.exe"),
+      binary: join(destinationDir, "xray.exe"),
       license: join(destinationDir, "LICENSE"),
     };
   }
