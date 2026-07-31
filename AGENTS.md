@@ -91,6 +91,12 @@ donutbrowser/
 
 ### Native app E2E tests are mandatory for affected behavior
 
+**No E2E suite runs in CI. You are the only thing that runs them.** The `app-e2e` and
+`sync-e2e` workflows were removed because they need real credentials, Docker, and a desktop
+session that hosted runners could not supply reliably; a permanently red check is worse than
+no check. Nothing downstream will catch an E2E regression for you, so skipping the affected
+suite means shipping it unverified. Report explicitly which suites you ran and which you did not.
+
 The native suites use the published `tauri-wd` driver (pinned in `e2e/app/Cargo.toml`, installed
 into the ignored `e2e/.driver` root) and launch an `e2e`-feature build.
 Every session gets its own temporary Donut data/cache/log root, home directory,
@@ -109,6 +115,7 @@ suite passes:
 | REST API/OpenAPI, MCP, cloud/update contracts, team locks, real-time synchronizer | `pnpm e2e:integrations` |
 | Sync client/server, manifests, timestamps, deletion, encryption, password rollover | `pnpm e2e:sync` |
 | Wayfern download/terms/fingerprint, browser runner, CDP, automation endpoints, process cleanup | `pnpm e2e:browser` |
+| `donut-sync/` server code (controllers, services, auth, S3 endpoints) | `pnpm --filter donut-sync test:e2e` against a local MinIO |
 | E2E harness, WebDriver plugin/driver, app isolation hooks, or changes spanning multiple rows | Run every affected row; use `pnpm e2e` for cross-cutting changes |
 
 `e2e:browser` requires `WAYFERN_TEST_TOKEN` in the environment or local `.env`. `e2e:network`
@@ -117,6 +124,20 @@ and the full suite additionally require Docker plus `RESIDENTIAL_PROXY_URL_ONE_H
 `--no-build` only when the frontend, Rust app, sidecar, and WebDriver binaries are already current.
 Keep failed artifacts and inspect the per-session app/driver logs and screenshot before changing
 assertions.
+
+The `donut-sync` row is the one suite the root `pnpm test` does not cover (`test:sync-e2e` runs
+the Rust sync harness only). It needs a MinIO on port 8987:
+
+```bash
+docker run -d --rm --name minio -p 8987:9000 \
+  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+  minio/minio:latest server /data
+SYNC_TOKEN=test-sync-token S3_ENDPOINT=http://127.0.0.1:8987 \
+  S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin \
+  S3_BUCKET=donut-sync-test S3_FORCE_PATH_STYLE=true \
+  pnpm --filter donut-sync test:e2e
+docker rm -f minio
+```
 
 When adding a Tauri command, assign it exactly once in `e2e/coverage-map.mjs` and add executable
 evidence to the owning suite. `e2e:smoke` fails if command registration and the coverage map drift.
