@@ -140,6 +140,57 @@ pub async fn start_remote_session(
     .map_err(|e| classify_error_string(&e))
 }
 
+/// What the backend returns when a session is stopped.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndRemoteSessionOutcome {
+  pub session_id: String,
+  pub status: String,
+  /// What the session actually cost, in seconds.
+  pub billed_seconds: u64,
+}
+
+/// Ask donutbrowser-infra to stop a remote session.
+///
+/// Without this the only thing that ends a session is the fleet's own two-hour
+/// cap, so every launch bills the full 7200s however briefly it was used — a
+/// handful of runs exhausts an allowance meant for a hundred. The backend
+/// refuses to retire a row it could not stop on the fleet, so a successful
+/// return here means the browser is really down and the profile lock released.
+pub async fn end_remote_session(
+  session_id: &str,
+) -> Result<EndRemoteSessionOutcome, RemoteSessionError> {
+  let endpoint = format!(
+    "{}/api/remote-sessions/{}",
+    crate::cloud_auth::CLOUD_API_URL,
+    urlencoding::encode(session_id)
+  );
+
+  crate::cloud_auth::CLOUD_AUTH
+    .api_call_with_retry(|token| {
+      let endpoint = endpoint.clone();
+      async move {
+        let response = reqwest::Client::new()
+          .delete(&endpoint)
+          .bearer_auth(token)
+          .send()
+          .await
+          .map_err(|e| format!("reach backend: {e}"))?;
+
+        let status = response.status().as_u16();
+        if !(200..300).contains(&status) {
+          let text = response.text().await.unwrap_or_default();
+          return Err(format!("({status}) {text}"));
+        }
+        response
+          .json::<EndRemoteSessionOutcome>()
+          .await
+          .map_err(|e| format!("decode response: {e}"))
+      }
+    })
+    .await
+    .map_err(|e| classify_error_string(&e))
+}
+
 /// Recover a typed error from `api_call_with_retry`'s string.
 ///
 /// That helper flattens everything to `String` to do its 401 sniffing, so the
@@ -219,6 +270,31 @@ mod tests {
   fn an_unencoded_error_string_is_not_misread_as_a_status() {
     assert!(matches!(
       classify_error_string("reach backend: connection refused"),
+      RemoteSessionError::Other(_)
+    ));
+  }
+
+  #[test]
+  fn the_stop_response_parses_what_the_backend_actually_sends() {
+    // Pinned against EndRemoteSessionOutcome in donutbrowser-infra
+    // (apps/backend/src/remote-sessions/remote-sessions.service.ts). A field
+    // name that does not match makes every stop fail at the decode step, and
+    // the session then runs to the 2h cap and bills 7200s — the exact defect
+    // this endpoint exists to fix, reintroduced silently.
+    let outcome: EndRemoteSessionOutcome =
+      serde_json::from_str(r#"{"session_id":"sess-1","status":"closed","billed_seconds":42}"#)
+        .expect("the backend's stop payload must deserialize");
+    assert_eq!(outcome.session_id, "sess-1");
+    assert_eq!(outcome.status, "closed");
+    assert_eq!(outcome.billed_seconds, 42);
+  }
+
+  #[test]
+  fn a_stop_of_an_unknown_session_is_not_reported_as_capacity() {
+    // The backend 404s a session that is not the caller's. Mapping that to
+    // NoCapacity would tell the user the fleet is busy and invite a retry.
+    assert!(matches!(
+      classify_error_string("(404) No such remote session"),
       RemoteSessionError::Other(_)
     ));
   }

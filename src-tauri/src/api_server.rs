@@ -294,6 +294,14 @@ pub struct RunRemoteResponse {
   pub status: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct StopRemoteResponse {
+  pub session_id: String,
+  pub status: String,
+  /// What the session actually cost, in seconds.
+  pub billed_seconds: u64,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 struct RunProfileRequest {
   url: Option<String>,
@@ -593,6 +601,7 @@ impl ApiServer {
       .routes(routes!(get_profile, update_profile, delete_profile))
       .routes(routes!(run_profile))
       .routes(routes!(run_profile_remote))
+      .routes(routes!(stop_remote_session))
       .routes(routes!(set_profile_cloud_sync))
       .routes(routes!(open_url_in_profile))
       .routes(routes!(kill_profile))
@@ -2356,6 +2365,43 @@ pub fn remote_launch_precondition(
     );
   }
   Ok(())
+}
+
+// API Handler - Stop a REMOTE session started by run-remote
+#[utoipa::path(
+  delete,
+  path = "/v1/remote-sessions/{id}",
+  params(
+    ("id" = String, Path, description = "Remote session ID from run-remote")
+  ),
+  responses(
+    (status = 200, description = "Remote session stopped", body = StopRemoteResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "No such remote session"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "The fleet could not be reached; the session is still running"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn stop_remote_session(
+  Path(id): Path<String>,
+) -> Result<Json<StopRemoteResponse>, (StatusCode, String)> {
+  // Without this route, `run-remote` hands back a session id nothing can act
+  // on: the only thing that ends a session is the fleet's own two-hour cap, so
+  // every launch bills 7200s no matter how briefly it ran.
+  let outcome = crate::remote_session::end_remote_session(&id)
+    .await
+    .map_err(remote_session_error_response)?;
+
+  Ok(Json(StopRemoteResponse {
+    session_id: outcome.session_id,
+    status: outcome.status,
+    billed_seconds: outcome.billed_seconds,
+  }))
 }
 
 fn remote_session_error_response(
