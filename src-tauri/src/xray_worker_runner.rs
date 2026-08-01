@@ -1,5 +1,7 @@
 use crate::proxy_runner::find_sidecar_executable;
-use crate::proxy_storage::{is_process_running, process_identity_matches, process_start_time};
+#[cfg(unix)]
+use crate::proxy_storage::is_process_running;
+use crate::proxy_storage::{process_identity_matches, process_start_time};
 use crate::xray::{build_client_config_json, parse_vless_uri, XrayClientRuntime};
 use crate::xray_worker_storage::{
   create_xray_worker_log, delete_xray_worker_config, generate_xray_worker_id,
