@@ -1763,13 +1763,22 @@ pub fn run_with_builder(
           .collect();
 
         for config in list_proxy_configs() {
-          let has_running_browser = config
-            .profile_id
-            .as_ref()
-            .is_some_and(|pid| running_profile_ids.contains(pid));
+          // Prefer the owner identity the worker itself recorded: it pins the
+          // browser to one exact process, so a recycled PID cannot make a dead
+          // browser look alive and strand this worker for good. Configs written
+          // before that field existed fall back to the profile's stored PID,
+          // which is all the information those workers have.
+          let has_running_browser = if config.browser_pid_start_time.is_some() {
+            crate::proxy_storage::browser_owner_is_alive(&config)
+          } else {
+            config
+              .profile_id
+              .as_ref()
+              .is_some_and(|pid| running_profile_ids.contains(pid))
+          };
           if has_running_browser {
             log::info!(
-              "Startup: preserving proxy worker {} (profile browser still running)",
+              "Startup: preserving proxy worker {} (browser still running)",
               config.id
             );
             continue;

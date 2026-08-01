@@ -1728,3 +1728,230 @@ async fn test_local_proxy_with_shadowsocks_upstream(
 
   Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Worker lifecycle: a detached donut-proxy must die with the browser it serves,
+// with no help from the GUI. These drive a REAL worker process end to end —
+// the unit tests cover the decision table, these prove the process actually
+// exits and cleans up after itself.
+//
+// The watchdog polls every 15s in production; the tests shorten it via
+// DONUT_PROXY_WATCHDOG_INTERVAL_MS so a reap is observable in seconds.
+// ---------------------------------------------------------------------------
+
+const TEST_WATCHDOG_INTERVAL_MS: &str = "300";
+
+/// A long-lived process standing in for a browser, reaped on drop so a failing
+/// assertion can never leave one behind.
+struct StubBrowser {
+  child: std::process::Child,
+}
+
+impl StubBrowser {
+  fn spawn() -> Self {
+    let mut command = if cfg!(windows) {
+      let mut c = std::process::Command::new("cmd");
+      c.args(["/C", "ping -n 600 127.0.0.1 >NUL"]);
+      c
+    } else {
+      let mut c = std::process::Command::new("sleep");
+      c.arg("600");
+      c
+    };
+    let child = command
+      .stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()
+      .expect("failed to spawn stub browser");
+    Self { child }
+  }
+
+  fn pid(&self) -> u32 {
+    self.child.id()
+  }
+
+  /// Kill and reap, so the PID is genuinely gone before the worker looks at it.
+  /// A zombie still resolves in the process table and would mask the reap.
+  fn terminate(&mut self) {
+    let _ = self.child.kill();
+    let _ = self.child.wait();
+  }
+}
+
+impl Drop for StubBrowser {
+  fn drop(&mut self) {
+    self.terminate();
+  }
+}
+
+/// Wait for a worker to remove its own config, which it does immediately before
+/// exiting. Returns false if it is still there when the deadline passes.
+async fn wait_for_worker_exit(proxy_id: &str, timeout: Duration) -> bool {
+  let deadline = std::time::Instant::now() + timeout;
+  while std::time::Instant::now() < deadline {
+    if donutbrowser_lib::proxy_storage::get_proxy_config(proxy_id).is_none() {
+      return true;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  false
+}
+
+/// Start a direct worker with the short watchdog interval and return its config.
+async fn start_lifecycle_worker(
+  profile_id: &str,
+) -> Result<donutbrowser_lib::proxy_storage::ProxyConfig, Box<dyn std::error::Error + Send + Sync>>
+{
+  std::env::set_var(
+    "DONUT_PROXY_WATCHDOG_INTERVAL_MS",
+    TEST_WATCHDOG_INTERVAL_MS,
+  );
+  donutbrowser_lib::proxy_runner::start_proxy_process_with_profile(
+    None,
+    None,
+    Some(profile_id.to_string()),
+    Vec::new(),
+    None,
+    false,
+    Some("http".to_string()),
+  )
+  .await
+  .map_err(|error| error.to_string().into())
+}
+
+/// Record the owning browser on a worker's config the way the GUI does: the PID
+/// plus the start time that pins it to that exact process.
+fn claim_worker_for(proxy_id: &str, browser_pid: u32) -> bool {
+  let Some(mut config) = donutbrowser_lib::proxy_storage::get_proxy_config(proxy_id) else {
+    return false;
+  };
+  let Some(start_time) = donutbrowser_lib::proxy_storage::resolve_process_start_time(browser_pid)
+  else {
+    return false;
+  };
+  config.browser_pid = Some(browser_pid);
+  config.browser_pid_start_time = Some(start_time);
+  donutbrowser_lib::proxy_storage::update_proxy_config(&config)
+}
+
+/// A worker whose browser exits must terminate itself and delete its config,
+/// with no GUI involved. This is the whole contract behind "no orphaned
+/// donut-proxy after closing the browser".
+#[tokio::test]
+#[serial]
+async fn worker_reaps_itself_when_its_browser_exits(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let _binary_path = setup_test().await?;
+  let config = start_lifecycle_worker("lifecycle-browser-exit").await?;
+  let mut tracker = ProxyTestTracker::new(_binary_path.clone());
+  tracker.track_proxy(config.id.clone());
+
+  let mut stub = StubBrowser::spawn();
+  assert!(
+    claim_worker_for(&config.id, stub.pid()),
+    "the worker must accept a live browser as its owner"
+  );
+
+  let owner = donutbrowser_lib::proxy_storage::get_proxy_config(&config.id)
+    .ok_or("worker config vanished before the browser exited")?;
+  assert_eq!(owner.browser_pid, Some(stub.pid()));
+  assert!(
+    owner.browser_pid_start_time.is_some(),
+    "the owner PID must be pinned to a start time"
+  );
+
+  // While the browser lives, the worker must stay: a worker that reaps itself
+  // out from under a running browser is a far worse bug than an orphan.
+  sleep(Duration::from_millis(1500)).await;
+  assert!(
+    donutbrowser_lib::proxy_storage::get_proxy_config(&config.id).is_some(),
+    "worker exited while its browser was still running"
+  );
+
+  let worker_pid = config.pid.ok_or("worker did not report a PID")?;
+  stub.terminate();
+
+  assert!(
+    wait_for_worker_exit(&config.id, Duration::from_secs(20)).await,
+    "worker did not clean up its config after its browser exited"
+  );
+  let mut process_gone = false;
+  for _ in 0..100 {
+    if !donutbrowser_lib::proxy_storage::is_process_running(worker_pid) {
+      process_gone = true;
+      break;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  assert!(
+    process_gone,
+    "worker process {worker_pid} is still in memory after its browser exited"
+  );
+
+  tracker.cleanup_all().await;
+  Ok(())
+}
+
+/// The orphan users actually reported: the browser is gone but its PID has been
+/// handed to some other process. Existence alone reads as "my browser is alive"
+/// and the worker never exits, so the owner is pinned by start time instead.
+#[tokio::test]
+#[serial]
+async fn worker_reaps_itself_when_its_browser_pid_is_recycled(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let binary_path = setup_test().await?;
+  let config = start_lifecycle_worker("lifecycle-pid-reuse").await?;
+  let mut tracker = ProxyTestTracker::new(binary_path);
+  tracker.track_proxy(config.id.clone());
+
+  // A live PID with someone else's start time is exactly what a recycled PID
+  // looks like from the worker's side.
+  let stub = StubBrowser::spawn();
+  let mut owner = donutbrowser_lib::proxy_storage::get_proxy_config(&config.id)
+    .ok_or("worker config missing after start")?;
+  owner.browser_pid = Some(stub.pid());
+  owner.browser_pid_start_time = Some(1);
+  assert!(donutbrowser_lib::proxy_storage::update_proxy_config(&owner));
+
+  assert!(
+    wait_for_worker_exit(&config.id, Duration::from_secs(20)).await,
+    "worker kept serving a PID that no longer belongs to its browser"
+  );
+
+  drop(stub);
+  tracker.cleanup_all().await;
+  Ok(())
+}
+
+/// Deleting a worker's config is how the GUI stops it. The worker must notice
+/// and exit even though nothing signalled it.
+#[tokio::test]
+#[serial]
+async fn worker_exits_when_its_config_is_deleted(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let binary_path = setup_test().await?;
+  let config = start_lifecycle_worker("lifecycle-config-deleted").await?;
+  let tracker = ProxyTestTracker::new(binary_path);
+  let worker_pid = config.pid.ok_or("worker did not report a PID")?;
+
+  assert!(donutbrowser_lib::proxy_storage::delete_proxy_config(
+    &config.id
+  ));
+
+  let mut process_gone = false;
+  for _ in 0..200 {
+    if !donutbrowser_lib::proxy_storage::is_process_running(worker_pid) {
+      process_gone = true;
+      break;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  assert!(
+    process_gone,
+    "worker process {worker_pid} survived deletion of its config"
+  );
+
+  tracker.cleanup_all().await;
+  Ok(())
+}

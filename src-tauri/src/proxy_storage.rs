@@ -29,9 +29,16 @@ pub struct ProxyConfig {
   /// launch. The detached worker watches this and self-terminates when the
   /// browser dies, so it dies with its browser even if the GUI has exited or
   /// restarted. `None` until launch completes (the worker keeps running while
-  /// it is `None`).
+  /// it is `None`, up to `UNCLAIMED_WORKER_GRACE_SECS`).
   #[serde(default)]
   pub browser_pid: Option<u32>,
+  /// Start time of `browser_pid`, pinning it to one exact process. Without it a
+  /// recycled PID reads as "my browser is still alive" and the worker outlives
+  /// its browser forever — the orphan users report. `None` on configs written
+  /// before this field existed; those fall back to a bare existence check so an
+  /// upgrade never reaps a worker whose browser is still running.
+  #[serde(default)]
+  pub browser_pid_start_time: Option<u64>,
 }
 
 impl ProxyConfig {
@@ -49,6 +56,7 @@ impl ProxyConfig {
       dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
+      browser_pid_start_time: None,
     }
   }
 
@@ -222,6 +230,98 @@ pub fn process_identity_matches(pid: u32, expected_start_time: Option<u64>) -> b
   expected_start_time.is_some_and(|expected| process_start_time(pid) == Some(expected))
 }
 
+/// Read a just-spawned process's start time, retrying briefly. A process is not
+/// always visible in the process table the instant `spawn` returns, and giving
+/// up would leave the caller unable to pin the PID to an identity.
+pub fn resolve_process_start_time(pid: u32) -> Option<u64> {
+  for _ in 0..25 {
+    if let Some(start_time) = process_start_time(pid) {
+      return Some(start_time);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(10));
+  }
+  None
+}
+
+/// Seconds since a worker config's id was minted. Ids are
+/// `proxy_{unix_secs}_{rand}` (see `generate_proxy_id`); anything else, or a
+/// timestamp in the future, reads as age 0 so callers stay conservative.
+pub fn proxy_config_age_secs(id: &str) -> u64 {
+  let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) else {
+    return 0;
+  };
+  id.strip_prefix("proxy_")
+    .and_then(|rest| rest.split('_').next())
+    .and_then(|secs| secs.parse::<u64>().ok())
+    .map(|created_at| now.as_secs().saturating_sub(created_at))
+    .unwrap_or(0)
+}
+
+/// How long a worker may run without the GUI claiming it by recording a browser
+/// PID. Covers the launch window (worker starts before the browser); past it the
+/// GUI that spawned this worker is gone and nothing will ever claim it.
+pub const UNCLAIMED_WORKER_GRACE_SECS: u64 = 300;
+
+/// Is the browser this worker serves still the same live process?
+///
+/// Identity-checked whenever a start time was recorded. Configs written before
+/// `browser_pid_start_time` existed fall back to a bare existence check, so
+/// upgrading never reaps a worker whose browser is still running.
+pub fn browser_owner_is_alive(config: &ProxyConfig) -> bool {
+  let Some(pid) = config.browser_pid.filter(|pid| *pid != 0) else {
+    return false;
+  };
+  match config.browser_pid_start_time {
+    Some(start_time) => process_identity_matches(pid, Some(start_time)),
+    None => is_process_running(pid),
+  }
+}
+
+/// What the detached worker's self-reaping supervisor should do this tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupervisorVerdict {
+  /// Keep serving.
+  Keep,
+  /// Our config is gone — the GUI stopped us, or the worker was superseded.
+  ExitConfigRemoved,
+  /// The browser we were started for is gone (debounced by the caller).
+  ExitOwnerGone,
+  /// No browser was ever recorded and the launch window has long passed.
+  ExitNeverClaimed,
+}
+
+/// Pure decision table for the worker supervisor. `owner_alive` is injected so
+/// every branch is testable without spawning browsers; production passes
+/// `browser_owner_is_alive`.
+pub fn supervisor_verdict(
+  config: Option<&ProxyConfig>,
+  age_secs: u64,
+  owner_alive: impl Fn(&ProxyConfig) -> bool,
+) -> SupervisorVerdict {
+  let Some(config) = config else {
+    return SupervisorVerdict::ExitConfigRemoved;
+  };
+
+  match config.browser_pid {
+    Some(pid) if pid != 0 => {
+      if owner_alive(config) {
+        SupervisorVerdict::Keep
+      } else {
+        SupervisorVerdict::ExitOwnerGone
+      }
+    }
+    // Never claimed. Keep serving through the launch window — the browser may
+    // still be starting — then give up rather than idling forever.
+    _ => {
+      if age_secs >= UNCLAIMED_WORKER_GRACE_SECS {
+        SupervisorVerdict::ExitNeverClaimed
+      } else {
+        SupervisorVerdict::Keep
+      }
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -296,6 +396,134 @@ mod tests {
       became_dead,
       "is_process_running must return false for a dead process (PID {pid})"
     );
+  }
+
+  fn owned_config(browser_pid: Option<u32>, browser_pid_start_time: Option<u64>) -> ProxyConfig {
+    let mut config = ProxyConfig::new("proxy_1_2".to_string(), "DIRECT".to_string(), Some(1080));
+    config.browser_pid = browser_pid;
+    config.browser_pid_start_time = browser_pid_start_time;
+    config
+  }
+
+  #[test]
+  fn owner_liveness_is_pinned_to_the_exact_process_that_was_recorded() {
+    let pid = std::process::id();
+    let start_time = process_start_time(pid).expect("current process should be visible");
+
+    assert!(browser_owner_is_alive(&owned_config(
+      Some(pid),
+      Some(start_time)
+    )));
+    // Same PID, different process: what a recycled PID looks like. Treating
+    // this as alive is what stranded workers forever.
+    assert!(!browser_owner_is_alive(&owned_config(
+      Some(pid),
+      Some(start_time.saturating_add(1))
+    )));
+    // Written before start times were recorded: existence is all we have, and
+    // an upgrade must not reap a worker whose browser is still running.
+    assert!(browser_owner_is_alive(&owned_config(Some(pid), None)));
+    assert!(!browser_owner_is_alive(&owned_config(
+      Some(u32::MAX),
+      Some(start_time)
+    )));
+    assert!(!browser_owner_is_alive(&owned_config(None, None)));
+    assert!(!browser_owner_is_alive(&owned_config(Some(0), None)));
+  }
+
+  #[test]
+  fn supervisor_keeps_serving_a_live_owner_and_exits_a_dead_one() {
+    let alive = |_: &ProxyConfig| true;
+    let dead = |_: &ProxyConfig| false;
+    let claimed = owned_config(Some(4321), Some(99));
+
+    assert_eq!(
+      supervisor_verdict(Some(&claimed), 0, alive),
+      SupervisorVerdict::Keep
+    );
+    assert_eq!(
+      supervisor_verdict(Some(&claimed), 0, dead),
+      SupervisorVerdict::ExitOwnerGone
+    );
+    // A live owner outranks age: a long-running browser is not an orphan.
+    assert_eq!(
+      supervisor_verdict(Some(&claimed), UNCLAIMED_WORKER_GRACE_SECS * 10, alive),
+      SupervisorVerdict::Keep
+    );
+  }
+
+  #[test]
+  fn supervisor_exits_when_its_config_is_gone() {
+    assert_eq!(
+      supervisor_verdict(None, 0, |_| true),
+      SupervisorVerdict::ExitConfigRemoved
+    );
+  }
+
+  #[test]
+  fn supervisor_gives_up_on_a_worker_no_browser_ever_claimed() {
+    // The GUI records the owner right after launch. Inside the window the
+    // browser may still be starting, so keep serving...
+    for unclaimed in [owned_config(None, None), owned_config(Some(0), None)] {
+      assert_eq!(
+        supervisor_verdict(Some(&unclaimed), 0, |_| false),
+        SupervisorVerdict::Keep
+      );
+      assert_eq!(
+        supervisor_verdict(
+          Some(&unclaimed),
+          UNCLAIMED_WORKER_GRACE_SECS.saturating_sub(1),
+          |_| false
+        ),
+        SupervisorVerdict::Keep
+      );
+      // ...past it the GUI that spawned this worker is gone and nothing will
+      // ever claim it, so it must not idle forever.
+      assert_eq!(
+        supervisor_verdict(Some(&unclaimed), UNCLAIMED_WORKER_GRACE_SECS, |_| false),
+        SupervisorVerdict::ExitNeverClaimed
+      );
+    }
+  }
+
+  #[test]
+  fn config_age_is_read_from_the_generated_id() {
+    let fresh = generate_proxy_id();
+    assert!(
+      proxy_config_age_secs(&fresh) <= 1,
+      "a just-generated id should read as brand new, got {}",
+      proxy_config_age_secs(&fresh)
+    );
+
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+    assert_eq!(
+      proxy_config_age_secs(&format!("proxy_{}_123", now.saturating_sub(600))),
+      600
+    );
+    // Unparsable and future-dated ids read as brand new so callers stay
+    // conservative rather than reaping something they can't date.
+    assert_eq!(proxy_config_age_secs("not-a-proxy-id"), 0);
+    assert_eq!(proxy_config_age_secs("proxy_abc_123"), 0);
+    assert_eq!(proxy_config_age_secs(&format!("proxy_{}_1", now + 600)), 0);
+  }
+
+  #[test]
+  fn configs_written_before_owner_start_times_still_load() {
+    let legacy = serde_json::json!({
+      "id": "proxy_1_2",
+      "upstream_url": "DIRECT",
+      "local_port": 1080,
+      "ignore_proxy_certificate": null,
+      "local_url": "http://127.0.0.1:1080",
+      "pid": 42,
+      "browser_pid": 4242
+    });
+    let config: ProxyConfig = serde_json::from_value(legacy).unwrap();
+    assert_eq!(config.browser_pid, Some(4242));
+    assert_eq!(config.browser_pid_start_time, None);
   }
 
   #[test]

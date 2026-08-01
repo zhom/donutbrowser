@@ -1,7 +1,7 @@
 use crate::proxy_runner::find_sidecar_executable;
 #[cfg(unix)]
 use crate::proxy_storage::is_process_running;
-use crate::proxy_storage::{process_identity_matches, process_start_time};
+use crate::proxy_storage::{process_identity_matches, resolve_process_start_time};
 use crate::xray::{build_client_config_json, parse_vless_uri, XrayClientRuntime};
 use crate::xray_worker_storage::{
   create_xray_worker_log, delete_xray_worker_config, generate_xray_worker_id,
@@ -20,16 +20,6 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const READY_CHECK_TIMEOUT: Duration = Duration::from_millis(750);
 static XRAY_BINARY_VERIFIED: AtomicBool = AtomicBool::new(false);
 static XRAY_START_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-fn resolve_process_start_time(pid: u32) -> Option<u64> {
-  for _ in 0..25 {
-    if let Some(start_time) = process_start_time(pid) {
-      return Some(start_time);
-    }
-    std::thread::sleep(Duration::from_millis(10));
-  }
-  None
-}
 
 fn structured_error(code: &str) -> Box<dyn std::error::Error> {
   serde_json::json!({ "code": code }).to_string().into()
@@ -659,6 +649,7 @@ pub async fn run_xray_worker(config_path: &Path) -> Result<(), Box<dyn std::erro
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::proxy_storage::process_start_time;
 
   #[cfg(unix)]
   fn short_lived_child() -> Child {

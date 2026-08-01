@@ -1562,11 +1562,12 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   // Self-reaping supervisor. The worker is a detached process that outlives the
   // GUI, so it cannot rely on the GUI's in-memory death-monitor (which is lost
-  // when the GUI restarts). Once the GUI records the browser PID this worker
-  // serves, poll it and exit when that browser is gone — never while it is
-  // alive, and never before a PID is recorded (covers the launch window and
-  // pre-upgrade configs lacking the field). A 2-miss debounce avoids exiting on
-  // a transient sysinfo false-negative under load / sleep-wake.
+  // when the GUI restarts). Once the GUI records the browser PID and start time
+  // this worker serves, poll that exact process identity and exit when it is
+  // gone — never while it is alive. A 2-miss debounce avoids exiting on a
+  // transient sysinfo false-negative under load / sleep-wake. The decision table
+  // itself lives in `proxy_storage::supervisor_verdict` so every branch is unit
+  // tested without spawning browsers.
   //
   // This runs on a DEDICATED OS THREAD, not a tokio task. If the worker's
   // accept/dial path ever busy-loops (e.g. a client retry-storm against a
@@ -1578,29 +1579,39 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   // reaps itself. Every call here is synchronous and safe off the runtime.
   {
     let watch_id = config.id.clone();
+    let poll_interval = watchdog_poll_interval();
     std::thread::spawn(move || {
+      use crate::proxy_storage::SupervisorVerdict;
+
       let mut consecutive_misses: u32 = 0;
       loop {
-        std::thread::sleep(std::time::Duration::from_secs(15));
-        match crate::proxy_storage::get_proxy_config(&watch_id) {
-          Some(cfg) => match cfg.browser_pid {
-            Some(bpid) if bpid != 0 => {
-              if crate::proxy_storage::is_process_running(bpid) {
-                consecutive_misses = 0;
-              } else {
-                consecutive_misses += 1;
-                if consecutive_misses >= 2 {
-                  log::info!("Browser PID {bpid} for config {watch_id} is gone; worker exiting");
-                  crate::proxy_storage::delete_proxy_config(&watch_id);
-                  std::process::exit(0);
-                }
-              }
+        std::thread::sleep(poll_interval);
+        let cfg = crate::proxy_storage::get_proxy_config(&watch_id);
+        let verdict = crate::proxy_storage::supervisor_verdict(
+          cfg.as_ref(),
+          crate::proxy_storage::proxy_config_age_secs(&watch_id),
+          crate::proxy_storage::browser_owner_is_alive,
+        );
+
+        match verdict {
+          SupervisorVerdict::Keep => consecutive_misses = 0,
+          SupervisorVerdict::ExitOwnerGone => {
+            consecutive_misses += 1;
+            if consecutive_misses >= 2 {
+              let owner = cfg.as_ref().and_then(|c| c.browser_pid).unwrap_or(0);
+              log::info!("Browser PID {owner} for config {watch_id} is gone; worker exiting");
+              crate::proxy_storage::delete_proxy_config(&watch_id);
+              std::process::exit(0);
             }
-            // No browser PID recorded yet (launch window / old config): keep running.
-            _ => consecutive_misses = 0,
-          },
-          // Our own config was removed (e.g. GUI stopped us): nothing to serve.
-          None => {
+          }
+          SupervisorVerdict::ExitNeverClaimed => {
+            log::info!(
+              "Config {watch_id} was never claimed by a browser within the launch window; worker exiting"
+            );
+            crate::proxy_storage::delete_proxy_config(&watch_id);
+            std::process::exit(0);
+          }
+          SupervisorVerdict::ExitConfigRemoved => {
             log::info!("Proxy config {watch_id} was removed; worker exiting");
             std::process::exit(0);
           }
@@ -1749,6 +1760,22 @@ async fn handle_connect_from_buffer(
   tunnel_streams(client_stream, target_stream, domain).await;
 
   Ok(())
+}
+
+/// How often the self-reaping supervisor re-checks its owner. Overridable via
+/// `DONUT_PROXY_WATCHDOG_INTERVAL_MS` so lifecycle tests can observe a real
+/// worker reaping itself in seconds instead of a minute; the floor keeps a
+/// mistyped value from turning the supervisor into a spin loop.
+const WATCHDOG_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+const WATCHDOG_POLL_INTERVAL_FLOOR: std::time::Duration = std::time::Duration::from_millis(100);
+
+fn watchdog_poll_interval() -> std::time::Duration {
+  std::env::var("DONUT_PROXY_WATCHDOG_INTERVAL_MS")
+    .ok()
+    .and_then(|raw| raw.trim().parse::<u64>().ok())
+    .map(std::time::Duration::from_millis)
+    .map(|interval| interval.max(WATCHDOG_POLL_INTERVAL_FLOOR))
+    .unwrap_or(WATCHDOG_POLL_INTERVAL)
 }
 
 /// Upper bound on concurrent connection handlers per worker. A real browser

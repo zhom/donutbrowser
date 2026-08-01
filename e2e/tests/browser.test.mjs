@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -429,5 +429,167 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       realTermsBefore,
       "the browser suite modified the real Wayfern terms marker",
     );
+  }
+});
+
+/// Read every donut-proxy worker config the app has on disk.
+async function readWorkerConfigs(app) {
+  const dir = path.join(app.dataRoot, "cache", "proxy_workers");
+  let entries;
+  try {
+    entries = await readdir(dir);
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  const configs = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    try {
+      configs.push(JSON.parse(await readFile(path.join(dir, entry), "utf8")));
+    } catch {
+      // A worker rewriting its config mid-read is not a failure.
+    }
+  }
+  return configs;
+}
+
+async function waitForCondition(check, description, timeoutMs = 30_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`Timed out after ${timeoutMs}ms waiting for ${description}`);
+}
+
+/// Launch a real profile and return it together with the worker serving it,
+/// asserting the worker is pinned to that exact browser process.
+async function launchWithWorker(app, version, name) {
+  const profile = await createRealProfile(app, version, name);
+  const launched = await app.invoke("launch_browser_profile", {
+    profile,
+    url: `${fixtureUrl}/worker-lifecycle`,
+  });
+  const browserPid = launched.process_id;
+  assert.ok(browserPid, "Wayfern must report a process id");
+
+  const worker = await app.waitFor(
+    async () =>
+      (await readWorkerConfigs(app)).find(
+        (config) => config.profile_id === profile.id,
+      ),
+    { description: `the proxy worker config for ${name}` },
+  );
+  assert.ok(worker.pid, "the worker must record its own pid");
+  assert.equal(
+    worker.browser_pid,
+    browserPid,
+    "the worker must record the browser it serves",
+  );
+  // Without the start time a recycled PID reads as a live browser forever,
+  // which is exactly how workers ended up outliving everything.
+  assert.equal(
+    typeof worker.browser_pid_start_time,
+    "number",
+    "the owning browser must be pinned to a start time, not just a pid",
+  );
+  return { profile, browserPid, workerPid: worker.pid, workerId: worker.id };
+}
+
+// The reported orphan, reproduced end to end with a real Wayfern. A detached
+// donut-proxy has to notice its browser is gone and exit on its own — before it
+// recorded a verified owner identity it just kept running and users killed it
+// by hand. Phase one covers closing the browser; phase two covers the reported
+// order (app closed first, so nothing is left to reap anything).
+test("a proxy worker dies with its browser, with and without the app running", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const localWayfernPath = defaultWayfernPath(
+    process.env.DONUT_E2E_PROJECT_ROOT,
+  );
+  const localWayfernVersion = existsSync(localWayfernPath)
+    ? inspectWayfern(localWayfernPath).version
+    : null;
+  const app = appFromEnvironment("browser-worker-lifecycle", {
+    seedVersionCache: localWayfernVersion ?? false,
+    // Let the app run the real acceptance flow below; the pre-seeded marker is
+    // not what the Wayfern binary itself honours, and it would exit on launch.
+    wayfernTermsAccepted: false,
+    // The worker polls its owner every 15s in production; shorten it so a reap
+    // is observable without padding the suite by minutes.
+    extraEnv: { DONUT_PROXY_WATCHDOG_INTERVAL_MS: "500" },
+  });
+
+  const strays = new Set();
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    if (!(await app.invoke("check_wayfern_terms_accepted"))) {
+      await app.invoke("accept_wayfern_terms");
+    }
+
+    // Phase one: the app is up, the browser goes away.
+    const first = await launchWithWorker(app, prepared.version, "Worker Reap");
+    strays.add(first.browserPid).add(first.workerPid);
+    process.kill(first.browserPid, "SIGKILL");
+    await waitForCondition(
+      () => !processExists(first.browserPid),
+      `Wayfern ${first.browserPid} to exit`,
+    );
+    await waitForCondition(
+      () => !processExists(first.workerPid),
+      `donut-proxy ${first.workerPid} to exit after its browser did`,
+    );
+    assert.equal(
+      (await readWorkerConfigs(app)).find(
+        (config) => config.id === first.workerId,
+      ),
+      undefined,
+      "the worker must delete its config on the way out",
+    );
+
+    // Phase two: the reported order — close the app while the browser is still
+    // running, then close the browser. Nothing but the worker is left alive.
+    const second = await launchWithWorker(
+      app,
+      prepared.version,
+      "Worker Reap After Quit",
+    );
+    strays.add(second.browserPid).add(second.workerPid);
+    await app.close();
+
+    // The app is expected to leave a live browser and its route alone on quit.
+    // If the harness tears the session's whole process group down instead, the
+    // orphan case cannot be observed here — say so rather than asserting on it.
+    if (!processExists(second.browserPid) || !processExists(second.workerPid)) {
+      console.warn(
+        "Skipping the app-closed orphan check: the driver terminated the browser and/or worker along with the app",
+      );
+      return;
+    }
+
+    process.kill(second.browserPid, "SIGKILL");
+    await waitForCondition(
+      () => !processExists(second.browserPid),
+      `Wayfern ${second.browserPid} to exit`,
+    );
+    await waitForCondition(
+      () => !processExists(second.workerPid),
+      `orphaned donut-proxy ${second.workerPid} to reap itself with no app running`,
+    );
+  } finally {
+    for (const pid of strays) {
+      if (pid && processExists(pid)) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    }
+    await app.close();
   }
 });

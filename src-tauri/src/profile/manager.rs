@@ -1426,8 +1426,17 @@ impl ProfileManager {
           if let Err(e) = self.save_profile(&merged) {
             log::warn!("Warning: Failed to update profile with new PID: {e}");
           }
+          // Re-point the worker at the browser's NEW identity. update_proxy_pid
+          // persists it, so a browser that re-execs mid-session doesn't leave
+          // the detached worker watching a process that no longer exists.
           if let Some(prev) = old_pid {
             let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, pid);
+          } else {
+            // First sighting this session (e.g. the GUI restarted while the
+            // browser kept running): nothing to re-key, but the worker still
+            // needs a live owner recorded or nothing will ever reap it.
+            crate::proxy_manager::PROXY_MANAGER
+              .set_browser_pid_for_profile(&merged.id.to_string(), pid);
           }
         }
       } else if merged.process_id.is_some() {
@@ -1493,8 +1502,17 @@ impl ProfileManager {
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to update Wayfern profile with process info: {e}");
             }
-            if let (Some(prev), Some(new)) = (old_pid, wayfern_process.processId) {
-              let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, new);
+            // Same contract as the Camoufox path: the worker reaps itself off
+            // the identity on disk, so a PID change must reach disk too.
+            match (old_pid, wayfern_process.processId) {
+              (Some(prev), Some(new)) => {
+                let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, new);
+              }
+              (None, Some(new)) => {
+                crate::proxy_manager::PROXY_MANAGER
+                  .set_browser_pid_for_profile(&latest.id.to_string(), new);
+              }
+              _ => {}
             }
 
             // Emit profile update event to frontend

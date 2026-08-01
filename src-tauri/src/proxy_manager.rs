@@ -160,6 +160,37 @@ pub fn is_launch_placeholder_pid(pid: u32) -> bool {
   pid >= LAUNCH_PLACEHOLDER_PID_MIN
 }
 
+/// Write the exact browser process identity (PID plus its start time) onto a
+/// worker's on-disk config. Both halves matter: the PID says which process to
+/// watch, the start time pins it to THAT process so a recycled PID can never
+/// read as "my browser is still alive".
+///
+/// Rejects launch placeholders and 0 — neither is a real browser — so a caller
+/// can treat `false` as "this worker has no verified owner" and abort rather
+/// than leave a worker nothing will reap.
+pub(crate) fn persist_browser_identity(proxy_id: &str, browser_pid: u32) -> bool {
+  if browser_pid == 0 || is_launch_placeholder_pid(browser_pid) {
+    return false;
+  }
+  let Some(mut cfg) = crate::proxy_storage::get_proxy_config(proxy_id) else {
+    return false;
+  };
+  let Some(start_time) = crate::proxy_storage::resolve_process_start_time(browser_pid) else {
+    log::warn!("Could not resolve start time for browser PID {browser_pid} (proxy {proxy_id})");
+    return false;
+  };
+
+  cfg.browser_pid = Some(browser_pid);
+  cfg.browser_pid_start_time = Some(start_time);
+  if crate::proxy_storage::update_proxy_config(&cfg) {
+    log::info!("Recorded browser PID {browser_pid} on proxy config {proxy_id} for self-reaping");
+    true
+  } else {
+    log::warn!("Failed to persist browser_pid {browser_pid} to proxy config {proxy_id}");
+    false
+  }
+}
+
 impl StoredProxy {
   pub fn new(name: String, proxy_settings: ProxySettings) -> Self {
     let sync_enabled = crate::sync::is_sync_configured();
@@ -1154,15 +1185,14 @@ impl ProxyManager {
         .map_err(|e| e.to_string());
 
     let ip_result = match proxy_start_result {
-      Ok(mut proxy_config) => {
+      Ok(proxy_config) => {
         let local_url = format!("http://127.0.0.1:{}", proxy_config.local_port.unwrap_or(0));
         let config_id = proxy_config.id.clone();
         // Tie the check worker's lifetime to this GUI process: the worker's
-        // PID watchdog self-exits when browser_pid dies, so if the app is
+        // owner watchdog self-exits when that identity dies, so if the app is
         // killed mid-check the worker follows instead of idling until the
         // next app launch.
-        proxy_config.browser_pid = Some(std::process::id());
-        if !crate::proxy_storage::update_proxy_config(&proxy_config) {
+        if !persist_browser_identity(&config_id, std::process::id()) {
           log::warn!("Failed to tag check worker {config_id} with app PID for self-expiry");
         }
         // Wrap in a timeout so the check worker doesn't stay alive indefinitely
@@ -1987,14 +2017,35 @@ impl ProxyManager {
   }
 
   // Update the PID mapping for an existing proxy
+  /// Re-key the in-memory map when a profile's browser PID changes, and rewrite
+  /// the worker's on-disk owner identity to match.
+  ///
+  /// Persisting is not optional bookkeeping. The detached worker reaps itself by
+  /// watching the identity on disk, so a re-key that only touched memory left
+  /// the worker watching the PREVIOUS process: once that PID was recycled the
+  /// worker saw a live "browser" forever and outlived both its browser and the
+  /// GUI. Callers on the status-sync path (`profile::manager`) hit this every
+  /// time a browser re-execs or restarts itself.
   pub fn update_proxy_pid(&self, old_pid: u32, new_pid: u32) -> Result<(), String> {
-    let mut proxies = self.active_proxies.lock().unwrap();
-    if let Some(proxy_info) = proxies.remove(&old_pid) {
-      proxies.insert(new_pid, proxy_info);
-      Ok(())
-    } else {
-      Err(format!("No proxy found for PID {old_pid}"))
+    let proxy_id = {
+      let mut proxies = self.active_proxies.lock().unwrap();
+      match proxies.remove(&old_pid) {
+        Some(proxy_info) => {
+          let id = proxy_info.id.clone();
+          proxies.insert(new_pid, proxy_info);
+          id
+        }
+        None => return Err(format!("No proxy found for PID {old_pid}")),
+      }
+    };
+
+    if !persist_browser_identity(&proxy_id, new_pid) {
+      log::warn!(
+        "Re-keyed proxy {proxy_id} to browser PID {new_pid} in memory but could not persist it; \
+         the detached worker is still watching the previous process"
+      );
     }
+    Ok(())
   }
 
   /// Persist the real browser PID onto the worker's on-disk config so the
@@ -2010,24 +2061,33 @@ impl ProxyManager {
     if browser_pid == 0 {
       return false;
     }
-    let proxy_id = {
-      let map = self.profile_active_proxy_ids.lock().unwrap();
-      match map.get(profile_id) {
-        Some(id) => id.clone(),
-        None => return false,
-      }
-    };
-    let Some(mut cfg) = crate::proxy_storage::get_proxy_config(&proxy_id) else {
+    let Some(proxy_id) = self.resolve_proxy_id_for_profile(profile_id) else {
       return false;
     };
-    cfg.browser_pid = Some(browser_pid);
-    if crate::proxy_storage::update_proxy_config(&cfg) {
-      log::info!("Recorded browser PID {browser_pid} on proxy config {proxy_id} for self-reaping");
-      true
-    } else {
-      log::warn!("Failed to persist browser_pid {browser_pid} to proxy config {proxy_id}");
-      false
+    persist_browser_identity(&proxy_id, browser_pid)
+  }
+
+  /// Find the worker serving a profile. Prefers the in-memory map, then falls
+  /// back to the newest matching config on disk: after a GUI restart the map is
+  /// empty, but a browser (and its worker) launched by the PREVIOUS GUI can
+  /// still be running, and that worker's owner identity must stay refreshable.
+  fn resolve_proxy_id_for_profile(&self, profile_id: &str) -> Option<String> {
+    if let Some(id) = self
+      .profile_active_proxy_ids
+      .lock()
+      .unwrap()
+      .get(profile_id)
+      .cloned()
+    {
+      return Some(id);
     }
+
+    // Smallest age = most recently created worker for this profile.
+    crate::proxy_storage::list_proxy_configs()
+      .into_iter()
+      .filter(|config| config.profile_id.as_deref() == Some(profile_id))
+      .min_by_key(|config| crate::proxy_storage::proxy_config_age_secs(&config.id))
+      .map(|config| config.id)
   }
 
   // Clean up proxies for dead browser processes
@@ -2047,19 +2107,12 @@ impl ProxyManager {
     // The user doesn't care if proxy processes run indefinitely as long as they're not consuming CPU
     let orphaned_configs = {
       use crate::proxy_storage::{is_process_running, list_proxy_configs};
-      use std::time::{SystemTime, UNIX_EPOCH};
 
       let all_configs = list_proxy_configs();
       let tracked_proxy_ids: std::collections::HashSet<String> = {
         let proxies = self.active_proxies.lock().unwrap();
         proxies.values().map(|p| p.id.clone()).collect()
       };
-
-      // Get current time for grace period check
-      let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
 
       all_configs
         .into_iter()
@@ -2069,15 +2122,9 @@ impl ProxyManager {
             return false;
           }
 
-          // Extract creation time from proxy ID (format: proxy_{timestamp}_{random})
-          // This gives us a grace period for newly created proxies
-          let proxy_age = config
-            .id
-            .strip_prefix("proxy_")
-            .and_then(|s| s.split('_').next())
-            .and_then(|s| s.parse::<u64>().ok())
-            .map(|created_at| now.saturating_sub(created_at))
-            .unwrap_or(0);
+          // Creation time comes from the proxy ID (format: proxy_{timestamp}_{random}),
+          // giving newly created proxies a grace period.
+          let proxy_age = crate::proxy_storage::proxy_config_age_secs(&config.id);
 
           // Grace period: don't clean up proxies created in the last 120 seconds
           // This prevents race conditions during startup (increased from 60 to 120 for safety)
@@ -2140,12 +2187,6 @@ impl ProxyManager {
     // proxies for running browsers (due to launcher-vs-browser PID mismatch).
     {
       use crate::proxy_storage::{is_process_running, list_proxy_configs};
-      use std::time::{SystemTime, UNIX_EPOCH};
-
-      let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
 
       let all_configs = list_proxy_configs();
       for config in all_configs {
@@ -2161,13 +2202,7 @@ impl ProxyManager {
         }
 
         // Check age: only kill if older than 5 minutes
-        let proxy_age = config
-          .id
-          .strip_prefix("proxy_")
-          .and_then(|s| s.split('_').next())
-          .and_then(|s| s.parse::<u64>().ok())
-          .map(|created_at| now.saturating_sub(created_at))
-          .unwrap_or(0);
+        let proxy_age = crate::proxy_storage::proxy_config_age_secs(&config.id);
 
         if proxy_age > 300 {
           log::info!(
@@ -2184,12 +2219,13 @@ impl ProxyManager {
     // Kill proxy workers whose browser process has died.
     //
     // active_proxies is keyed by the EXACT browser PID that was recorded in
-    // update_proxy_pid(). Checking that PID against a single process-table
-    // snapshot is deterministic: either the PID refers to a live process or
-    // it doesn't. This avoids the fuzzy launcher-vs-browser detection used
-    // by check_browser_status (which historically had false negatives on
-    // Linux and was the reason profile-associated workers were left alone
-    // in the other cleanup branches).
+    // update_proxy_pid(). That PID is matched against a single process-table
+    // snapshot AND, when the worker's config records one, against the browser's
+    // start time — existence alone would let a recycled PID keep a dead
+    // browser's worker alive indefinitely. This avoids the fuzzy
+    // launcher-vs-browser detection used by check_browser_status (which
+    // historically had false negatives on Linux and was the reason
+    // profile-associated workers were left alone in the other cleanup branches).
     //
     // Without this, every time a user closes their browser via the window's
     // X button (bypassing Donut's stop flow) or the browser crashes, the
@@ -2228,10 +2264,18 @@ impl ProxyManager {
           if browser_pid == 0 || is_launch_placeholder_pid(browser_pid) {
             continue;
           }
-          if system
-            .process(sysinfo::Pid::from_u32(browser_pid))
-            .is_some()
-          {
+          // Reuse the single scan rather than re-querying per PID, but hold the
+          // entry to the recorded identity when the worker has one.
+          let expected_start_time = crate::proxy_storage::get_proxy_config(&proxy_id)
+            .and_then(|config| config.browser_pid_start_time);
+          let still_the_same_browser = match system.process(sysinfo::Pid::from_u32(browser_pid)) {
+            Some(process) => expected_start_time.is_none_or(|expected| {
+              // Same PID, different process: the browser died and its PID was reused.
+              process.start_time() == expected
+            }),
+            None => false,
+          };
+          if still_the_same_browser {
             alive_pids.push(browser_pid);
           } else {
             dead_candidates.push((browser_pid, proxy_id, profile_id));
@@ -2845,6 +2889,143 @@ mod tests {
     assert_eq!(info.profile_id.as_deref(), Some("prof_a"));
   }
 
+  /// Save a worker config for a profile in an isolated cache dir and return its id.
+  fn saved_worker_config(profile_id: Option<&str>) -> String {
+    let id = crate::proxy_storage::generate_proxy_id();
+    let config = crate::proxy_storage::ProxyConfig::new(id.clone(), "DIRECT".to_string(), Some(0))
+      .with_profile_id(profile_id.map(str::to_string));
+    crate::proxy_storage::save_proxy_config(&config).unwrap();
+    id
+  }
+
+  #[test]
+  fn browser_identity_records_the_pid_and_its_start_time() {
+    let temp = tempfile::tempdir().unwrap();
+    let _cache_guard = crate::app_dirs::set_test_cache_dir(temp.path().to_path_buf());
+    let id = saved_worker_config(Some("prof_identity"));
+
+    let pid = std::process::id();
+    assert!(persist_browser_identity(&id, pid));
+
+    let saved = crate::proxy_storage::get_proxy_config(&id).unwrap();
+    assert_eq!(saved.browser_pid, Some(pid));
+    assert_eq!(
+      saved.browser_pid_start_time,
+      crate::proxy_storage::process_start_time(pid),
+      "the start time must pin the PID to this exact process"
+    );
+    assert!(crate::proxy_storage::browser_owner_is_alive(&saved));
+  }
+
+  #[test]
+  fn browser_identity_refuses_owners_that_are_not_real_browsers() {
+    let temp = tempfile::tempdir().unwrap();
+    let _cache_guard = crate::app_dirs::set_test_cache_dir(temp.path().to_path_buf());
+    let id = saved_worker_config(Some("prof_reject"));
+
+    // 0 and launch placeholders mean "no browser reported yet". Recording one
+    // would leave a worker whose owner can never die, so it must fail loudly
+    // enough for the caller to abort the launch.
+    assert!(!persist_browser_identity(&id, 0));
+    assert!(!persist_browser_identity(
+      &id,
+      next_launch_placeholder_pid()
+    ));
+    // A PID with no process behind it can't be pinned to an identity either.
+    assert!(!persist_browser_identity(&id, u32::MAX));
+    // An unknown worker is not silently created.
+    assert!(!persist_browser_identity(
+      "proxy_1_missing",
+      std::process::id()
+    ));
+
+    let saved = crate::proxy_storage::get_proxy_config(&id).unwrap();
+    assert_eq!(saved.browser_pid, None);
+    assert_eq!(saved.browser_pid_start_time, None);
+  }
+
+  /// The regression behind the orphaned-worker reports: the status synchronizer
+  /// re-keys a profile's browser PID whenever the browser re-execs, and that
+  /// change has to reach the worker's config. When it only landed in memory the
+  /// detached worker kept watching the PREVIOUS process — and once that PID was
+  /// recycled it saw a live "browser" forever and outlived everything.
+  #[test]
+  fn remapping_a_browser_pid_rewrites_the_workers_on_disk_owner() {
+    let temp = tempfile::tempdir().unwrap();
+    let _cache_guard = crate::app_dirs::set_test_cache_dir(temp.path().to_path_buf());
+    let id = saved_worker_config(Some("prof_remap"));
+
+    let pm = ProxyManager::new();
+    pm.insert_active_proxy(100, make_proxy_info(&id, 9010, Some("prof_remap")));
+    let stale_start_time = 1;
+    let mut seeded = crate::proxy_storage::get_proxy_config(&id).unwrap();
+    seeded.browser_pid = Some(100);
+    seeded.browser_pid_start_time = Some(stale_start_time);
+    assert!(crate::proxy_storage::update_proxy_config(&seeded));
+
+    let live_pid = std::process::id();
+    pm.update_proxy_pid(100, live_pid).unwrap();
+
+    let saved = crate::proxy_storage::get_proxy_config(&id).unwrap();
+    assert_eq!(saved.browser_pid, Some(live_pid));
+    assert_ne!(saved.browser_pid_start_time, Some(stale_start_time));
+    assert!(
+      crate::proxy_storage::browser_owner_is_alive(&saved),
+      "the worker must now be watching the browser that is actually running"
+    );
+  }
+
+  /// After a GUI restart the profile→proxy map is empty, but a browser launched
+  /// by the previous GUI can still be running with its worker attached. That
+  /// worker's owner still has to be refreshable, so the lookup falls back to disk.
+  #[test]
+  fn the_worker_for_a_profile_is_found_on_disk_when_memory_is_empty() {
+    let temp = tempfile::tempdir().unwrap();
+    let _cache_guard = crate::app_dirs::set_test_cache_dir(temp.path().to_path_buf());
+    let id = saved_worker_config(Some("prof_restart"));
+    let _other = saved_worker_config(Some("prof_unrelated"));
+
+    let pm = ProxyManager::new();
+    assert_eq!(
+      pm.resolve_proxy_id_for_profile("prof_restart").as_deref(),
+      Some(id.as_str())
+    );
+    assert!(pm.resolve_proxy_id_for_profile("prof_absent").is_none());
+
+    let live_pid = std::process::id();
+    assert!(pm.set_browser_pid_for_profile("prof_restart", live_pid));
+    let saved = crate::proxy_storage::get_proxy_config(&id).unwrap();
+    assert_eq!(saved.browser_pid, Some(live_pid));
+    assert!(crate::proxy_storage::browser_owner_is_alive(&saved));
+  }
+
+  #[test]
+  fn the_in_memory_mapping_wins_over_the_on_disk_scan() {
+    let temp = tempfile::tempdir().unwrap();
+    let _cache_guard = crate::app_dirs::set_test_cache_dir(temp.path().to_path_buf());
+    let stale = saved_worker_config(Some("prof_both"));
+    let current = saved_worker_config(Some("prof_both"));
+
+    let pm = ProxyManager::new();
+    pm.profile_active_proxy_ids
+      .lock()
+      .unwrap()
+      .insert("prof_both".to_string(), current.clone());
+
+    assert_eq!(
+      pm.resolve_proxy_id_for_profile("prof_both").as_deref(),
+      Some(current.as_str())
+    );
+    assert!(pm.set_browser_pid_for_profile("prof_both", std::process::id()));
+    assert_eq!(
+      crate::proxy_storage::get_proxy_config(&stale)
+        .unwrap()
+        .browser_pid,
+      None,
+      "only the tracked worker may be re-pointed"
+    );
+  }
+
   #[test]
   fn test_update_proxy_pid_error_for_unknown_pid() {
     let pm = ProxyManager::new();
@@ -3057,6 +3238,7 @@ mod tests {
       dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
+      browser_pid_start_time: None,
     };
     let dead_config = ProxyConfig {
       id: dead_id.clone(),
@@ -3071,6 +3253,7 @@ mod tests {
       dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
+      browser_pid_start_time: None,
     };
 
     save_proxy_config(&live_config).unwrap();
@@ -3113,6 +3296,7 @@ mod tests {
       dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
+      browser_pid_start_time: None,
     };
 
     // Save
@@ -3540,6 +3724,7 @@ mod tests {
       dns_allowlist_mode: false,
       local_protocol: None,
       browser_pid: None,
+      browser_pid_start_time: None,
     };
     save_proxy_config(&config).unwrap();
 
