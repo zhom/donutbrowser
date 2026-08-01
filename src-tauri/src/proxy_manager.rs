@@ -2269,11 +2269,15 @@ impl ProxyManager {
           let expected_start_time = crate::proxy_storage::get_proxy_config(&proxy_id)
             .and_then(|config| config.browser_pid_start_time);
           let still_the_same_browser = match system.process(sysinfo::Pid::from_u32(browser_pid)) {
-            Some(process) => expected_start_time.is_none_or(|expected| {
-              // Same PID, different process: the browser died and its PID was reused.
-              process.start_time() == expected
-            }),
-            None => false,
+            // An exited-but-unreaped browser still occupies its PID in this
+            // snapshot; only a genuinely live process counts.
+            Some(process) if crate::proxy_storage::snapshot_process_is_alive(process) => {
+              expected_start_time.is_none_or(|expected| {
+                // Same PID, different process: the browser died and its PID was reused.
+                process.start_time() == expected
+              })
+            }
+            _ => false,
           };
           if still_the_same_browser {
             alive_pids.push(browser_pid);

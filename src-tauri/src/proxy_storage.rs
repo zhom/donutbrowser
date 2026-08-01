@@ -210,6 +210,16 @@ pub fn generate_proxy_id() -> String {
   )
 }
 
+/// A process that has exited but whose parent has not reaped it. It still owns
+/// a PID and still appears in the process table, so an existence check reports
+/// it as alive — forever, since the workers and browsers we spawn are detached
+/// and never waited on. Treating it as running is what would keep a dead
+/// browser's worker alive on Linux, where zombies persist for the whole life of
+/// the parent process.
+fn process_is_zombie(process: &sysinfo::Process) -> bool {
+  process.status() == sysinfo::ProcessStatus::Zombie
+}
+
 pub fn process_start_time(pid: u32) -> Option<u64> {
   use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
   let pid = sysinfo::Pid::from_u32(pid);
@@ -219,7 +229,17 @@ pub fn process_start_time(pid: u32) -> Option<u64> {
     true,
     ProcessRefreshKind::nothing(),
   );
-  system.process(pid).map(sysinfo::Process::start_time)
+  system
+    .process(pid)
+    .filter(|process| !process_is_zombie(process))
+    .map(sysinfo::Process::start_time)
+}
+
+/// Whether a process from an existing `System` snapshot is genuinely alive.
+/// Callers that already hold a full scan use this instead of re-querying, but
+/// must still exclude zombies the same way `process_start_time` does.
+pub fn snapshot_process_is_alive(process: &sysinfo::Process) -> bool {
+  !process_is_zombie(process)
 }
 
 pub fn is_process_running(pid: u32) -> bool {
@@ -508,6 +528,47 @@ mod tests {
     assert_eq!(proxy_config_age_secs("not-a-proxy-id"), 0);
     assert_eq!(proxy_config_age_secs("proxy_abc_123"), 0);
     assert_eq!(proxy_config_age_secs(&format!("proxy_{}_1", now + 600)), 0);
+  }
+
+  /// An exited child that nobody has waited on stays in the process table as a
+  /// zombie for as long as its parent lives — and everything we spawn is
+  /// detached and never waited on. Reporting one as running would keep a dead
+  /// browser's worker alive for the whole life of the app.
+  #[cfg(unix)]
+  #[test]
+  fn an_exited_but_unreaped_child_is_not_running() {
+    let child = std::process::Command::new("true")
+      .stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()
+      .expect("failed to spawn child");
+    let pid = child.id();
+    let start_time = process_start_time(pid);
+
+    // Deliberately leak the handle: waiting would reap the zombie and destroy
+    // the very condition under test.
+    std::mem::forget(child);
+
+    let mut observed_dead = false;
+    for _ in 0..100 {
+      if !is_process_running(pid) {
+        observed_dead = true;
+        break;
+      }
+      std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(
+      observed_dead,
+      "an exited child that was never waited on must not read as running (PID {pid})"
+    );
+    // The same must hold for the identity check the workers actually use.
+    assert!(!process_identity_matches(pid, start_time));
+
+    // Reap it now so the test process doesn't leave one behind.
+    unsafe {
+      libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0);
+    }
   }
 
   #[test]
