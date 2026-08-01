@@ -1,0 +1,258 @@
+name: Publish sidecars to R2
+
+# Publishes the `donut-proxy` sidecar to the bucket behind
+# https://download.wayfern.com, which is where the Wayfern VM fleet's bootstrap
+# scripts fetch it from.
+#
+# WHY THIS EXISTS SEPARATELY FROM release.yml
+# The desktop app ships donut-proxy INSIDE the bundle as a Tauri sidecar, so a
+# desktop release never needs it in a bucket. The fleet is the opposite: a leased
+# macOS or Windows host has no bundle, and its agent refuses to launch a browser
+# at all when the sidecar is missing (agent/launcher.go). Tying publication to a
+# desktop release would mean the fleet could only be unblocked by cutting one.
+#
+# The fleet needs exactly two targets. Other platforms get their sidecar from the
+# app bundle and are deliberately not built here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build from (defaults to the triggering ref)"
+        required: false
+        type: string
+  push:
+    branches: [main]
+    paths:
+      # The proxy is a separate bin from the app, and republishing invalidates
+      # the SHA an operator recorded out of band — so this is narrowed to the
+      # modules `src/bin/proxy_server.rs` actually imports, rather than all of
+      # src-tauri/src.
+      #
+      # BEST EFFORT, deliberately: the bin reaches donutbrowser_lib, so a change
+      # deep in a shared module can alter the binary without matching a path
+      # here. `workflow_dispatch` is the escape hatch, and the round-trip digest
+      # check means a stale publish is visible rather than silent.
+      - "src-tauri/src/bin/proxy_server.rs"
+      - "src-tauri/src/proxy_server.rs"
+      - "src-tauri/src/proxy_storage.rs"
+      - "src-tauri/src/proxy_runner.rs"
+      - "src-tauri/src/socks5_local.rs"
+      - "src-tauri/src/app_dirs.rs"
+      - "src-tauri/src/vpn/**"
+      - "src-tauri/src/vpn_worker_storage.rs"
+      - "src-tauri/src/xray_worker_runner.rs"
+      - "src-tauri/src/xray/**"
+      - "src-tauri/build.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/publish-sidecars.yml"
+
+concurrency:
+  # Two overlapping runs would race on the same object keys and the loser's
+  # bytes could win, leaving the bucket serving a build nobody recorded.
+  group: publish-sidecars
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build donut-proxy (${{ matrix.target }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      # One target failing must not leave the other unpublished and the pair
+      # skewed; publish what built and report the rest.
+      fail-fast: false
+      matrix:
+        include:
+          # The leased Mac mini (Apple silicon).
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            artifact: donut-proxy-aarch64-apple-darwin
+          # The leased Elastic Metal Windows box.
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: donut-proxy-x86_64-pc-windows-msvc.exe
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          # build.rs derives BUILD_VERSION from git; a shallow clone with no tags
+          # makes every published binary report `nightly-<hash>` instead of a
+          # version, which is what an operator reads to tell builds apart.
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Build donut-proxy
+        shell: bash
+        working-directory: ./src-tauri
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: cargo build --bin donut-proxy --target ${{ matrix.target }} --release
+
+      - name: Stage the binary and record its digest
+        id: stage
+        shell: bash
+        working-directory: ./src-tauri
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sidecars"
+          src="target/${{ matrix.target }}/release/donut-proxy"
+          [ -f "$src.exe" ] && src="$src.exe"
+          if [ ! -f "$src" ]; then
+            echo "::error::cargo reported success but $src does not exist"
+            exit 1
+          fi
+          dest="$RUNNER_TEMP/sidecars/${{ matrix.artifact }}"
+          cp "$src" "$dest"
+          chmod +x "$dest"
+
+          # Prove the thing we are about to publish actually runs and is the
+          # binary we think it is. A sidecar that cannot start is indistinguishable
+          # from a missing one once it is on a leased host, except that it fails
+          # later and less clearly.
+          version="$("$dest" --version)"
+          case "$version" in
+            "donut-proxy "*) ;;
+            *) echo "::error::unexpected --version output: $version"; exit 1 ;;
+          esac
+
+          if command -v sha256sum >/dev/null; then
+            digest="$(sha256sum "$dest" | cut -d' ' -f1)"
+          else
+            digest="$(shasum -a 256 "$dest" | cut -d' ' -f1)"
+          fi
+
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          printf '%s  %s\n' "$digest" "${{ matrix.artifact }}" \
+            > "$RUNNER_TEMP/sidecars/${{ matrix.artifact }}.sha256"
+
+      - name: Publish to R2
+        shell: bash
+        env:
+          # The repo's existing R2 secrets (see publish-repos.yml) are preferred;
+          # the AWS_* names are accepted because R2's S3 API is what those
+          # credentials are for and an operator may have configured either.
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_KEY_FALLBACK: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_FALLBACK: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The bucket behind download.wayfern.com. Defaulted rather than
+          # required so this works with the account's existing setup.
+          WAYFERN_R2_BUCKET: ${{ secrets.WAYFERN_R2_BUCKET }}
+          ARTIFACT: ${{ matrix.artifact }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          if ! command -v aws >/dev/null; then
+            # Preinstalled on every GitHub-hosted image, so its absence means a
+            # self-hosted or changed runner. Say that, rather than failing later
+            # with "command not found" from inside a chain of pipes.
+            echo "::error::aws CLI not found on this runner. Install aws-cli v2 or use a GitHub-hosted runner."
+            exit 1
+          fi
+
+          # Byte-identical to publish-repos.yml. Deliberately NOT a `tr -d` of
+          # quote characters: that would corrupt a secret containing one, rather
+          # than only unwrapping a value someone pasted with quotes around it.
+          strip() { printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"; }
+
+          key_id="$(strip "${R2_ACCESS_KEY_ID:-}")"
+          secret="$(strip "${R2_SECRET_ACCESS_KEY:-}")"
+          if [ -z "$key_id" ] || [ -z "$secret" ]; then
+            key_id="$(strip "${AWS_KEY_FALLBACK:-}")"
+            secret="$(strip "${AWS_SECRET_FALLBACK:-}")"
+          fi
+          if [ -z "$key_id" ] || [ -z "$secret" ]; then
+            echo "::error::No R2 credentials. Set R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY (preferred) or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY as repository secrets."
+            exit 1
+          fi
+
+          bucket="$(strip "${WAYFERN_R2_BUCKET:-}")"
+          bucket="${bucket:-wayfern}"
+
+          endpoint="$(strip "${R2_ENDPOINT_URL:-}")"
+          if [ -z "$endpoint" ]; then
+            account="$(strip "${CLOUDFLARE_ACCOUNT_ID:-}")"
+            if [ -z "$account" ]; then
+              echo "::error::Set R2_ENDPOINT_URL, or CLOUDFLARE_ACCOUNT_ID so the endpoint can be derived."
+              exit 1
+            fi
+            endpoint="https://${account}.r2.cloudflarestorage.com"
+          fi
+          case "$endpoint" in https://*) ;; *) endpoint="https://$endpoint" ;; esac
+
+          export AWS_ACCESS_KEY_ID="$key_id"
+          export AWS_SECRET_ACCESS_KEY="$secret"
+          export AWS_DEFAULT_REGION="auto"
+          # aws-cli v2.23+ sends integrity checksums by default and R2 rejects
+          # them with `Unauthorized`. Same workaround as scripts/publish-repo.sh.
+          export AWS_REQUEST_CHECKSUM_CALCULATION="WHEN_REQUIRED"
+          export AWS_RESPONSE_CHECKSUM_VALIDATION="WHEN_REQUIRED"
+
+          src="$RUNNER_TEMP/sidecars/$ARTIFACT"
+
+          # no-cache, not a long max-age: this key is deliberately overwritten in
+          # place, and a CDN copy of the previous build would make a host fail
+          # the SHA check the bootstrap performs, which reads as a corrupt
+          # download rather than a stale cache.
+          aws s3 cp "$src" "s3://${bucket}/${ARTIFACT}" \
+            --endpoint-url "$endpoint" \
+            --content-type application/octet-stream \
+            --cache-control "no-cache, must-revalidate" \
+            --only-show-errors
+          aws s3 cp "$src.sha256" "s3://${bucket}/${ARTIFACT}.sha256" \
+            --endpoint-url "$endpoint" \
+            --content-type text/plain \
+            --cache-control "no-cache, must-revalidate" \
+            --only-show-errors
+
+          # Read it back and compare. Without this, "published" is an assumption:
+          # a truncated upload or a write to the wrong bucket both look like
+          # success, and the failure would surface days later on a leased host
+          # as an unexplained checksum mismatch.
+          verify="$RUNNER_TEMP/verify-$ARTIFACT"
+          aws s3 cp "s3://${bucket}/${ARTIFACT}" "$verify" \
+            --endpoint-url "$endpoint" --only-show-errors
+          if command -v sha256sum >/dev/null; then
+            got="$(sha256sum "$verify" | cut -d' ' -f1)"
+          else
+            got="$(shasum -a 256 "$verify" | cut -d' ' -f1)"
+          fi
+          if [ "$got" != "$DIGEST" ]; then
+            echo "::error::Round-trip mismatch for $ARTIFACT: uploaded $DIGEST, bucket returned $got"
+            exit 1
+          fi
+          echo "Published and verified $ARTIFACT ($DIGEST)"
+
+      - name: Summarise
+        if: always() && steps.stage.outputs.digest != ''
+        shell: bash
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+          VERSION: ${{ steps.stage.outputs.version }}
+        run: |
+          {
+            echo "### $ARTIFACT"
+            echo ""
+            echo "- version: \`$VERSION\`"
+            echo "- sha256: \`$DIGEST\`"
+            echo "- url: https://download.wayfern.com/$ARTIFACT"
+            echo ""
+            echo "The fleet bootstrap takes this digest as an argument, so copy it"
+            echo "from here rather than fetching the published \`.sha256\` — a hash"
+            echo "served by the same bucket as the binary verifies transport only."
+          } >> "$GITHUB_STEP_SUMMARY"
