@@ -775,7 +775,7 @@ async fn test_wireguard_traffic_flows_through_donut_proxy(
 
   cleanup_runtime().await;
   if !test_harness::is_docker_available() {
-    eprintln!("skipping WireGuard e2e test because Docker is unavailable");
+    eprintln!("skipping WireGuard e2e test because Docker cannot run Linux containers");
     return Ok(());
   }
 

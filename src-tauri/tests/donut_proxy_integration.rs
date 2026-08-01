@@ -1612,10 +1612,8 @@ async fn test_local_proxy_with_shadowsocks_upstream(
   let binary_path = setup_test().await?;
   let mut tracker = ProxyTestTracker::new(binary_path.clone());
 
-  // Check Docker availability
-  let docker_check = std::process::Command::new("docker").arg("version").output();
-  if docker_check.map(|o| !o.status.success()).unwrap_or(true) {
-    eprintln!("skipping Shadowsocks e2e test because Docker is unavailable");
+  if !common::docker_supports_linux_containers() {
+    eprintln!("skipping Shadowsocks e2e test because Docker cannot run Linux containers");
     return Ok(());
   }
 
