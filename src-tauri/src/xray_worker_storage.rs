@@ -2,8 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 const UNSTARTED_WORKER_GRACE_SECS: u64 = 60;
+const TRANSIENT_IO_RETRY_ATTEMPTS: u32 = 25;
+const TRANSIENT_IO_RETRY_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct XrayWorkerConfig {
@@ -104,9 +107,59 @@ fn atomic_write_owner_only(path: &Path, content: &[u8]) -> std::io::Result<()> {
   temporary.write_all(content)?;
   temporary.flush()?;
   temporary.as_file().sync_all()?;
-  temporary.persist(path).map_err(|error| error.error)?;
+
+  let mut attempt = 0;
+  loop {
+    match temporary.persist(path) {
+      Ok(_) => break,
+      Err(error)
+        if attempt < TRANSIENT_IO_RETRY_ATTEMPTS && io_error_is_transient(&error.error) =>
+      {
+        temporary = error.file;
+        attempt += 1;
+        std::thread::sleep(TRANSIENT_IO_RETRY_DELAY);
+      }
+      Err(error) => return Err(error.error),
+    }
+  }
+
   crate::app_dirs::restrict_to_owner(path);
   Ok(())
+}
+
+/// Windows refuses to replace or open a file another handle holds without
+/// `FILE_SHARE_DELETE`, and virus scanners open files exactly that way. The
+/// supervisor rewrites worker state while the GUI polls it, so both the rename
+/// and the read fail spuriously under that race. Those are worth retrying;
+/// every other error is real and must surface.
+#[cfg(windows)]
+fn io_error_is_transient(error: &std::io::Error) -> bool {
+  const ERROR_ACCESS_DENIED: i32 = 5;
+  const ERROR_SHARING_VIOLATION: i32 = 32;
+  const ERROR_LOCK_VIOLATION: i32 = 33;
+  matches!(
+    error.raw_os_error(),
+    Some(ERROR_ACCESS_DENIED | ERROR_SHARING_VIOLATION | ERROR_LOCK_VIOLATION)
+  )
+}
+
+#[cfg(not(windows))]
+fn io_error_is_transient(_error: &std::io::Error) -> bool {
+  false
+}
+
+fn read_worker_state(path: &Path) -> Option<Vec<u8>> {
+  let mut attempt = 0;
+  loop {
+    match fs::read(path) {
+      Ok(content) => return Some(content),
+      Err(error) if attempt < TRANSIENT_IO_RETRY_ATTEMPTS && io_error_is_transient(&error) => {
+        attempt += 1;
+        std::thread::sleep(TRANSIENT_IO_RETRY_DELAY);
+      }
+      Err(_) => return None,
+    }
+  }
 }
 
 pub fn xray_worker_config_path(id: &str) -> PathBuf {
@@ -202,8 +255,7 @@ pub fn get_xray_worker_config(id: &str) -> Option<XrayWorkerConfig> {
 }
 
 pub fn get_xray_worker_config_from_path(path: &Path) -> Option<XrayWorkerConfig> {
-  let content = fs::read(path).ok()?;
-  serde_json::from_slice(&content).ok()
+  serde_json::from_slice(&read_worker_state(path)?).ok()
 }
 
 pub fn update_xray_worker_config(config: &XrayWorkerConfig) -> bool {
@@ -375,27 +427,25 @@ mod tests {
 
   #[test]
   fn atomic_state_updates_never_expose_partial_json() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
-
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("state.json");
     atomic_write_owner_only(&path, br#"{"value":0}"#).unwrap();
-    let complete = Arc::new(AtomicBool::new(false));
-    let writer_complete = complete.clone();
     let writer_path = path.clone();
     let writer = std::thread::spawn(move || {
       for value in 1..=500 {
         let content = serde_json::to_vec(&serde_json::json!({ "value": value })).unwrap();
         atomic_write_owner_only(&writer_path, &content).unwrap();
       }
-      writer_complete.store(true, Ordering::Release);
     });
 
-    while !complete.load(Ordering::Acquire) {
-      let content = std::fs::read(&path).unwrap();
+    // Bound the reader on the writer's own lifetime. A completion flag the
+    // writer sets last is never set when it panics, which strands this loop
+    // reading the last good file forever instead of failing.
+    while !writer.is_finished() {
+      let content = read_worker_state(&path).expect("state file stays readable while replaced");
       let value: serde_json::Value = serde_json::from_slice(&content).unwrap();
       assert!(value["value"].is_number());
+      std::thread::yield_now();
     }
     writer.join().unwrap();
   }
