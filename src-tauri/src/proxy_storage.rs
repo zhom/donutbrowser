@@ -210,14 +210,51 @@ pub fn generate_proxy_id() -> String {
   )
 }
 
-/// A process that has exited but whose parent has not reaped it. It still owns
-/// a PID and still appears in the process table, so an existence check reports
-/// it as alive — forever, since the workers and browsers we spawn are detached
-/// and never waited on. Treating it as running is what would keep a dead
-/// browser's worker alive on Linux, where zombies persist for the whole life of
-/// the parent process.
-fn process_is_zombie(process: &sysinfo::Process) -> bool {
-  process.status() == sysinfo::ProcessStatus::Zombie
+/// Has this process exited even though the process table still lists it?
+///
+/// Both platforms have a way for a dead process to keep its PID and its
+/// process-table entry, which makes a bare existence check report it as alive.
+///
+/// Unix: a zombie, exited but not reaped by its parent. It persists for the
+/// whole life of the parent, and since the workers and browsers we spawn are
+/// detached and never waited on, that is forever. Treating one as running is
+/// what would keep a dead browser's worker alive.
+///
+/// Windows: no zombie status, but the same hazard. The process object outlives
+/// the last thread that exited, and its PID stays reserved for as long as any
+/// handle to it is open, so a snapshot taken right after a kill can still list
+/// a process that is already gone. `WaitForSingleObject` with a zero timeout
+/// answers authoritatively: a signalled process object has exited, whatever the
+/// snapshot says.
+fn process_has_exited(process: &sysinfo::Process) -> bool {
+  if process.status() == sysinfo::ProcessStatus::Zombie {
+    return true;
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+      OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+
+    unsafe {
+      // Opening fails for processes we are not allowed to touch (another user,
+      // elevated, protected). Those we cannot query, so keep the snapshot's
+      // verdict rather than declaring a live process dead.
+      let Ok(handle) = OpenProcess(PROCESS_SYNCHRONIZE, false, process.pid().as_u32()) else {
+        return false;
+      };
+      let signalled = WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
+      let _ = CloseHandle(handle);
+      signalled
+    }
+  }
+
+  #[cfg(not(target_os = "windows"))]
+  {
+    false
+  }
 }
 
 pub fn process_start_time(pid: u32) -> Option<u64> {
@@ -231,15 +268,16 @@ pub fn process_start_time(pid: u32) -> Option<u64> {
   );
   system
     .process(pid)
-    .filter(|process| !process_is_zombie(process))
+    .filter(|process| !process_has_exited(process))
     .map(sysinfo::Process::start_time)
 }
 
 /// Whether a process from an existing `System` snapshot is genuinely alive.
 /// Callers that already hold a full scan use this instead of re-querying, but
-/// must still exclude zombies the same way `process_start_time` does.
+/// must still exclude the dead-yet-listed the same way `process_start_time`
+/// does.
 pub fn snapshot_process_is_alive(process: &sysinfo::Process) -> bool {
-  !process_is_zombie(process)
+  !process_has_exited(process)
 }
 
 pub fn is_process_running(pid: u32) -> bool {
@@ -395,25 +433,12 @@ mod tests {
       .expect("failed to spawn child");
     let pid = child.id();
     child.wait().expect("child failed");
-    // On Windows a terminated process remains a live kernel object (and sysinfo
-    // keeps reporting it) until the LAST handle to it is closed. std::Child
-    // holds that handle until dropped, so the check below would otherwise see
-    // the just-exited process as still running. Drop the handle, then allow a
-    // brief moment for the OS to reclaim the process before asserting. (In
-    // production these PIDs belong to detached browsers/workers that no handle
-    // outlives, so is_process_running already observes their exit promptly.)
-    drop(child);
 
-    let mut became_dead = false;
-    for _ in 0..50 {
-      if !is_process_running(pid) {
-        became_dead = true;
-        break;
-      }
-      std::thread::sleep(std::time::Duration::from_millis(20));
-    }
+    // `child` is deliberately still in scope. On Windows its open handle keeps
+    // the exited process a live kernel object that the snapshot still reports,
+    // which is exactly the case `process_has_exited` has to see through.
     assert!(
-      became_dead,
+      !is_process_running(pid),
       "is_process_running must return false for a dead process (PID {pid})"
     );
   }
