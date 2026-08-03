@@ -345,6 +345,10 @@
       "nameDesc": "Ad (Z–A)",
       "newest": "Önce en yeni",
       "oldest": "Önce en eski"
+    },
+    "remote": {
+      "runningTooltip": "Uzak bir makinede çalışıyor. Profili buraya geri getirmek için durdurun.",
+      "pendingSyncTooltip": "Uzak oturumun değiştirdikleri indiriliyor. Bittiğinde yeniden kullanılabilir olacak."
     }
   },
   "createProfile": {
@@ -1880,7 +1884,12 @@
     "cookieBotUnsupportedPlatform": "Cookie Bot, {{platform}} profillerini çalıştıramaz. Yalnızca Windows ve macOS profilleri desteklenir.",
     "cookieBotRequiresExitNode": "Önce bir proxy veya VPN ekleyin. Aksi hâlde çalışma bir veri merkezi adresinden çıkar ve bu, profilin kimliğine zarar verir.",
     "unknownCode": "Bir sorun oluştu: {{code}}",
-    "cookieBotTouchFingerprintUnsupported": "Bu profil dokunmatik bir cihaz olduğunu bildiriyor ve bot bunu süremez. Masaüstü parmak izi kullanın."
+    "cookieBotTouchFingerprintUnsupported": "Bu profil dokunmatik bir cihaz olduğunu bildiriyor ve bot bunu süremez. Masaüstü parmak izi kullanın.",
+    "profileRunningRemotely": "Bu profil uzak bir makinede çalışıyor. Önce uzak oturumu durdurun.",
+    "profileRemoteSyncPending": "Uzak oturum az önce bitti. Bu profili burada açmadan önce değişikliklerinin inmesi bekleniyor.",
+    "profileLockedByMember": "Bu profil {{email}} tarafından kullanılıyor.",
+    "profileLockedElsewhere": "Bu profil başka bir cihazda kullanılıyor.",
+    "profileLockUnavailable": "Bu profilin başka bir yerde kullanılıp kullanılmadığı denetlenemedi. Bağlantınızı kontrol edip yeniden deneyin."
   },
   "rail": {
     "profiles": "Profiller",

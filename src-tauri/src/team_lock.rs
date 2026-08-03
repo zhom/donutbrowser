@@ -95,8 +95,8 @@ impl ProfileLockManager {
 
   pub async fn acquire_lock(&self, profile_id: &str) -> Result<(), String> {
     let client = Client::new();
-    let access_token =
-      CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
+    let access_token = CloudAuthManager::load_access_token()?
+      .ok_or_else(|| crate::backend_error("PROFILE_LOCK_UNAVAILABLE"))?;
 
     let url = format!("{CLOUD_API_URL}/api/profile-locks/{profile_id}");
     let response = client
@@ -104,24 +104,29 @@ impl ProfileLockManager {
       .header("Authorization", format!("Bearer {access_token}"))
       .send()
       .await
-      .map_err(|e| format!("Failed to acquire lock: {e}"))?;
+      .map_err(|e| {
+        log::warn!("Failed to acquire profile lock for {profile_id}: {e}");
+        crate::backend_error("PROFILE_LOCK_UNAVAILABLE")
+      })?;
 
     if !response.status().is_success() {
       let status = response.status();
       let body = response.text().await.unwrap_or_default();
-      return Err(format!("Lock acquisition failed ({status}): {body}"));
+      log::warn!("Profile lock acquisition for {profile_id} failed ({status}): {body}");
+      return Err(crate::backend_error("PROFILE_LOCK_UNAVAILABLE"));
     }
 
-    let result: AcquireLockResponse = response
-      .json()
-      .await
-      .map_err(|e| format!("Failed to parse lock response: {e}"))?;
+    let result: AcquireLockResponse = response.json().await.map_err(|e| {
+      log::warn!("Could not parse the profile lock response for {profile_id}: {e}");
+      crate::backend_error("PROFILE_LOCK_UNAVAILABLE")
+    })?;
 
     if !result.success {
-      let email = result
-        .locked_by_email
-        .unwrap_or_else(|| "another device".to_string());
-      return Err(format!("Profile is in use by {email}"));
+      return Err(lock_conflict_error(
+        profile_id,
+        result.locked_by.as_deref(),
+        result.locked_by_email.as_deref(),
+      ));
     }
 
     // Update local cache
@@ -274,6 +279,39 @@ impl ProfileLockManager {
   }
 }
 
+/// Separator the backend puts between a user id and a non-desktop holder's
+/// sub-identity. Mirrors `HOLDER_SEPARATOR` in donutbrowser-infra's
+/// `profile-locks.service.ts`.
+///
+/// A remote VM session takes the lock under `<user id>:vm:<session id>` so it
+/// contends with this desktop instead of silently sharing its lock. That makes
+/// the holder string the one place a client can tell "a teammate has this open"
+/// apart from "this is my own profile, running on the fleet" — two refusals that
+/// need completely different words.
+const VM_HOLDER_SEPARATOR: &str = ":vm:";
+
+/// The `{"code":…}` for a lock this caller could not take.
+fn lock_conflict_error(
+  profile_id: &str,
+  holder: Option<&str>,
+  holder_email: Option<&str>,
+) -> String {
+  if holder.is_some_and(|id| id.contains(VM_HOLDER_SEPARATOR)) {
+    // The user's own remote session. Saying "in use by you@example.com" here,
+    // which is what the raw backend message did, reads as a bug.
+    log::info!("Profile {profile_id} is held by a remote session");
+    return crate::backend_error("PROFILE_RUNNING_REMOTELY");
+  }
+  match holder_email {
+    Some(email) if !email.is_empty() => serde_json::json!({
+      "code": "PROFILE_LOCKED_BY_MEMBER",
+      "params": { "email": email }
+    })
+    .to_string(),
+    _ => crate::backend_error("PROFILE_LOCKED_ELSEWHERE"),
+  }
+}
+
 /// Acquire profile lock if profile is sync-enabled and user has a paid subscription.
 pub async fn acquire_team_lock_if_needed(
   profile: &crate::profile::BrowserProfile,
@@ -294,10 +332,12 @@ pub async fn acquire_team_lock_if_needed(
     .is_locked_by_another(&profile.id.to_string())
     .await
   {
-    if let Some(lock) = PROFILE_LOCK.get_lock_status(&profile.id.to_string()).await {
-      return Err(format!("Profile is in use by {}", lock.locked_by_email));
-    }
-    return Err("Profile is in use on another device".to_string());
+    let held = PROFILE_LOCK.get_lock_status(&profile.id.to_string()).await;
+    return Err(lock_conflict_error(
+      &profile.id.to_string(),
+      held.as_ref().map(|lock| lock.locked_by.as_str()),
+      held.as_ref().map(|lock| lock.locked_by_email.as_str()),
+    ));
   }
 
   PROFILE_LOCK.acquire_lock(&profile.id.to_string()).await
@@ -327,4 +367,40 @@ pub async fn get_team_locks() -> Result<Vec<ProfileLockInfo>, String> {
 #[tauri::command]
 pub async fn get_team_lock_status(profile_id: String) -> Result<Option<ProfileLockInfo>, String> {
   Ok(PROFILE_LOCK.get_lock_status(&profile_id).await)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_users_own_remote_session_is_not_reported_as_a_teammate() {
+    // The holder for a fleet session is `<user id>:vm:<session id>` and the row
+    // carries the OWNER's email, so the previous message read "Profile is in use
+    // by you@example.com" — the user's own address, about their own profile.
+    let err = lock_conflict_error(
+      "p1",
+      Some("11111111-2222-3333-4444-555555555555:vm:run-remote:p1:abc"),
+      Some("owner@example.com"),
+    );
+    assert_eq!(err, r#"{"code":"PROFILE_RUNNING_REMOTELY"}"#);
+    assert!(!err.contains("owner@example.com"));
+  }
+
+  #[test]
+  fn a_teammates_lock_names_them_through_a_translatable_code() {
+    let err = lock_conflict_error("p1", Some("other-user-id"), Some("mate@example.com"));
+    let json: serde_json::Value = serde_json::from_str(&err).expect("a code envelope");
+    assert_eq!(json["code"], "PROFILE_LOCKED_BY_MEMBER");
+    assert_eq!(json["params"]["email"], "mate@example.com");
+  }
+
+  #[test]
+  fn a_lock_with_no_identifiable_holder_still_produces_a_code() {
+    // Raw English here is what reaches a Russian user untranslated.
+    for holder in [None, Some("")] {
+      let err = lock_conflict_error("p1", holder, None);
+      assert_eq!(err, r#"{"code":"PROFILE_LOCKED_ELSEWHERE"}"#);
+    }
+  }
 }

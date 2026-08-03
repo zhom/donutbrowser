@@ -879,6 +879,17 @@ pub fn is_downloading(browser: &str, version: &str) -> bool {
   downloading.contains(&download_key)
 }
 
+/// Test-only: mark a browser-version pair as in flight so guards that consult
+/// `is_downloading` can be exercised without running a real download. Clear it
+/// again with `clear_download_state_for_browser`.
+#[cfg(test)]
+pub fn mark_downloading_for_test(browser: &str, version: &str) {
+  DOWNLOADING_BROWSERS
+    .lock()
+    .unwrap()
+    .insert(format!("{browser}-{version}"));
+}
+
 /// Clear all in-progress download bookkeeping for a browser.
 ///
 /// Used as a last-resort cleanup when a download future is abandoned (e.g. dropped

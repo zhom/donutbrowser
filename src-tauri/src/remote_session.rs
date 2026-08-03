@@ -9,6 +9,7 @@
 use crate::cloud_errors::{self, FailureCodes};
 use crate::profile::types::BrowserProfile;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -137,7 +138,7 @@ pub async fn start_remote_session(
   let key = idempotency_key(&profile_id, &uuid::Uuid::new_v4().to_string());
   let endpoint = format!("{}/api/remote-sessions", crate::cloud_auth::CLOUD_API_URL);
 
-  crate::cloud_auth::CLOUD_AUTH
+  let outcome = crate::cloud_auth::CLOUD_AUTH
     .api_call_with_retry(|token| {
       let endpoint = endpoint.clone();
       let body = StartRemoteRequest {
@@ -169,7 +170,14 @@ pub async fn start_remote_session(
       }
     })
     .await
-    .map_err(|e| classify_error_string(&e))
+    .map_err(|e| classify_error_string(&e))?;
+
+  // Gate the profile here rather than waiting for the stream to say so. A host
+  // starts pulling this profile the instant the backend accepts, and the first
+  // transition can arrive seconds later or, on a machine whose stream is down,
+  // not at all. Those seconds are enough for a user to press Run.
+  note_session_started(&profile.id.to_string(), &outcome.session_id);
+  Ok(outcome)
 }
 
 /// What the backend returns when a session is stopped.
@@ -179,6 +187,30 @@ pub struct EndRemoteSessionOutcome {
   pub status: String,
   /// What the session actually cost, in seconds.
   pub billed_seconds: u64,
+}
+
+/// Gate a profile the moment a launch is accepted, and pull when one is stopped.
+///
+/// The event stream is the normal way this machine learns a session's state, but
+/// it is not the only way a session starts or ends and it is not guaranteed to
+/// be connected. Both of these are called directly by the launch and stop paths
+/// so the gate never depends on a socket being up: a launch whose first
+/// transition is missed would leave the profile openable locally while a host
+/// wrote to it, and a stop whose `closed` frame is missed would leave the
+/// session's work sitting in cloud storage with nothing to pull it.
+pub fn note_session_started(profile_id: &str, session_id: &str) {
+  crate::remote_handoff::note_running(profile_id, session_id);
+}
+
+pub fn note_session_stopped(app: &AppHandle, session_id: &str) {
+  let Some(profile_id) = crate::remote_handoff::profile_for_session(session_id) else {
+    // A session this machine never saw start. There is nothing recorded to
+    // pull for, and inventing a profile id would gate the wrong profile.
+    return;
+  };
+  if crate::remote_handoff::note_ended(&profile_id, session_id) {
+    crate::remote_handoff::schedule_pull(app.clone(), profile_id);
+  }
 }
 
 /// Ask donutbrowser-infra to stop a remote session.
@@ -341,6 +373,257 @@ async fn get_json<T: serde::de::DeserializeOwned>(
     })
     .await
     .map_err(|e| classify_error_string(&e))
+}
+
+// --- Driving a session ------------------------------------------------------
+
+/// Where to attach a CDP client for one session.
+///
+/// The descriptor is deliberately OPAQUE and server-decided. The desktop knows
+/// nothing about the fleet — not its hostname, not its paths, not a credential
+/// it would accept — and switches only on `auth`. That is what lets the server
+/// move the endpoint, or hand out a different kind of credential, without a
+/// desktop release; a hard-coded URL in a shipped binary could not be moved at
+/// all.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CdpEndpoint {
+  #[serde(default)]
+  pub session_id: String,
+  pub ws_url: String,
+  /// Wire protocol the endpoint speaks.
+  #[serde(default)]
+  pub protocol: String,
+  /// How to authenticate: `bearer` means the same access token used for REST.
+  #[serde(default)]
+  pub auth: String,
+}
+
+/// The only credential scheme this build can present.
+const AUTH_BEARER: &str = "bearer";
+
+/// The only relay protocol this build speaks.
+const PROTOCOL_CDP_RELAY_1: &str = "cdp-relay/1";
+
+/// Endpoints already resolved, keyed by session id.
+///
+/// A session's endpoint does not move while it lives, and every tool call would
+/// otherwise pay a cloud round trip before it could send its first byte.
+static CDP_ENDPOINTS: Mutex<Option<HashMap<String, CdpEndpoint>>> = Mutex::new(None);
+
+/// Ask the backend where to attach for `session_id`.
+pub async fn cdp_endpoint(session_id: &str) -> Result<CdpEndpoint, RemoteSessionError> {
+  if let Some(cached) = with_endpoints(|map| map.get(session_id).cloned()) {
+    return Ok(cached);
+  }
+
+  let endpoint = format!(
+    "{}/api/remote-sessions/{}/cdp",
+    crate::cloud_auth::CLOUD_API_URL,
+    urlencoding::encode(session_id)
+  );
+  let mut resolved: CdpEndpoint = get_json(endpoint).await?;
+  if resolved.session_id.is_empty() {
+    resolved.session_id = session_id.to_string();
+  }
+
+  if let Some(reason) = unsupported_descriptor(&resolved) {
+    return Err(RemoteSessionError::Other(reason));
+  }
+
+  with_endpoints(|map| map.insert(session_id.to_string(), resolved.clone()));
+  Ok(resolved)
+}
+
+/// Why this build cannot use a descriptor, if it cannot.
+///
+/// A scheme or protocol this version does not implement has to fail loudly.
+/// Guessing at a credential scheme would send the user's access token somewhere
+/// it was never meant to go, and ignoring the fields would present the wrong
+/// credential on a wire expecting another — both of which read as "remote
+/// driving is broken" rather than "this app is out of date".
+///
+/// An empty field means the server stated nothing, which is how a descriptor
+/// that predates the field looks; the historic behaviour is then the answer.
+fn unsupported_descriptor(endpoint: &CdpEndpoint) -> Option<String> {
+  if !endpoint.auth.is_empty() && endpoint.auth != AUTH_BEARER {
+    return Some(format!(
+      "this version cannot attach to a remote browser using {:?} authentication; update Donut Browser",
+      endpoint.auth
+    ));
+  }
+  if !endpoint.protocol.is_empty() && endpoint.protocol != PROTOCOL_CDP_RELAY_1 {
+    return Some(format!(
+      "this version does not speak {:?}; update Donut Browser",
+      endpoint.protocol
+    ));
+  }
+  None
+}
+
+fn with_endpoints<T>(f: impl FnOnce(&mut HashMap<String, CdpEndpoint>) -> T) -> T {
+  let mut guard = CDP_ENDPOINTS
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  f(guard.get_or_insert_with(HashMap::new))
+}
+
+fn forget_endpoint(session_id: &str) {
+  with_endpoints(|map| map.remove(session_id));
+}
+
+/// The access token a relay attach presents.
+///
+/// One place, so the credential a WebSocket carries is provably the same one
+/// every REST call already carries, and no second copy of the load-and-check
+/// logic can drift from it.
+pub fn access_token_for_cdp() -> Result<String, String> {
+  crate::cloud_auth::CloudAuthManager::load_access_token()?
+    .filter(|token| !token.is_empty())
+    .ok_or_else(|| "not signed in to Donut cloud".to_string())
+}
+
+/// Sessions that can be driven right now, keyed by the profile they hold.
+///
+/// Maintained from the event stream so deciding "is this profile running on the
+/// fleet?" costs a lock rather than a cloud round trip on every tool call.
+static LIVE_BY_PROFILE: Mutex<Option<HashMap<String, RemoteSessionState>>> = Mutex::new(None);
+
+/// Whether the stream has delivered a snapshot and has not dropped since.
+///
+/// Without this the index cannot distinguish "no session for that profile" from
+/// "nothing has told us about any session yet", and the second answered as the
+/// first is exactly how a live remote profile reports itself as not running.
+static INDEX_AUTHORITATIVE: AtomicBool = AtomicBool::new(false);
+
+fn with_index<T>(f: impl FnOnce(&mut HashMap<String, RemoteSessionState>) -> T) -> T {
+  let mut guard = LIVE_BY_PROFILE
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  f(guard.get_or_insert_with(HashMap::new))
+}
+
+/// A session that is up AND attachable.
+///
+/// `provisioning` and `ready` are both "the browser is not there yet"; treating
+/// either as drivable is what makes a client attach into a connection that
+/// never establishes.
+pub fn is_drivable(session: &RemoteSessionState) -> bool {
+  session.state == "live" && session.cdp_ready
+}
+
+/// A session that will never write to the profile again.
+///
+/// Deliberately NOT the negation of [`is_drivable`]. A `provisioning` session
+/// has already taken the profile lock and its host is about to pull the profile
+/// down and launch a browser on it, so it owns the profile every bit as much as
+/// a `live` one does — it is simply not attachable yet. Treating "not drivable"
+/// as "finished" would lift the local launch gate during the one minute a host
+/// spends starting up, which is the window in which two writers do the most
+/// damage.
+pub fn is_terminal(session: &RemoteSessionState) -> bool {
+  matches!(session.state.as_str(), "closed" | "error")
+}
+
+/// Apply one session to the index, and to the local launch gate.
+///
+/// A session that stopped being drivable is removed, but only by the session
+/// that owns the slot: a late `closed` for a finished session must not evict
+/// the live one that replaced it.
+fn index_session(app: Option<&AppHandle>, session: &RemoteSessionState) {
+  let Some(profile_id) = session.profile_id.clone() else {
+    return;
+  };
+
+  // The gate is maintained from the same frames as the index, because these are
+  // the only frames that exist. It is deliberately keyed off `is_terminal`
+  // rather than `is_drivable`: a provisioning host already owns the profile.
+  if is_terminal(session) {
+    if crate::remote_handoff::note_ended(&profile_id, &session.session_id) {
+      if let Some(app) = app {
+        crate::remote_handoff::schedule_pull(app.clone(), profile_id.clone());
+      }
+    }
+  } else {
+    crate::remote_handoff::note_running(&profile_id, &session.session_id);
+  }
+
+  if is_drivable(session) {
+    with_index(|map| map.insert(profile_id, session.clone()));
+    return;
+  }
+  forget_endpoint(&session.session_id);
+  with_index(|map| {
+    let owns_slot = map
+      .get(&profile_id)
+      .is_some_and(|held| held.session_id == session.session_id);
+    if owns_slot {
+      map.remove(&profile_id);
+    }
+  });
+}
+
+/// Replace the whole index from a full listing, and reconcile the launch gate.
+fn reindex(app: Option<&AppHandle>, sessions: &[RemoteSessionState]) {
+  // Every session the backend still considers unfinished. A profile this
+  // machine last saw running whose session is not in here finished while
+  // nothing was watching — its work is in cloud storage and has not been pulled.
+  let unfinished: std::collections::HashSet<String> = sessions
+    .iter()
+    .filter(|session| !is_terminal(session))
+    .map(|session| session.session_id.clone())
+    .collect();
+
+  for session in sessions {
+    index_session(app, session);
+  }
+  for profile_id in crate::remote_handoff::reconcile(&unfinished) {
+    if let Some(app) = app {
+      crate::remote_handoff::schedule_pull(app.clone(), profile_id);
+    }
+  }
+
+  let next: HashMap<String, RemoteSessionState> = sessions
+    .iter()
+    .filter(|session| is_drivable(session))
+    .filter_map(|session| {
+      session
+        .profile_id
+        .clone()
+        .map(|profile_id| (profile_id, session.clone()))
+    })
+    .collect();
+  let live: std::collections::HashSet<&str> = next
+    .values()
+    .map(|session| session.session_id.as_str())
+    .collect();
+  with_endpoints(|map| map.retain(|session_id, _| live.contains(session_id.as_str())));
+  with_index(|map| *map = next);
+}
+
+/// The drivable session holding `profile_id`, if there is one.
+///
+/// Consults the in-process index first. Only when the stream is not delivering
+/// transitions does it spend a cloud round trip, because in that state the
+/// index cannot be trusted to be complete and answering "not running" from it
+/// would hide a session the user is already paying for.
+pub async fn live_session_for_profile(profile_id: &str) -> Option<RemoteSessionState> {
+  if let Some(session) = with_index(|map| map.get(profile_id).cloned()) {
+    return Some(session);
+  }
+  if INDEX_AUTHORITATIVE.load(Ordering::SeqCst) {
+    return None;
+  }
+
+  match list_remote_sessions().await {
+    Ok(sessions) => {
+      reindex(None, &sessions);
+      with_index(|map| map.get(profile_id).cloned())
+    }
+    Err(e) => {
+      log::debug!("Could not refresh remote sessions while resolving a CDP target: {e}");
+      None
+    }
+  }
 }
 
 // --- Live state, without polling -------------------------------------------
@@ -550,6 +833,10 @@ pub fn start_session_events(app: AppHandle) {
 
 /// Stop receiving. Safe to call when nothing is running.
 pub fn stop_session_events() {
+  // Cleared unconditionally: unsubscribing is what sign-out does, and an index
+  // left marked authoritative would keep answering from state nothing is
+  // maintaining any more.
+  INDEX_AUTHORITATIVE.store(false, Ordering::SeqCst);
   if !STREAM_RUNNING.swap(false, Ordering::SeqCst) {
     return;
   }
@@ -723,6 +1010,7 @@ fn dispatch_frame(app: &AppHandle, frame: &SseFrame) {
   let Some((target, payload)) = route_frame(frame.event.as_deref(), &frame.data) else {
     return;
   };
+  apply_to_index(Some(app), target, &payload);
 
   use tauri::Emitter;
   if let Err(e) = app.emit(target, payload) {
@@ -730,7 +1018,47 @@ fn dispatch_frame(app: &AppHandle, frame: &SseFrame) {
   }
 }
 
+/// Keep the drivable-session index in step with what the stream just said.
+///
+/// The same frames that tell the frontend a session went live are the only
+/// thing that can tell the CDP resolver so without polling, and a resolver that
+/// polls would put a cloud round trip in front of every automation call.
+pub fn apply_to_index(app: Option<&AppHandle>, target: &str, payload: &serde_json::Value) {
+  if target == EVENT_SESSION_SNAPSHOT {
+    let Some(array) = payload.get("sessions").and_then(|v| v.as_array()) else {
+      // Marking the index authoritative off a frame that carried no list would
+      // answer "no session" for every profile until the next reconnect.
+      log::warn!("Ignoring a remote-session snapshot that carried no session list");
+      return;
+    };
+    let mut sessions = Vec::with_capacity(array.len());
+    for value in array {
+      match serde_json::from_value::<RemoteSessionState>(value.clone()) {
+        Ok(session) => sessions.push(session),
+        Err(e) => log::warn!("Skipping an undecodable session in the snapshot: {e}"),
+      }
+    }
+    reindex(app, &sessions);
+    INDEX_AUTHORITATIVE.store(true, Ordering::SeqCst);
+    return;
+  }
+
+  if target == EVENT_SESSION_STATE {
+    match serde_json::from_value::<RemoteSessionState>(payload.clone()) {
+      Ok(session) => index_session(app, &session),
+      Err(e) => log::warn!("Ignoring an undecodable session transition: {e}"),
+    }
+  }
+}
+
 fn emit_stream_status(app: &AppHandle, connected: bool, reason: Option<&str>) {
+  if !connected {
+    // A dropped stream means transitions are being missed, so the index stops
+    // being an answer and becomes a cache: a miss now costs one cloud read
+    // rather than silently reporting a live session as absent.
+    INDEX_AUTHORITATIVE.store(false, Ordering::SeqCst);
+  }
+
   use tauri::Emitter;
   let payload = serde_json::json!({ "connected": connected, "reason": reason });
   if let Err(e) = app.emit(EVENT_STREAM_STATUS, payload) {
@@ -1122,5 +1450,264 @@ mod tests {
     STREAM_RUNNING.store(false, Ordering::SeqCst);
     stop_session_events();
     assert!(!session_events_running());
+  }
+
+  // --- The drivable-session index ------------------------------------------
+  //
+  // This index is what lets an automation call decide "is this profile running
+  // on the fleet?" without a cloud round trip. Everything below drives it
+  // through the SAME two steps production uses — decode the wire, route the
+  // frame, apply it — because the whole class of bug this replaced came from a
+  // test that agreed with the client and neither agreeing with the server.
+
+  /// The statics below are process-wide, and `cargo test` runs these threads in
+  /// parallel. Without this every index test would be racing every other one.
+  static INDEX_TESTS: Mutex<()> = Mutex::new(());
+
+  fn index_test<T>(body: impl FnOnce() -> T) -> T {
+    let _guard = INDEX_TESTS
+      .lock()
+      .unwrap_or_else(std::sync::PoisonError::into_inner);
+    with_index(|map| map.clear());
+    with_endpoints(|map| map.clear());
+    INDEX_AUTHORITATIVE.store(false, Ordering::SeqCst);
+    body()
+  }
+
+  /// Decode, route and apply a literal wire capture, exactly as
+  /// `dispatch_frame` does minus the emit to the frontend.
+  fn feed(bytes: &[u8]) {
+    let mut decoder = SseDecoder::new();
+    for frame in decoder.push(bytes) {
+      if let Some((target, payload)) = route_frame(frame.event.as_deref(), &frame.data) {
+        apply_to_index(None, target, &payload);
+      }
+    }
+  }
+
+  fn indexed(profile_id: &str) -> Option<RemoteSessionState> {
+    with_index(|map| map.get(profile_id).cloned())
+  }
+
+  fn transition(session_id: &str, profile_id: &str, state: &str, cdp_ready: bool) -> Vec<u8> {
+    format!(
+      "data: {{\"type\":\"state\",\"session\":{{\"session_id\":\"{session_id}\",\"profile_id\":\"{profile_id}\",\"state\":\"{state}\",\"cdp_ready\":{cdp_ready}}}}}\n\n"
+    )
+    .into_bytes()
+  }
+
+  #[test]
+  fn a_session_becoming_drivable_is_indexed_by_the_profile_it_holds() {
+    index_test(|| {
+      feed(&transition("sess-1", "p1", "live", true));
+      let held = indexed("p1").expect("a live session must be resolvable by profile");
+      assert_eq!(held.session_id, "sess-1");
+    });
+  }
+
+  #[test]
+  fn a_browser_that_is_up_but_not_attachable_is_not_offered_for_driving() {
+    index_test(|| {
+      // `ready` without CDP is a browser that exists and cannot be driven.
+      // Offering it is what makes a client attach into a connection that never
+      // establishes, and then blame the fleet for the timeout.
+      feed(&transition("sess-1", "p1", "ready", false));
+      assert!(indexed("p1").is_none());
+      feed(&transition("sess-1", "p1", "provisioning", false));
+      assert!(indexed("p1").is_none());
+    });
+  }
+
+  #[test]
+  fn a_session_that_closes_frees_the_profile_and_forgets_its_endpoint() {
+    index_test(|| {
+      feed(&transition("sess-1", "p1", "live", true));
+      with_endpoints(|map| {
+        map.insert(
+          "sess-1".to_string(),
+          CdpEndpoint {
+            session_id: "sess-1".to_string(),
+            ws_url: "wss://example/cdp".to_string(),
+            protocol: PROTOCOL_CDP_RELAY_1.to_string(),
+            auth: AUTH_BEARER.to_string(),
+          },
+        )
+      });
+
+      feed(&transition("sess-1", "p1", "closed", false));
+      assert!(indexed("p1").is_none());
+      // A cached endpoint for a dead session would be handed to the next
+      // attach, which would then fail against a relay that has nothing left to
+      // relay to.
+      assert!(with_endpoints(|map| map.get("sess-1").cloned()).is_none());
+    });
+  }
+
+  #[test]
+  fn a_late_close_for_a_finished_session_does_not_evict_the_one_that_replaced_it() {
+    index_test(|| {
+      feed(&transition("sess-1", "p1", "live", true));
+      feed(&transition("sess-1", "p1", "closed", false));
+      feed(&transition("sess-2", "p1", "live", true));
+
+      // Out-of-order frames are normal: the reconciler polls the fleet while
+      // the user is already starting the next session. A stale close arriving
+      // after the new session went live must not make a working browser
+      // unreachable.
+      feed(&transition("sess-1", "p1", "closed", false));
+      assert_eq!(
+        indexed("p1").map(|s| s.session_id),
+        Some("sess-2".to_string())
+      );
+    });
+  }
+
+  #[test]
+  fn the_opening_snapshot_replaces_the_index_and_makes_it_authoritative() {
+    index_test(|| {
+      feed(&transition("stale", "p-gone", "live", true));
+      feed(
+        concat!(
+          r#"data: {"type":"snapshot","at":"2026-08-03T00:00:00.000Z","sessions":["#,
+          r#"{"session_id":"sess-1","profile_id":"p1","state":"live","cdp_ready":true},"#,
+          r#"{"session_id":"sess-2","profile_id":"p2","state":"ready","cdp_ready":false}]}"#,
+          "\n\n"
+        )
+        .as_bytes(),
+      );
+
+      assert_eq!(
+        indexed("p1").map(|s| s.session_id),
+        Some("sess-1".to_string())
+      );
+      // Not attachable, so not in the index even though the snapshot listed it.
+      assert!(indexed("p2").is_none());
+      // A session the snapshot did not mention is gone, however live the index
+      // last believed it to be.
+      assert!(indexed("p-gone").is_none());
+      assert!(INDEX_AUTHORITATIVE.load(Ordering::SeqCst));
+    });
+  }
+
+  #[test]
+  fn a_snapshot_carrying_no_session_list_does_not_blind_the_resolver() {
+    index_test(|| {
+      feed(&transition("sess-1", "p1", "live", true));
+      // Trusting a malformed snapshot would answer "no session" for every
+      // profile until the next reconnect, which is exactly the blindness the
+      // index exists to remove.
+      apply_to_index(None, EVENT_SESSION_SNAPSHOT, &serde_json::json!({}));
+      assert_eq!(
+        indexed("p1").map(|s| s.session_id),
+        Some("sess-1".to_string())
+      );
+      assert!(!INDEX_AUTHORITATIVE.load(Ordering::SeqCst));
+    });
+  }
+
+  #[test]
+  fn one_undecodable_session_does_not_cost_the_whole_snapshot() {
+    index_test(|| {
+      feed(
+        concat!(
+          r#"data: {"type":"snapshot","sessions":[{"nonsense":true},"#,
+          r#"{"session_id":"sess-1","profile_id":"p1","state":"live","cdp_ready":true}]}"#,
+          "\n\n"
+        )
+        .as_bytes(),
+      );
+      assert_eq!(
+        indexed("p1").map(|s| s.session_id),
+        Some("sess-1".to_string())
+      );
+      assert!(INDEX_AUTHORITATIVE.load(Ordering::SeqCst));
+    });
+  }
+
+  #[test]
+  fn unsubscribing_stops_the_index_being_an_answer() {
+    index_test(|| {
+      INDEX_AUTHORITATIVE.store(true, Ordering::SeqCst);
+      STREAM_RUNNING.store(false, Ordering::SeqCst);
+      // Sign-out unsubscribes. An index still marked authoritative would keep
+      // answering from state nothing is maintaining any more, so a session
+      // started by the next account would report as absent.
+      stop_session_events();
+      assert!(!INDEX_AUTHORITATIVE.load(Ordering::SeqCst));
+    });
+  }
+
+  #[test]
+  fn a_session_with_no_profile_is_ignored_rather_than_indexed_under_nothing() {
+    index_test(|| {
+      feed(b"data: {\"type\":\"state\",\"session\":{\"session_id\":\"s1\",\"state\":\"live\",\"cdp_ready\":true}}\n\n");
+      assert!(with_index(|map| map.is_empty()));
+    });
+  }
+
+  // --- The CDP endpoint descriptor -----------------------------------------
+
+  #[test]
+  fn the_endpoint_descriptor_matches_what_the_backend_sends() {
+    // Pinned against `GET /api/remote-sessions/:id/cdp` in donutbrowser-infra.
+    // A field name that does not match makes every remote attach fail at the
+    // decode step, and the desktop reports a live session as undrivable.
+    let endpoint: CdpEndpoint = serde_json::from_str(
+      r#"{"session_id":"sess-1",
+          "ws_url":"wss://api.donutbrowser.com/api/remote-sessions/cdp?session_id=sess-1",
+          "protocol":"cdp-relay/1","auth":"bearer"}"#,
+    )
+    .expect("the backend's CDP descriptor must deserialize");
+    assert_eq!(endpoint.session_id, "sess-1");
+    assert!(endpoint.ws_url.starts_with("wss://"));
+    assert!(unsupported_descriptor(&endpoint).is_none());
+  }
+
+  #[test]
+  fn a_descriptor_this_build_cannot_honour_is_refused_rather_than_guessed_at() {
+    // The descriptor is opaque and server-decided so the endpoint can move
+    // without a desktop release. The other side of that bargain is that a
+    // scheme this build does not implement must say so, not present the user's
+    // access token on a wire that expected something else.
+    let ticketed = CdpEndpoint {
+      session_id: "sess-1".to_string(),
+      ws_url: "wss://fleet.example/cdp".to_string(),
+      protocol: PROTOCOL_CDP_RELAY_1.to_string(),
+      auth: "ticket".to_string(),
+    };
+    assert!(unsupported_descriptor(&ticketed)
+      .expect("an unknown auth scheme must be refused")
+      .contains("update Donut Browser"));
+
+    let future_protocol = CdpEndpoint {
+      auth: AUTH_BEARER.to_string(),
+      protocol: "cdp-relay/2".to_string(),
+      ..ticketed
+    };
+    assert!(unsupported_descriptor(&future_protocol).is_some());
+  }
+
+  #[test]
+  fn a_descriptor_that_states_nothing_is_treated_as_todays_behaviour() {
+    // An older backend that predates the fields must keep working; the fields
+    // are a forward-compatibility hook, not a required handshake.
+    let bare: CdpEndpoint = serde_json::from_str(r#"{"ws_url":"wss://example/cdp"}"#)
+      .expect("a descriptor with only a URL must deserialize");
+    assert!(bare.session_id.is_empty());
+    assert!(unsupported_descriptor(&bare).is_none());
+  }
+
+  #[test]
+  fn only_a_session_that_is_both_live_and_attachable_is_drivable() {
+    let mut session: RemoteSessionState =
+      serde_json::from_str(r#"{"session_id":"s1","state":"live","cdp_ready":true}"#).unwrap();
+    assert!(is_drivable(&session));
+
+    session.cdp_ready = false;
+    assert!(!is_drivable(&session));
+
+    session.cdp_ready = true;
+    session.state = "ready".to_string();
+    assert!(!is_drivable(&session));
   }
 }

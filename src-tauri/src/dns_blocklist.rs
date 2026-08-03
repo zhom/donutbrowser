@@ -59,23 +59,46 @@ impl BlocklistLevel {
     }
   }
 
-  pub fn url(&self) -> Option<&'static str> {
+  /// Where this tier's `domains/*.txt` list is fetched from.
+  ///
+  /// `raw.githubusercontent.com` only, deliberately. This used to be a jsDelivr
+  /// URL against `hagezi/dns-blocklists`, and it broke every blocklisted launch:
+  /// that repo grew past jsDelivr's 150 MB package-resolution limit, so
+  /// `@latest` began answering `403 Package size exceeded the configured limit
+  /// of 150 MB` for every tier. Nothing was wrong locally and nothing a user
+  /// could do would fix it — a third party's repo got too big and a CDN's
+  /// package resolver gave up.
+  ///
+  /// raw.githubusercontent.com serves the file straight from the ref and
+  /// resolves no package at all, so it cannot fail that way. The
+  /// `domains/*.txt` format now lives in `hagezi/dns-blocklists-legacy`.
+  ///
+  /// Returned as a slice so the fetch path can try several sources if one is
+  /// ever added; today there is exactly one on purpose.
+  pub fn urls(&self) -> &'static [&'static str] {
     match self {
-      Self::None | Self::Custom => None,
+      Self::None | Self::Custom => &[],
       Self::Light => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/light.txt")
+        &["https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains/light.txt"]
       }
       Self::Normal => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/multi.txt")
+        &["https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains/multi.txt"]
       }
-      Self::Pro => Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/pro.txt"),
-      Self::ProPlus => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/pro.plus.txt")
+      Self::Pro => {
+        &["https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains/pro.txt"]
       }
-      Self::Ultimate => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/ultimate.txt")
-      }
+      Self::ProPlus => &[
+        "https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains/pro.plus.txt",
+      ],
+      Self::Ultimate => &[
+        "https://raw.githubusercontent.com/hagezi/dns-blocklists-legacy/main/domains/ultimate.txt",
+      ],
     }
+  }
+
+  /// The preferred source, for callers that only need to name one.
+  pub fn url(&self) -> Option<&'static str> {
+    self.urls().first().copied()
   }
 
   pub fn filename(&self) -> Option<&'static str> {
@@ -295,49 +318,85 @@ impl BlocklistManager {
   }
 
   pub async fn fetch_blocklist(level: BlocklistLevel) -> Result<PathBuf, String> {
-    let production_url = level
-      .url()
-      .ok_or_else(|| format!("No URL for level {:?}", level))?;
+    let production_urls: Vec<String> = level.urls().iter().map(|u| (*u).to_string()).collect();
+    if production_urls.is_empty() {
+      return Err(format!("No URL for level {:?}", level));
+    }
     #[cfg(feature = "e2e")]
-    let url = std::env::var("DONUT_E2E_DNS_BLOCKLIST_BASE_URL")
+    let urls = std::env::var("DONUT_E2E_DNS_BLOCKLIST_BASE_URL")
       .ok()
       .filter(|base| !base.is_empty())
       .map(|base| {
-        format!(
+        vec![format!(
           "{}/{}",
           base.trim_end_matches('/'),
           level.filename().unwrap_or("blocklist.txt")
-        )
+        )]
       })
-      .unwrap_or_else(|| production_url.to_string());
+      .unwrap_or(production_urls);
     #[cfg(not(feature = "e2e"))]
-    let url = production_url.to_string();
+    let urls = production_urls;
     let path =
       Self::cached_file_path(level).ok_or_else(|| format!("No filename for level {:?}", level))?;
 
     let cache_dir = Self::cache_dir();
     std::fs::create_dir_all(&cache_dir).map_err(|e| format!("Failed to create cache dir: {e}"))?;
 
-    log::info!(
-      "[dns-blocklist] Fetching {} from {}",
-      level.display_name(),
-      url
-    );
+    // Try each source in turn. A tier is only a failure once EVERY source has
+    // refused it: the outage this replaced was one CDN answering 403 for a
+    // reason that had nothing to do with the user, and falling back would have
+    // made it invisible.
+    let mut body: Option<String> = None;
+    let mut failures: Vec<String> = Vec::new();
 
-    let response = HTTP_CLIENT
-      .get(&url)
-      .send()
-      .await
-      .map_err(|e| format!("Failed to fetch blocklist: {e}"))?;
+    for url in &urls {
+      log::info!(
+        "[dns-blocklist] Fetching {} from {}",
+        level.display_name(),
+        url
+      );
 
-    if !response.status().is_success() {
-      return Err(format!("HTTP {} when fetching {}", response.status(), url));
+      let response = match HTTP_CLIENT.get(url).send().await {
+        Ok(response) => response,
+        Err(e) => {
+          failures.push(format!("{url}: {e}"));
+          continue;
+        }
+      };
+
+      if !response.status().is_success() {
+        failures.push(format!("{url}: HTTP {}", response.status()));
+        continue;
+      }
+
+      match response.text().await {
+        Ok(text) => {
+          if failures.is_empty() {
+            log::info!("[dns-blocklist] {} fetched", level.display_name());
+          } else {
+            // Worth saying out loud: the primary source is down and somebody
+            // should know before the backup goes too.
+            log::warn!(
+              "[dns-blocklist] {} came from a fallback source after {} failure(s): {}",
+              level.display_name(),
+              failures.len(),
+              failures.join("; ")
+            );
+          }
+          body = Some(text);
+          break;
+        }
+        Err(e) => failures.push(format!("{url}: {e}")),
+      }
     }
 
-    let body = response
-      .text()
-      .await
-      .map_err(|e| format!("Failed to read response body: {e}"))?;
+    let Some(body) = body else {
+      return Err(format!(
+        "Failed to fetch blocklist {} from any source ({})",
+        level.display_name(),
+        failures.join("; ")
+      ));
+    };
 
     // Write atomically: write to temp file, then rename
     let tmp_path = path.with_extension("tmp");
@@ -794,6 +853,66 @@ mod tests {
     }
     assert!(BlocklistLevel::None.url().is_none());
     assert!(BlocklistLevel::None.filename().is_none());
+  }
+
+  #[test]
+  fn every_tier_is_served_only_from_raw_githubusercontent() {
+    // jsDelivr is deliberately not a source. It resolves a whole package to
+    // serve one file, so when `hagezi/dns-blocklists` grew past its 150 MB
+    // limit every tier began answering 403 — an outage nothing local could fix.
+    // raw.githubusercontent.com serves the file straight from the ref and
+    // resolves no package, so it cannot fail that way.
+    for &level in BlocklistLevel::all_downloadable() {
+      let urls = level.urls();
+      assert_eq!(
+        urls.len(),
+        1,
+        "{} should have exactly one source: {urls:?}",
+        level.as_str()
+      );
+      for url in urls {
+        assert!(
+          url.starts_with("https://raw.githubusercontent.com/"),
+          "{} must be served from raw.githubusercontent.com: {url}",
+          level.as_str()
+        );
+        assert!(
+          !url.contains("jsdelivr"),
+          "{} must not reintroduce jsDelivr: {url}",
+          level.as_str()
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn no_tier_points_at_the_oversized_upstream_repo() {
+    // The `domains/*.txt` format moved to `-legacy`, which is small enough for
+    // jsDelivr to resolve. Pointing any tier back at the original repo
+    // reintroduces the 403.
+    for &level in BlocklistLevel::all_downloadable() {
+      for url in level.urls() {
+        assert!(
+          !url.contains("/hagezi/dns-blocklists@") && !url.contains("/hagezi/dns-blocklists/"),
+          "{} still points at the oversized repo: {url}",
+          level.as_str()
+        );
+        assert!(
+          url.contains("dns-blocklists-legacy"),
+          "{} should read the legacy list repo: {url}",
+          level.as_str()
+        );
+        assert!(
+          url.ends_with(
+            level
+              .filename()
+              .expect("downloadable tiers have a filename")
+          ),
+          "{} source must serve its own tier file: {url}",
+          level.as_str()
+        );
+      }
+    }
   }
 
   #[test]

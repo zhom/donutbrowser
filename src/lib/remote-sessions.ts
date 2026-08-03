@@ -48,6 +48,19 @@ export interface RemoteSessionEnded {
 }
 
 /**
+ * Why a profile cannot be opened on this computer right now.
+ *
+ * - `running`: a browser is open on the fleet holding this profile.
+ * - `pending_sync`: a session has finished and what it wrote is still being
+ *   pulled down. Opening the local copy now would make the local files look
+ *   newer than the host's push, and the next sync would then upload the stale
+ *   copy over the session's work and delete the rest of it.
+ *
+ * Both states are temporary and neither is an error.
+ */
+export type RemoteHandoffState = "running" | "pending_sync";
+
+/**
  * States a session cannot leave under its own steam.
  *
  * `error` is terminal just as `closed` is, and there is never a `closed` frame
@@ -83,7 +96,30 @@ export const REMOTE_SESSION_EVENTS = {
   snapshot: "remote-session-snapshot",
   /** Stream connectivity. Payload: `RemoteSessionStreamStatus`. */
   stream: "remote-session-stream",
+  /**
+   * The set of profiles that cannot be launched locally changed.
+   * Payload: `Record<profileId, RemoteHandoffState>`.
+   */
+  handoff: "remote-handoff-changed",
 } as const;
+
+/** Which profiles are blocked from launching locally, and why. */
+export function getRemoteHandoffStates(): Promise<
+  Record<string, RemoteHandoffState>
+> {
+  return invoke<Record<string, RemoteHandoffState>>(
+    "get_remote_handoff_states",
+  );
+}
+
+export function onRemoteHandoffChanged(
+  handler: (states: Record<string, RemoteHandoffState>) => void,
+): Promise<UnlistenFn> {
+  return listen<Record<string, RemoteHandoffState>>(
+    REMOTE_SESSION_EVENTS.handoff,
+    (event) => handler(event.payload),
+  );
+}
 
 export function listRemoteSessions(): Promise<RemoteSessionState[]> {
   return invoke<RemoteSessionState[]>("list_remote_sessions");

@@ -316,6 +316,13 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
       "update_proxy",
       "get_page_content",
       "get_interactive_elements",
+      // The remote loop has to be complete from MCP alone: start a session,
+      // watch it become usable, drive it with the interaction tools above, stop
+      // it. Any one of these missing leaves an agent able to lease a host it
+      // cannot use, or unable to lease one at all.
+      "run_profile_remote",
+      "get_remote_session",
+      "stop_remote_session",
     ]) {
       assert.ok(names.includes(name), `MCP is missing ${name}`);
     }
@@ -671,6 +678,15 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         }),
         notSignedIn,
       );
+      // The local-launch gate. Nothing has run remotely in this session, so it
+      // is empty — but it must answer, because a UI that cannot read it shows
+      // an enabled Run button over a profile the backend will refuse.
+      const handoff = await app.invoke("get_remote_handoff_states");
+      assert.ok(
+        handoff && typeof handoff === "object" && !Array.isArray(handoff),
+        "the handoff gate must answer with a profile-keyed object",
+      );
+      assert.equal(Object.keys(handoff).length, 0);
 
       // The transition stream is what the desktop uses instead of polling, so
       // its subscriber has to start, report itself, and stop on demand. Both

@@ -15,12 +15,16 @@ pub use engine::{
   enable_proxy_sync_if_needed, enable_sync_for_all_entities, enable_vpn_sync_if_needed,
   get_unsynced_entity_counts, is_group_in_use_by_synced_profile, is_group_used_by_synced_profile,
   is_proxy_in_use_by_synced_profile, is_proxy_used_by_synced_profile, is_sync_configured,
-  is_vpn_in_use_by_synced_profile, is_vpn_used_by_synced_profile, request_profile_sync,
-  rollover_encryption_for_all_entities, set_extension_group_sync_enabled,
-  set_extension_sync_enabled, set_group_sync_enabled, set_profile_sync_mode,
-  set_proxy_sync_enabled, set_vpn_sync_enabled, sync_profile, trigger_sync_for_profile, SyncEngine,
+  is_vpn_in_use_by_synced_profile, is_vpn_used_by_synced_profile,
+  pull_profile_after_remote_session, request_profile_sync, rollover_encryption_for_all_entities,
+  set_extension_group_sync_enabled, set_extension_sync_enabled, set_group_sync_enabled,
+  set_profile_sync_mode, set_proxy_sync_enabled, set_vpn_sync_enabled, sync_profile,
+  trigger_sync_for_profile, ProfileSyncOutcome, SyncEngine,
 };
-pub use manifest::{compute_diff, generate_manifest, HashCache, ManifestDiff, SyncManifest};
+pub use manifest::{
+  compute_diff, compute_diff_with_bias, generate_manifest, DiffBias, HashCache, ManifestDiff,
+  SyncManifest,
+};
 pub use scheduler::{get_global_scheduler, set_global_scheduler, SyncScheduler};
 pub use subscription::{SubscriptionManager, SyncWorkItem};
 pub use types::{SyncError, SyncResult};

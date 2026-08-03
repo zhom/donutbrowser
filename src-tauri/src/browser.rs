@@ -231,7 +231,7 @@ mod windows {
   pub fn is_wayfern_version_downloaded(install_dir: &Path) -> bool {
     if wayfern_executable_candidates(install_dir)
       .iter()
-      .any(|exe_path| exe_path.exists() && exe_path.is_file())
+      .any(|exe_path| exe_path.exists() && exe_path.is_file() && has_sibling_dll(exe_path))
     {
       return true;
     }
@@ -239,7 +239,8 @@ mod windows {
     // Check for any .exe file that looks like the browser
     if let Ok(entries) = std::fs::read_dir(install_dir) {
       for entry in entries.flatten() {
-        if is_wayfern_exe(&entry.path()) {
+        let path = entry.path();
+        if is_wayfern_exe(&path) && has_sibling_dll(&path) {
           return true;
         }
       }
@@ -378,6 +379,33 @@ impl BrowserFactory {
       BrowserType::Wayfern => Box::new(WayfernBrowser::new()),
     }
   }
+}
+
+/// Whether the directory holding `exe_path` also contains at least one `.dll`.
+///
+/// A Chromium build on Windows cannot start without its sibling libraries
+/// (`chrome.dll` and friends) and its `.manifest`; a lone `.exe` is a gutted
+/// install, and launching it fails inside the Windows loader with os error
+/// 14001 (`ERROR_SXS_CANT_GEN_ACTCTX`, "side-by-side configuration is
+/// incorrect"). Treating such a directory as downloaded is what made that state
+/// permanent: the registry rescan re-added it as a healthy install, so no
+/// re-download was ever offered. The check is scoped to the executable's own
+/// directory because the payload may sit at the version root or in a `bin/`,
+/// `wayfern/`, `wayfern-win/` or `chrome-win/` subdirectory.
+#[cfg(any(target_os = "windows", test))]
+fn has_sibling_dll(exe_path: &Path) -> bool {
+  let Some(dir) = exe_path.parent() else {
+    return false;
+  };
+  let Ok(entries) = std::fs::read_dir(dir) else {
+    return false;
+  };
+  entries.flatten().any(|entry| {
+    entry
+      .path()
+      .extension()
+      .is_some_and(|ext| ext.eq_ignore_ascii_case("dll"))
+  })
 }
 
 /// Check if a file is a valid PE executable by reading its magic bytes (MZ).
@@ -573,6 +601,58 @@ mod tests {
       .get_executable_path(install_dir)
       .expect("Wayfern executable in subdir should be found");
     assert!(exe.ends_with(std::path::Path::new("wayfern-win").join("wayfern.exe")));
+  }
+
+  /// A gutted Windows install (the `.exe` survived a cleanup pass that deleted
+  /// every `.dll` and the `.manifest`) must not read as downloaded, otherwise it
+  /// is re-registered as healthy and launching it fails with os error 14001.
+  /// Runs on every platform because the predicate is platform-independent.
+  #[test]
+  fn test_lone_exe_is_not_a_valid_windows_install() {
+    use tempfile::TempDir;
+    let temp = TempDir::new().unwrap();
+    let install_dir = temp.path();
+
+    let exe = install_dir.join("chrome.exe");
+    std::fs::File::create(&exe).unwrap();
+    assert!(
+      !has_sibling_dll(&exe),
+      "an .exe with no sibling .dll is a gutted install"
+    );
+
+    std::fs::File::create(install_dir.join("chrome.dll")).unwrap();
+    assert!(
+      has_sibling_dll(&exe),
+      "an .exe next to its libraries is a complete install"
+    );
+  }
+
+  /// The DLL check is scoped to the executable's own directory, so the nested
+  /// `chrome-win/` and `wayfern-win/` layouts are not falsely rejected because
+  /// the version root happens to hold no libraries.
+  #[test]
+  fn test_sibling_dll_check_is_scoped_to_the_executable_directory() {
+    use tempfile::TempDir;
+    let temp = TempDir::new().unwrap();
+    let install_dir = temp.path();
+
+    let subdir = install_dir.join("chrome-win");
+    std::fs::create_dir_all(&subdir).unwrap();
+    let exe = subdir.join("chrome.exe");
+    std::fs::File::create(&exe).unwrap();
+    std::fs::File::create(subdir.join("CHROME.DLL")).unwrap();
+
+    assert!(
+      has_sibling_dll(&exe),
+      "libraries beside the executable count regardless of case or nesting"
+    );
+
+    let root_exe = install_dir.join("chrome.exe");
+    std::fs::File::create(&root_exe).unwrap();
+    assert!(
+      !has_sibling_dll(&root_exe),
+      "libraries in a sibling subdirectory must not validate a bare root .exe"
+    );
   }
 
   #[test]

@@ -255,6 +255,7 @@ export const commandCoverage = {
       "list_remote_sessions",
       "get_remote_session",
       "stop_remote_session",
+      "get_remote_handoff_states",
       "start_remote_session_events",
       "stop_remote_session_events",
       "get_remote_session_events_status",

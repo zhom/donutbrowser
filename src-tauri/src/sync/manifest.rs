@@ -414,11 +414,41 @@ impl ManifestDiff {
 }
 
 /// Compute what needs to be synced between local and remote
+/// Which side a sync should believe when both have moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiffBias {
+  /// Newest `updated_at` wins. What an ordinary background sync uses.
+  #[default]
+  Auto,
+  /// Remote wins regardless of timestamps.
+  ///
+  /// Used for exactly one thing: the pull that follows a remote session. A
+  /// leased host has just written the authoritative copy of this profile, and
+  /// the local directory is whatever it was before the session started. If the
+  /// user launched locally in between, local mtimes are NEWER than the host's
+  /// push, so `Auto` would upload the stale copy and put every file the host
+  /// wrote into `files_to_delete_remote` — the whole session's work destroyed,
+  /// silently. There is no timestamp comparison that gets this right, because
+  /// the local clock genuinely is later; only the caller knows that the remote
+  /// copy is the one that matters.
+  PreferRemote,
+}
+
 pub fn compute_diff(local: &SyncManifest, remote: Option<&SyncManifest>) -> ManifestDiff {
+  compute_diff_with_bias(local, remote, DiffBias::Auto)
+}
+
+pub fn compute_diff_with_bias(
+  local: &SyncManifest,
+  remote: Option<&SyncManifest>,
+  bias: DiffBias,
+) -> ManifestDiff {
   let mut diff = ManifestDiff::default();
 
   let Some(remote) = remote else {
-    // No remote manifest - upload everything
+    // No remote manifest - upload everything. Even under PreferRemote: there is
+    // no remote copy to prefer, and refusing to upload would leave the profile
+    // with no cloud copy at all.
     diff.files_to_upload = local.files.clone();
     return diff;
   };
@@ -446,11 +476,14 @@ pub fn compute_diff(local: &SyncManifest, remote: Option<&SyncManifest>) -> Mani
   let local_updated = local.updated_at_datetime();
   let remote_updated = remote.updated_at_datetime();
 
-  let local_is_newer = match (local_updated, remote_updated) {
-    (Some(l), Some(r)) => l > r,
-    (Some(_), None) => true,
-    (None, Some(_)) => false,
-    (None, None) => true, // Default to uploading
+  let local_is_newer = match bias {
+    DiffBias::PreferRemote => false,
+    DiffBias::Auto => match (local_updated, remote_updated) {
+      (Some(l), Some(r)) => l > r,
+      (Some(_), None) => true,
+      (None, Some(_)) => false,
+      (None, None) => true, // Default to uploading
+    },
   };
 
   if local_is_newer {
@@ -672,6 +705,68 @@ mod tests {
     assert!(diff.files_to_download.is_empty());
     assert!(diff.files_to_delete_local.is_empty());
     assert!(diff.files_to_delete_remote.is_empty());
+  }
+
+  /// A manifest with one file, at a stated time.
+  fn manifest_at(updated_at: &str, files: &[(&str, &str)]) -> SyncManifest {
+    SyncManifest {
+      version: 1,
+      profile_id: "test".to_string(),
+      generated_at: updated_at.to_string(),
+      updated_at: updated_at.to_string(),
+      exclude_globs: vec![],
+      files: files
+        .iter()
+        .map(|(path, hash)| ManifestFileEntry {
+          path: (*path).to_string(),
+          size: 10,
+          mtime: 1000,
+          hash: (*hash).to_string(),
+        })
+        .collect(),
+      encrypted: false,
+    }
+  }
+
+  #[test]
+  fn prefer_remote_downloads_even_though_the_local_clock_is_later() {
+    // The exact shape of the data-loss bug. A remote session finishes and the
+    // host pushes the profile; the user then launches locally before the pull
+    // lands, so every local mtime is newer than the host's write. Under Auto
+    // that uploads the stale copy and deletes the session's own files.
+    let local = manifest_at("2026-01-02T00:00:00Z", &[("Cookies", "before-session")]);
+    let remote = manifest_at(
+      "2026-01-01T00:00:00Z",
+      &[("Cookies", "after-session"), ("History", "warmed")],
+    );
+
+    let lossy = compute_diff_with_bias(&local, Some(&remote), DiffBias::Auto);
+    assert_eq!(lossy.files_to_delete_remote, vec!["History".to_string()]);
+    assert_eq!(lossy.files_to_upload.len(), 1);
+
+    let safe = compute_diff_with_bias(&local, Some(&remote), DiffBias::PreferRemote);
+    assert!(
+      safe.files_to_delete_remote.is_empty(),
+      "a post-session pull must never delete what the host just wrote"
+    );
+    assert!(safe.files_to_upload.is_empty());
+    let downloaded: Vec<&str> = safe
+      .files_to_download
+      .iter()
+      .map(|f| f.path.as_str())
+      .collect();
+    assert_eq!(downloaded.len(), 2);
+    assert!(downloaded.contains(&"Cookies"));
+    assert!(downloaded.contains(&"History"));
+  }
+
+  #[test]
+  fn prefer_remote_still_uploads_when_there_is_no_remote_copy() {
+    // Nothing to prefer. Refusing to upload here would leave a profile with no
+    // cloud copy because a session once ran against it.
+    let local = manifest_at("2026-01-02T00:00:00Z", &[("Cookies", "only-local")]);
+    let diff = compute_diff_with_bias(&local, None, DiffBias::PreferRemote);
+    assert_eq!(diff.files_to_upload.len(), 1);
   }
 
   #[test]

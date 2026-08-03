@@ -345,6 +345,10 @@
       "nameDesc": "名称 (Z–A)",
       "newest": "最新优先",
       "oldest": "最早优先"
+    },
+    "remote": {
+      "runningTooltip": "正在远程计算机上运行。停止后配置文件会回到本机。",
+      "pendingSyncTooltip": "正在下载远程会话所做的更改。完成后即可再次使用。"
     }
   },
   "createProfile": {
@@ -1880,7 +1884,12 @@
     "cookieBotUnsupportedPlatform": "Cookie Bot 无法运行 {{platform}} 配置文件。仅支持 Windows 和 macOS 配置文件。",
     "cookieBotRequiresExitNode": "请先绑定代理或 VPN。否则运行会从数据中心地址发出，损害配置文件的身份。",
     "unknownCode": "出现问题: {{code}}",
-    "cookieBotTouchFingerprintUnsupported": "该配置文件声称是触摸设备，机器人无法操作。请使用桌面端指纹。"
+    "cookieBotTouchFingerprintUnsupported": "该配置文件声称是触摸设备，机器人无法操作。请使用桌面端指纹。",
+    "profileRunningRemotely": "该配置文件正在远程计算机上运行。请先停止远程会话。",
+    "profileRemoteSyncPending": "远程会话刚刚结束。正在等待其更改下载完成后才能在此打开该配置文件。",
+    "profileLockedByMember": "该配置文件正在被 {{email}} 使用。",
+    "profileLockedElsewhere": "该配置文件正在另一台设备上使用。",
+    "profileLockUnavailable": "无法检查该配置文件是否正在别处使用。请检查网络连接后重试。"
   },
   "rail": {
     "profiles": "配置文件",

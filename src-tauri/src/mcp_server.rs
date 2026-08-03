@@ -18,6 +18,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::browser::ProxySettings;
+use crate::cdp_target::{CdpError, CdpTarget};
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::{BrowserProfile, ProfileManager};
@@ -105,7 +106,27 @@ pub struct McpError {
   message: String,
 }
 
+/// Surface a CDP failure to the agent with the reason intact.
+///
+/// The distinction matters to whoever is on the other end: "the session is
+/// still provisioning" invites a retry in a few seconds, "you are signed out"
+/// does not, and flattening both into `-32000: something went wrong` is how an
+/// automation client ends up retrying a refusal forever.
+fn cdp_error(error: CdpError) -> McpError {
+  McpError {
+    code: -32000,
+    message: error.to_string(),
+  }
+}
+
 const DEFAULT_MCP_PORT: u16 = 51080;
+
+/// How long a keystroke waits for its acknowledgement before moving on.
+///
+/// Generous enough to absorb a relayed round trip, short enough that a browser
+/// which stops answering does not leave the caller typing into a socket that
+/// will never reply.
+const KEYSTROKE_ACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 struct McpSession {
   initialized: bool,
@@ -521,6 +542,11 @@ impl McpServer {
         // hardware is spent per RUN and enforced server-side.
         | "run_cookie_bot_now"
         | "cancel_cookie_bot_run"
+        // Leasing a remote host is the single most expensive action here, and
+        // ending one reaches the same fleet. Both are metered exactly as their
+        // REST equivalents already are.
+        | "run_profile_remote"
+        | "stop_remote_session"
     )
   }
 
@@ -821,7 +847,7 @@ impl McpServer {
       },
       McpTool {
         name: "get_profile_status".to_string(),
-        description: "Check if a browser profile is currently running".to_string(),
+        description: "Check whether a browser profile is running and can be driven. Returns is_running (true when the browser can be driven, wherever it is), location ('local', 'remote' or 'stopped'), is_running_locally, and remote_session_id when it is running on the remote fleet.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -1658,9 +1684,44 @@ impl McpServer {
           "required": ["profile_id", "index", "text"]
         }),
       },
-      // Remote fleet observability. `run_profile_remote` hands back a session
-      // id and the word "provisioning"; without these an agent can only learn
-      // that a session became usable by trying to drive it and failing.
+      // Remote fleet. An agent that could drive a remote profile but not start
+      // one had to be handed a session by something else — the REST API or the
+      // GUI — which is no use to an MCP client running on its own.
+      McpTool {
+        name: "run_profile_remote".to_string(),
+        description: "Start this profile on a remote host of its own operating system. The profile must have Regular cloud sync enabled. Returns a session id; poll get_remote_session until state is 'live', then drive it with navigate, screenshot, click_element and the rest exactly as you would a local profile.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to run remotely"
+            },
+            "url": {
+              "type": "string",
+              "description": "Optional URL to open once the browser is up"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "stop_remote_session".to_string(),
+        description: "Stop a remote session and settle what it cost. A session left running bills until the fleet's two-hour cap, so stop one as soon as you are done with it".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session id returned by run_profile_remote"
+            }
+          },
+          "required": ["session_id"]
+        }),
+      },
+      // Observability. `run_profile_remote` hands back a session id and the
+      // word "provisioning"; without these an agent can only learn that a
+      // session became usable by trying to drive it and failing.
       McpTool {
         name: "list_remote_sessions".to_string(),
         description: "List the remote browser sessions this account currently owns, with their live status".to_string(),
@@ -2252,6 +2313,19 @@ impl McpServer {
         .await?;
         self.handle_type_by_index(arguments).await
       }
+      // Leasing a host is the most expensive thing this server can do, so it
+      // is gated exactly like the local launch it replaces.
+      "run_profile_remote" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_run_profile_remote(arguments).await
+      }
+      // No capability gate on the stop. A lapsed plan must never be the reason
+      // an agent cannot end something that is spending hours.
+      "stop_remote_session" => Self::handle_stop_remote_session(arguments).await,
       // Remote fleet observability. Reads only, and free: being unable to see
       // that a session you are already paying for has become usable is not a
       // feature worth withholding.
@@ -2999,14 +3073,48 @@ impl McpServer {
       });
     }
 
-    let is_running = profile.process_id.is_some();
+    // "Running" has to mean "drivable", not "has a process on this machine".
+    // A profile open on the leased fleet has no local process, and answering
+    // `is_running: false` for it tells an agent not to bother calling the very
+    // tools that would have worked.
+    let is_running_locally = profile.process_id.is_some();
+    let remote_session = if is_running_locally {
+      None
+    } else {
+      crate::remote_session::live_session_for_profile(profile_id).await
+    };
+
+    let location = match (is_running_locally, &remote_session) {
+      (true, _) => "local",
+      (false, Some(_)) => "remote",
+      (false, None) => "stopped",
+    };
+
+    // Whether a LOCAL launch would be refused, and why. An agent that reads
+    // `location: "stopped"` and calls `run_profile` on a profile whose finished
+    // remote session has not been pulled back would get a bare 409 with nothing
+    // to act on; worse, before the gate existed it would have got a browser and
+    // silently destroyed the session's work.
+    let handoff = crate::remote_handoff::state_for(profile_id);
+    let can_launch_locally = handoff.is_none() && !is_running_locally;
 
     Ok(serde_json::json!({
       "content": [{
         "type": "text",
         "text": serde_json::json!({
           "profile_id": profile_id,
-          "is_running": is_running
+          "is_running": location != "stopped",
+          "is_running_locally": is_running_locally,
+          "location": location,
+          "remote_session_id": remote_session.map(|session| session.session_id),
+          "can_launch_locally": can_launch_locally,
+          "local_launch_blocked_by": match handoff {
+            Some(crate::remote_handoff::HandoffState::Running) => Some("remote_session_running"),
+            Some(crate::remote_handoff::HandoffState::PendingSync) => {
+              Some("remote_session_changes_downloading")
+            }
+            None => None,
+          },
         }).to_string()
       }]
     }))
@@ -4481,164 +4589,43 @@ impl McpServer {
 
   // --- CDP utility methods for browser interaction ---
 
-  async fn get_cdp_port_for_profile(&self, profile: &BrowserProfile) -> Result<u16, McpError> {
-    let profiles_dir = ProfileManager::instance().get_profiles_dir();
-    let profile_path = profile.get_profile_data_path(&profiles_dir);
-    let profile_path_str = profile_path.to_string_lossy();
-
-    // Retry a few times — port info may not be stored yet right after launch
-    for attempt in 0..10 {
-      if attempt > 0 {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-      }
-      let port = if profile.browser == "wayfern" {
-        crate::wayfern_manager::WayfernManager::instance()
-          .get_cdp_port(&profile_path_str)
-          .await
-      } else {
-        None
-      };
-      if let Some(p) = port {
-        return Ok(p);
-      }
-    }
-
-    Err(McpError {
-      code: -32000,
-      message: format!(
-        "No CDP connection available for profile '{}'. Make sure the browser is running.",
-        profile.name
-      ),
-    })
-  }
-
-  async fn get_cdp_ws_url(&self, port: u16) -> Result<String, McpError> {
-    let url = format!("http://127.0.0.1:{port}/json");
-    let client = reqwest::Client::new();
-
-    // Retry connecting to CDP endpoint (browser may still be starting up)
-    let max_attempts = 15;
-    let mut last_err = String::new();
-    for attempt in 0..max_attempts {
-      if attempt > 0 {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-      }
-      match client
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(3))
-        .send()
-        .await
-      {
-        Ok(resp) => match resp.json::<Vec<serde_json::Value>>().await {
-          Ok(targets) => {
-            if let Some(ws_url) = targets
-              .iter()
-              .find(|t| t.get("type").and_then(|v| v.as_str()) == Some("page"))
-              .and_then(|t| t.get("webSocketDebuggerUrl"))
-              .and_then(|v| v.as_str())
-            {
-              return Ok(ws_url.to_string());
-            }
-            last_err = "No page target found in browser".to_string();
-          }
-          Err(e) => {
-            last_err = format!("Failed to parse CDP targets: {e}");
-          }
-        },
-        Err(e) => {
-          last_err = format!("Failed to connect to browser CDP endpoint: {e}");
-        }
-      }
-    }
-
-    Err(McpError {
-      code: -32000,
-      message: last_err,
-    })
+  /// Where this profile's browser is: on this machine, or on the fleet.
+  ///
+  /// Every interaction tool goes through here, so a profile launched with
+  /// `run-remote` is driven by exactly the tools that drive a local one. The
+  /// alternative — a parallel set of remote-only tools — drifts from the local
+  /// set within a release and doubles every future change.
+  async fn resolve_cdp_target(&self, profile_id: &str) -> Result<CdpTarget, McpError> {
+    let profile = self.get_wayfern_profile(profile_id)?;
+    crate::cdp_target::resolve(&profile)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.to_string(),
+      })
   }
 
   async fn send_cdp(
     &self,
-    ws_url: &str,
+    target: &CdpTarget,
     method: &str,
     params: serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    use futures_util::sink::SinkExt;
-    use futures_util::stream::StreamExt;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::Message;
-
-    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect to CDP WebSocket: {e}"),
-    })?;
-
-    let command = serde_json::json!({
-      "id": 1,
-      "method": method,
-      "params": params
-    });
-
-    ws_stream
-      .send(Message::Text(command.to_string().into()))
+    crate::cdp_target::run_command(target, method, params)
       .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to send CDP command: {e}"),
-      })?;
-
-    while let Some(msg) = ws_stream.next().await {
-      let msg = msg.map_err(|e| McpError {
-        code: -32000,
-        message: format!("CDP WebSocket error: {e}"),
-      })?;
-      if let Message::Text(text) = msg {
-        let response: serde_json::Value =
-          serde_json::from_str(text.as_str()).map_err(|e| McpError {
-            code: -32000,
-            message: format!("Failed to parse CDP response: {e}"),
-          })?;
-        if response.get("id") == Some(&serde_json::json!(1)) {
-          if let Some(error) = response.get("error") {
-            return Err(McpError {
-              code: -32000,
-              message: format!("CDP error: {error}"),
-            });
-          }
-          return Ok(
-            response
-              .get("result")
-              .cloned()
-              .unwrap_or(serde_json::json!({})),
-          );
-        }
-      }
-    }
-
-    Err(McpError {
-      code: -32000,
-      message: "No response received from CDP".to_string(),
-    })
+      .map_err(cdp_error)
   }
 
   async fn send_human_keystrokes(
     &self,
-    ws_url: &str,
+    target: &CdpTarget,
     text: &str,
     wpm: Option<f64>,
   ) -> Result<(), McpError> {
     use crate::human_typing::{MarkovTyper, TypingAction};
-    use futures_util::sink::SinkExt;
-    use futures_util::stream::StreamExt;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::Message;
 
     let events = MarkovTyper::new(text, wpm).run();
-
-    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect to CDP WebSocket: {e}"),
-    })?;
+    let mut connection = target.connect().await.map_err(cdp_error)?;
 
     let mut cmd_id = 1u64;
     let mut last_time = 0.0;
@@ -4650,234 +4637,82 @@ impl McpServer {
       }
       last_time = event.time;
 
-      match &event.action {
+      let (down, up) = match &event.action {
         TypingAction::Char(ch) => {
-          let text_str = ch.to_string();
-          // keyDown
-          let down = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
+          let ch = ch.to_string();
+          (
+            serde_json::json!({
               "type": "keyDown",
-              "text": text_str,
-              "key": text_str,
-              "unmodifiedText": text_str,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(down.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          // Drain response
-          let _ = ws_stream.next().await;
-
-          // keyUp
-          let up = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyUp",
-              "key": text_str,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(up.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          let _ = ws_stream.next().await;
+              "text": ch,
+              "key": ch,
+              "unmodifiedText": ch,
+            }),
+            serde_json::json!({ "type": "keyUp", "key": ch }),
+          )
         }
-        TypingAction::Backspace => {
-          let down = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyDown",
-              "key": "Backspace",
-              "code": "Backspace",
-              "windowsVirtualKeyCode": 8,
-              "nativeVirtualKeyCode": 8,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(down.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          let _ = ws_stream.next().await;
+        TypingAction::Backspace => (
+          serde_json::json!({
+            "type": "keyDown",
+            "key": "Backspace",
+            "code": "Backspace",
+            "windowsVirtualKeyCode": 8,
+            "nativeVirtualKeyCode": 8,
+          }),
+          serde_json::json!({
+            "type": "keyUp",
+            "key": "Backspace",
+            "code": "Backspace",
+            "windowsVirtualKeyCode": 8,
+            "nativeVirtualKeyCode": 8,
+          }),
+        ),
+      };
 
-          let up = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyUp",
-              "key": "Backspace",
-              "code": "Backspace",
-              "windowsVirtualKeyCode": 8,
-              "nativeVirtualKeyCode": 8,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(up.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          let _ = ws_stream.next().await;
+      for params in [down, up] {
+        if let Err(e) = connection
+          .send_command(cmd_id, "Input.dispatchKeyEvent", params)
+          .await
+        {
+          return Err(cdp_error(e));
         }
+        // Drained rather than matched: the point is to keep reading so the
+        // browser is never writing into a full socket while the next keystroke
+        // is being timed. Bounded, because a reply that never comes must not
+        // freeze typing forever — the keystroke itself was already delivered.
+        let _ = tokio::time::timeout(KEYSTROKE_ACK_TIMEOUT, connection.next_text()).await;
+        cmd_id += 1;
       }
     }
 
+    connection.close().await;
     Ok(())
   }
 
   /// Send a CDP command and wait for the page to finish loading.
-  /// Uses a single WebSocket connection to: enable Page events, send the command,
-  /// wait for the command response, then wait for `Page.loadEventFired`.
+  ///
+  /// Thin over the shared runner so a local and a remote profile take exactly
+  /// the same path: one implementation of "navigate then wait", not two that
+  /// drift.
   async fn send_cdp_and_wait_for_load(
     &self,
-    ws_url: &str,
+    target: &CdpTarget,
     method: &str,
     params: serde_json::Value,
     timeout_secs: u64,
   ) -> Result<serde_json::Value, McpError> {
-    use futures_util::sink::SinkExt;
-    use futures_util::stream::StreamExt;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::Message;
-
-    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect to CDP WebSocket: {e}"),
-    })?;
-
-    // Enable Page domain events so we receive loadEventFired
-    let enable_cmd = serde_json::json!({
-      "id": 1,
-      "method": "Page.enable",
-      "params": {}
-    });
-    ws_stream
-      .send(Message::Text(enable_cmd.to_string().into()))
+    crate::cdp_target::run_command_awaiting_load(target, method, params, timeout_secs)
       .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to send Page.enable: {e}"),
-      })?;
-
-    // Wait for Page.enable response
-    loop {
-      let msg = ws_stream
-        .next()
-        .await
-        .ok_or_else(|| McpError {
-          code: -32000,
-          message: "WebSocket closed waiting for Page.enable response".to_string(),
-        })?
-        .map_err(|e| McpError {
-          code: -32000,
-          message: format!("CDP WebSocket error: {e}"),
-        })?;
-      if let Message::Text(text) = msg {
-        let resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or_default();
-        if resp.get("id") == Some(&serde_json::json!(1)) {
-          break;
-        }
-      }
-    }
-
-    // Send the actual command (e.g., Page.navigate)
-    let command = serde_json::json!({
-      "id": 2,
-      "method": method,
-      "params": params
-    });
-    ws_stream
-      .send(Message::Text(command.to_string().into()))
-      .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to send CDP command: {e}"),
-      })?;
-
-    // Wait for command response and then for Page.loadEventFired
-    let mut command_result = None;
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_secs);
-
-    loop {
-      let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-      if remaining.is_zero() {
-        // Timed out waiting for load — return the command result if we have it
-        break;
-      }
-
-      let msg = match tokio::time::timeout(remaining, ws_stream.next()).await {
-        Ok(Some(Ok(msg))) => msg,
-        Ok(Some(Err(e))) => {
-          return Err(McpError {
-            code: -32000,
-            message: format!("CDP WebSocket error: {e}"),
-          });
-        }
-        Ok(None) => break, // stream ended
-        Err(_) => break,   // timeout
-      };
-
-      if let Message::Text(text) = msg {
-        let response: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or_default();
-
-        // Check for command response
-        if response.get("id") == Some(&serde_json::json!(2)) {
-          if let Some(error) = response.get("error") {
-            return Err(McpError {
-              code: -32000,
-              message: format!("CDP error: {error}"),
-            });
-          }
-          command_result = Some(
-            response
-              .get("result")
-              .cloned()
-              .unwrap_or(serde_json::json!({})),
-          );
-        }
-
-        // Check for Page.loadEventFired — page is fully loaded
-        if response.get("method") == Some(&serde_json::json!("Page.loadEventFired")) {
-          break;
-        }
-      }
-    }
-
-    // Disable Page domain events
-    let disable_cmd = serde_json::json!({
-      "id": 3,
-      "method": "Page.disable",
-      "params": {}
-    });
-    let _ = ws_stream
-      .send(Message::Text(disable_cmd.to_string().into()))
-      .await;
-
-    command_result.ok_or_else(|| McpError {
-      code: -32000,
-      message: "No response received from CDP".to_string(),
-    })
+      .map_err(cdp_error)
   }
 
-  fn get_running_profile(&self, profile_id: &str) -> Result<BrowserProfile, McpError> {
+  /// The profile a browser-interaction tool refers to.
+  ///
+  /// Deliberately does NOT require a local process. That check used to live
+  /// here, and it is exactly the state a profile running on the fleet is in, so
+  /// it refused every remote tool call before resolution had a chance to find
+  /// the session. Whether a browser exists at all is [`resolve_cdp_target`]'s
+  /// answer to give, because only it can see both places one could be.
+  fn get_wayfern_profile(&self, profile_id: &str) -> Result<BrowserProfile, McpError> {
     let profiles = ProfileManager::instance()
       .list_profiles()
       .map_err(|e| McpError {
@@ -4897,13 +4732,6 @@ impl McpServer {
       return Err(McpError {
         code: -32000,
         message: "MCP only supports Wayfern profiles".to_string(),
-      });
-    }
-
-    if profile.process_id.is_none() {
-      return Err(McpError {
-        code: -32000,
-        message: format!("Profile '{}' is not running", profile.name),
       });
     }
 
@@ -4931,13 +4759,11 @@ impl McpServer {
         message: "Missing url".to_string(),
       })?;
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     self
       .send_cdp_and_wait_for_load(
-        &ws_url,
+        &target,
         "Page.navigate",
         serde_json::json!({ "url": url }),
         30,
@@ -4973,9 +4799,7 @@ impl McpServer {
       .and_then(|v| v.as_bool())
       .unwrap_or(false);
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let mut params = serde_json::json!({ "format": format });
 
@@ -4985,7 +4809,7 @@ impl McpServer {
 
     if full_page {
       let layout = self
-        .send_cdp(&ws_url, "Page.getLayoutMetrics", serde_json::json!({}))
+        .send_cdp(&target, "Page.getLayoutMetrics", serde_json::json!({}))
         .await?;
 
       if let Some(content_size) = layout.get("contentSize") {
@@ -5001,7 +4825,7 @@ impl McpServer {
     }
 
     let result = self
-      .send_cdp(&ws_url, "Page.captureScreenshot", params)
+      .send_cdp(&target, "Page.captureScreenshot", params)
       .await?;
 
     let data = result
@@ -5045,9 +4869,7 @@ impl McpServer {
       .and_then(|v| v.as_bool())
       .unwrap_or(false);
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let cdp_params = serde_json::json!({
       "expression": expression,
@@ -5057,11 +4879,11 @@ impl McpServer {
 
     let result = if wait_for_load {
       self
-        .send_cdp_and_wait_for_load(&ws_url, "Runtime.evaluate", cdp_params, 30)
+        .send_cdp_and_wait_for_load(&target, "Runtime.evaluate", cdp_params, 30)
         .await?
     } else {
       self
-        .send_cdp(&ws_url, "Runtime.evaluate", cdp_params)
+        .send_cdp(&target, "Runtime.evaluate", cdp_params)
         .await?
     };
 
@@ -5110,9 +4932,7 @@ impl McpServer {
         message: "Missing selector".to_string(),
       })?;
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let selector_escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
     let js = format!(
@@ -5131,7 +4951,7 @@ impl McpServer {
     // and we return immediately.
     let result = self
       .send_cdp_and_wait_for_load(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": js,
@@ -5197,9 +5017,7 @@ impl McpServer {
       .unwrap_or(false);
     let wpm = arguments.get("wpm").and_then(|v| v.as_f64());
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let selector_escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
     let focus_js = if clear_first {
@@ -5230,7 +5048,7 @@ impl McpServer {
 
     let focus_result = self
       .send_cdp(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": focus_js,
@@ -5255,13 +5073,13 @@ impl McpServer {
     if instant {
       self
         .send_cdp(
-          &ws_url,
+          &target,
           "Input.insertText",
           serde_json::json!({ "text": text }),
         )
         .await?;
     } else {
-      self.send_human_keystrokes(&ws_url, text, wpm).await?;
+      self.send_human_keystrokes(&target, text, wpm).await?;
     }
 
     Ok(serde_json::json!({
@@ -5294,9 +5112,7 @@ impl McpServer {
       .map(|n| n as usize)
       .unwrap_or(40_000);
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let js = if let Some(sel) = selector {
       let sel_escaped = sel.replace('\\', "\\\\").replace('\'', "\\'");
@@ -5325,7 +5141,7 @@ impl McpServer {
 
     let result = self
       .send_cdp(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": js,
@@ -5378,13 +5194,11 @@ impl McpServer {
         message: "Missing profile_id".to_string(),
       })?;
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let result = self
       .send_cdp(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": "JSON.stringify({url: location.href, title: document.title, readyState: document.readyState})",
@@ -5426,9 +5240,7 @@ impl McpServer {
       .map(|n| n as usize)
       .unwrap_or(40_000);
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     // Walk the DOM for visible, non-disabled interactive elements, label them
     // with a zero-based index, and cache the live references on
@@ -5438,7 +5250,7 @@ impl McpServer {
 
     let result = self
       .send_cdp(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": js,
@@ -5511,9 +5323,7 @@ impl McpServer {
         message: "Missing index".to_string(),
       })?;
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     let js = format!(
       r#"(() => {{
@@ -5528,7 +5338,7 @@ impl McpServer {
 
     let result = self
       .send_cdp_and_wait_for_load(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": js,
@@ -5594,9 +5404,7 @@ impl McpServer {
       .unwrap_or(false);
     let wpm = arguments.get("wpm").and_then(|v| v.as_f64());
 
-    let profile = self.get_running_profile(profile_id)?;
-    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
-    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let target = self.resolve_cdp_target(profile_id).await?;
 
     // Mirrors handle_type_text's focus step but resolves the element via the
     // cached index instead of a CSS selector.
@@ -5628,7 +5436,7 @@ impl McpServer {
 
     let focus_result = self
       .send_cdp(
-        &ws_url,
+        &target,
         "Runtime.evaluate",
         serde_json::json!({
           "expression": focus_js,
@@ -5653,13 +5461,13 @@ impl McpServer {
     if instant {
       self
         .send_cdp(
-          &ws_url,
+          &target,
           "Input.insertText",
           serde_json::json!({ "text": text }),
         )
         .await?;
     } else {
-      self.send_human_keystrokes(&ws_url, text, wpm).await?;
+      self.send_human_keystrokes(&target, text, wpm).await?;
     }
 
     Ok(serde_json::json!({
@@ -5931,6 +5739,63 @@ impl McpServer {
       message,
     })?;
     Ok(profile)
+  }
+
+  /// Start this profile on a host of its own operating system.
+  ///
+  /// Deliberately no `is_cross_os` guard: local `run_profile` refuses a foreign
+  /// profile because THIS machine is the wrong OS, and running it on a host of
+  /// its own OS is precisely what this exists for.
+  async fn handle_run_profile_remote(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    let url = arguments
+      .get("url")
+      .and_then(|v| v.as_str())
+      .map(str::to_string);
+    let profile = self.get_wayfern_profile(profile_id)?;
+
+    // The host pulls the profile from cloud storage, so one that has never
+    // synced would launch an empty browser and push that emptiness back over
+    // the real one. Same rule the REST route applies, from the same place.
+    crate::api_server::remote_launch_precondition(&profile)
+      .await
+      .map_err(|message| McpError {
+        code: -32000,
+        message,
+      })?;
+
+    let app = {
+      let inner = self.inner.lock().await;
+      inner.app_handle.clone().ok_or_else(|| McpError {
+        code: -32000,
+        message: "MCP server not properly initialized".to_string(),
+      })?
+    };
+
+    let outcome = crate::remote_session::start_remote_session(app, &profile, url)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.to_error_json(),
+      })?;
+    Self::json_content(&outcome)
+  }
+
+  /// Stop a remote session and settle what it cost.
+  async fn handle_stop_remote_session(
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let session_id = Self::require_str(arguments, "session_id")?;
+    let outcome = crate::remote_session::end_remote_session(session_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.to_error_json(),
+      })?;
+    Self::json_content(&outcome)
   }
 
   async fn handle_list_remote_sessions() -> Result<serde_json::Value, McpError> {
@@ -6245,7 +6110,11 @@ mod tests {
     assert!(tool_names.contains(&"type_text"));
     assert!(tool_names.contains(&"get_page_content"));
     assert!(tool_names.contains(&"get_page_info"));
-    // Remote fleet observability
+    // Remote fleet: an agent must be able to start a session, see it become
+    // usable, drive it with the tools above, and stop it. Any one of those
+    // missing makes remote driving unusable from MCP alone.
+    assert!(tool_names.contains(&"run_profile_remote"));
+    assert!(tool_names.contains(&"stop_remote_session"));
     assert!(tool_names.contains(&"list_remote_sessions"));
     assert!(tool_names.contains(&"get_remote_session"));
     assert!(tool_names.contains(&"get_remote_hours_quota"));
@@ -6276,7 +6145,7 @@ mod tests {
       .get_tools()
       .into_iter()
       .map(|tool| tool.name)
-      .filter(|name| name.contains("cookie_bot") || name.contains("remote_"))
+      .filter(|name| name.contains("cookie_bot") || name.contains("remote"))
       .collect();
 
     let dispatched = include_str!("mcp_server.rs");
@@ -6288,7 +6157,7 @@ mod tests {
     }
     assert_eq!(
       advertised.len(),
-      13,
+      15,
       "expected the full remote-fleet and cookie-bot set: {advertised:?}"
     );
   }
@@ -6448,8 +6317,10 @@ mod tests {
       // Leases a remote host for up to two hours and spends the pooled
       // remote-hour budget.
       "run_cookie_bot_now",
+      "run_profile_remote",
       // Reaches the fleet, like the remote-session stop it mirrors.
       "cancel_cookie_bot_run",
+      "stop_remote_session",
     ] {
       assert!(
         McpServer::is_automation_tool_call(&request("tools/call", Some(name))),

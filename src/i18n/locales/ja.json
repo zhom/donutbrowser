@@ -345,6 +345,10 @@
       "nameDesc": "名前 (Z→A)",
       "newest": "新しい順",
       "oldest": "古い順"
+    },
+    "remote": {
+      "runningTooltip": "リモートマシンで実行中です。停止するとプロファイルがここに戻ります。",
+      "pendingSyncTooltip": "リモートセッションの変更をダウンロード中です。完了すると再び使用できます。"
     }
   },
   "createProfile": {
@@ -1880,7 +1884,12 @@
     "cookieBotUnsupportedPlatform": "Cookie Bot は {{platform}} のプロファイルを実行できません。対応しているのは Windows と macOS のプロファイルのみです。",
     "cookieBotRequiresExitNode": "先にプロキシまたは VPN を設定してください。設定しないと通信がデータセンターのアドレスから出て、プロファイルの信頼性を損ないます。",
     "unknownCode": "エラーが発生しました: {{code}}",
-    "cookieBotTouchFingerprintUnsupported": "このプロファイルはタッチ端末を名乗っており、ボットは操作できません。デスクトップのフィンガープリントをお使いください。"
+    "cookieBotTouchFingerprintUnsupported": "このプロファイルはタッチ端末を名乗っており、ボットは操作できません。デスクトップのフィンガープリントをお使いください。",
+    "profileRunningRemotely": "このプロファイルはリモートマシンで実行中です。先にリモートセッションを停止してください。",
+    "profileRemoteSyncPending": "リモートセッションが終了しました。この profile をここで開く前に、変更のダウンロードを待っています。",
+    "profileLockedByMember": "このプロファイルは {{email}} が使用中です。",
+    "profileLockedElsewhere": "このプロファイルは別のデバイスで使用中です。",
+    "profileLockUnavailable": "このプロファイルが他で使用中か確認できませんでした。接続を確認して再試行してください。"
   },
   "rail": {
     "profiles": "プロファイル",

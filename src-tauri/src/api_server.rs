@@ -5,7 +5,10 @@ use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
 use axum::{
-  extract::{Path, Query, State},
+  extract::{
+    ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
+    Path, Query, State,
+  },
   http::{header, HeaderMap, Method, StatusCode},
   middleware::{self, Next},
   response::{IntoResponse, Json, Response},
@@ -509,6 +512,7 @@ struct ImportProxiesResponse {
     run_profile,
     run_profile_remote,
     stop_remote_session,
+    remote_session_cdp,
     list_remote_sessions_api,
     get_remote_session_api,
     get_remote_hours,
@@ -794,6 +798,7 @@ fn build_v1_router() -> Router<ApiServerState> {
     // `/v1/remote-sessions/{id}`, and registering them separately would have
     // the second overwrite the first.
     .routes(routes!(get_remote_session_api, stop_remote_session))
+    .routes(routes!(remote_session_cdp))
     .routes(routes!(list_remote_sessions_api))
     .routes(routes!(get_remote_hours))
     .routes(routes!(set_profile_cloud_sync))
@@ -1061,6 +1066,20 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
 /// bare status code. Matching is on message content because the managers
 /// return plain strings (some are the JSON `{"code": ...}` strings shared
 /// with the Tauri commands).
+/// Codes meaning "this profile is held by someone else right now".
+///
+/// Kept as one list so the REST layer, which has no other way to tell a refusal
+/// apart from a validation failure, cannot drift from the guards that produce
+/// them. `PROFILE_REMOTE_SYNC_PENDING` in particular is temporary by nature: the
+/// pull that clears it is already running.
+const LAUNCH_CONFLICT_CODES: [&str; 5] = [
+  "PROFILE_RUNNING",
+  "PROFILE_RUNNING_REMOTELY",
+  "PROFILE_REMOTE_SYNC_PENDING",
+  "PROFILE_LOCKED_BY_MEMBER",
+  "PROFILE_LOCKED_ELSEWHERE",
+];
+
 fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
   let msg = err.to_string();
 
@@ -1069,8 +1088,19 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
     if let Some(code) = value.get("code").and_then(|c| c.as_str()) {
       let status = if code.ends_with("_NOT_FOUND") {
         StatusCode::NOT_FOUND
+      } else if LAUNCH_CONFLICT_CODES.contains(&code) {
+        // Someone or something else holds this profile: another team member, a
+        // browser already open, or a remote session whose work has not been
+        // pulled back yet. All of them are "try again later", not "your request
+        // was malformed", and 400 would tell an automation client to give up.
+        StatusCode::CONFLICT
       } else if code == "INTERNAL_ERROR" {
         StatusCode::INTERNAL_SERVER_ERROR
+      } else if code == "PROFILE_LOCK_UNAVAILABLE" {
+        // The lock service could not be reached. The launch is refused because
+        // it cannot be proven safe, which is an upstream failure, not the
+        // caller's fault.
+        StatusCode::SERVICE_UNAVAILABLE
       } else if code.ends_with("_REQUIRES_PRO") || code.ends_with("_PAYMENT_REQUIRED") {
         // Paid-feature gates (FINGERPRINT_REQUIRES_PRO, PROXY_PAYMENT_REQUIRED).
         // Mapping them here lets the gate live in the shared manager instead of
@@ -2295,8 +2325,9 @@ async fn delete_extension_group_api(
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
-    (status = 409, description = "Profile is locked by another team member"),
+    (status = 409, description = "Profile is locked by another team member, running on the remote fleet, or waiting for a finished remote session to be pulled back"),
     (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "The profile lock service could not be reached"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -2308,12 +2339,12 @@ async fn run_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<RunProfileRequest>,
-) -> Result<Json<RunProfileResponse>, StatusCode> {
+) -> Result<Json<RunProfileResponse>, (StatusCode, String)> {
   if !crate::cloud_auth::CLOUD_AUTH
     .can_use_browser_automation()
     .await
   {
-    return Err(StatusCode::PAYMENT_REQUIRED);
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
   }
 
   let headless = request.headless.unwrap_or(false);
@@ -2322,29 +2353,34 @@ async fn run_profile(
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(manager_error_response)?;
 
   let profile = profiles
     .iter()
     .find(|p| p.id.to_string() == id)
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
 
   if profile.is_cross_os() {
-    return Err(StatusCode::BAD_REQUEST);
+    return Err((
+      StatusCode::BAD_REQUEST,
+      "cannot launch a cross-OS profile locally; use /run-remote".to_string(),
+    ));
   }
 
-  // Team lock check
+  // Team lock check. Routed through the shared mapper so a profile held by the
+  // user's OWN remote session is a 409 that says so, rather than a bare status
+  // with no body, which is what an automation client had to guess from.
   crate::team_lock::acquire_team_lock_if_needed(profile)
     .await
-    .map_err(|_| StatusCode::CONFLICT)?;
+    .map_err(manager_error_response)?;
 
   let remote_debugging_port = {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
       .await
-      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+      .map_err(manager_error_response)?;
     let port = listener
       .local_addr()
-      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+      .map_err(manager_error_response)?
       .port();
     drop(listener);
     port
@@ -2352,7 +2388,7 @@ async fn run_profile(
 
   // Use the same launch path as the main app, but force a fresh instance with
   // remote debugging enabled so the returned port is the one the browser binds.
-  match crate::browser_runner::launch_browser_profile_impl(
+  let updated_profile = crate::browser_runner::launch_browser_profile_impl(
     state.app_handle.clone(),
     profile.clone(),
     url,
@@ -2361,14 +2397,13 @@ async fn run_profile(
     true,
   )
   .await
-  {
-    Ok(updated_profile) => Ok(Json(RunProfileResponse {
-      profile_id: updated_profile.id.to_string(),
-      remote_debugging_port,
-      headless,
-    })),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-  }
+  .map_err(manager_error_response)?;
+
+  Ok(Json(RunProfileResponse {
+    profile_id: updated_profile.id.to_string(),
+    remote_debugging_port,
+    headless,
+  }))
 }
 
 // API Handler - Launch this profile on a REMOTE VM of its own operating system
@@ -2732,6 +2767,157 @@ fn status_for_code(code: &str) -> StatusCode {
   } else {
     StatusCode::INTERNAL_SERVER_ERROR
   }
+}
+
+// API Handler - Attach a CDP client (Playwright, Puppeteer, chrome-remote-interface)
+// to a remote session.
+//
+// This is what makes `run-remote` usable. Without it the endpoint hands back a
+// session id that nothing outside this app can do anything with: the fleet's
+// relay only accepts the user's Donut cloud credential, an automation client
+// does not have one, and it must not be given one — an API token is scoped to
+// "drive my browsers", not "act as my account".
+//
+// So the socket is opened here with the credential this process already holds
+// and the frames are pumped verbatim in both directions. The caller presents
+// the ordinary API bearer token and gets a browser-level CDP endpoint at
+// `ws://127.0.0.1:<api port>/v1/remote-sessions/{id}/cdp`:
+//
+//     const browser = await chromium.connectOverCDP({
+//       endpointURL: `ws://127.0.0.1:10108/v1/remote-sessions/${id}/cdp`,
+//       headers: { Authorization: `Bearer ${API_TOKEN}` },
+//     });
+//
+// Nothing is attached to a page first, deliberately: Playwright drives
+// `Target.setAutoAttach` and builds its own session map, and a socket already
+// bound to one page would hide every other target from it.
+#[utoipa::path(
+  get,
+  path = "/v1/remote-sessions/{id}/cdp",
+  params(
+    ("id" = String, Path, description = "Remote session ID from run-remote")
+  ),
+  responses(
+    (status = 101, description = "Switching Protocols; a browser-level CDP WebSocket follows"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "No such remote session, or it is not attachable yet"),
+    (status = 502, description = "The relay could not be reached"),
+    (status = 426, description = "Not a WebSocket upgrade request")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "remote-sessions"
+)]
+async fn remote_session_cdp(
+  Path(id): Path<String>,
+  upgrade: WebSocketUpgrade,
+) -> Result<Response, (StatusCode, String)> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .can_use_browser_automation()
+    .await
+  {
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
+  }
+
+  // Dialled BEFORE the upgrade is accepted, so a session that is not attachable
+  // is an HTTP status the client can read. Accepting the upgrade first would
+  // turn every such failure into a socket that opens and immediately closes,
+  // which is what a CDP client reports as "browser closed unexpectedly".
+  let upstream = crate::cdp_target::open_relay_socket(&id)
+    .await
+    .map_err(cdp_error_response)?;
+
+  Ok(
+    upgrade
+      .max_message_size(crate::cdp_target::MAX_RELAY_MESSAGE_BYTES)
+      .max_frame_size(crate::cdp_target::MAX_RELAY_MESSAGE_BYTES)
+      .on_upgrade(move |client| pump_cdp(id, client, upstream)),
+  )
+}
+
+fn cdp_error_response(err: crate::cdp_target::CdpError) -> (StatusCode, String) {
+  use crate::cdp_target::CdpError;
+  let status = match err {
+    CdpError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+    // "Not drivable" covers a session that is still provisioning and one that
+    // is not the caller's. Both are 404 to a CDP client: there is no browser at
+    // this address right now.
+    CdpError::NotDrivable(_) => StatusCode::NOT_FOUND,
+    CdpError::Unreachable(_) => StatusCode::BAD_GATEWAY,
+    CdpError::Transport(_) | CdpError::Protocol(_) => StatusCode::BAD_GATEWAY,
+  };
+  (status, err.to_string())
+}
+
+/// Copy CDP frames between the local client and the fleet relay until either
+/// side hangs up.
+///
+/// Verbatim in both directions. This proxy deliberately understands nothing
+/// about CDP: a client that speaks a newer protocol, or a target type this
+/// build has never heard of, must keep working without a Donut release.
+async fn pump_cdp(session_id: String, client: WebSocket, upstream: crate::cdp_target::RelaySocket) {
+  use futures_util::{SinkExt, StreamExt};
+  use tokio_tungstenite::tungstenite::Message as RelayMessage;
+
+  let (mut client_tx, mut client_rx) = client.split();
+  let (mut relay_tx, mut relay_rx) = upstream.split();
+
+  let to_relay = async {
+    while let Some(Ok(message)) = client_rx.next().await {
+      let forwarded = match message {
+        WsMessage::Text(text) => RelayMessage::Text(text.as_str().into()),
+        WsMessage::Binary(bytes) => RelayMessage::Binary(bytes),
+        WsMessage::Ping(bytes) => RelayMessage::Ping(bytes),
+        WsMessage::Pong(bytes) => RelayMessage::Pong(bytes),
+        WsMessage::Close(_) => break,
+      };
+      if relay_tx.send(forwarded).await.is_err() {
+        break;
+      }
+    }
+    let _ = relay_tx.close().await;
+  };
+
+  let to_client = async {
+    while let Some(Ok(message)) = relay_rx.next().await {
+      let forwarded = match message {
+        RelayMessage::Text(text) => WsMessage::Text(text.as_str().into()),
+        RelayMessage::Binary(bytes) => WsMessage::Binary(bytes),
+        RelayMessage::Ping(bytes) => WsMessage::Ping(bytes),
+        RelayMessage::Pong(bytes) => WsMessage::Pong(bytes),
+        // A relay close carries the only diagnosis the server gives (1008 is a
+        // rejected credential, 1013 is "not up yet"), so it is passed through
+        // rather than swallowed into a bare disconnect.
+        RelayMessage::Close(frame) => {
+          let _ = client_tx
+            .send(WsMessage::Close(frame.map(|f| {
+              axum::extract::ws::CloseFrame {
+                code: u16::from(f.code),
+                reason: f.reason.as_str().into(),
+              }
+            })))
+            .await;
+          return;
+        }
+        RelayMessage::Frame(_) => continue,
+      };
+      if client_tx.send(forwarded).await.is_err() {
+        break;
+      }
+    }
+    let _ = client_tx.close().await;
+  };
+
+  // Either direction ending means the conversation is over. Waiting for both
+  // would hold a relay socket open — and one of the session's four allowed
+  // attachments with it — after the client had gone.
+  tokio::select! {
+    () = to_relay => {}
+    () = to_client => {}
+  }
+  log::info!("CDP proxy for remote session {session_id} closed");
 }
 
 // API Handler - Every remote session this account currently owns
@@ -3240,6 +3426,11 @@ async fn get_cookie_bot_usage(
 }
 
 // API Handler - Open URL in existing browser
+//
+// Works against a profile running here OR one running on the leased fleet: a
+// remote session is navigated over the same CDP path the automation tools use,
+// so a caller does not have to know where the browser is. The cross-OS refusal
+// therefore only applies to a profile that would have to be launched locally.
 #[utoipa::path(
   post,
   path = "/v1/profiles/{id}/open-url",
@@ -3248,12 +3439,14 @@ async fn get_cookie_bot_usage(
   ),
   request_body = OpenUrlRequest,
   responses(
-    (status = 200, description = "URL opened successfully"),
-    (status = 400, description = "Cannot open URL with a cross-OS profile"),
+    (status = 200, description = "URL opened successfully, locally or on the profile's remote session"),
+    (status = 400, description = "Cannot open URL with a cross-OS profile that is not running remotely"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
+    (status = 409, description = "Profile is locked by another team member, or waiting for a finished remote session to be pulled back"),
     (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "The profile lock service could not be reached"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -3284,6 +3477,12 @@ async fn open_url_in_profile(
 }
 
 // API Handler - Kill browser process
+//
+// Stops the browser wherever it is. A profile open on the leased fleet is ended
+// through the backend, which is what makes this endpoint mean "stop this
+// profile" rather than "stop this profile if it happens to be on this machine" —
+// the latter reported success, killed nothing, and left the session billing to
+// its two-hour cap.
 #[utoipa::path(
   post,
   path = "/v1/profiles/{id}/kill",
@@ -3291,11 +3490,12 @@ async fn open_url_in_profile(
     ("id" = String, Path, description = "Profile ID")
   ),
   responses(
-    (status = 204, description = "Browser process killed successfully"),
+    (status = 204, description = "Browser stopped, locally or on the profile's remote session"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan required"),
     (status = 404, description = "Profile not found"),
     (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "The fleet could not be reached; the remote browser is still running"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -3306,31 +3506,41 @@ async fn open_url_in_profile(
 async fn kill_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, (StatusCode, String)> {
   // Programmatically launching and stopping profiles is a paid feature; the
   // run/open-url handlers gate the same way.
   if !crate::cloud_auth::CLOUD_AUTH
     .can_use_browser_automation()
     .await
   {
-    return Err(StatusCode::PAYMENT_REQUIRED);
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
   }
 
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(manager_error_response)?;
 
   let profile = profiles
     .iter()
     .find(|p| p.id.to_string() == id)
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
 
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
   browser_runner
     .kill_browser_process(state.app_handle.clone(), profile)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+      let message = e.to_string();
+      // The backend refuses to retire a session it could not stop on the fleet.
+      // Reporting that as a 500 invites a retry loop against a browser that is
+      // still running; 503 says "it is still up, try again".
+      if message.contains("REMOTE_") {
+        (StatusCode::SERVICE_UNAVAILABLE, message)
+      } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, message)
+      }
+    })?;
 
   crate::team_lock::release_team_lock_if_needed(profile).await;
 
@@ -4331,6 +4541,96 @@ mod tests {
   // list, not from the router — endpoints registered on the router but missing
   // from ApiDoc silently disappear from the spec. Lock in the ones that were
   // once dropped, and that removed endpoints stay gone.
+  #[test]
+  fn a_profile_held_elsewhere_is_a_conflict_not_a_bad_request() {
+    // These four refusals all mean "come back in a moment". Answering 400 tells
+    // an automation client its request was malformed and to stop retrying, and
+    // that is what every one of them did before they had codes at all.
+    for code in [
+      "PROFILE_RUNNING_REMOTELY",
+      "PROFILE_REMOTE_SYNC_PENDING",
+      "PROFILE_LOCKED_BY_MEMBER",
+      "PROFILE_LOCKED_ELSEWHERE",
+    ] {
+      let (status, body) = manager_error_response(serde_json::json!({ "code": code }).to_string());
+      assert_eq!(status, StatusCode::CONFLICT, "{code} must be a 409");
+      assert!(body.contains(code), "{code} must reach the caller");
+    }
+  }
+
+  #[test]
+  fn an_unreachable_lock_service_is_not_the_callers_fault() {
+    let (status, _) =
+      manager_error_response(serde_json::json!({ "code": "PROFILE_LOCK_UNAVAILABLE" }).to_string());
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+  }
+
+  #[test]
+  fn a_remote_session_exposes_a_cdp_endpoint_an_external_client_can_attach_to() {
+    // Without this route `run-remote` hands back a session id that nothing
+    // outside the app can use: the fleet relay accepts only the user's cloud
+    // credential, which an API consumer does not have and must not be given.
+    // A Playwright user reads the spec to find this, so it has to be in it.
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let operation = &spec["paths"]["/v1/remote-sessions/{id}/cdp"]["get"];
+    assert!(
+      operation.is_object(),
+      "the CDP attach endpoint must be in the served spec"
+    );
+    assert!(
+      operation["responses"].get("101").is_some(),
+      "a WebSocket endpoint must document its upgrade"
+    );
+    assert_eq!(operation["tags"][0], "remote-sessions");
+  }
+
+  #[test]
+  fn a_cdp_attach_failure_is_not_reported_as_a_broken_relay() {
+    // A CDP client retries a 502 and gives up on a 404. Reporting "this session
+    // is not up yet" as a gateway failure sends it into a loop against a
+    // session that is doing exactly what it should.
+    use crate::cdp_target::CdpError;
+    assert_eq!(
+      cdp_error_response(CdpError::NotDrivable("provisioning".into())).0,
+      StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+      cdp_error_response(CdpError::Unauthorized("no token".into())).0,
+      StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+      cdp_error_response(CdpError::Unreachable("dns".into())).0,
+      StatusCode::BAD_GATEWAY
+    );
+  }
+
+  #[test]
+  fn the_kill_route_documents_that_it_can_fail_to_stop_a_remote_browser() {
+    // The backend refuses to retire a session it could not stop on the fleet, so
+    // stopping can genuinely fail with the browser still running. A spec that
+    // only lists 204 tells a client that never happens.
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let responses = &spec["paths"]["/v1/profiles/{id}/kill"]["post"]["responses"];
+    assert!(
+      responses.get("503").is_some(),
+      "kill must document that the fleet may be unreachable"
+    );
+  }
+
+  #[test]
+  fn the_local_launch_routes_document_their_conflict() {
+    // A profile waiting on a finished remote session refuses a local launch.
+    // Undocumented, that reaches an integrator as an unexplained 409.
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for path in ["/v1/profiles/{id}/run", "/v1/profiles/{id}/open-url"] {
+      let responses = &spec["paths"][path]["post"]["responses"];
+      assert!(
+        responses.get("409").is_some(),
+        "{path} must document its conflict"
+      );
+    }
+  }
+
   #[test]
   fn openapi_spec_covers_registered_routes() {
     let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");

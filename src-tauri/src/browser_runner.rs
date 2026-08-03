@@ -15,6 +15,13 @@ static PROFILE_LAUNCH_LOCKS: LazyLock<
   tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 > = LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
 
+/// How long a remote navigation waits for the page to settle.
+///
+/// A relayed round trip crosses two networks and the page load itself happens
+/// on hardware in another country, so this is deliberately the same budget the
+/// automation tools give a navigation rather than a loopback-sized one.
+const REMOTE_NAVIGATE_TIMEOUT_SECS: u64 = 30;
+
 async fn lock_profile_launch(profile_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
   let lock = {
     let mut locks = PROFILE_LAUNCH_LOCKS.lock().await;
@@ -829,9 +836,62 @@ impl BrowserRunner {
     profile: &BrowserProfile,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _profile_launch_guard = lock_profile_launch(&profile.id.to_string()).await;
+
+    // "Stop this profile" has to mean the browser that is actually running, and
+    // for a profile on the leased fleet that browser is not on this machine.
+    // Without this, stopping reported success, killed nothing, and left the
+    // session running to its two-hour cap — billing the user for every minute
+    // and holding their profile lock the whole time.
+    if self.stop_remote_session_for(&app_handle, profile).await? {
+      return Ok(());
+    }
+
     self
       .kill_browser_process_unlocked(app_handle, profile)
       .await
+  }
+
+  /// Stop this profile's fleet session, if it has one. Returns whether it did.
+  ///
+  /// Guarded on there being no local process so a locally running profile never
+  /// pays for the lookup, exactly as the open-URL path is: the profile lock
+  /// makes a local and a remote browser mutually exclusive.
+  async fn stop_remote_session_for(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile: &BrowserProfile,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    if profile.process_id.is_some() {
+      return Ok(false);
+    }
+    let profile_id = profile.id.to_string();
+    let Some(session_id) = crate::remote_handoff::running_session_for_profile(&profile_id) else {
+      return Ok(false);
+    };
+
+    log::info!(
+      "Stopping remote session {session_id} for profile {} ({profile_id})",
+      profile.name
+    );
+    crate::remote_session::end_remote_session(&session_id)
+      .await
+      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        // Surfaced rather than swallowed. The backend refuses to retire a
+        // session it could not stop on the fleet, so a failure here means the
+        // browser is STILL RUNNING; reporting success would tell the user their
+        // profile is free when a host is still writing to it.
+        log::warn!("Failed to stop remote session {session_id}: {e}");
+        e.to_error_json().into()
+      })?;
+
+    // The session is down and its work is in cloud storage. This is what puts
+    // the profile into "pending sync" and starts the pull, so the user is not
+    // handed back a profile directory that predates the session they just ran.
+    //
+    // The session's own profile lock is released by the backend when it retires
+    // the row; nothing is released from here, because this client never held it.
+    crate::remote_session::note_session_stopped(app_handle, &session_id);
+    Ok(true)
   }
 
   async fn kill_browser_process_unlocked(
@@ -1222,6 +1282,29 @@ impl BrowserRunner {
       .ok_or_else(|| format!("Profile '{profile_id}' not found"))?;
     let _profile_launch_guard = lock_profile_launch(&profile.id.to_string()).await;
 
+    // A profile already open on the leased fleet is driven, not launched. This
+    // sits above the cross-OS guard on purpose: a Windows profile cannot run on
+    // this Mac, which is the whole reason it is running remotely, and refusing
+    // to point it at a URL for that reason would make the remote session
+    // unusable from the one endpoint that exists to use it.
+    //
+    // Guarded on there being no local process, so a profile running here never
+    // pays for the lookup: a local launch records a pid, and the profile lock
+    // keeps a local and a remote session mutually exclusive.
+    if profile.process_id.is_none() {
+      if let Ok(target) = crate::cdp_target::resolve(&profile).await {
+        if target.is_remote() {
+          log::info!("Opening URL through {}", target.describe());
+          return crate::cdp_target::navigate(&target, &url, REMOTE_NAVIGATE_TIMEOUT_SECS)
+            .await
+            .map_err(|e| {
+              log::warn!("Failed to open a URL on the remote browser: {e}");
+              format!("Failed to open URL with profile: {e}")
+            });
+        }
+      }
+    }
+
     if profile.is_cross_os() {
       return Err(format!(
         "Cannot open URL with profile '{}': this profile was created on {} and cannot be used on a different operating system",
@@ -1229,6 +1312,14 @@ impl BrowserRunner {
         profile.host_os.as_deref().unwrap_or("another OS"),
       ));
     }
+
+    // Past this point a local browser is about to be launched, and until now
+    // this was the ONE launch path that took neither the profile lock nor any
+    // notice of the fleet. A remote session whose state could not be read (a
+    // dropped event stream plus an unreachable backend) fell straight through
+    // to a local launch on a profile a host was writing to.
+    crate::remote_handoff::ensure_local_launch_allowed(&profile.id.to_string())?;
+    crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
 
     log::info!("Opening URL with selected profile");
 
@@ -1280,6 +1371,12 @@ pub async fn launch_browser_profile_impl(
       profile.host_os.as_deref().unwrap_or("another OS"),
     ));
   }
+
+  // Refuse a launch that would run over work a remote session has not handed
+  // back yet. Checked before the profile lock because it answers without a
+  // round trip and because it stays true after the session's lock is released:
+  // the lock protects the browser, this protects the bytes it wrote.
+  crate::remote_handoff::ensure_local_launch_allowed(&profile.id.to_string())?;
 
   // Team lock check: if profile is sync-enabled and user is on a team, acquire lock
   crate::team_lock::acquire_team_lock_if_needed(&profile).await?;

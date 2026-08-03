@@ -345,6 +345,10 @@
       "nameDesc": "Tên (Z–A)",
       "newest": "Mới nhất trước",
       "oldest": "Cũ nhất trước"
+    },
+    "remote": {
+      "runningTooltip": "Đang chạy trên máy từ xa. Dừng lại để đưa hồ sơ về đây.",
+      "pendingSyncTooltip": "Đang tải về những gì phiên từ xa đã thay đổi. Sẽ dùng lại được khi hoàn tất."
     }
   },
   "createProfile": {
@@ -1880,7 +1884,12 @@
     "cookieBotUnsupportedPlatform": "Cookie Bot không chạy được hồ sơ {{platform}}. Chỉ hỗ trợ hồ sơ Windows và macOS.",
     "cookieBotRequiresExitNode": "Hãy gán proxy hoặc VPN trước. Nếu không, lần chạy sẽ đi ra từ địa chỉ trung tâm dữ liệu, gây hại cho danh tính hồ sơ.",
     "unknownCode": "Đã xảy ra lỗi: {{code}}",
-    "cookieBotTouchFingerprintUnsupported": "Hồ sơ này khai báo là thiết bị cảm ứng, bot không điều khiển được. Hãy dùng vân tay máy tính để bàn."
+    "cookieBotTouchFingerprintUnsupported": "Hồ sơ này khai báo là thiết bị cảm ứng, bot không điều khiển được. Hãy dùng vân tay máy tính để bàn.",
+    "profileRunningRemotely": "Hồ sơ này đang chạy trên máy từ xa. Hãy dừng phiên từ xa trước.",
+    "profileRemoteSyncPending": "Một phiên từ xa vừa kết thúc. Đang chờ tải các thay đổi về trước khi mở hồ sơ này tại đây.",
+    "profileLockedByMember": "Hồ sơ này đang được {{email}} sử dụng.",
+    "profileLockedElsewhere": "Hồ sơ này đang được sử dụng trên thiết bị khác.",
+    "profileLockUnavailable": "Không thể kiểm tra hồ sơ này có đang được dùng ở nơi khác hay không. Hãy kiểm tra kết nối và thử lại."
   },
   "rail": {
     "profiles": "Profile",

@@ -78,6 +78,11 @@ export type BackendErrorCode =
   | "REMOTE_SESSION_CONFLICT"
   | "REMOTE_SYNC_IN_PROGRESS"
   | "REMOTE_HOURS_EXHAUSTED"
+  | "PROFILE_RUNNING_REMOTELY"
+  | "PROFILE_REMOTE_SYNC_PENDING"
+  | "PROFILE_LOCKED_BY_MEMBER"
+  | "PROFILE_LOCKED_ELSEWHERE"
+  | "PROFILE_LOCK_UNAVAILABLE"
   | "NOT_TEAM_MEMBER"
   | "COOKIE_BOT_NOT_ENTITLED"
   | "COOKIE_BOT_NOT_ENROLLED"
@@ -314,6 +319,18 @@ export function translateBackendError(t: TFunction, err: unknown): string {
         granted: parsed.params?.granted ?? "0",
         used: parsed.params?.used ?? "0",
       });
+    case "PROFILE_RUNNING_REMOTELY":
+      return t("backendErrors.profileRunningRemotely");
+    case "PROFILE_REMOTE_SYNC_PENDING":
+      return t("backendErrors.profileRemoteSyncPending");
+    case "PROFILE_LOCKED_BY_MEMBER":
+      return t("backendErrors.profileLockedByMember", {
+        email: parsed.params?.email ?? "",
+      });
+    case "PROFILE_LOCKED_ELSEWHERE":
+      return t("backendErrors.profileLockedElsewhere");
+    case "PROFILE_LOCK_UNAVAILABLE":
+      return t("backendErrors.profileLockUnavailable");
     case "NOT_TEAM_MEMBER":
       return t("backendErrors.notTeamMember");
     case "COOKIE_BOT_NOT_ENTITLED":

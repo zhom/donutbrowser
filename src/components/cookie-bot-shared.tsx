@@ -237,6 +237,24 @@ export function preflight(profile: BrowserProfile): PreflightResult {
   return ELIGIBLE;
 }
 
+/**
+ * Whether this profile could be launched on a remote host.
+ *
+ * A strict subset of {@link preflight}: a remote session needs the profile to
+ * exist in cloud storage in a form a host can read, and nothing more. The bot's
+ * extra requirement — an exit node — exists because a night of unattended
+ * traffic from a datacenter address is worse for the profile than not warming
+ * it, and that reasoning does not apply to a session the user is driving.
+ *
+ * Mirrors `remote_launch_profile_rules` in `api_server.rs`, which is
+ * authoritative; this only avoids offering an action that would be refused.
+ */
+export function canLaunchRemotely(profile: BrowserProfile): boolean {
+  const syncMode = profile.sync_mode ?? "Disabled";
+  if (syncMode === "Disabled" || syncMode === "Encrypted") return false;
+  return resolvedOs(profile) !== null;
+}
+
 export function preflightReason(t: TFunction, result: PreflightResult): string {
   switch (result.code) {
     case "syncOff":

@@ -51,6 +51,7 @@ mod automation_rate_limiter;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
+mod cdp_target;
 mod default_browser;
 pub mod dns_blocklist;
 mod downloaded_browsers_registry;
@@ -72,6 +73,7 @@ mod proxy_manager;
 pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
+mod remote_handoff;
 mod remote_session;
 mod settings_manager;
 pub mod socks5_local;
@@ -1333,11 +1335,27 @@ async fn get_remote_session(
 /// so a handful of short launches bills an allowance meant for a hundred.
 #[tauri::command]
 async fn stop_remote_session(
+  app_handle: tauri::AppHandle,
   session_id: String,
 ) -> Result<remote_session::EndRemoteSessionOutcome, String> {
-  remote_session::end_remote_session(&session_id)
+  let outcome = remote_session::end_remote_session(&session_id)
     .await
-    .map_err(|e| remote_session_error("stop", e))
+    .map_err(|e| remote_session_error("stop", e))?;
+  // The stream normally reports the close, but a stop must not depend on a
+  // socket being up: without this the session's work would sit in cloud storage
+  // with nothing to pull it, and the profile would look ready to open locally
+  // while its local copy still predated the session.
+  remote_session::note_session_stopped(&app_handle, &session_id);
+  Ok(outcome)
+}
+
+/// Which profiles cannot be launched locally right now, and why.
+///
+/// Backed by the same store the launch gate reads, so the button the UI disables
+/// and the refusal the backend would produce can never disagree.
+#[tauri::command]
+fn get_remote_handoff_states() -> std::collections::HashMap<String, remote_handoff::HandoffState> {
+  remote_handoff::states()
 }
 
 /// Subscribe to session transitions. Idempotent.
@@ -2535,6 +2553,12 @@ pub fn run_with_builder(
           // and would only be refused on a loop; the frontend starts it again
           // through `start_remote_session_events` once the user signs in.
           remote_session::start_session_events(app_handle_cloud.clone());
+
+          // A session that finished while this machine was shut, or whose pull
+          // ran out of retries offline, leaves a profile blocked from launching
+          // with its work still in cloud storage. Signing in is the first moment
+          // that pull can succeed, so it is where it is retried.
+          remote_handoff::resume_pending_pulls(&app_handle_cloud);
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });
@@ -2731,6 +2755,7 @@ pub fn run_with_builder(
       list_remote_sessions,
       get_remote_session,
       stop_remote_session,
+      get_remote_handoff_states,
       start_remote_session_events,
       stop_remote_session_events,
       get_remote_session_events_status,
@@ -2809,6 +2834,10 @@ mod tests {
       crate::remote_session::EVENT_SESSION_STATE,
       crate::remote_session::EVENT_SESSION_SNAPSHOT,
       crate::remote_session::EVENT_STREAM_STATUS,
+      // The launch gate is emitted from the same place for the same reason: a
+      // Run button that does not hear about it stays enabled over a profile the
+      // backend will refuse, or over unsynced work it must not open.
+      crate::remote_handoff::EVENT_REMOTE_HANDOFF,
     ] {
       assert!(
         client.contains(&format!("\"{event}\"")),

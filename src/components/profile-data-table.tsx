@@ -101,6 +101,7 @@ import { useBrowserState } from "@/hooks/use-browser-state";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { useRemoteHandoff } from "@/hooks/use-remote-handoff";
 import { useScrollFade } from "@/hooks/use-scroll-fade";
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import { useTeamLocks } from "@/hooks/use-team-locks";
@@ -121,6 +122,7 @@ import {
 import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { canUseCookieBot } from "@/lib/entitlements";
 import { formatRelativeTime } from "@/lib/flag-utils";
+import type { RemoteHandoffState } from "@/lib/remote-sessions";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -272,6 +274,15 @@ interface TableMeta {
   // Team locks
   isProfileLockedByAnother: (profileId: string) => boolean;
   getProfileLockEmail: (profileId: string) => string | undefined;
+
+  // Remote execution.
+  //
+  // `getRemoteHandoff` is the authoritative answer to "can this be opened
+  // here", read from the same store the backend gate reads. The team-lock cache
+  // above cannot serve it: it refreshes on a 30-second poll and says nothing at
+  // all about a session that has finished but whose work has not been pulled
+  // back yet.
+  getRemoteHandoff: (profileId: string) => RemoteHandoffState | null;
 
   // Synchronizer
   getProfileSyncInfo: (profileId: string) =>
@@ -1585,6 +1596,10 @@ export function ProfilesDataTable({
   const { vpnConfigs } = useVpnEvents();
   const { user } = useCloudAuth();
   const { isProfileLocked, getLockInfo } = useTeamLocks(user?.id);
+  // Which profiles cannot be opened on this computer, and why. Event-driven and
+  // read from the backend's own gate, so the button state and the refusal the
+  // backend would give can never disagree.
+  const { handoffFor } = useRemoteHandoff();
 
   // Cookie Bot. Enrolments and live runs both live server-side, so the table
   // reads them from the shared store rather than from BrowserProfile.
@@ -2445,6 +2460,9 @@ export function ProfilesDataTable({
       getProfileLockEmail: (profileId: string) =>
         getLockInfo(profileId)?.lockedByEmail,
 
+      // Remote execution
+      getRemoteHandoff: handoffFor,
+
       // Synchronizer
       getProfileSyncInfo: getProfileSyncInfo ?? (() => undefined),
       onLaunchWithSync:
@@ -2524,6 +2542,7 @@ export function ProfilesDataTable({
       handleCreateCountryProxy,
       isProfileLocked,
       getLockInfo,
+      handoffFor,
       getProfileSyncInfo,
       onLaunchWithSync,
       cookieBotUnlocked,
@@ -2725,20 +2744,37 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
+          const handoff = meta.getRemoteHandoff(profile.id);
+          // A profile open on the fleet IS running, and the button has to say
+          // so: it is the control that stops it, and stopping now reaches the
+          // remote browser rather than looking for a local process that was
+          // never there.
+          const isRunningRemotely = handoff === "running";
+          const isPendingRemotePull = handoff === "pending_sync";
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            isRunningRemotely;
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isLockedByAnother = meta.isProfileLockedByAnother(profile.id);
           const isSyncing = meta.syncStatuses[profile.id]?.status === "syncing";
-          const canLaunch =
-            meta.browserState.canLaunchProfile(profile) &&
-            !isLockedByAnother &&
-            !isSyncing;
+          // A remote session holds the profile lock under its own holder id, so
+          // `isLockedByAnother` is true for the user's OWN fleet session. That
+          // must not disable the control that stops it.
+          const canLaunch = isRunningRemotely
+            ? true
+            : meta.browserState.canLaunchProfile(profile) &&
+              !isPendingRemotePull &&
+              !isLockedByAnother &&
+              !isSyncing;
           const lockEmail = meta.getProfileLockEmail(profile.id);
-          const tooltipContent = isLockedByAnother
-            ? meta.t("sync.team.cannotLaunchLocked", { email: lockEmail })
-            : meta.browserState.getLaunchTooltipContent(profile);
+          const tooltipContent = isRunningRemotely
+            ? meta.t("profiles.remote.runningTooltip")
+            : isPendingRemotePull
+              ? meta.t("profiles.remote.pendingSyncTooltip")
+              : isLockedByAnother
+                ? meta.t("sync.team.cannotLaunchLocked", { email: lockEmail })
+                : meta.browserState.getLaunchTooltipContent(profile);
 
           const handleProfileStop = async (profile: BrowserProfile) => {
             meta.setStoppingProfiles((prev: Set<string>) =>

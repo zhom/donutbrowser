@@ -345,6 +345,10 @@
       "nameDesc": "Nom (Z–A)",
       "newest": "Plus récents d’abord",
       "oldest": "Plus anciens d’abord"
+    },
+    "remote": {
+      "runningTooltip": "En cours d'exécution sur une machine distante. Arrêtez-la pour récupérer le profil ici.",
+      "pendingSyncTooltip": "Téléchargement des modifications de la session distante. De nouveau disponible une fois terminé."
     }
   },
   "createProfile": {
@@ -1887,7 +1891,12 @@
     "cookieBotUnsupportedPlatform": "Cookie Bot ne peut pas exécuter de profils {{platform}}. Seuls les profils Windows et macOS sont pris en charge.",
     "cookieBotRequiresExitNode": "Associez d'abord un proxy ou un VPN. Sans cela, l'exécution proviendrait d'une adresse de centre de données, ce qui abîme l'identité du profil.",
     "unknownCode": "Une erreur est survenue : {{code}}",
-    "cookieBotTouchFingerprintUnsupported": "Ce profil déclare un appareil tactile, que le bot ne peut pas piloter. Utilisez une empreinte de bureau."
+    "cookieBotTouchFingerprintUnsupported": "Ce profil déclare un appareil tactile, que le bot ne peut pas piloter. Utilisez une empreinte de bureau.",
+    "profileRunningRemotely": "Ce profil s'exécute sur une machine distante. Arrêtez d'abord la session distante.",
+    "profileRemoteSyncPending": "Une session distante vient de se terminer. Ses modifications doivent être téléchargées avant d'ouvrir ce profil ici.",
+    "profileLockedByMember": "Ce profil est utilisé par {{email}}.",
+    "profileLockedElsewhere": "Ce profil est utilisé sur un autre appareil.",
+    "profileLockUnavailable": "Impossible de vérifier si ce profil est utilisé ailleurs. Vérifiez votre connexion et réessayez."
   },
   "rail": {
     "profiles": "Profils",

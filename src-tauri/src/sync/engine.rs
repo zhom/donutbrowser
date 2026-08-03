@@ -1,6 +1,8 @@
 use super::client::SyncClient;
 use super::encryption;
-use super::manifest::{compute_diff, generate_manifest, get_cache_path, HashCache, SyncManifest};
+use super::manifest::{
+  compute_diff_with_bias, generate_manifest, get_cache_path, DiffBias, HashCache, SyncManifest,
+};
 use super::types::*;
 use crate::events;
 use crate::profile::types::{BrowserProfile, SyncMode};
@@ -19,6 +21,22 @@ use tokio::sync::{Mutex as TokioMutex, Semaphore};
 /// entity's user-edit timestamp in unix seconds. Used to resolve sync conflicts
 /// (last-write-wins) from a HEAD request without downloading the object body.
 const UPDATED_AT_META_KEY: &str = "updated-at";
+
+/// What one profile reconcile actually did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProfileSyncOutcome {
+  /// The local directory and the remote copy now agree.
+  Completed,
+  /// Nothing was transferred, and the reason is not an error. A caller waiting
+  /// on the remote copy has NOT got it and must try again.
+  Skipped(&'static str),
+}
+
+impl ProfileSyncOutcome {
+  pub fn is_completed(&self) -> bool {
+    matches!(self, Self::Completed)
+  }
+}
 
 lazy_static::lazy_static! {
   static ref SYNC_CANCEL_FLAGS: StdMutex<HashMap<String, Arc<AtomicBool>>> =
@@ -450,13 +468,35 @@ impl SyncEngine {
     app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> SyncResult<()> {
+    self
+      .sync_profile_with_bias(app_handle, profile, DiffBias::Auto)
+      .await
+      .map(|_| ())
+  }
+
+  /// Reconcile a profile, stating which side wins and whether anything happened.
+  ///
+  /// The outcome matters to exactly one caller: the pull that follows a remote
+  /// session. Every skip below returns `Ok(())` from `sync_profile`, so a caller
+  /// that treated success as "the profile is now current" would clear the local
+  /// launch gate without having downloaded a single byte — and the user would
+  /// then open a stale profile over the session's work. `Skipped` says so.
+  pub async fn sync_profile_with_bias(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile: &BrowserProfile,
+    bias: DiffBias,
+  ) -> SyncResult<ProfileSyncOutcome> {
     if profile.is_cross_os() {
       log::info!(
         "Cross-OS profile: {} ({}) — syncing metadata only",
         profile.name,
         profile.id
       );
-      return self.sync_cross_os_metadata(app_handle, profile).await;
+      self.sync_cross_os_metadata(app_handle, profile).await?;
+      // The browser files are the thing a remote session changes, and a cross-OS
+      // profile syncs none of them here, so this is not a completed pull.
+      return Ok(ProfileSyncOutcome::Skipped("cross-OS profile"));
     }
 
     // Skip team profiles for self-hosted sync
@@ -466,7 +506,9 @@ impl SyncEngine {
         profile.name,
         profile.id
       );
-      return Ok(());
+      return Ok(ProfileSyncOutcome::Skipped(
+        "team profile, self-hosted sync",
+      ));
     }
 
     // Skip if profile is currently running locally
@@ -476,20 +518,21 @@ impl SyncEngine {
         profile.name,
         profile.id
       );
-      return Ok(());
+      return Ok(ProfileSyncOutcome::Skipped("profile is running locally"));
     }
 
-    // Skip if profile is locked by another team member
+    // Skip if profile is locked by another team member, or by one of this
+    // user's own remote sessions.
     if crate::team_lock::TEAM_LOCK
       .is_locked_by_another(&profile.id.to_string())
       .await
     {
       log::info!(
-        "Skipping sync for profile locked by another team member: {} ({})",
+        "Skipping sync for profile locked by another holder: {} ({})",
         profile.name,
         profile.id
       );
-      return Ok(());
+      return Ok(ProfileSyncOutcome::Skipped("profile is locked elsewhere"));
     }
 
     let reconciled_profile = self.reconcile_profile_metadata(profile).await?;
@@ -591,7 +634,7 @@ impl SyncEngine {
       .await?;
 
     // Compute diff
-    let diff = compute_diff(&local_manifest, remote_manifest.as_ref());
+    let diff = compute_diff_with_bias(&local_manifest, remote_manifest.as_ref(), bias);
 
     if diff.is_empty() {
       log::info!("Profile {} is already in sync", profile_id);
@@ -603,7 +646,9 @@ impl SyncEngine {
           "status": "synced"
         }),
       );
-      return Ok(());
+      // Nothing to transfer IS a completed reconcile: the local copy already
+      // matches what the host pushed, which is exactly what the caller waits for.
+      return Ok(ProfileSyncOutcome::Completed);
     }
 
     let upload_bytes: u64 = diff.files_to_upload.iter().map(|f| f.size).sum();
@@ -769,7 +814,7 @@ impl SyncEngine {
     );
 
     log::info!("Profile {} synced successfully", profile_id);
-    Ok(())
+    Ok(ProfileSyncOutcome::Completed)
   }
 
   async fn download_manifest(
@@ -3544,6 +3589,40 @@ pub async fn trigger_sync_for_profile(
     .map_err(|e| format!("Sync failed: {e}"))?;
 
   Ok(())
+}
+
+/// Pull a profile back down after a remote session wrote to it.
+///
+/// Not `trigger_sync_for_profile` with a different name. Two things differ, and
+/// both of them are the reason the session's work used to be destroyed:
+///
+/// - The diff is biased to the remote copy. The host has just written the
+///   authoritative profile; local mtimes may nonetheless be newer, and under the
+///   ordinary rule that uploads the stale copy and deletes the host's files.
+/// - The outcome is reported. Every skip inside `sync_profile` returns success,
+///   so the caller could otherwise mark the profile current without a byte
+///   having moved.
+pub async fn pull_profile_after_remote_session(
+  app_handle: &tauri::AppHandle,
+  profile_id: &str,
+) -> Result<ProfileSyncOutcome, String> {
+  let engine = SyncEngine::create_from_settings(app_handle)
+    .await
+    .map_err(|e| format!("Failed to create sync engine: {e}"))?;
+
+  let profile_uuid =
+    uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+  let profile = ProfileManager::instance()
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {e}"))?
+    .into_iter()
+    .find(|p| p.id == profile_uuid)
+    .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+  engine
+    .sync_profile_with_bias(app_handle, &profile, DiffBias::PreferRemote)
+    .await
+    .map_err(|e| format!("Sync failed: {e}"))
 }
 
 #[tauri::command]

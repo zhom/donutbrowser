@@ -345,6 +345,10 @@
       "nameDesc": "Name (Z–A)",
       "newest": "Newest first",
       "oldest": "Oldest first"
+    },
+    "remote": {
+      "runningTooltip": "Running on a remote machine. Stop it to bring the profile back here.",
+      "pendingSyncTooltip": "Downloading what the remote session changed. Available again when it finishes."
     }
   },
   "createProfile": {
@@ -1880,7 +1884,12 @@
     "cookieBotUnsupportedPlatform": "The cookie bot cannot run {{platform}} profiles. Only Windows and macOS profiles are supported.",
     "cookieBotRequiresExitNode": "Attach a proxy or VPN first. Without one the run would come from a datacenter address, which damages the profile's identity.",
     "unknownCode": "Something went wrong: {{code}}",
-    "cookieBotTouchFingerprintUnsupported": "This profile claims a touch device, which the bot cannot drive. Use a desktop fingerprint."
+    "cookieBotTouchFingerprintUnsupported": "This profile claims a touch device, which the bot cannot drive. Use a desktop fingerprint.",
+    "profileRunningRemotely": "This profile is running on a remote machine. Stop the remote session first.",
+    "profileRemoteSyncPending": "A remote session just finished. Waiting for its changes to download before this profile can open here.",
+    "profileLockedByMember": "This profile is in use by {{email}}.",
+    "profileLockedElsewhere": "This profile is in use on another device.",
+    "profileLockUnavailable": "Could not check whether this profile is in use elsewhere. Check your connection and try again."
   },
   "rail": {
     "profiles": "Profiles",
