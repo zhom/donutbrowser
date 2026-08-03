@@ -258,7 +258,8 @@
       "emptyCreate": "Tạo hồ sơ",
       "emptyImport": "Nhập hồ sơ",
       "emptyFilteredTitle": "Không tìm thấy hồ sơ",
-      "emptyFilteredHint": "Không có hồ sơ nào khớp với nhóm hoặc tìm kiếm này. Hãy thử bộ lọc khác hoặc tạo mới."
+      "emptyFilteredHint": "Không có hồ sơ nào khớp với nhóm hoặc tìm kiếm này. Hãy thử bộ lọc khác hoặc tạo mới.",
+      "bot": "Bot"
     },
     "actions": {
       "launch": "Khởi chạy",
@@ -1479,8 +1480,8 @@
     "createGroup": "Tạo nhóm",
     "noGroups": "Chưa tạo nhóm nào. Tạo nhóm đầu tiên bằng nút phía trên.",
     "loading": "Đang tải nhóm...",
-    "profileCount_one": "{{count}} profile",
-    "profileCount_other": "{{count}} profile",
+    "profileCount_one": "{{count}} hồ sơ",
+    "profileCount_other": "{{count}} hồ sơ",
     "groupsLabel": "Nhóm",
     "profilesCol": "Profile",
     "syncCannotDisable": "Không thể tắt đồng bộ khi nhóm này được sử dụng bởi profile đã đồng bộ",
@@ -1851,7 +1852,35 @@
     "vlessConfigInvalid": "URI VLESS không hợp lệ.",
     "xrayUnavailable": "Xray-core không khả dụng trên hệ thống này.",
     "xrayUnsupportedOs": "VLESS yêu cầu macOS 12 trở lên.",
-    "xrayStartFailed": "Không thể khởi động Xray-core."
+    "xrayStartFailed": "Không thể khởi động Xray-core.",
+    "cloudNotSignedIn": "Hãy đăng nhập tài khoản Donut Browser để dùng tính năng này.",
+    "cloudUnreachable": "Không kết nối được tới máy chủ Donut Browser. Hãy kiểm tra kết nối và thử lại.",
+    "cloudRequestFailed": "Yêu cầu thất bại. Hãy thử lại sau giây lát.",
+    "remoteRateLimited": "Quá nhiều yêu cầu. Hãy đợi một lát rồi thử lại.",
+    "remoteNoCapacity": "Hiện không có máy từ xa nào rảnh. Hãy thử lại sau vài phút.",
+    "remoteNotEntitled": "Gói của bạn không bao gồm chạy từ xa.",
+    "remoteSessionRefused": "Máy từ xa đã từ chối phiên này.",
+    "remoteSessionNotFound": "Phiên từ xa đó không còn tồn tại.",
+    "remoteSessionConflict": "Hồ sơ này đang được mở ở nơi khác.",
+    "remoteSyncInProgress": "Hồ sơ này vẫn đang tải lên đồng bộ đám mây. Hãy đợi đồng bộ xong rồi thử lại.",
+    "remoteHoursExhausted": "Bạn đã dùng hết {{used}} trong {{granted}} giờ từ xa của tháng này.",
+    "notTeamMember": "Bạn không thuộc nhóm nào.",
+    "cookieBotNotEntitled": "Gói của bạn không bao gồm Cookie Bot.",
+    "cookieBotNotEnrolled": "Hồ sơ này chưa được thiết lập cho Cookie Bot.",
+    "cookieBotScheduleConflict": "{{email}} đã làm ấm hồ sơ này lúc {{time}}.",
+    "cookieBotRunInProgress": "Đã có một lần chạy đang diễn ra cho hồ sơ này.",
+    "cookieBotRunNotFound": "Lần chạy đó không còn tồn tại.",
+    "cookieBotInvalidSchedule": "Lịch chạy đó không hợp lệ. Hãy kiểm tra giờ chạy, các ngày và thời lượng.",
+    "cookieBotInvalidTimezone": "{{timezone}} không phải múi giờ mà máy chủ nhận diện được.",
+    "cookieBotInvalidPeriod": "Kỳ đó không hợp lệ. Hãy dùng dạng tháng như 2026-08.",
+    "cookieBotSiteLimit": "Nhập từ {{min}} đến {{max}} trang, mỗi trang là một địa chỉ http hoặc https đầy đủ.",
+    "cookieBotRequiresCloudSync": "Hãy bật đồng bộ đám mây cho hồ sơ này trước: máy từ xa không có cách nào khác để lấy hồ sơ.",
+    "cookieBotEncryptedSyncUnsupported": "Hồ sơ này dùng đồng bộ mã hóa đầu cuối mà máy từ xa không giải mã được. Hãy chuyển sang đồng bộ thường.",
+    "cookieBotUnknownPlatform": "Hồ sơ này chưa ghi nhận hệ điều hành nên không thể ghép với máy nào.",
+    "cookieBotUnsupportedPlatform": "Cookie Bot không chạy được hồ sơ {{platform}}. Chỉ hỗ trợ hồ sơ Windows và macOS.",
+    "cookieBotRequiresExitNode": "Hãy gán proxy hoặc VPN trước. Nếu không, lần chạy sẽ đi ra từ địa chỉ trung tâm dữ liệu, gây hại cho danh tính hồ sơ.",
+    "unknownCode": "Đã xảy ra lỗi: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "Hồ sơ này khai báo là thiết bị cảm ứng, bot không điều khiển được. Hãy dùng vân tay máy tính để bàn."
   },
   "rail": {
     "profiles": "Profile",
@@ -1870,7 +1899,9 @@
     },
     "network": "Mạng",
     "integrations": "Tích hợp",
-    "account": "Tài khoản"
+    "account": "Tài khoản",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot — đang chạy"
   },
   "pageTitle": {
     "proxies": "Mạng",
@@ -1881,7 +1912,8 @@
     "integrations": "Tích hợp",
     "account": "Tài khoản",
     "import": "Nhập profile",
-    "shortcuts": "Phím tắt"
+    "shortcuts": "Phím tắt",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1956,8 @@
     },
     "tabs": {
       "account": "Tài khoản",
-      "selfHosted": "Tự lưu trữ"
+      "selfHosted": "Tự lưu trữ",
+      "teamUsage": "Mức dùng của nhóm"
     },
     "selfHosted": {
       "title": "Máy chủ đồng bộ tự lưu trữ",
@@ -1937,7 +1970,8 @@
     },
     "deviceOrdinal": "{{ordinal}} trên {{count}}",
     "automationPrimaryOnly": "Tự động hóa trình duyệt chỉ chạy trên thiết bị chính của bạn (Thiết bị 1). Đăng xuất ở đó để sử dụng tại đây.",
-    "automationActiveHere": "Tự động hóa trình duyệt đang hoạt động trên thiết bị này."
+    "automationActiveHere": "Tự động hóa trình duyệt đang hoạt động trên thiết bị này.",
+    "viewTeamUsage": "Xem mức dùng của nhóm"
   },
   "shortcutsPage": {
     "title": "Phím tắt",
@@ -1970,7 +2004,8 @@
     "goGroups": "Đi đến Nhóm",
     "goIntegrations": "Đi đến Tích hợp",
     "goAccount": "Đi đến Tài khoản",
-    "goSettings": "Đi đến Cài đặt"
+    "goSettings": "Đi đến Cài đặt",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "Đóng Donut Browser?",
@@ -2102,5 +2137,287 @@
     "matchToProxy": "Khớp vân tay với proxy",
     "matching": "Đang khớp…",
     "matchSuccess": "Đã cập nhật vân tay để khớp với proxy. Khởi động lại hồ sơ để áp dụng."
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "Làm ấm hồ sơ qua đêm trên máy từ xa.",
+    "tabs": {
+      "overview": "Tổng quan",
+      "schedule": "Lịch chạy",
+      "activity": "Hoạt động",
+      "team": "Nhóm"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "Cookie Bot làm ấm hồ sơ của bạn qua đêm trên máy từ xa, giúp chúng giữ được cookie và lịch sử mà không cần bật máy tính của bạn. Cần gói Pro hoặc Team."
+    },
+    "empty": {
+      "title": "Chưa có hồ sơ nào được đăng ký",
+      "hint": "Chọn một hồ sơ và bot sẽ làm ấm nó qua đêm trên máy từ xa. Máy tính của bạn có thể tắt.",
+      "cta": "Đăng ký một hồ sơ"
+    },
+    "tonight": {
+      "label": "Đêm nay",
+      "nextRun": "Lần chạy tới lúc {{time}}",
+      "dueCount_one": "{{count}} hồ sơ đến hạn",
+      "dueCount_other": "{{count}} hồ sơ đến hạn",
+      "nothingScheduled": "Chưa lên lịch gì"
+    },
+    "lastDay": {
+      "label": "24 giờ qua",
+      "none": "Chưa có lần chạy nào",
+      "ran_one": "{{count}} đã chạy",
+      "ran_other": "{{count}} đã chạy",
+      "partial_one": "{{count}} một phần",
+      "partial_other": "{{count}} một phần",
+      "failed_one": "{{count}} thất bại",
+      "failed_other": "{{count}} thất bại"
+    },
+    "chart": {
+      "machineTime": "Thời gian máy mỗi đêm",
+      "minutes": "{{minutes}} phút"
+    },
+    "hours": {
+      "label": "Giờ từ xa",
+      "remaining": "Còn {{remaining}} giờ trong {{total}}",
+      "remainingOf": "trên {{total}} giờ",
+      "used": "Đã dùng {{used}} trong {{total}} giờ",
+      "resets": "Đặt lại vào {{date}}",
+      "exhausted": "Đã hết giờ từ xa. Các lịch chạy vẫn được giữ và sẽ tiếp tục ở chu kỳ sau.",
+      "exhaustedOn": "Đã hết giờ từ xa. Các lịch chạy vẫn được giữ và sẽ tiếp tục vào {{date}}.",
+      "estimate": "Khoảng {{hours}} giờ mỗi tuần · còn {{remaining}} giờ trong chu kỳ này",
+      "estimateOverBudget": "Cần khoảng {{hours}} giờ mỗi tuần — chỉ còn {{remaining}} giờ",
+      "estimateOnly": "Khoảng {{hours}} giờ mỗi tuần"
+    },
+    "enrolled": {
+      "columnProfile": "Hồ sơ",
+      "columnCadence": "Tần suất",
+      "columnTime": "Giờ",
+      "columnNextRun": "Lần chạy tới",
+      "columnLastRun": "Lần chạy trước",
+      "enrolProfiles": "Đăng ký hồ sơ",
+      "edit": "Sửa lịch chạy",
+      "neverRun": "Chưa bao giờ",
+      "pausedNoHours": "Tạm dừng — hết giờ",
+      "profileMissing": "Hồ sơ đó không có trên máy tính này."
+    },
+    "schedule": {
+      "empty": "Chưa có gì được lên lịch.",
+      "quietHours_one": "{{count}} giờ trống",
+      "quietHours_other": "{{count}} giờ trống",
+      "crowded_one": "{{count}} hồ sơ khởi động cùng lúc",
+      "crowded_other": "{{count}} hồ sơ khởi động cùng lúc",
+      "unenrol": "Gỡ khỏi Cookie Bot",
+      "unenrolTitle": "Gỡ {{name}} khỏi Cookie Bot?",
+      "unenrolDescription": "Việc làm ấm sẽ dừng ngay đêm nay. Các lần chạy trước vẫn nằm trong tab Hoạt động.",
+      "unenrolled": "Đã gỡ khỏi Cookie Bot"
+    },
+    "status": {
+      "provisioning": "Đang chuẩn bị máy",
+      "ready": "Đang tải hồ sơ",
+      "warming": "Đang làm ấm",
+      "finished": "Đang kết thúc",
+      "failed": "Thất bại"
+    },
+    "runStatus": {
+      "pending": "Trong hàng đợi",
+      "running": "Đang chạy",
+      "succeeded": "Hoàn tất",
+      "partial": "Một phần",
+      "failed": "Thất bại",
+      "skipped": "Đã bỏ qua",
+      "cancelled": "Đã dừng"
+    },
+    "running": {
+      "label": "Đang chạy",
+      "more": "+{{count}} nữa",
+      "stop": "Dừng lần chạy",
+      "stopped": "Đã dừng lần chạy"
+    },
+    "live": {
+      "idle": "Hiện không có gì đang chạy",
+      "streamOffline": "Cập nhật trực tiếp đang ngoại tuyến",
+      "streamOfflineDetail": "Cập nhật trực tiếp đang ngoại tuyến — đang kết nối lại. Các lần chạy bên dưới có thể đã cũ.",
+      "unnamedSession": "Phiên từ xa",
+      "notStartedYet": "Máy chưa báo về thời điểm bắt đầu.",
+      "sitesProgress": "{{visited}} trong {{total}} trang",
+      "sitesUnknown": "Chưa có báo cáo về các trang",
+      "consentHandled_one": "Đã xử lý {{count}} hộp thoại đồng ý",
+      "consentHandled_other": "Đã xử lý {{count}} hộp thoại đồng ý",
+      "consentUnknown": "Chưa có báo cáo về hộp thoại đồng ý",
+      "billed": "Đã tính {{duration}}",
+      "billedUnknown": "Chưa có báo cáo về thời gian tính phí",
+      "chunk": "Phần {{index}} trên {{total}}"
+    },
+    "history": {
+      "title": "Lần chạy",
+      "allProfiles": "Tất cả hồ sơ",
+      "searchPlaceholder": "Tìm hồ sơ…",
+      "filterAll": "Tất cả lần chạy",
+      "filterComplete": "Hoàn tất",
+      "filterPartial": "Một phần",
+      "filterFailed": "Thất bại",
+      "columnStarted": "Bắt đầu",
+      "columnProfile": "Hồ sơ",
+      "columnDuration": "Thời lượng",
+      "columnSites": "Trang",
+      "columnStatus": "Trạng thái",
+      "columnOperator": "Người vận hành",
+      "empty": "Chưa có lần chạy nào.",
+      "noMatch": "Không có lần chạy nào khớp bộ lọc này.",
+      "unknownProfile": "Hồ sơ không xác định",
+      "outcome": "Lý do: {{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "Không truy cập được {{count}} trang",
+      "sitesFailed_other": "Không truy cập được {{count}} trang",
+      "consentHandled_one": "Đã xử lý {{count}} hộp thoại đồng ý",
+      "consentHandled_other": "Đã xử lý {{count}} hộp thoại đồng ý",
+      "sitesUnknown": "Chưa có số liệu"
+    },
+    "duration": {
+      "hm": "{{hours}} giờ {{minutes}} phút",
+      "ms": "{{minutes}} phút {{seconds}} giây",
+      "s": "{{seconds}} giây"
+    },
+    "picker": {
+      "title": "Đăng ký hồ sơ",
+      "description": "Chọn các hồ sơ mà bot sẽ làm ấm qua đêm.",
+      "searchPlaceholder": "Tìm hồ sơ…",
+      "noProfiles": "Không có hồ sơ nào khớp.",
+      "alreadyEnrolled": "Đã đăng ký",
+      "continue_one": "Tiếp tục với {{count}}",
+      "continue_other": "Tiếp tục với {{count}}"
+    },
+    "enrol": {
+      "titleOne": "Đăng ký {{name}}",
+      "titleCount_one": "Đăng ký {{count}} hồ sơ",
+      "titleCount_other": "Đăng ký {{count}} hồ sơ",
+      "editTitle": "Sửa lịch chạy",
+      "description": "Bot mở hồ sơ trên máy từ xa và duyệt các trang bạn liệt kê. Máy tính của bạn có thể tắt.",
+      "summaryNightly": "Chạy mỗi đêm lúc {{time}}, tối đa {{minutes}} phút mỗi lần.",
+      "summaryWeeknights": "Chạy từ thứ Hai đến thứ Sáu lúc {{time}}, tối đa {{minutes}} phút mỗi lần.",
+      "summaryAlternate": "Chạy cách đêm lúc {{time}}, tối đa {{minutes}} phút mỗi lần.",
+      "summaryCustom_one": "Chạy {{count}} đêm mỗi tuần lúc {{time}}, tối đa {{minutes}} phút mỗi lần.",
+      "summaryCustom_other": "Chạy {{count}} đêm mỗi tuần lúc {{time}}, tối đa {{minutes}} phút mỗi lần.",
+      "confirm": "Đăng ký cho đêm nay",
+      "confirmSome": "Đăng ký {{eligible}} trong {{total}} cho đêm nay",
+      "fixFirst": "Hãy khắc phục những mục này trước",
+      "saving": "Đang đăng ký…",
+      "saved": "Đã lưu lịch chạy",
+      "enrolled_one": "Đã đăng ký {{count}} hồ sơ",
+      "enrolled_other": "Đã đăng ký {{count}} hồ sơ",
+      "adjust": "Điều chỉnh lịch chạy",
+      "cadenceLabel": "Tần suất",
+      "cadenceNightly": "Mỗi đêm",
+      "cadenceWeeknights": "Đêm trong tuần",
+      "cadenceAlternate": "Cách đêm",
+      "cadenceCustom_one": "{{count}} đêm mỗi tuần",
+      "cadenceCustom_other": "{{count}} đêm mỗi tuần",
+      "timeLabel": "Giờ bắt đầu",
+      "timeHint": "Theo múi giờ trong dấu vân tay của từng hồ sơ.",
+      "maxMinutesLabel": "Số phút tối đa",
+      "intensityLabel": "Độ sâu",
+      "sitesLabel": "Trang web",
+      "sitesPlaceholder": "Mỗi dòng một địa chỉ",
+      "sitesHint_one": "{{count}} trang. Chỉ những trang bạn liệt kê ở đây mới được truy cập.",
+      "sitesHint_other": "{{count}} trang. Chỉ những trang bạn liệt kê ở đây mới được truy cập.",
+      "sitesTooMany": "Tối đa {{max}} trang.",
+      "presetsUnavailable": "Không tải được các mức độ sâu định sẵn. Hãy thử lại sau giây lát.",
+      "confirmBulkTitle_one": "Đăng ký {{count}} hồ sơ vào Cookie Bot?",
+      "confirmBulkTitle_other": "Đăng ký {{count}} hồ sơ vào Cookie Bot?",
+      "confirmBulkDescription_one": "Việc này đặt trước một lần chạy đêm, trừ vào quỹ giờ từ xa dùng chung. Bạn sẽ chọn giờ và các trang ở bước tiếp theo.",
+      "confirmBulkDescription_other": "Việc này đặt trước {{count}} lần chạy đêm, trừ vào quỹ giờ từ xa dùng chung. Bạn sẽ chọn giờ và các trang ở bước tiếp theo.",
+      "confirmBulkButton_one": "Tiếp tục với {{count}} hồ sơ",
+      "confirmBulkButton_other": "Tiếp tục với {{count}} hồ sơ",
+      "sitesRequired": "Hãy thêm ít nhất một trang.",
+      "addSitesFirst": "Hãy thêm một trang trước",
+      "presetsMissing": "Không có cài đặt sẵn về độ sâu"
+    },
+    "preset": {
+      "light": "Nhẹ",
+      "balanced": "Tiêu chuẩn",
+      "deep": "Sâu"
+    },
+    "preflight": {
+      "ineligible_one": "{{count}} hồ sơ không chạy từ xa được",
+      "ineligible_other": "{{count}} hồ sơ không chạy từ xa được",
+      "reasonSync": "Đồng bộ đang tắt",
+      "reasonEncrypted": "Mã hóa đầu cuối",
+      "reasonNoFingerprint": "Chưa ghi nhận hệ điều hành",
+      "reasonCrossOs": "Tạo cho {{os}} — không có máy từ xa phù hợp",
+      "reasonNoExitNode": "Không có proxy hoặc VPN",
+      "fixSync": "Bật đồng bộ",
+      "fixEncrypted": "Mở cài đặt đồng bộ",
+      "fixProxy": "Gán một proxy",
+      "fixFailed": "Không áp dụng được cách khắc phục đó.",
+      "exitNodeHint": "Không có proxy hoặc VPN, lần chạy sẽ đi ra từ chính địa chỉ trung tâm dữ liệu của hệ thống máy. Nhiều giờ lưu lượng từ một mạng lưu trữ gây hại cho danh tính hồ sơ hơn cả việc không làm ấm."
+    },
+    "conflict": {
+      "title": "{{email}} đã làm ấm hồ sơ này lúc {{time}}",
+      "detail": "Hai lịch chạy trên cùng một hồ sơ tiêu tốn giờ gấp đôi và có thể xung đột giữa chừng.",
+      "keepTheirs": "Dùng lịch của họ",
+      "replace": "Thay bằng lịch của tôi",
+      "replaceForbidden": "Chỉ chủ sở hữu hoặc quản trị viên nhóm mới đổi được lịch của người khác.",
+      "askThem": "Sao chép {{email}}",
+      "emailCopied": "Đã sao chép email",
+      "copyFailed": "Không sao chép được địa chỉ."
+    },
+    "actionBar": {
+      "enrol": "Đăng ký vào Cookie Bot",
+      "proRequired": "Cookie Bot cần gói Pro hoặc Team",
+      "noneEligible": "Không hồ sơ nào đã chọn có thể làm ấm từ xa"
+    },
+    "actions": {
+      "enrol": "Đăng ký vào Cookie Bot",
+      "editSchedule": "Sửa lịch chạy",
+      "runNow": "Chạy ngay",
+      "runStarted": "Đã bắt đầu chạy",
+      "viewActivity": "Xem hoạt động",
+      "runNotStarted": "Lượt chạy chưa bắt đầu: {{reason}}"
+    },
+    "state": {
+      "enrolled": "Đã đăng ký",
+      "notEnrolled": "Chưa đăng ký",
+      "paused": "Tạm dừng",
+      "summary": "{{cadence}} lúc {{time}}",
+      "rowMenu": "Tùy chọn Cookie Bot cho {{name}}",
+      "blocked": "Không thể chạy: {{reason}}"
+    },
+    "team": {
+      "title": "Mức dùng của nhóm",
+      "pooled_one": "{{used}} trong {{total}} giờ, {{count}} chỗ",
+      "pooled_other": "{{used}} trong {{total}} giờ dùng chung cho {{count}} chỗ",
+      "hours": "{{hours}} giờ",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "Tương tác",
+      "columnMember": "Thành viên",
+      "columnRuns": "Lần chạy",
+      "columnHours": "Giờ",
+      "columnShare": "Tỷ lệ",
+      "noActivity": "Không có phiên từ xa nào trong kỳ này.",
+      "soloNote": "Hiện chỉ có mức dùng của bạn. Mời đồng đội để xem quỹ giờ chia theo từng thành viên.",
+      "runsFailed": "· {{n}} thất bại"
+    },
+    "closeReason": {
+      "stoppedByUser": "Đã dừng thủ công",
+      "maxDuration": "Đã đạt giới hạn thời gian",
+      "other": "Đã kết thúc: {{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "Không có trong gói của bạn",
+      "syncDisabled": "Hồ sơ này đang tắt đồng bộ đám mây",
+      "encryptedSync": "Không hỗ trợ đồng bộ mã hoá đầu cuối",
+      "proxyRequired": "Chưa gắn proxy hoặc VPN",
+      "touchFingerprint": "Không hỗ trợ vân tay thiết bị cảm ứng",
+      "platformUnsupported": "Không có máy nào chạy hệ điều hành của hồ sơ này",
+      "noSites": "Không có trang nào để truy cập",
+      "quotaExhausted": "Đã dùng hết số giờ từ xa",
+      "profileLocked": "Hồ sơ đang mở ở nơi khác",
+      "noCapacity": "Không có máy nào rảnh",
+      "managerError": "Cụm máy không khởi động được trình duyệt",
+      "budgetExceeded": "Đã hết thời lượng dành cho đêm nay",
+      "cancelledByUser": "Đã dừng thủ công",
+      "unknown": "Lý do không xác định ({{code}})"
+    }
   }
 }

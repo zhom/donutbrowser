@@ -1,3 +1,6 @@
+import type { CookieBotSchedule } from "@/lib/cookie-bot";
+import type { RemoteSessionState } from "@/lib/remote-sessions";
+
 export interface ProxySettings {
   proxy_type: string;
   host: string;
@@ -94,9 +97,28 @@ export interface Entitlements {
   crossOsFingerprints: boolean;
   cloudBackup: boolean;
   teamCollaboration: boolean;
+  /** Overnight profile warming on a leased remote host. */
+  cookieBot: boolean;
   profileLimit: number;
   requestsPerHour: number;
+  /**
+   * Per-seat monthly allowance for remote sessions. Reporting only: the
+   * spendable figure is whatever `get_remote_hours_quota` returns, because a
+   * team pools this across its seats and only the server knows the seat count.
+   */
+  remoteBrowserHours: number;
 }
+
+/**
+ * What a backend older than the cookie-bot release actually sends. Read it
+ * through `getEntitlements()`, which fills the gap — never off `CloudUser`
+ * directly, or a paying customer's Cookie Bot silently reads `false`.
+ */
+export type ServerEntitlements = Omit<
+  Entitlements,
+  "cookieBot" | "remoteBrowserHours"
+> &
+  Partial<Pick<Entitlements, "cookieBot" | "remoteBrowserHours">>;
 
 export interface CloudUser {
   id: string;
@@ -120,7 +142,45 @@ export interface CloudUser {
   isPrimaryDevice?: boolean | null;
   // Plan-derived capabilities. The desktop resolves this before handing CloudUser
   // to the UI; optional to stay safe on older cached state.
-  entitlements?: Entitlements;
+  entitlements?: ServerEntitlements;
+}
+
+/**
+ * Cookie Bot and remote-session wire types. Defined next to the transport that
+ * owns them (`src/lib/cookie-bot.ts`, `src/lib/remote-sessions.ts`) and
+ * re-exported here so a component reads one module. Type-only, so nothing is
+ * pulled into the bundle.
+ */
+export type {
+  CookieBotConflict,
+  CookieBotPreset,
+  CookieBotPresetList,
+  CookieBotRun,
+  CookieBotRunPage,
+  CookieBotRunStarted,
+  CookieBotSchedule,
+  CookieBotScheduleInput,
+  CookieBotScheduleList,
+  CookieBotScheduleSaved,
+  CookieBotScope,
+  CookieBotUsage,
+  CookieBotUsageMember,
+  CookieBotUsageProfile,
+  RemoteHoursMember,
+  RemoteHoursQuota,
+} from "@/lib/cookie-bot";
+export type {
+  RemoteSessionPhase,
+  RemoteSessionSnapshot,
+  RemoteSessionState,
+} from "@/lib/remote-sessions";
+
+/** Where a profile stands with the bot, as one row of the profile table reads it. */
+export interface ProfileBotState {
+  /** The stored enrolment, or null when the profile is not enrolled. */
+  schedule: CookieBotSchedule | null;
+  /** A remote session for this profile that has not closed yet. */
+  liveSession: RemoteSessionState | null;
 }
 
 export interface ProfileLockInfo {

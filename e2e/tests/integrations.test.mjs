@@ -652,6 +652,116 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       assert.ok(versionStatus && typeof versionStatus === "object");
       assert.equal(typeof (await app.invoke("is_default_browser")), "boolean");
 
+      // Remote sessions and the cookie bot are brokered by the cloud backend.
+      // Signed out, every one of them must fail as a code the UI can
+      // translate — a raw English string from the transport would reach the
+      // user untranslated, which is what the {"code":…} convention prevents.
+      const notSignedIn = /"code":"CLOUD_NOT_SIGNED_IN"/;
+      const missingProfileId = "00000000-0000-0000-0000-0000000000ff";
+      assert.match(await app.invokeError("list_remote_sessions"), notSignedIn);
+      assert.match(
+        await app.invokeError("get_remote_session", {
+          sessionId: "missing-e2e-session",
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("stop_remote_session", {
+          sessionId: "missing-e2e-session",
+        }),
+        notSignedIn,
+      );
+
+      // The transition stream is what the desktop uses instead of polling, so
+      // its subscriber has to start, report itself, and stop on demand. Both
+      // calls are repeated: a second start must not open a second socket, and
+      // a second stop must not fail.
+      assert.equal(await app.invoke("get_remote_session_events_status"), false);
+      await app.invoke("start_remote_session_events");
+      assert.equal(await app.invoke("get_remote_session_events_status"), true);
+      await app.invoke("start_remote_session_events");
+      assert.equal(await app.invoke("get_remote_session_events_status"), true);
+      await app.invoke("stop_remote_session_events");
+      assert.equal(await app.invoke("get_remote_session_events_status"), false);
+      await app.invoke("stop_remote_session_events");
+      assert.equal(await app.invoke("get_remote_session_events_status"), false);
+
+      assert.match(
+        await app.invokeError("get_cookie_bot_schedules", { scope: "mine" }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("get_cookie_bot_schedule", {
+          profileId: missingProfileId,
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("delete_cookie_bot_schedule", {
+          profileId: missingProfileId,
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("check_cookie_bot_conflicts", {
+          profileId: missingProfileId,
+          runAtMinute: 120,
+          daysMask: 127,
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("get_cookie_bot_runs", { limit: 10 }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("cancel_cookie_bot_run", {
+          runId: "missing-e2e-run",
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("get_cookie_bot_presets"),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("get_remote_hours_quota"),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("get_cookie_bot_usage", { period: "2026-01" }),
+        notSignedIn,
+      );
+
+      // Enrolling and running act on a profile this machine holds: both are
+      // refused before any network call when it does not exist, so a bad id
+      // can never reach a leased host or an hour of the pooled budget.
+      assert.match(
+        await app.invokeError("save_cookie_bot_schedule", {
+          profileId: missingProfileId,
+          schedule: {
+            profile_name: "E2E missing profile",
+            platform: "windows",
+            enabled: true,
+            run_at_minute: 120,
+            days_mask: 127,
+            timezone: "UTC",
+            preset: "balanced",
+            max_minutes: 60,
+            sites: ["https://example.com"],
+          },
+          acknowledgeConflict: false,
+        }),
+        /"code":"PROFILE_NOT_FOUND"/,
+      );
+      assert.match(
+        await app.invokeError("run_cookie_bot_now", {
+          profileId: missingProfileId,
+          maxMinutes: 30,
+        }),
+        /"code":"PROFILE_NOT_FOUND"/,
+      );
+
       const trial = await app.invoke("get_commercial_trial_status");
       assert.ok(trial && typeof trial === "object");
       await app.invoke("acknowledge_trial_expiration");

@@ -72,6 +72,24 @@ impl SyncScheduler {
     self.running.store(false, Ordering::SeqCst);
   }
 
+  /// Whether this specific profile is mid-sync or queued to sync.
+  ///
+  /// A remote host materialises the profile by pulling the synced manifest, so
+  /// launching one while the upload is still running hands it a torn snapshot:
+  /// the manifest is written last, but a launch that races a *queued* sync can
+  /// still pull files that are about to be replaced. Either way the browser
+  /// comes up on a profile that never existed on this machine.
+  ///
+  /// Deliberately per-profile rather than the global
+  /// {@link Self::is_sync_in_progress}: an unrelated profile uploading 80 MB
+  /// must not block launching this one.
+  pub async fn is_profile_sync_in_progress(&self, profile_id: &str) -> bool {
+    if self.in_flight_profiles.lock().await.contains(profile_id) {
+      return true;
+    }
+    self.pending_profiles.lock().await.contains_key(profile_id)
+  }
+
   /// Check if any sync operation is currently in progress
   pub async fn is_sync_in_progress(&self) -> bool {
     let in_flight = self.in_flight_profiles.lock().await;

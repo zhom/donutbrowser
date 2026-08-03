@@ -2034,8 +2034,7 @@ function SecuritySectionInline({
     }
     if (mode === "set" || mode === "change") {
       if (password.length < 8) return t("profilePassword.errors.tooShort");
-      if (password !== confirm)
-        return t("profilePassword.errors.passwordMismatch");
+      if (password !== confirm) return t("profilePassword.errors.mismatch");
     }
     return null;
   };

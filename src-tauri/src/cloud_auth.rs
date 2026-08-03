@@ -43,10 +43,20 @@ pub struct Entitlements {
   pub cloud_backup: bool,
   #[serde(rename = "teamCollaboration", default)]
   pub team_collaboration: bool,
+  /// Overnight profile warming on a leased remote host. Present on the wire
+  /// since the cookie-bot release; a field missing here is silently dropped on
+  /// the way to the UI, which is why every mirror of this struct has to move
+  /// together.
+  #[serde(rename = "cookieBot", default)]
+  pub cookie_bot: bool,
   #[serde(rename = "profileLimit", default)]
   pub profile_limit: i64,
   #[serde(rename = "requestsPerHour", default)]
   pub requests_per_hour: i64,
+  /// Per-seat monthly remote-session allowance. Reporting only — a team pools
+  /// it across seats, so the spendable figure comes from the quota route.
+  #[serde(rename = "remoteBrowserHours", default)]
+  pub remote_browser_hours: i64,
 }
 
 /// Local fallback mirror of the backend plan -> capability matrix, used only when
@@ -66,8 +76,10 @@ fn derive_entitlements(
       cross_os_fingerprints: false,
       cloud_backup: false,
       team_collaboration: false,
+      cookie_bot: false,
       profile_limit: 0,
       requests_per_hour: 0,
+      remote_browser_hours: 0,
     };
   }
   // pro and any unrecognized paid plan -> pro-level (never team).
@@ -82,12 +94,18 @@ fn derive_entitlements(
     cross_os_fingerprints,
     cloud_backup,
     team_collaboration,
+    // A bot run IS remote automation on leased hardware, so the two capabilities
+    // never diverge: a plan that cannot drive a browser cannot warm one either.
+    cookie_bot: browser_automation,
     profile_limit,
     requests_per_hour: if browser_automation {
       DEFAULT_REQUESTS_PER_HOUR
     } else {
       0
     },
+    // Deliberately 0 in the fallback: the allowance is the server's to state and
+    // guessing it here would show a customer hours they may not have.
+    remote_browser_hours: 0,
   }
 }
 

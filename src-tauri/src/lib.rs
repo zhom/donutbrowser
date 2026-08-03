@@ -82,7 +82,9 @@ mod wayfern_manager;
 mod wayfern_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 pub mod cloud_auth;
+mod cloud_errors;
 mod commercial_license;
+mod cookie_bot;
 mod cookie_manager;
 pub mod events;
 mod mcp_integrations;
@@ -1286,6 +1288,247 @@ async fn generate_sample_fingerprint(
   }
 }
 
+// --- Remote sessions --------------------------------------------------------
+//
+// Everything below is transport only. The session state machine, the fleet, the
+// schedule, the browsing behaviour and the budget all live behind
+// donutbrowser-infra; these commands carry the user's own scalars there and
+// render back what the server says.
+
+/// Turn a remote-session failure into the code the frontend translates.
+///
+/// The typed variants carry the backend's own English, which reaches the user
+/// untranslated if it is surfaced as-is. The raw text is kept in the app log,
+/// where support can read it, and never in the toast.
+fn remote_session_error(context: &str, err: remote_session::RemoteSessionError) -> String {
+  log::warn!("Remote session {context} failed: {err}");
+  err.to_error_json()
+}
+
+/// Every remote session the signed-in user currently owns.
+#[tauri::command]
+async fn list_remote_sessions() -> Result<Vec<remote_session::RemoteSessionState>, String> {
+  remote_session::list_remote_sessions()
+    .await
+    .map_err(|e| remote_session_error("list", e))
+}
+
+/// One session's real state.
+///
+/// The stream is how the desktop normally learns a transition; this is the
+/// one-shot read for a window opened after the fact, or a reconnect confirming
+/// what it missed.
+#[tauri::command]
+async fn get_remote_session(
+  session_id: String,
+) -> Result<remote_session::RemoteSessionState, String> {
+  remote_session::get_remote_session(&session_id)
+    .await
+    .map_err(|e| remote_session_error("read", e))
+}
+
+/// Stop a remote session and settle what it cost.
+///
+/// Without this the only thing that ends a session is the fleet's two-hour cap,
+/// so a handful of short launches bills an allowance meant for a hundred.
+#[tauri::command]
+async fn stop_remote_session(
+  session_id: String,
+) -> Result<remote_session::EndRemoteSessionOutcome, String> {
+  remote_session::end_remote_session(&session_id)
+    .await
+    .map_err(|e| remote_session_error("stop", e))
+}
+
+/// Subscribe to session transitions. Idempotent.
+///
+/// Called once the desktop has a cloud session: signed out there is nothing to
+/// stream and the socket would only be refused on a loop.
+#[tauri::command]
+fn start_remote_session_events(app_handle: tauri::AppHandle) {
+  remote_session::start_session_events(app_handle);
+}
+
+/// Unsubscribe. Safe when nothing is running; called on sign-out.
+#[tauri::command]
+fn stop_remote_session_events() {
+  remote_session::stop_session_events();
+}
+
+/// Whether the desktop is subscribed to session transitions.
+///
+/// A UI that mounts after the stream started has no `remote-session-stream`
+/// event to read, so this is how it decides whether to trust the live state or
+/// fall back to `list_remote_sessions`.
+#[tauri::command]
+fn get_remote_session_events_status() -> bool {
+  remote_session::session_events_running()
+}
+
+// --- Cookie bot -------------------------------------------------------------
+
+/// Turn a cookie-bot failure into the code the frontend translates.
+fn cookie_bot_error(context: &str, err: cookie_bot::CookieBotError) -> String {
+  log::warn!(
+    "Cookie bot {context} failed: {} (HTTP {})",
+    err.code(),
+    err.status()
+  );
+  err.to_error_json()
+}
+
+/// The local profile a cookie-bot write refers to.
+///
+/// Enrolment and run-now act on a profile this machine holds: the client-side
+/// preconditions read its sync mode, OS and exit node, and none of that can be
+/// checked for a profile that is not here.
+fn cookie_bot_profile(profile_id: &str) -> Result<profile::BrowserProfile, String> {
+  let profiles = profile::manager::ProfileManager::instance()
+    .list_profiles()
+    .map_err(|e| wrap_backend_error(e, "Failed to read profiles"))?;
+  profiles
+    .into_iter()
+    .find(|p| p.id.to_string() == profile_id)
+    .ok_or_else(|| backend_error("PROFILE_NOT_FOUND"))
+}
+
+/// Every enrolment the caller can see. `scope` is `mine` or `team`.
+#[tauri::command]
+async fn get_cookie_bot_schedules(
+  scope: Option<String>,
+) -> Result<cookie_bot::CookieBotScheduleList, String> {
+  cookie_bot::list_schedules(scope.as_deref())
+    .await
+    .map_err(|e| cookie_bot_error("schedule list", e))
+}
+
+/// This profile's enrolment, or `None` when it has none.
+#[tauri::command]
+async fn get_cookie_bot_schedule(
+  profile_id: String,
+) -> Result<Option<cookie_bot::CookieBotSchedule>, String> {
+  cookie_bot::get_schedule(&profile_id)
+    .await
+    .map_err(|e| cookie_bot_error("schedule read", e))
+}
+
+/// Create or replace this profile's enrolment.
+///
+/// `acknowledge_conflict` is the second half of a two-step write: a teammate's
+/// existing enrolment refuses the first PUT and names them, and the same call
+/// with the flag set goes through.
+#[tauri::command]
+async fn save_cookie_bot_schedule(
+  profile_id: String,
+  schedule: cookie_bot::CookieBotScheduleInput,
+  acknowledge_conflict: bool,
+) -> Result<cookie_bot::CookieBotScheduleSaved, String> {
+  // Refused here rather than at 02:00: a profile that can never be warmed
+  // should never reach a schedule row, an hour of quota or a leased host.
+  let profile = cookie_bot_profile(&profile_id)?;
+  cookie_bot::bot_precondition(&profile)?;
+  // The frontend sends the user's choices; the profile facts the server refuses
+  // a run on are stamped here, from the profile itself, so a caller cannot
+  // assert them.
+  let schedule = schedule.with_profile_state(cookie_bot::profile_state(&profile));
+  cookie_bot::save_schedule(&profile_id, &schedule, acknowledge_conflict)
+    .await
+    .map_err(|e| cookie_bot_error("schedule write", e))
+}
+
+/// Turn the bot off for this profile. `false` means there was nothing enrolled.
+#[tauri::command]
+async fn delete_cookie_bot_schedule(profile_id: String) -> Result<bool, String> {
+  cookie_bot::delete_schedule(&profile_id)
+    .await
+    .map(|outcome| outcome.deleted)
+    .map_err(|e| cookie_bot_error("schedule delete", e))
+}
+
+/// Who else already warms this profile, without writing anything.
+#[tauri::command]
+async fn check_cookie_bot_conflicts(
+  profile_id: String,
+  run_at_minute: Option<u16>,
+  timezone: Option<String>,
+  days_mask: Option<u8>,
+) -> Result<Vec<cookie_bot::CookieBotConflict>, String> {
+  cookie_bot::check_conflicts(&profile_id, run_at_minute, timezone.as_deref(), days_mask)
+    .await
+    .map(|check| check.conflicts)
+    .map_err(|e| cookie_bot_error("conflict check", e))
+}
+
+/// One page of run history, newest first.
+#[tauri::command]
+async fn get_cookie_bot_runs(
+  profile_id: Option<String>,
+  scope: Option<String>,
+  limit: Option<u32>,
+  before: Option<String>,
+) -> Result<cookie_bot::CookieBotRunPage, String> {
+  cookie_bot::list_runs(
+    profile_id.as_deref(),
+    scope.as_deref(),
+    limit,
+    before.as_deref(),
+  )
+  .await
+  .map_err(|e| cookie_bot_error("run list", e))
+}
+
+/// Start a run now instead of waiting for tonight.
+///
+/// The preset and the site list come from the stored enrolment, so an
+/// unenrolled profile is refused rather than run with client-chosen defaults.
+#[tauri::command]
+async fn run_cookie_bot_now(
+  profile_id: String,
+  max_minutes: Option<u32>,
+) -> Result<cookie_bot::CookieBotRunStarted, String> {
+  cookie_bot::bot_precondition(&cookie_bot_profile(&profile_id)?)?;
+  cookie_bot::run_now(&profile_id, max_minutes)
+    .await
+    .map_err(|e| cookie_bot_error("run start", e))
+}
+
+/// Stop a run that is still going.
+#[tauri::command]
+async fn cancel_cookie_bot_run(run_id: String) -> Result<cookie_bot::CookieBotRun, String> {
+  cookie_bot::cancel_run(&run_id)
+    .await
+    .map_err(|e| cookie_bot_error("run cancel", e))
+}
+
+/// The intensities the server offers today. Opaque ids and a typical duration —
+/// what each one actually does is the server's to know.
+#[tauri::command]
+async fn get_cookie_bot_presets() -> Result<cookie_bot::CookieBotPresetList, String> {
+  cookie_bot::list_presets()
+    .await
+    .map_err(|e| cookie_bot_error("preset list", e))
+}
+
+/// The pooled remote-hour budget: bot and interactive sessions share one pool.
+///
+/// Being refused a launch must not be the only way to learn a limit exists.
+#[tauri::command]
+async fn get_remote_hours_quota() -> Result<cookie_bot::RemoteHoursQuota, String> {
+  cookie_bot::remote_hours_quota()
+    .await
+    .map_err(|e| cookie_bot_error("quota read", e))
+}
+
+/// Per-member and per-profile spend for a calendar month (`YYYY-MM`).
+#[tauri::command]
+async fn get_cookie_bot_usage(
+  period: Option<String>,
+) -> Result<cookie_bot::CookieBotUsage, String> {
+  cookie_bot::team_usage(period.as_deref())
+    .await
+    .map_err(|e| cookie_bot_error("usage read", e))
+}
+
 /// Confirm a quit chosen from the close-confirmation dialog and exit the app.
 #[tauri::command]
 fn confirm_quit(app_handle: tauri::AppHandle) {
@@ -2286,6 +2529,12 @@ pub fn run_with_builder(
             }
           };
           tokio::join!(sync_token_fut, proxy_fut, wayfern_fut);
+
+          // Subscribe to remote-session transitions. Started here rather than
+          // unconditionally because a signed-out desktop has nothing to stream
+          // and would only be refused on a loop; the frontend starts it again
+          // through `start_remote_session_events` once the user signs in.
+          remote_session::start_session_events(app_handle_cloud.clone());
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });
@@ -2478,6 +2727,25 @@ pub fn run_with_builder(
       dns_blocklist::set_custom_dns_config,
       dns_blocklist::import_custom_dns_rules,
       dns_blocklist::export_custom_dns_rules,
+      // Remote session commands
+      list_remote_sessions,
+      get_remote_session,
+      stop_remote_session,
+      start_remote_session_events,
+      stop_remote_session_events,
+      get_remote_session_events_status,
+      // Cookie bot commands
+      get_cookie_bot_schedules,
+      get_cookie_bot_schedule,
+      save_cookie_bot_schedule,
+      delete_cookie_bot_schedule,
+      check_cookie_bot_conflicts,
+      get_cookie_bot_runs,
+      run_cookie_bot_now,
+      cancel_cookie_bot_run,
+      get_cookie_bot_presets,
+      get_remote_hours_quota,
+      get_cookie_bot_usage,
       // Profile password commands
       set_profile_password,
       change_profile_password,
@@ -2490,6 +2758,12 @@ pub fn run_with_builder(
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|_app_handle, _event| {
+      // Drop the session stream before the runtime goes away, so a shutdown
+      // never waits out a reconnect backoff that is about to be pointless.
+      if let tauri::RunEvent::Exit = _event {
+        remote_session::stop_session_events();
+      }
+
       #[cfg(target_os = "macos")]
       if let tauri::RunEvent::Reopen { .. } = _event {
         if let Some(window) = _app_handle.get_webview_window("main") {
@@ -2521,6 +2795,26 @@ mod tests {
       parsed["params"]["detail"],
       "Failed to save: disk unavailable"
     );
+  }
+
+  #[test]
+  fn the_frontend_listens_for_the_remote_session_events_that_are_emitted() {
+    // These names are the whole of BUG-2's fix: the backend answers a launch
+    // with `provisioning` and nothing else, so a desktop that subscribes to a
+    // name the emitter does not use is blind between launch and stop and shows
+    // nothing at all. Renaming one side is silent everywhere else.
+    let client = fs::read_to_string("../src/lib/remote-sessions.ts")
+      .expect("the frontend remote-session client must exist");
+    for event in [
+      crate::remote_session::EVENT_SESSION_STATE,
+      crate::remote_session::EVENT_SESSION_SNAPSHOT,
+      crate::remote_session::EVENT_STREAM_STATUS,
+    ] {
+      assert!(
+        client.contains(&format!("\"{event}\"")),
+        "no frontend listener for the emitted event {event}"
+      );
+    }
   }
 
   #[test]

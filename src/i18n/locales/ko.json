@@ -258,7 +258,8 @@
       "emptyCreate": "프로필 생성",
       "emptyImport": "프로필 가져오기",
       "emptyFilteredTitle": "프로필을 찾을 수 없습니다",
-      "emptyFilteredHint": "이 그룹 또는 검색과 일치하는 프로필이 없습니다. 다른 필터를 사용하거나 새로 만드세요."
+      "emptyFilteredHint": "이 그룹 또는 검색과 일치하는 프로필이 없습니다. 다른 필터를 사용하거나 새로 만드세요.",
+      "bot": "봇"
     },
     "actions": {
       "launch": "실행",
@@ -1851,7 +1852,35 @@
     "vlessConfigInvalid": "VLESS URI가 올바르지 않습니다.",
     "xrayUnavailable": "이 시스템에서는 Xray-core를 사용할 수 없습니다.",
     "xrayUnsupportedOs": "VLESS를 사용하려면 macOS 12 이상이 필요합니다.",
-    "xrayStartFailed": "Xray-core를 시작할 수 없습니다."
+    "xrayStartFailed": "Xray-core를 시작할 수 없습니다.",
+    "cloudNotSignedIn": "이 기능을 사용하려면 Donut Browser 계정에 로그인하세요.",
+    "cloudUnreachable": "Donut Browser 서버에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.",
+    "cloudRequestFailed": "요청이 실패했습니다. 잠시 후 다시 시도하세요.",
+    "remoteRateLimited": "요청이 너무 많습니다. 잠시 기다렸다가 다시 시도하세요.",
+    "remoteNoCapacity": "지금은 사용 가능한 원격 머신이 없습니다. 몇 분 후에 다시 시도하세요.",
+    "remoteNotEntitled": "현재 요금제에는 원격 실행이 포함되어 있지 않습니다.",
+    "remoteSessionRefused": "원격 머신이 이 세션을 거부했습니다.",
+    "remoteSessionNotFound": "해당 원격 세션은 더 이상 존재하지 않습니다.",
+    "remoteSessionConflict": "이 프로필은 이미 다른 곳에서 열려 있습니다.",
+    "remoteSyncInProgress": "이 프로필은 아직 클라우드 동기화에 업로드 중입니다. 동기화가 끝난 뒤 다시 시도하세요.",
+    "remoteHoursExhausted": "이번 달 원격 시간 {{granted}}시간 중 {{used}}시간을 모두 사용했습니다.",
+    "notTeamMember": "어떤 팀에도 속해 있지 않습니다.",
+    "cookieBotNotEntitled": "현재 요금제에는 Cookie Bot이 포함되어 있지 않습니다.",
+    "cookieBotNotEnrolled": "이 프로필은 아직 Cookie Bot용으로 설정되지 않았습니다.",
+    "cookieBotScheduleConflict": "{{email}} 님이 이미 이 프로필을 {{time}}에 예열합니다.",
+    "cookieBotRunInProgress": "이 프로필에서 이미 실행이 진행 중입니다.",
+    "cookieBotRunNotFound": "해당 실행은 더 이상 존재하지 않습니다.",
+    "cookieBotInvalidSchedule": "일정이 올바르지 않습니다. 실행 시각, 요일, 시간을 확인하세요.",
+    "cookieBotInvalidTimezone": "{{timezone}}은(는) 서버가 인식하지 못하는 시간대입니다.",
+    "cookieBotInvalidPeriod": "기간이 올바르지 않습니다. 2026-08 같은 월 형식을 사용하세요.",
+    "cookieBotSiteLimit": "사이트를 {{min}}개 이상 {{max}}개 이하로, 각각 완전한 http 또는 https 주소로 입력하세요.",
+    "cookieBotRequiresCloudSync": "먼저 이 프로필의 클라우드 동기화를 켜세요. 원격 머신이 프로필을 가져올 다른 방법이 없습니다.",
+    "cookieBotEncryptedSyncUnsupported": "이 프로필은 원격 머신이 복호화할 수 없는 종단 간 암호화 동기화를 사용합니다. 일반 동기화로 전환하세요.",
+    "cookieBotUnknownPlatform": "이 프로필에는 기록된 운영체제가 없어 머신을 배정할 수 없습니다.",
+    "cookieBotUnsupportedPlatform": "Cookie Bot은 {{platform}} 프로필을 실행할 수 없습니다. Windows와 macOS 프로필만 지원합니다.",
+    "cookieBotRequiresExitNode": "먼저 프록시나 VPN을 연결하세요. 없으면 실행 트래픽이 데이터센터 주소에서 나가 프로필 신뢰도를 해칩니다.",
+    "unknownCode": "문제가 발생했습니다: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "이 프로필은 터치 기기를 표방하며, 봇이 조작할 수 없습니다. 데스크톱 지문을 사용하세요."
   },
   "rail": {
     "profiles": "프로필",
@@ -1870,7 +1899,9 @@
     },
     "network": "네트워크",
     "integrations": "통합",
-    "account": "계정"
+    "account": "계정",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot — 실행 중"
   },
   "pageTitle": {
     "proxies": "네트워크",
@@ -1881,7 +1912,8 @@
     "integrations": "통합",
     "account": "계정",
     "import": "프로필 가져오기",
-    "shortcuts": "키보드 단축키"
+    "shortcuts": "키보드 단축키",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1956,8 @@
     },
     "tabs": {
       "account": "계정",
-      "selfHosted": "자체 호스팅"
+      "selfHosted": "자체 호스팅",
+      "teamUsage": "팀 사용량"
     },
     "selfHosted": {
       "title": "자체 호스팅 동기화 서버",
@@ -1937,7 +1970,8 @@
     },
     "deviceOrdinal": "{{count}}대 중 {{ordinal}}번째",
     "automationPrimaryOnly": "브라우저 자동화는 기본 기기(기기 1)에서만 실행됩니다. 여기서 사용하려면 해당 기기에서 로그아웃하세요.",
-    "automationActiveHere": "이 기기에서 브라우저 자동화가 활성화되어 있습니다."
+    "automationActiveHere": "이 기기에서 브라우저 자동화가 활성화되어 있습니다.",
+    "viewTeamUsage": "팀 사용량 보기"
   },
   "shortcutsPage": {
     "title": "키보드 단축키",
@@ -1970,7 +2004,8 @@
     "goGroups": "그룹으로 이동",
     "goIntegrations": "통합으로 이동",
     "goAccount": "계정으로 이동",
-    "goSettings": "설정으로 이동"
+    "goSettings": "설정으로 이동",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "Donut Browser를 닫으시겠습니까?",
@@ -2102,5 +2137,287 @@
     "matchToProxy": "지문을 프록시에 맞추기",
     "matching": "맞추는 중…",
     "matchSuccess": "지문이 프록시에 맞게 업데이트되었습니다. 적용하려면 프로필을 다시 실행하세요."
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "원격 머신에서 밤새 프로필을 예열합니다.",
+    "tabs": {
+      "overview": "개요",
+      "schedule": "일정",
+      "activity": "활동",
+      "team": "팀"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "Cookie Bot은 원격 머신에서 밤새 프로필을 예열해, 내 컴퓨터를 켜 두지 않아도 쿠키와 방문 기록이 유지됩니다. Pro 또는 Team 요금제가 필요합니다."
+    },
+    "empty": {
+      "title": "등록된 프로필이 없습니다",
+      "hint": "프로필을 선택하면 봇이 밤새 원격 머신에서 예열합니다. 내 컴퓨터는 꺼져 있어도 됩니다.",
+      "cta": "프로필 등록"
+    },
+    "tonight": {
+      "label": "오늘 밤",
+      "nextRun": "다음 실행 {{time}}",
+      "dueCount_one": "프로필 {{count}}개 예정",
+      "dueCount_other": "프로필 {{count}}개 예정",
+      "nothingScheduled": "예정된 작업 없음"
+    },
+    "lastDay": {
+      "label": "최근 24시간",
+      "none": "아직 실행 없음",
+      "ran_one": "{{count}}건 실행",
+      "ran_other": "{{count}}건 실행",
+      "partial_one": "{{count}}건 일부 완료",
+      "partial_other": "{{count}}건 일부 완료",
+      "failed_one": "{{count}}건 실패",
+      "failed_other": "{{count}}건 실패"
+    },
+    "chart": {
+      "machineTime": "하룻밤당 머신 시간",
+      "minutes": "{{minutes}}분"
+    },
+    "hours": {
+      "label": "원격 시간",
+      "remaining": "{{total}}시간 중 {{remaining}}시간 남음",
+      "remainingOf": "/ {{total}}시간",
+      "used": "{{total}}시간 중 {{used}}시간 사용",
+      "resets": "{{date}}에 초기화",
+      "exhausted": "남은 원격 시간이 없습니다. 일정은 그대로 등록되어 있으며 다음 주기에 재개됩니다.",
+      "exhaustedOn": "남은 원격 시간이 없습니다. 일정은 그대로 등록되어 있으며 {{date}}에 재개됩니다.",
+      "estimate": "주당 약 {{hours}}시간 · 이번 주기에 {{remaining}}시간 남음",
+      "estimateOverBudget": "주당 약 {{hours}}시간이 필요하지만 {{remaining}}시간만 남았습니다",
+      "estimateOnly": "주당 약 {{hours}}시간"
+    },
+    "enrolled": {
+      "columnProfile": "프로필",
+      "columnCadence": "주기",
+      "columnTime": "시각",
+      "columnNextRun": "다음 실행",
+      "columnLastRun": "마지막 실행",
+      "enrolProfiles": "프로필 등록",
+      "edit": "일정 편집",
+      "neverRun": "없음",
+      "pausedNoHours": "일시 중지 — 시간 소진",
+      "profileMissing": "해당 프로필은 이 컴퓨터에 없습니다."
+    },
+    "schedule": {
+      "empty": "아직 예정된 작업이 없습니다.",
+      "quietHours_one": "빈 시간 {{count}}시간",
+      "quietHours_other": "빈 시간 {{count}}시간",
+      "crowded_one": "프로필 {{count}}개가 동시에 시작",
+      "crowded_other": "프로필 {{count}}개가 동시에 시작",
+      "unenrol": "Cookie Bot에서 제거",
+      "unenrolTitle": "{{name}}을(를) Cookie Bot에서 제거할까요?",
+      "unenrolDescription": "오늘 밤부터 예열이 중단됩니다. 지난 실행 기록은 활동 탭에 남습니다.",
+      "unenrolled": "Cookie Bot에서 제거했습니다"
+    },
+    "status": {
+      "provisioning": "머신 준비 중",
+      "ready": "프로필 불러오는 중",
+      "warming": "예열 중",
+      "finished": "마무리 중",
+      "failed": "실패"
+    },
+    "runStatus": {
+      "pending": "대기 중",
+      "running": "실행 중",
+      "succeeded": "완료",
+      "partial": "일부 완료",
+      "failed": "실패",
+      "skipped": "건너뜀",
+      "cancelled": "중지됨"
+    },
+    "running": {
+      "label": "지금 실행 중",
+      "more": "+{{count}}개 더",
+      "stop": "실행 중지",
+      "stopped": "실행을 중지했습니다"
+    },
+    "live": {
+      "idle": "지금 실행 중인 작업이 없습니다",
+      "streamOffline": "실시간 업데이트가 오프라인입니다",
+      "streamOfflineDetail": "실시간 업데이트가 오프라인입니다. 다시 연결하는 중입니다. 아래 실행 내역은 최신이 아닐 수 있습니다.",
+      "unnamedSession": "원격 세션",
+      "notStartedYet": "머신이 아직 시작 시각을 보고하지 않았습니다.",
+      "sitesProgress": "{{total}}개 사이트 중 {{visited}}개",
+      "sitesUnknown": "사이트가 아직 보고되지 않았습니다",
+      "consentHandled_one": "동의 창 {{count}}개 처리",
+      "consentHandled_other": "동의 창 {{count}}개 처리",
+      "consentUnknown": "동의 창이 아직 보고되지 않았습니다",
+      "billed": "{{duration}} 청구",
+      "billedUnknown": "청구 시간이 아직 보고되지 않았습니다",
+      "chunk": "{{total}}개 중 {{index}}번째"
+    },
+    "history": {
+      "title": "실행 내역",
+      "allProfiles": "모든 프로필",
+      "searchPlaceholder": "프로필 검색…",
+      "filterAll": "모든 실행",
+      "filterComplete": "완료",
+      "filterPartial": "일부 완료",
+      "filterFailed": "실패",
+      "columnStarted": "시작",
+      "columnProfile": "프로필",
+      "columnDuration": "소요 시간",
+      "columnSites": "사이트",
+      "columnStatus": "상태",
+      "columnOperator": "실행자",
+      "empty": "아직 실행 내역이 없습니다.",
+      "noMatch": "이 필터에 해당하는 실행이 없습니다.",
+      "unknownProfile": "알 수 없는 프로필",
+      "outcome": "이유: {{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "사이트 {{count}}개에 접속하지 못했습니다",
+      "sitesFailed_other": "사이트 {{count}}개에 접속하지 못했습니다",
+      "consentHandled_one": "동의 창 {{count}}개 처리",
+      "consentHandled_other": "동의 창 {{count}}개 처리",
+      "sitesUnknown": "보고되지 않음"
+    },
+    "duration": {
+      "hm": "{{hours}}시간 {{minutes}}분",
+      "ms": "{{minutes}}분 {{seconds}}초",
+      "s": "{{seconds}}초"
+    },
+    "picker": {
+      "title": "프로필 등록",
+      "description": "봇이 밤새 예열할 프로필을 선택하세요.",
+      "searchPlaceholder": "프로필 검색…",
+      "noProfiles": "일치하는 프로필이 없습니다.",
+      "alreadyEnrolled": "등록됨",
+      "continue_one": "{{count}}개로 계속",
+      "continue_other": "{{count}}개로 계속"
+    },
+    "enrol": {
+      "titleOne": "{{name}} 등록",
+      "titleCount_one": "프로필 {{count}}개 등록",
+      "titleCount_other": "프로필 {{count}}개 등록",
+      "editTitle": "일정 편집",
+      "description": "봇이 원격 머신에서 프로필을 열고 지정한 사이트를 둘러봅니다. 내 컴퓨터는 꺼져 있어도 됩니다.",
+      "summaryNightly": "매일 밤 {{time}}에 회당 최대 {{minutes}}분 실행합니다.",
+      "summaryWeeknights": "월요일부터 금요일까지 {{time}}에 회당 최대 {{minutes}}분 실행합니다.",
+      "summaryAlternate": "하루 걸러 {{time}}에 회당 최대 {{minutes}}분 실행합니다.",
+      "summaryCustom_one": "주 {{count}}회 밤 {{time}}에 회당 최대 {{minutes}}분 실행합니다.",
+      "summaryCustom_other": "주 {{count}}회 밤 {{time}}에 회당 최대 {{minutes}}분 실행합니다.",
+      "confirm": "오늘 밤부터 등록",
+      "confirmSome": "오늘 밤 {{total}}개 중 {{eligible}}개 등록",
+      "fixFirst": "먼저 이 문제를 해결하세요",
+      "saving": "등록 중…",
+      "saved": "일정을 저장했습니다",
+      "enrolled_one": "프로필 {{count}}개를 등록했습니다",
+      "enrolled_other": "프로필 {{count}}개를 등록했습니다",
+      "adjust": "일정 조정",
+      "cadenceLabel": "주기",
+      "cadenceNightly": "매일 밤",
+      "cadenceWeeknights": "평일 밤",
+      "cadenceAlternate": "하루 걸러",
+      "cadenceCustom_one": "주 {{count}}회 밤",
+      "cadenceCustom_other": "주 {{count}}회 밤",
+      "timeLabel": "시작 시각",
+      "timeHint": "각 프로필 지문의 시간대 기준입니다.",
+      "maxMinutesLabel": "최대 분",
+      "intensityLabel": "깊이",
+      "sitesLabel": "사이트",
+      "sitesPlaceholder": "한 줄에 주소 하나",
+      "sitesHint_one": "사이트 {{count}}개. 여기에 적은 페이지만 방문합니다.",
+      "sitesHint_other": "사이트 {{count}}개. 여기에 적은 페이지만 방문합니다.",
+      "sitesTooMany": "사이트는 최대 {{max}}개입니다.",
+      "presetsUnavailable": "깊이 프리셋을 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
+      "confirmBulkTitle_one": "프로필 {{count}}개를 Cookie Bot에 등록할까요?",
+      "confirmBulkTitle_other": "프로필 {{count}}개를 Cookie Bot에 등록할까요?",
+      "confirmBulkDescription_one": "공유 원격 시간에서 야간 실행 1건을 예약합니다. 시각과 사이트는 다음 단계에서 선택합니다.",
+      "confirmBulkDescription_other": "공유 원격 시간에서 야간 실행 {{count}}건을 예약합니다. 시각과 사이트는 다음 단계에서 선택합니다.",
+      "confirmBulkButton_one": "프로필 {{count}}개로 계속",
+      "confirmBulkButton_other": "프로필 {{count}}개로 계속",
+      "sitesRequired": "사이트를 하나 이상 추가하세요.",
+      "addSitesFirst": "사이트를 먼저 추가하세요",
+      "presetsMissing": "깊이 프리셋을 사용할 수 없습니다"
+    },
+    "preset": {
+      "light": "가볍게",
+      "balanced": "표준",
+      "deep": "깊게"
+    },
+    "preflight": {
+      "ineligible_one": "프로필 {{count}}개는 원격으로 실행할 수 없습니다",
+      "ineligible_other": "프로필 {{count}}개는 원격으로 실행할 수 없습니다",
+      "reasonSync": "동기화가 꺼져 있음",
+      "reasonEncrypted": "종단 간 암호화",
+      "reasonNoFingerprint": "기록된 운영체제 없음",
+      "reasonCrossOs": "{{os}}용으로 생성됨 — 일치하는 원격 머신 없음",
+      "reasonNoExitNode": "프록시나 VPN 없음",
+      "fixSync": "동기화 켜기",
+      "fixEncrypted": "동기화 설정 열기",
+      "fixProxy": "프록시 연결",
+      "fixFailed": "해당 수정을 적용하지 못했습니다.",
+      "exitNodeHint": "프록시나 VPN이 없으면 실행 트래픽이 머신 풀 자체의 데이터센터 주소로 나갑니다. 호스팅 네트워크에서 몇 시간씩 발생하는 트래픽은 예열을 아예 하지 않는 것보다 프로필 신뢰도를 더 크게 해칩니다."
+    },
+    "conflict": {
+      "title": "{{email}} 님이 이미 이 프로필을 {{time}}에 예열합니다",
+      "detail": "한 프로필에 일정이 두 개면 시간이 두 배로 소모되고 실행 도중 충돌할 수 있습니다.",
+      "keepTheirs": "상대의 일정 사용",
+      "replace": "내 일정으로 교체",
+      "replaceForbidden": "다른 사람의 일정은 팀 소유자나 관리자만 변경할 수 있습니다.",
+      "askThem": "{{email}} 복사",
+      "emailCopied": "이메일을 복사했습니다",
+      "copyFailed": "주소를 복사하지 못했습니다."
+    },
+    "actionBar": {
+      "enrol": "Cookie Bot에 등록",
+      "proRequired": "Cookie Bot에는 Pro 또는 Team 요금제가 필요합니다",
+      "noneEligible": "선택한 프로필 중 원격으로 예열할 수 있는 것이 없습니다"
+    },
+    "actions": {
+      "enrol": "Cookie Bot에 등록",
+      "editSchedule": "일정 편집",
+      "runNow": "지금 실행",
+      "runStarted": "실행을 시작했습니다",
+      "viewActivity": "활동 보기",
+      "runNotStarted": "실행이 시작되지 않았습니다: {{reason}}"
+    },
+    "state": {
+      "enrolled": "등록됨",
+      "notEnrolled": "등록되지 않음",
+      "paused": "일시 중지",
+      "summary": "{{cadence}} {{time}}",
+      "rowMenu": "{{name}}의 Cookie Bot 옵션",
+      "blocked": "실행할 수 없음: {{reason}}"
+    },
+    "team": {
+      "title": "팀 사용량",
+      "pooled_one": "{{total}}시간 중 {{used}}시간, {{count}}석",
+      "pooled_other": "{{total}}시간 중 {{used}}시간을 {{count}}석이 공유",
+      "hours": "{{hours}}시간",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "직접 사용",
+      "columnMember": "구성원",
+      "columnRuns": "실행 횟수",
+      "columnHours": "시간",
+      "columnShare": "비중",
+      "noActivity": "이 기간에는 원격 세션이 없습니다.",
+      "soloNote": "현재는 본인 사용량만 표시됩니다. 구성원별 분배를 보려면 팀원을 초대하세요.",
+      "runsFailed": "· 실패 {{n}}회"
+    },
+    "closeReason": {
+      "stoppedByUser": "직접 중지했습니다",
+      "maxDuration": "시간 제한에 도달했습니다",
+      "other": "종료됨: {{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "현재 요금제에 포함되어 있지 않습니다",
+      "syncDisabled": "이 프로필은 클라우드 동기화가 꺼져 있습니다",
+      "encryptedSync": "종단 간 암호화 동기화는 지원되지 않습니다",
+      "proxyRequired": "프록시나 VPN이 연결되어 있지 않습니다",
+      "touchFingerprint": "터치 기기 지문은 지원되지 않습니다",
+      "platformUnsupported": "이 프로필의 운영체제를 실행할 머신이 없습니다",
+      "noSites": "방문할 사이트가 없습니다",
+      "quotaExhausted": "원격 시간을 모두 사용했습니다",
+      "profileLocked": "프로필이 다른 곳에서 열려 있었습니다",
+      "noCapacity": "여유 머신이 없었습니다",
+      "managerError": "플릿이 브라우저를 시작하지 못했습니다",
+      "budgetExceeded": "그날 밤의 시간 예산이 소진되었습니다",
+      "cancelledByUser": "직접 중지했습니다",
+      "unknown": "알 수 없는 이유 ({{code}})"
+    }
   }
 }

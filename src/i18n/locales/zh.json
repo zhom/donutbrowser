@@ -258,7 +258,8 @@
       "emptyCreate": "创建配置文件",
       "emptyImport": "导入配置文件",
       "emptyFilteredTitle": "未找到配置文件",
-      "emptyFilteredHint": "没有符合此分组或搜索的配置文件。请尝试其他筛选条件或新建一个。"
+      "emptyFilteredHint": "没有符合此分组或搜索的配置文件。请尝试其他筛选条件或新建一个。",
+      "bot": "机器人"
     },
     "actions": {
       "launch": "启动",
@@ -1851,7 +1852,35 @@
     "vlessConfigInvalid": "VLESS URI 无效。",
     "xrayUnavailable": "此系统无法使用 Xray-core。",
     "xrayUnsupportedOs": "VLESS 需要 macOS 12 或更高版本。",
-    "xrayStartFailed": "无法启动 Xray-core。"
+    "xrayStartFailed": "无法启动 Xray-core。",
+    "cloudNotSignedIn": "请先登录你的 Donut Browser 账号再使用此功能。",
+    "cloudUnreachable": "无法连接 Donut Browser 服务器。请检查网络后重试。",
+    "cloudRequestFailed": "请求失败。请稍后再试。",
+    "remoteRateLimited": "请求过于频繁。请稍候再试。",
+    "remoteNoCapacity": "当前没有空闲的远程机器。请几分钟后再试。",
+    "remoteNotEntitled": "你的套餐不包含远程运行。",
+    "remoteSessionRefused": "远程机器拒绝了此会话。",
+    "remoteSessionNotFound": "该远程会话已不存在。",
+    "remoteSessionConflict": "此配置文件已在别处打开。",
+    "remoteSyncInProgress": "此配置文件仍在上传到云同步。请等待同步完成后重试。",
+    "remoteHoursExhausted": "本月 {{granted}} 小时远程时长已全部用完（已用 {{used}}）。",
+    "notTeamMember": "你不属于任何团队。",
+    "cookieBotNotEntitled": "你的套餐不包含 Cookie Bot。",
+    "cookieBotNotEnrolled": "此配置文件尚未为 Cookie Bot 配置。",
+    "cookieBotScheduleConflict": "{{email}} 已在 {{time}} 养这个配置文件。",
+    "cookieBotRunInProgress": "此配置文件已有一次运行正在进行。",
+    "cookieBotRunNotFound": "该运行记录已不存在。",
+    "cookieBotInvalidSchedule": "该计划无效。请检查运行时间、日期和时长。",
+    "cookieBotInvalidTimezone": "{{timezone}} 不是服务器可识别的时区。",
+    "cookieBotInvalidPeriod": "该周期无效。请使用类似 2026-08 的月份。",
+    "cookieBotSiteLimit": "请输入 {{min}} 到 {{max}} 个网站，每个都要是完整的 http 或 https 地址。",
+    "cookieBotRequiresCloudSync": "请先为此配置文件开启云同步：远程机器没有其他方式获取它。",
+    "cookieBotEncryptedSyncUnsupported": "此配置文件使用端到端加密同步，远程机器无法解密。请改为常规同步。",
+    "cookieBotUnknownPlatform": "此配置文件没有记录操作系统，无法匹配到机器。",
+    "cookieBotUnsupportedPlatform": "Cookie Bot 无法运行 {{platform}} 配置文件。仅支持 Windows 和 macOS 配置文件。",
+    "cookieBotRequiresExitNode": "请先绑定代理或 VPN。否则运行会从数据中心地址发出，损害配置文件的身份。",
+    "unknownCode": "出现问题: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "该配置文件声称是触摸设备，机器人无法操作。请使用桌面端指纹。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -1870,7 +1899,9 @@
     },
     "network": "网络",
     "integrations": "集成",
-    "account": "账号"
+    "account": "账号",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot — 正在运行"
   },
   "pageTitle": {
     "proxies": "网络",
@@ -1881,7 +1912,8 @@
     "integrations": "集成",
     "account": "账户",
     "import": "导入配置文件",
-    "shortcuts": "键盘快捷键"
+    "shortcuts": "键盘快捷键",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1956,8 @@
     },
     "tabs": {
       "account": "账户",
-      "selfHosted": "自托管"
+      "selfHosted": "自托管",
+      "teamUsage": "团队用量"
     },
     "selfHosted": {
       "title": "自托管同步服务器",
@@ -1937,7 +1970,8 @@
     },
     "deviceOrdinal": "第 {{ordinal}} 台，共 {{count}} 台",
     "automationPrimaryOnly": "浏览器自动化仅在您的主设备（设备 1）上运行。请在该设备上退出登录，才能在此设备上使用。",
-    "automationActiveHere": "浏览器自动化已在此设备上启用。"
+    "automationActiveHere": "浏览器自动化已在此设备上启用。",
+    "viewTeamUsage": "查看团队用量"
   },
   "shortcutsPage": {
     "title": "键盘快捷键",
@@ -1970,7 +2004,8 @@
     "goGroups": "转到分组",
     "goIntegrations": "转到集成",
     "goAccount": "转到账户",
-    "goSettings": "转到设置"
+    "goSettings": "转到设置",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "关闭 Donut Browser？",
@@ -2102,5 +2137,287 @@
     "matchToProxy": "将指纹匹配到代理",
     "matching": "匹配中…",
     "matchSuccess": "指纹已更新以匹配代理。重新启动配置文件以生效。"
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "在远程机器上通宵养号。",
+    "tabs": {
+      "overview": "概览",
+      "schedule": "计划",
+      "activity": "活动",
+      "team": "团队"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "Cookie Bot 在远程机器上通宵养号，无需开着你的电脑也能保住 Cookie 和历史记录。需要 Pro 或 Team 套餐。"
+    },
+    "empty": {
+      "title": "尚未加入任何配置文件",
+      "hint": "选一个配置文件，机器人会在远程机器上通宵养号。你的电脑可以关机。",
+      "cta": "加入一个配置文件"
+    },
+    "tonight": {
+      "label": "今晚",
+      "nextRun": "下次运行 {{time}}",
+      "dueCount_one": "{{count}} 个配置文件待运行",
+      "dueCount_other": "{{count}} 个配置文件待运行",
+      "nothingScheduled": "没有安排"
+    },
+    "lastDay": {
+      "label": "最近 24 小时",
+      "none": "还没有运行记录",
+      "ran_one": "{{count}} 次运行",
+      "ran_other": "{{count}} 次运行",
+      "partial_one": "{{count}} 次部分完成",
+      "partial_other": "{{count}} 次部分完成",
+      "failed_one": "{{count}} 次失败",
+      "failed_other": "{{count}} 次失败"
+    },
+    "chart": {
+      "machineTime": "每晚机器时长",
+      "minutes": "{{minutes}} 分钟"
+    },
+    "hours": {
+      "label": "远程时长",
+      "remaining": "{{total}} 小时中还剩 {{remaining}} 小时",
+      "remainingOf": "/ {{total}} 小时",
+      "used": "{{total}} 小时中已用 {{used}} 小时",
+      "resets": "{{date}} 重置",
+      "exhausted": "远程时长已用完。计划仍然保留，将在下个周期恢复。",
+      "exhaustedOn": "远程时长已用完。计划仍然保留，将于 {{date}} 恢复。",
+      "estimate": "每周约 {{hours}} 小时 · 本周期还剩 {{remaining}} 小时",
+      "estimateOverBudget": "每周约需 {{hours}} 小时，但只剩 {{remaining}} 小时",
+      "estimateOnly": "每周约 {{hours}} 小时"
+    },
+    "enrolled": {
+      "columnProfile": "配置文件",
+      "columnCadence": "频率",
+      "columnTime": "时间",
+      "columnNextRun": "下次运行",
+      "columnLastRun": "上次运行",
+      "enrolProfiles": "加入配置文件",
+      "edit": "编辑计划",
+      "neverRun": "从未",
+      "pausedNoHours": "已暂停 — 时长用尽",
+      "profileMissing": "该配置文件不在这台电脑上。"
+    },
+    "schedule": {
+      "empty": "还没有任何安排。",
+      "quietHours_one": "{{count}} 个空闲小时",
+      "quietHours_other": "{{count}} 个空闲小时",
+      "crowded_one": "{{count}} 个配置文件同时开始",
+      "crowded_other": "{{count}} 个配置文件同时开始",
+      "unenrol": "从 Cookie Bot 移除",
+      "unenrolTitle": "将 {{name}} 从 Cookie Bot 移除？",
+      "unenrolDescription": "今晚起停止养号。以往的运行记录仍保留在“活动”中。",
+      "unenrolled": "已从 Cookie Bot 移除"
+    },
+    "status": {
+      "provisioning": "正在准备机器",
+      "ready": "正在加载配置文件",
+      "warming": "养号中",
+      "finished": "正在收尾",
+      "failed": "失败"
+    },
+    "runStatus": {
+      "pending": "排队中",
+      "running": "运行中",
+      "succeeded": "已完成",
+      "partial": "部分完成",
+      "failed": "失败",
+      "skipped": "已跳过",
+      "cancelled": "已停止"
+    },
+    "running": {
+      "label": "正在运行",
+      "more": "另有 {{count}} 个",
+      "stop": "停止运行",
+      "stopped": "运行已停止"
+    },
+    "live": {
+      "idle": "当前没有任务在运行",
+      "streamOffline": "实时更新已离线",
+      "streamOfflineDetail": "实时更新已离线，正在重新连接。下方的运行记录可能不是最新的。",
+      "unnamedSession": "远程会话",
+      "notStartedYet": "机器尚未报告开始时间。",
+      "sitesProgress": "{{total}} 个网站中的 {{visited}} 个",
+      "sitesUnknown": "尚未报告网站信息",
+      "consentHandled_one": "已处理 {{count}} 个同意提示",
+      "consentHandled_other": "已处理 {{count}} 个同意提示",
+      "consentUnknown": "尚未报告同意提示",
+      "billed": "已计费 {{duration}}",
+      "billedUnknown": "尚未报告计费时长",
+      "chunk": "第 {{index}} 段，共 {{total}} 段"
+    },
+    "history": {
+      "title": "运行记录",
+      "allProfiles": "所有配置文件",
+      "searchPlaceholder": "搜索配置文件…",
+      "filterAll": "全部运行",
+      "filterComplete": "已完成",
+      "filterPartial": "部分完成",
+      "filterFailed": "失败",
+      "columnStarted": "开始",
+      "columnProfile": "配置文件",
+      "columnDuration": "时长",
+      "columnSites": "网站",
+      "columnStatus": "状态",
+      "columnOperator": "操作者",
+      "empty": "还没有运行记录。",
+      "noMatch": "没有符合此筛选条件的运行。",
+      "unknownProfile": "未知配置文件",
+      "outcome": "原因：{{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "{{count}} 个网站无法访问",
+      "sitesFailed_other": "{{count}} 个网站无法访问",
+      "consentHandled_one": "已处理 {{count}} 个同意提示",
+      "consentHandled_other": "已处理 {{count}} 个同意提示",
+      "sitesUnknown": "暂无数据"
+    },
+    "duration": {
+      "hm": "{{hours}} 小时 {{minutes}} 分",
+      "ms": "{{minutes}} 分 {{seconds}} 秒",
+      "s": "{{seconds}} 秒"
+    },
+    "picker": {
+      "title": "加入配置文件",
+      "description": "选择机器人应在夜间养号的配置文件。",
+      "searchPlaceholder": "搜索配置文件…",
+      "noProfiles": "没有匹配的配置文件。",
+      "alreadyEnrolled": "已加入",
+      "continue_one": "继续（{{count}} 个）",
+      "continue_other": "继续（{{count}} 个）"
+    },
+    "enrol": {
+      "titleOne": "加入 {{name}}",
+      "titleCount_one": "加入 {{count}} 个配置文件",
+      "titleCount_other": "加入 {{count}} 个配置文件",
+      "editTitle": "编辑计划",
+      "description": "机器人会在远程机器上打开配置文件，浏览你列出的网站。你的电脑可以关机。",
+      "summaryNightly": "每晚 {{time}} 运行，每次最多 {{minutes}} 分钟。",
+      "summaryWeeknights": "周一至周五 {{time}} 运行，每次最多 {{minutes}} 分钟。",
+      "summaryAlternate": "隔晚 {{time}} 运行，每次最多 {{minutes}} 分钟。",
+      "summaryCustom_one": "每周 {{count}} 晚，于 {{time}} 运行，每次最多 {{minutes}} 分钟。",
+      "summaryCustom_other": "每周 {{count}} 晚，于 {{time}} 运行，每次最多 {{minutes}} 分钟。",
+      "confirm": "今晚起加入",
+      "confirmSome": "今晚加入 {{total}} 个中的 {{eligible}} 个",
+      "fixFirst": "请先解决这些问题",
+      "saving": "正在加入…",
+      "saved": "计划已保存",
+      "enrolled_one": "已加入 {{count}} 个配置文件",
+      "enrolled_other": "已加入 {{count}} 个配置文件",
+      "adjust": "调整计划",
+      "cadenceLabel": "频率",
+      "cadenceNightly": "每晚",
+      "cadenceWeeknights": "工作日夜间",
+      "cadenceAlternate": "隔晚一次",
+      "cadenceCustom_one": "每周 {{count}} 晚",
+      "cadenceCustom_other": "每周 {{count}} 晚",
+      "timeLabel": "开始时间",
+      "timeHint": "按各配置文件指纹所在时区计算。",
+      "maxMinutesLabel": "最长分钟数",
+      "intensityLabel": "深度",
+      "sitesLabel": "网站",
+      "sitesPlaceholder": "每行一个网址",
+      "sitesHint_one": "{{count}} 个网站。只会访问你在这里列出的页面。",
+      "sitesHint_other": "{{count}} 个网站。只会访问你在这里列出的页面。",
+      "sitesTooMany": "最多 {{max}} 个网站。",
+      "presetsUnavailable": "无法加载深度预设。请稍后再试。",
+      "confirmBulkTitle_one": "将 {{count}} 个配置文件加入 Cookie Bot？",
+      "confirmBulkTitle_other": "将 {{count}} 个配置文件加入 Cookie Bot？",
+      "confirmBulkDescription_one": "这会占用共享远程时长预订一次夜间运行。时间和网站将在下一步选择。",
+      "confirmBulkDescription_other": "这会占用共享远程时长预订 {{count}} 次夜间运行。时间和网站将在下一步选择。",
+      "confirmBulkButton_one": "继续（{{count}} 个配置文件）",
+      "confirmBulkButton_other": "继续（{{count}} 个配置文件）",
+      "sitesRequired": "请至少添加一个网站。",
+      "addSitesFirst": "请先添加网站",
+      "presetsMissing": "深度预设不可用"
+    },
+    "preset": {
+      "light": "轻度",
+      "balanced": "标准",
+      "deep": "深度"
+    },
+    "preflight": {
+      "ineligible_one": "{{count}} 个配置文件无法远程运行",
+      "ineligible_other": "{{count}} 个配置文件无法远程运行",
+      "reasonSync": "同步已关闭",
+      "reasonEncrypted": "端到端加密",
+      "reasonNoFingerprint": "没有记录操作系统",
+      "reasonCrossOs": "为 {{os}} 创建 — 没有匹配的远程机器",
+      "reasonNoExitNode": "没有代理或 VPN",
+      "fixSync": "开启同步",
+      "fixEncrypted": "打开同步设置",
+      "fixProxy": "绑定代理",
+      "fixFailed": "无法应用该修复。",
+      "exitNodeHint": "没有代理或 VPN 时，流量会从机器集群自己的数据中心地址发出。来自托管网络的长时间流量对配置文件身份的损害，比完全不养号还要大。"
+    },
+    "conflict": {
+      "title": "{{email}} 已在 {{time}} 养这个配置文件",
+      "detail": "同一个配置文件上有两份计划会重复消耗时长，并可能在运行中冲突。",
+      "keepTheirs": "使用对方的计划",
+      "replace": "用我的替换",
+      "replaceForbidden": "只有团队所有者或管理员才能更改他人的计划。",
+      "askThem": "复制 {{email}}",
+      "emailCopied": "已复制邮箱",
+      "copyFailed": "无法复制该地址。"
+    },
+    "actionBar": {
+      "enrol": "加入 Cookie Bot",
+      "proRequired": "Cookie Bot 需要 Pro 或 Team 套餐",
+      "noneEligible": "所选配置文件都无法远程养号"
+    },
+    "actions": {
+      "enrol": "加入 Cookie Bot",
+      "editSchedule": "编辑计划",
+      "runNow": "立即运行",
+      "runStarted": "已开始运行",
+      "viewActivity": "查看活动",
+      "runNotStarted": "运行未开始：{{reason}}"
+    },
+    "state": {
+      "enrolled": "已加入",
+      "notEnrolled": "未加入",
+      "paused": "已暂停",
+      "summary": "{{cadence}} {{time}}",
+      "rowMenu": "{{name}} 的 Cookie Bot 选项",
+      "blocked": "无法运行：{{reason}}"
+    },
+    "team": {
+      "title": "团队用量",
+      "pooled_one": "{{total}} 小时中已用 {{used}} 小时，{{count}} 个席位",
+      "pooled_other": "{{total}} 小时中已用 {{used}} 小时，由 {{count}} 个席位共享",
+      "hours": "{{hours}} 小时",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "手动使用",
+      "columnMember": "成员",
+      "columnRuns": "运行次数",
+      "columnHours": "时长",
+      "columnShare": "占比",
+      "noActivity": "此期间没有远程会话。",
+      "soloNote": "目前只显示你自己的用量。邀请队友后可按成员查看时长分配。",
+      "runsFailed": "· {{n}} 次失败"
+    },
+    "closeReason": {
+      "stoppedByUser": "已手动停止",
+      "maxDuration": "已达时间上限",
+      "other": "已结束：{{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "当前套餐不包含此功能",
+      "syncDisabled": "该配置文件已关闭云同步",
+      "encryptedSync": "不支持端到端加密同步",
+      "proxyRequired": "未绑定代理或 VPN",
+      "touchFingerprint": "不支持触摸设备指纹",
+      "platformUnsupported": "没有机器可运行该配置文件的系统",
+      "noSites": "没有要访问的网站",
+      "quotaExhausted": "远程时长已用完",
+      "profileLocked": "该配置文件已在别处打开",
+      "noCapacity": "没有空闲机器",
+      "managerError": "机器集群未能启动浏览器",
+      "budgetExceeded": "当晚的时长预算已用完",
+      "cancelledByUser": "已手动停止",
+      "unknown": "未知原因（{{code}}）"
+    }
   }
 }

@@ -3321,6 +3321,12 @@ pub async fn set_profile_sync_mode(
     .save_profile(&profile)
     .map_err(|e| format!("Failed to save profile: {e}"))?;
 
+  // The bot materialises the profile from donut-sync, so switching sync off (or
+  // to Encrypted, which the host cannot decrypt) is a refusal reason. The server
+  // holds only the copy this machine declared; without this, an enrolment keeps
+  // claiming a syncable profile every night after the user turned sync off.
+  crate::cookie_bot::report_profile_state(&profile);
+
   let _ = events::emit("profiles-changed", ());
 
   // When (re-)enabling sync, clear any stale tombstone from a previous

@@ -258,7 +258,8 @@
       "emptyCreate": "Create profile",
       "emptyImport": "Import profiles",
       "emptyFilteredTitle": "No profiles found",
-      "emptyFilteredHint": "No profiles match this group or search. Try another filter or create a new one."
+      "emptyFilteredHint": "No profiles match this group or search. Try another filter or create a new one.",
+      "bot": "Bot"
     },
     "actions": {
       "launch": "Launch",
@@ -1851,7 +1852,35 @@
     "vlessConfigInvalid": "The VLESS URI is invalid.",
     "xrayUnavailable": "Xray-core is unavailable on this system.",
     "xrayUnsupportedOs": "VLESS requires macOS 12 or newer.",
-    "xrayStartFailed": "Xray-core could not start."
+    "xrayStartFailed": "Xray-core could not start.",
+    "cloudNotSignedIn": "Sign in to your Donut Browser account to use this.",
+    "cloudUnreachable": "Could not reach Donut Browser's servers. Check your connection and try again.",
+    "cloudRequestFailed": "The request failed. Please try again in a moment.",
+    "remoteRateLimited": "Too many requests. Wait a moment and try again.",
+    "remoteNoCapacity": "No remote host is free right now. Try again in a few minutes.",
+    "remoteNotEntitled": "Your plan does not include remote execution.",
+    "remoteSessionRefused": "The remote host refused this session.",
+    "remoteSessionNotFound": "That remote session no longer exists.",
+    "remoteSessionConflict": "This profile is already open somewhere else.",
+    "remoteSyncInProgress": "This profile is still uploading to cloud sync. Wait for the sync to finish, then try again.",
+    "remoteHoursExhausted": "You have used all {{used}} of your {{granted}} remote hours this month.",
+    "notTeamMember": "You are not a member of a team.",
+    "cookieBotNotEntitled": "Your plan does not include the cookie bot.",
+    "cookieBotNotEnrolled": "This profile is not set up for the cookie bot yet.",
+    "cookieBotScheduleConflict": "{{email}} already warms this profile at {{time}}.",
+    "cookieBotRunInProgress": "A run is already in progress for this profile.",
+    "cookieBotRunNotFound": "That run no longer exists.",
+    "cookieBotInvalidSchedule": "That schedule is not valid. Check the run time, days and duration.",
+    "cookieBotInvalidTimezone": "{{timezone}} is not a time zone the server recognises.",
+    "cookieBotInvalidPeriod": "That period is not valid. Use a month such as 2026-08.",
+    "cookieBotSiteLimit": "Enter between {{min}} and {{max}} sites, each a full http or https address.",
+    "cookieBotRequiresCloudSync": "Turn on cloud sync for this profile first — a remote host has no other way to obtain it.",
+    "cookieBotEncryptedSyncUnsupported": "This profile uses end-to-end encrypted sync, which a remote host cannot decrypt. Switch it to Regular sync.",
+    "cookieBotUnknownPlatform": "This profile has no recorded operating system, so it cannot be matched to a host.",
+    "cookieBotUnsupportedPlatform": "The cookie bot cannot run {{platform}} profiles. Only Windows and macOS profiles are supported.",
+    "cookieBotRequiresExitNode": "Attach a proxy or VPN first. Without one the run would come from a datacenter address, which damages the profile's identity.",
+    "unknownCode": "Something went wrong: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "This profile claims a touch device, which the bot cannot drive. Use a desktop fingerprint."
   },
   "rail": {
     "profiles": "Profiles",
@@ -1870,7 +1899,9 @@
     },
     "network": "Network",
     "integrations": "Integrations",
-    "account": "Account"
+    "account": "Account",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot — running now"
   },
   "pageTitle": {
     "proxies": "Network",
@@ -1881,7 +1912,8 @@
     "integrations": "Integrations",
     "account": "Account",
     "import": "Import profile",
-    "shortcuts": "Keyboard shortcuts"
+    "shortcuts": "Keyboard shortcuts",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1956,8 @@
     },
     "tabs": {
       "account": "Account",
-      "selfHosted": "Self-hosted"
+      "selfHosted": "Self-hosted",
+      "teamUsage": "Team usage"
     },
     "selfHosted": {
       "title": "Self-hosted sync server",
@@ -1937,7 +1970,8 @@
     },
     "deviceOrdinal": "{{ordinal}} of {{count}}",
     "automationPrimaryOnly": "Browser automation runs only on your primary device (Device 1). Sign out there to use it here.",
-    "automationActiveHere": "Browser automation is active on this device."
+    "automationActiveHere": "Browser automation is active on this device.",
+    "viewTeamUsage": "View team usage"
   },
   "shortcutsPage": {
     "title": "Keyboard shortcuts",
@@ -1970,7 +2004,8 @@
     "goGroups": "Go to Groups",
     "goIntegrations": "Go to Integrations",
     "goAccount": "Go to Account",
-    "goSettings": "Go to Settings"
+    "goSettings": "Go to Settings",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "Close Donut Browser?",
@@ -2102,5 +2137,287 @@
     "matchToProxy": "Match fingerprint to proxy",
     "matching": "Matching…",
     "matchSuccess": "Fingerprint updated to match the proxy. Relaunch the profile to apply."
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "Overnight profile warming on a remote machine.",
+    "tabs": {
+      "overview": "Overview",
+      "schedule": "Schedule",
+      "activity": "Activity",
+      "team": "Team"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "Cookie Bot warms your profiles overnight on a remote machine, so they keep their cookies and their history without your computer being on. It needs a Pro or Team plan."
+    },
+    "empty": {
+      "title": "No profiles are enrolled",
+      "hint": "Pick a profile and the bot warms it overnight on a remote machine. Your computer can be off.",
+      "cta": "Enrol a profile"
+    },
+    "tonight": {
+      "label": "Tonight",
+      "nextRun": "Next run {{time}}",
+      "dueCount_one": "{{count}} profile due",
+      "dueCount_other": "{{count}} profiles due",
+      "nothingScheduled": "Nothing scheduled"
+    },
+    "lastDay": {
+      "label": "Last 24 hours",
+      "none": "No runs yet",
+      "ran_one": "{{count}} ran",
+      "ran_other": "{{count}} ran",
+      "partial_one": "{{count}} partial",
+      "partial_other": "{{count}} partial",
+      "failed_one": "{{count}} failed",
+      "failed_other": "{{count}} failed"
+    },
+    "chart": {
+      "machineTime": "Machine time per night",
+      "minutes": "{{minutes}} min"
+    },
+    "hours": {
+      "label": "Remote hours",
+      "remaining": "{{remaining}} h left of {{total}}",
+      "remainingOf": "of {{total}} h",
+      "used": "{{used}} of {{total}} h used",
+      "resets": "Resets {{date}}",
+      "exhausted": "No remote hours left. Schedules stay enrolled and resume next cycle.",
+      "exhaustedOn": "No remote hours left. Schedules stay enrolled and resume {{date}}.",
+      "estimate": "About {{hours}} h per week · {{remaining}} h left this cycle",
+      "estimateOverBudget": "Needs about {{hours}} h per week — only {{remaining}} h left",
+      "estimateOnly": "About {{hours}} h per week"
+    },
+    "enrolled": {
+      "columnProfile": "Profile",
+      "columnCadence": "Cadence",
+      "columnTime": "Time",
+      "columnNextRun": "Next run",
+      "columnLastRun": "Last run",
+      "enrolProfiles": "Enrol profiles",
+      "edit": "Edit schedule",
+      "neverRun": "Never",
+      "pausedNoHours": "Paused — out of hours",
+      "profileMissing": "That profile is not on this computer."
+    },
+    "schedule": {
+      "empty": "Nothing is scheduled yet.",
+      "quietHours_one": "{{count}} quiet hour",
+      "quietHours_other": "{{count}} quiet hours",
+      "crowded_one": "{{count}} profile starts at once",
+      "crowded_other": "{{count}} profiles start at once",
+      "unenrol": "Remove from Cookie Bot",
+      "unenrolTitle": "Remove {{name}} from Cookie Bot?",
+      "unenrolDescription": "It stops warming tonight. Past runs stay in Activity.",
+      "unenrolled": "Removed from Cookie Bot"
+    },
+    "status": {
+      "provisioning": "Preparing a machine",
+      "ready": "Loading profile",
+      "warming": "Warming",
+      "finished": "Finishing",
+      "failed": "Failed"
+    },
+    "runStatus": {
+      "pending": "Queued",
+      "running": "Running",
+      "succeeded": "Complete",
+      "partial": "Partial",
+      "failed": "Failed",
+      "skipped": "Skipped",
+      "cancelled": "Stopped"
+    },
+    "running": {
+      "label": "Running now",
+      "more": "+{{count}} more",
+      "stop": "Stop run",
+      "stopped": "Run stopped"
+    },
+    "live": {
+      "idle": "Nothing is running right now",
+      "streamOffline": "Live updates are offline",
+      "streamOfflineDetail": "Live updates are offline — reconnecting. The runs below may be out of date.",
+      "unnamedSession": "Remote session",
+      "notStartedYet": "The machine has not reported a start time yet.",
+      "sitesProgress": "{{visited}} of {{total}} sites",
+      "sitesUnknown": "Sites not reported yet",
+      "consentHandled_one": "{{count}} consent prompt handled",
+      "consentHandled_other": "{{count}} consent prompts handled",
+      "consentUnknown": "Consent prompts not reported yet",
+      "billed": "{{duration}} billed",
+      "billedUnknown": "Billed time not reported yet",
+      "chunk": "Part {{index}} of {{total}}"
+    },
+    "history": {
+      "title": "Runs",
+      "allProfiles": "All profiles",
+      "searchPlaceholder": "Search profiles…",
+      "filterAll": "All runs",
+      "filterComplete": "Complete",
+      "filterPartial": "Partial",
+      "filterFailed": "Failed",
+      "columnStarted": "Started",
+      "columnProfile": "Profile",
+      "columnDuration": "Duration",
+      "columnSites": "Sites",
+      "columnStatus": "Status",
+      "columnOperator": "Operator",
+      "empty": "No runs yet.",
+      "noMatch": "No runs match this filter.",
+      "unknownProfile": "Unknown profile",
+      "outcome": "Reason: {{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "{{count}} site could not be reached",
+      "sitesFailed_other": "{{count}} sites could not be reached",
+      "consentHandled_one": "{{count}} consent prompt handled",
+      "consentHandled_other": "{{count}} consent prompts handled",
+      "sitesUnknown": "Not reported"
+    },
+    "duration": {
+      "hm": "{{hours}}h {{minutes}}m",
+      "ms": "{{minutes}}m {{seconds}}s",
+      "s": "{{seconds}}s"
+    },
+    "picker": {
+      "title": "Enrol profiles",
+      "description": "Pick the profiles the bot should warm overnight.",
+      "searchPlaceholder": "Search profiles…",
+      "noProfiles": "No profiles match.",
+      "alreadyEnrolled": "Enrolled",
+      "continue_one": "Continue with {{count}}",
+      "continue_other": "Continue with {{count}}"
+    },
+    "enrol": {
+      "titleOne": "Enrol {{name}}",
+      "titleCount_one": "Enrol {{count}} profile",
+      "titleCount_other": "Enrol {{count}} profiles",
+      "editTitle": "Edit schedule",
+      "description": "The bot opens the profile on a remote machine and browses the sites you list. Your computer can be off.",
+      "summaryNightly": "Runs every night at {{time}}, up to {{minutes}} min each.",
+      "summaryWeeknights": "Runs Monday to Friday at {{time}}, up to {{minutes}} min each.",
+      "summaryAlternate": "Runs every other night at {{time}}, up to {{minutes}} min each.",
+      "summaryCustom_one": "Runs {{count}} night a week at {{time}}, up to {{minutes}} min each.",
+      "summaryCustom_other": "Runs {{count}} nights a week at {{time}}, up to {{minutes}} min each.",
+      "confirm": "Enrol tonight",
+      "confirmSome": "Enrol {{eligible}} of {{total}} tonight",
+      "fixFirst": "Fix these first",
+      "saving": "Enrolling…",
+      "saved": "Schedule saved",
+      "enrolled_one": "Enrolled {{count}} profile",
+      "enrolled_other": "Enrolled {{count}} profiles",
+      "adjust": "Adjust schedule",
+      "cadenceLabel": "Cadence",
+      "cadenceNightly": "Nightly",
+      "cadenceWeeknights": "Weeknights",
+      "cadenceAlternate": "Every other night",
+      "cadenceCustom_one": "{{count}} night a week",
+      "cadenceCustom_other": "{{count}} nights a week",
+      "timeLabel": "Start time",
+      "timeHint": "Local to each profile's fingerprint timezone.",
+      "maxMinutesLabel": "Max minutes",
+      "intensityLabel": "Depth",
+      "sitesLabel": "Sites",
+      "sitesPlaceholder": "One address per line",
+      "sitesHint_one": "{{count}} site. Only pages you list here are visited.",
+      "sitesHint_other": "{{count}} sites. Only pages you list here are visited.",
+      "sitesTooMany": "At most {{max}} sites.",
+      "presetsUnavailable": "Could not load the depth presets. Try again in a moment.",
+      "confirmBulkTitle_one": "Enrol {{count}} profile in Cookie Bot?",
+      "confirmBulkTitle_other": "Enrol {{count}} profiles in Cookie Bot?",
+      "confirmBulkDescription_one": "It books a nightly run against your shared remote hours. You choose the time and the sites next.",
+      "confirmBulkDescription_other": "They book {{count}} nightly runs against your shared remote hours. You choose the time and the sites next.",
+      "confirmBulkButton_one": "Continue with {{count}} profile",
+      "confirmBulkButton_other": "Continue with {{count}} profiles",
+      "sitesRequired": "Add at least one site.",
+      "addSitesFirst": "Add a site first",
+      "presetsMissing": "Depth presets unavailable"
+    },
+    "preset": {
+      "light": "Light",
+      "balanced": "Standard",
+      "deep": "Deep"
+    },
+    "preflight": {
+      "ineligible_one": "{{count}} profile can't run remotely",
+      "ineligible_other": "{{count}} profiles can't run remotely",
+      "reasonSync": "Sync is off",
+      "reasonEncrypted": "End-to-end encrypted",
+      "reasonNoFingerprint": "No recorded operating system",
+      "reasonCrossOs": "Built for {{os}} — no remote machine matches",
+      "reasonNoExitNode": "No proxy or VPN",
+      "fixSync": "Turn on sync",
+      "fixEncrypted": "Open sync settings",
+      "fixProxy": "Attach a proxy",
+      "fixFailed": "Could not apply that fix.",
+      "exitNodeHint": "Without a proxy or VPN the run leaves from the fleet's own datacenter address. Hours of traffic from a hosting network damages the profile's identity more than not warming it at all."
+    },
+    "conflict": {
+      "title": "{{email}} already warms this profile at {{time}}",
+      "detail": "Two schedules on one profile spend hours twice and can collide mid-run.",
+      "keepTheirs": "Use their schedule",
+      "replace": "Replace with mine",
+      "replaceForbidden": "Only a team owner or admin can change someone else's schedule.",
+      "askThem": "Copy {{email}}",
+      "emailCopied": "Email copied",
+      "copyFailed": "Could not copy the address."
+    },
+    "actionBar": {
+      "enrol": "Enrol in Cookie Bot",
+      "proRequired": "Cookie Bot requires a Pro or Team plan",
+      "noneEligible": "None of the selected profiles can be warmed remotely"
+    },
+    "actions": {
+      "enrol": "Enrol in Cookie Bot",
+      "editSchedule": "Edit schedule",
+      "runNow": "Run now",
+      "runStarted": "Run started",
+      "viewActivity": "View activity",
+      "runNotStarted": "The run did not start: {{reason}}"
+    },
+    "state": {
+      "enrolled": "Enrolled",
+      "notEnrolled": "Not enrolled",
+      "paused": "Paused",
+      "summary": "{{cadence}} at {{time}}",
+      "rowMenu": "Cookie Bot options for {{name}}",
+      "blocked": "Cannot run: {{reason}}"
+    },
+    "team": {
+      "title": "Team usage",
+      "pooled_one": "{{used}} of {{total}} h, {{count}} seat",
+      "pooled_other": "{{used}} of {{total}} h pooled across {{count}} seats",
+      "hours": "{{hours}} h",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "Interactive",
+      "columnMember": "Member",
+      "columnRuns": "Runs",
+      "columnHours": "Hours",
+      "columnShare": "Share",
+      "noActivity": "No remote sessions in this period.",
+      "soloNote": "Only your own usage so far. Invite teammates to see the pool split by member.",
+      "runsFailed": "· {{n}} failed"
+    },
+    "closeReason": {
+      "stoppedByUser": "Stopped by hand",
+      "maxDuration": "Reached the time limit",
+      "other": "Ended: {{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "Not included in your plan",
+      "syncDisabled": "Cloud sync is off for this profile",
+      "encryptedSync": "End-to-end encrypted sync is not supported",
+      "proxyRequired": "No proxy or VPN attached",
+      "touchFingerprint": "Touch fingerprints are not supported",
+      "platformUnsupported": "No machine runs this profile's system",
+      "noSites": "No sites to visit",
+      "quotaExhausted": "Remote hours used up",
+      "profileLocked": "The profile was open somewhere else",
+      "noCapacity": "No machine was free",
+      "managerError": "The fleet could not start the browser",
+      "budgetExceeded": "The night's budget ran out",
+      "cancelledByUser": "Stopped by hand",
+      "unknown": "Unknown reason ({{code}})"
+    }
   }
 }

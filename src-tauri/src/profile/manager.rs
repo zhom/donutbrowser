@@ -1189,6 +1189,12 @@ impl ProfileManager {
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
 
+    // The cookie bot refuses a run on a profile with no exit node, using the
+    // copy of that fact the desktop last declared. Detaching a proxy has to
+    // move that copy, or tonight's run egresses from the leased host's own
+    // datacenter address.
+    crate::cookie_bot::report_profile_state(&profile);
+
     // Auto-enable sync for new proxy if profile has sync enabled
     if profile.is_sync_enabled() {
       if let Some(ref new_proxy_id) = proxy_id {
@@ -1249,6 +1255,10 @@ impl ProfileManager {
       })?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+
+    // Same reason as the proxy path: a VPN is the profile's exit node too, and
+    // the server only knows what this machine last told it.
+    crate::cookie_bot::report_profile_state(&profile);
 
     // Auto-enable sync for the new VPN if profile has sync enabled.
     if profile.is_sync_enabled() {

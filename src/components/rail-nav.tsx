@@ -8,6 +8,7 @@ import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal } from "react-icons/go";
 import {
   LuCloud,
+  LuCookie,
   LuInfo,
   LuKeyboard,
   LuPlug,
@@ -26,6 +27,7 @@ export type AppPage =
   | "proxies"
   | "extensions"
   | "groups"
+  | "cookieBot"
   | "vpns"
   | "settings"
   | "integrations"
@@ -174,6 +176,12 @@ interface RailNavProps {
   currentPage: AppPage;
   onNavigate: (page: AppPage) => void;
   onOpenAbout: () => void;
+  /**
+   * A remote session is running right now. The Cookie Bot item carries a dot so
+   * the state is legible from every other page — an overnight job you cannot
+   * see from where you are standing may as well not be observable at all.
+   */
+  cookieBotRunning?: boolean;
 }
 
 /** Shared-element indicator that slides between the active rail items. */
@@ -199,6 +207,7 @@ const TOP_ITEMS: RailItem[] = [
   { page: "proxies", Icon: FiWifi, labelKey: "rail.network" },
   { page: "extensions", Icon: LuPuzzle, labelKey: "rail.extensions" },
   { page: "groups", Icon: LuUsers, labelKey: "rail.groups" },
+  { page: "cookieBot", Icon: LuCookie, labelKey: "rail.cookieBot" },
   { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
@@ -229,6 +238,7 @@ export function RailNav({
   currentPage,
   onNavigate,
   onOpenAbout,
+  cookieBotRunning = false,
 }: RailNavProps) {
   const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -325,9 +335,19 @@ export function RailNav({
                 >
                   {active && <ActiveIndicator />}
                   <Icon className="size-3.5" />
+                  {page === "cookieBot" && cookieBotRunning && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute top-1 right-1 size-1.5 rounded-full bg-success"
+                    />
+                  )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">{t(labelKey)}</TooltipContent>
+              <TooltipContent side="right">
+                {page === "cookieBot" && cookieBotRunning
+                  ? t("rail.cookieBotRunning")
+                  : t(labelKey)}
+              </TooltipContent>
             </Tooltip>
           );
         })}

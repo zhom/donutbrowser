@@ -33,7 +33,6 @@ pub struct ApiProfile {
   pub process_id: Option<u32>,
   pub last_launch: Option<u64>,
   pub release_type: String,
-  #[schema(value_type = Object)]
   pub group_id: Option<String>,
   pub tags: Vec<String>,
   pub is_running: bool,
@@ -302,6 +301,86 @@ pub struct StopRemoteResponse {
   pub billed_seconds: u64,
 }
 
+/// Every remote session the signed-in account currently owns.
+///
+/// `run-remote` hands back a session id and the literal string `provisioning`;
+/// without a way to read the real state back, an automation client can only
+/// discover that a session became usable by trying to drive it.
+#[derive(Debug, Serialize, ToSchema)]
+struct ApiRemoteSessionsResponse {
+  sessions: Vec<crate::remote_session::RemoteSessionState>,
+}
+
+/// Enrol a profile in the nightly cookie bot, or replace its enrolment.
+///
+/// `platform` and `profile_name` are optional because this machine already
+/// knows both: the platform is the profile's own operating system, and a
+/// caller-supplied one that disagrees is a mistake, not a choice.
+#[derive(Debug, Deserialize, ToSchema)]
+struct SetCookieBotScheduleRequest {
+  /// Defaults to the profile's local name.
+  profile_name: Option<String>,
+  /// `windows` or `macos`. Defaults to the profile's own operating system, and
+  /// must match it when supplied.
+  platform: Option<String>,
+  /// Whether the nightly run is armed. A disabled schedule keeps its settings.
+  enabled: bool,
+  /// Minutes past local midnight the run is anchored to (0..1439).
+  run_at_minute: u16,
+  /// Bitmask of local weekdays, bit 0 = Monday (1..127).
+  days_mask: u8,
+  /// IANA zone the run time is expressed in.
+  timezone: String,
+  /// Server-issued preset id from `GET /v1/cookie-bot/presets`.
+  preset: String,
+  /// Upper bound on one run, in minutes.
+  max_minutes: u32,
+  /// Absolute http(s) URLs to browse. The bot visits only these.
+  #[serde(default)]
+  sites: Vec<String>,
+  /// Random spread around the anchor time, in seconds.
+  jitter_seconds: Option<u32>,
+  /// Write anyway when a teammate already enrols this profile. Without it, a
+  /// colliding write is refused with 409 and the teammate's details.
+  #[serde(default)]
+  acknowledge_conflict: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct StartCookieBotRunRequest {
+  /// Profile to warm. It must already have a schedule: the preset and the site
+  /// list live there, so a run never carries a behaviour of its own.
+  profile_id: String,
+  /// Overrides the schedule's own cap for this run only.
+  max_minutes: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CookieBotScopeQuery {
+  scope: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CookieBotConflictsQuery {
+  profile_id: String,
+  run_at_minute: Option<u16>,
+  timezone: Option<String>,
+  days_mask: Option<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CookieBotRunsQuery {
+  profile_id: Option<String>,
+  scope: Option<String>,
+  limit: Option<u32>,
+  before: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CookieBotUsageQuery {
+  period: Option<String>,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 struct RunProfileRequest {
   url: Option<String>,
@@ -428,6 +507,22 @@ struct ImportProxiesResponse {
     update_profile,
     delete_profile,
     run_profile,
+    run_profile_remote,
+    stop_remote_session,
+    list_remote_sessions_api,
+    get_remote_session_api,
+    get_remote_hours,
+    set_profile_cloud_sync,
+    list_cookie_bot_schedules,
+    get_cookie_bot_schedule,
+    set_cookie_bot_schedule,
+    delete_cookie_bot_schedule,
+    get_cookie_bot_conflicts,
+    list_cookie_bot_runs,
+    start_cookie_bot_run,
+    cancel_cookie_bot_run,
+    list_cookie_bot_presets,
+    get_cookie_bot_usage,
     open_url_in_profile,
     kill_profile,
     batch_run_profiles,
@@ -484,6 +579,30 @@ struct ImportProxiesResponse {
     RunProfileResponse,
     RunRemoteRequest,
     RunRemoteResponse,
+    StopRemoteResponse,
+    SetCloudSyncRequest,
+    SetCloudSyncResponse,
+    ApiRemoteSessionsResponse,
+    SetCookieBotScheduleRequest,
+    StartCookieBotRunRequest,
+    crate::remote_session::RemoteSessionState,
+    crate::cookie_bot::CookieBotSchedule,
+    crate::cookie_bot::CookieBotScheduleList,
+    crate::cookie_bot::CookieBotScheduleSaved,
+    crate::cookie_bot::CookieBotScheduleDeleted,
+    crate::cookie_bot::CookieBotConflict,
+    crate::cookie_bot::CookieBotConflictCheck,
+    crate::cookie_bot::CookieBotRun,
+    crate::cookie_bot::CookieBotRunPage,
+    crate::cookie_bot::CookieBotRunStarted,
+    crate::cookie_bot::CookieBotPreset,
+    crate::cookie_bot::CookieBotPresetList,
+    crate::cookie_bot::CookieBotUsage,
+    crate::cookie_bot::CookieBotUsageMember,
+    crate::cookie_bot::CookieBotUsageProfile,
+    crate::cookie_bot::RemoteHoursQuota,
+    crate::cookie_bot::RemoteHoursMember,
+    crate::cookie_bot::RemoteHoursBreakdown,
     RunProfileRequest,
     BatchRunRequest,
     BatchRunResult,
@@ -514,6 +633,8 @@ struct ImportProxiesResponse {
     (name = "extensions", description = "Extension management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
     (name = "cookies", description = "Cookie management endpoints"),
+    (name = "remote-sessions", description = "Sessions running on the leased remote fleet"),
+    (name = "cookie-bot", description = "Scheduled cookie-warming runs on the remote fleet"),
   ),
   modifiers(&SecurityAddon),
 )]
@@ -595,39 +716,7 @@ impl ApiServer {
       .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
       .port();
 
-    // Create router with OpenAPI documentation
-    let (v1_routes, _) = OpenApiRouter::new()
-      .routes(routes!(get_profiles, create_profile))
-      .routes(routes!(get_profile, update_profile, delete_profile))
-      .routes(routes!(run_profile))
-      .routes(routes!(run_profile_remote))
-      .routes(routes!(stop_remote_session))
-      .routes(routes!(set_profile_cloud_sync))
-      .routes(routes!(open_url_in_profile))
-      .routes(routes!(kill_profile))
-      .routes(routes!(batch_run_profiles))
-      .routes(routes!(batch_stop_profiles))
-      .routes(routes!(detect_import_profiles))
-      .routes(routes!(import_profiles_api))
-      .routes(routes!(import_profile_cookies))
-      .routes(routes!(get_groups, create_group))
-      .routes(routes!(get_group, update_group, delete_group))
-      .routes(routes!(get_tags))
-      .routes(routes!(get_proxies, create_proxy))
-      .routes(routes!(import_proxies_api))
-      .routes(routes!(get_proxy, update_proxy, delete_proxy))
-      .routes(routes!(get_vpns, create_vpn))
-      .routes(routes!(import_vpn))
-      .routes(routes!(export_vpn))
-      .routes(routes!(get_vpn, update_vpn, delete_vpn))
-      .routes(routes!(get_extensions))
-      .routes(routes!(delete_extension_api))
-      .routes(routes!(get_extension_groups))
-      .routes(routes!(delete_extension_group_api))
-      .routes(routes!(download_browser_api))
-      .routes(routes!(get_browser_versions))
-      .routes(routes!(check_browser_downloaded))
-      .split_for_parts();
+    let v1_routes = build_v1_router();
 
     let api = ApiDoc::openapi();
 
@@ -683,6 +772,68 @@ impl ApiServer {
     self.port = None;
     Ok(())
   }
+}
+
+/// Register every `/v1` handler.
+///
+/// Pulled out of `start` so a test can build it. Axum panics when two handlers
+/// claim the same path, and until this was callable the only thing that
+/// exercised it was starting the real server — a conflict introduced here
+/// would have shipped as an app that dies the moment the API is switched on.
+///
+/// The OpenAPI half of `split_for_parts` is discarded on purpose: the served
+/// spec comes from the hand-maintained `ApiDoc`, which is why
+/// `openapi_spec_covers_registered_routes` exists.
+fn build_v1_router() -> Router<ApiServerState> {
+  let (routes, _) = OpenApiRouter::new()
+    .routes(routes!(get_profiles, create_profile))
+    .routes(routes!(get_profile, update_profile, delete_profile))
+    .routes(routes!(run_profile))
+    .routes(routes!(run_profile_remote))
+    // One `routes!` per PATH, not per handler: the GET and the DELETE share
+    // `/v1/remote-sessions/{id}`, and registering them separately would have
+    // the second overwrite the first.
+    .routes(routes!(get_remote_session_api, stop_remote_session))
+    .routes(routes!(list_remote_sessions_api))
+    .routes(routes!(get_remote_hours))
+    .routes(routes!(set_profile_cloud_sync))
+    .routes(routes!(list_cookie_bot_schedules))
+    .routes(routes!(
+      get_cookie_bot_schedule,
+      set_cookie_bot_schedule,
+      delete_cookie_bot_schedule
+    ))
+    .routes(routes!(get_cookie_bot_conflicts))
+    .routes(routes!(list_cookie_bot_runs, start_cookie_bot_run))
+    .routes(routes!(cancel_cookie_bot_run))
+    .routes(routes!(list_cookie_bot_presets))
+    .routes(routes!(get_cookie_bot_usage))
+    .routes(routes!(open_url_in_profile))
+    .routes(routes!(kill_profile))
+    .routes(routes!(batch_run_profiles))
+    .routes(routes!(batch_stop_profiles))
+    .routes(routes!(detect_import_profiles))
+    .routes(routes!(import_profiles_api))
+    .routes(routes!(import_profile_cookies))
+    .routes(routes!(get_groups, create_group))
+    .routes(routes!(get_group, update_group, delete_group))
+    .routes(routes!(get_tags))
+    .routes(routes!(get_proxies, create_proxy))
+    .routes(routes!(import_proxies_api))
+    .routes(routes!(get_proxy, update_proxy, delete_proxy))
+    .routes(routes!(get_vpns, create_vpn))
+    .routes(routes!(import_vpn))
+    .routes(routes!(export_vpn))
+    .routes(routes!(get_vpn, update_vpn, delete_vpn))
+    .routes(routes!(get_extensions))
+    .routes(routes!(delete_extension_api))
+    .routes(routes!(get_extension_groups))
+    .routes(routes!(delete_extension_group_api))
+    .routes(routes!(download_browser_api))
+    .routes(routes!(get_browser_versions))
+    .routes(routes!(check_browser_downloaded))
+    .split_for_parts();
+  routes
 }
 
 // Terms and Conditions check middleware
@@ -786,11 +937,43 @@ async fn request_logging_middleware(request: axum::extract::Request, next: Next)
 }
 
 fn is_automation_request(method: &Method, path: &str) -> bool {
+  // Ending a remote session is the one automation action that is not a POST.
+  // Its handler declares a 429, which could never fire while this function
+  // returned early for every non-POST method.
+  //
+  // Cancelling a cookie-bot run joins it: both reach across to the fleet, and
+  // treating one stop as metered and the other as free would be arbitrary.
+  // Note that the desktop's own stop button goes through a Tauri command, not
+  // this server, so a human can always stop a run the limiter has cut off.
+  if method == Method::DELETE {
+    let mut segments = match path
+      .strip_prefix("/v1/remote-sessions/")
+      .or_else(|| path.strip_prefix("/v1/cookie-bot/runs/"))
+    {
+      Some(rest) => rest.split('/'),
+      None => return false,
+    };
+    return matches!((segments.next(), segments.next()), (Some(id), None) if !id.is_empty());
+  }
+
   if method != Method::POST {
     return false;
   }
 
-  if matches!(path, "/v1/profiles/batch/run" | "/v1/profiles/batch/stop") {
+  // Starting a bot run leases a host for up to two hours and spends the
+  // account's pooled remote-hour budget, which makes it the single most
+  // expensive thing this API can be asked to do.
+  //
+  // Deliberately NOT here: the cookie-bot schedule writes (PUT and DELETE on
+  // /v1/cookie-bot/schedules/{profile_id}). They are configuration — a small
+  // row in donutbrowser-infra — and lease nothing. Metering them would 429 a
+  // client enrolling a fleet of profiles at start-up, while the thing that
+  // actually protects the hardware, the pooled hour budget, is enforced
+  // server-side on every run whether or not it was scheduled from here.
+  if matches!(
+    path,
+    "/v1/profiles/batch/run" | "/v1/profiles/batch/stop" | "/v1/cookie-bot/runs"
+  ) {
     return true;
   }
 
@@ -800,7 +983,13 @@ fn is_automation_request(method: &Method, path: &str) -> bool {
   let mut segments = profile_action.split('/');
   matches!(
     (segments.next(), segments.next(), segments.next()),
-    (Some(_), Some("run" | "open-url" | "kill"), None)
+    // `run-remote` is a separate segment from `run`, so it matched nothing here
+    // and every remote launch bypassed the quota it declares a 429 for.
+    (
+      Some(_),
+      Some("run" | "open-url" | "kill" | "run-remote"),
+      None
+    )
   )
 }
 
@@ -2230,7 +2419,7 @@ async fn run_profile_remote(
   // The profile must exist in cloud storage before a remote host can open it —
   // the VM pulls it from donut-sync, and a profile that has never synced would
   // launch an empty browser and then push that emptiness back over the real one.
-  if let Err(reason) = remote_launch_precondition(profile) {
+  if let Err(reason) = remote_launch_precondition(profile).await {
     return Err((StatusCode::BAD_REQUEST, reason));
   }
 
@@ -2305,7 +2494,7 @@ async fn set_profile_cloud_sync(
   // Reported rather than left for the caller to discover at launch time: the
   // most common reason a caller enables sync is to run the profile remotely,
   // and Encrypted mode silently makes that impossible.
-  let blocked = remote_launch_precondition(profile).err();
+  let blocked = remote_launch_precondition(profile).await.err();
   Ok(Json(SetCloudSyncResponse {
     profile_id: profile.id.to_string(),
     mode,
@@ -2334,10 +2523,35 @@ fn sync_mode_error_response(err: String) -> (StatusCode, String) {
 
 /// Whether a profile may be launched on a remote host.
 ///
-/// Extracted so the rule is unit-testable without a running app: it is the one
-/// gate between "the user asked" and "a browser opens somewhere else holding
-/// their cookies".
-pub fn remote_launch_precondition(
+/// The one gate between "the user asked" and "a browser opens somewhere else
+/// holding their cookies". Adds the live check the pure rules cannot make: a
+/// launch that races this profile's own upload hands the host a torn snapshot.
+pub async fn remote_launch_precondition(
+  profile: &crate::profile::types::BrowserProfile,
+) -> Result<(), String> {
+  remote_launch_profile_rules(profile)?;
+
+  // The manifest is written last, so a host pulling mid-upload gets files
+  // that are about to be replaced and a manifest that does not describe them.
+  // The browser then comes up on a profile that never existed on this machine
+  // and pushes it back over the real one.
+  if let Some(scheduler) = crate::sync::get_global_scheduler() {
+    if scheduler
+      .is_profile_sync_in_progress(&profile.id.to_string())
+      .await
+    {
+      return Err(serde_json::json!({ "code": "REMOTE_SYNC_IN_PROGRESS" }).to_string());
+    }
+  }
+
+  Ok(())
+}
+
+/// The parts of the rule that depend only on the profile itself.
+///
+/// Split out so the rules stay unit-testable without a running app or a sync
+/// scheduler, and so the live check above cannot be reached without them.
+pub fn remote_launch_profile_rules(
   profile: &crate::profile::types::BrowserProfile,
 ) -> Result<(), String> {
   if !profile.is_sync_enabled() {
@@ -2414,6 +2628,615 @@ fn remote_session_error_response(
     RemoteSessionError::NotAuthorised(m) => (StatusCode::PAYMENT_REQUIRED, m),
     RemoteSessionError::Other(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
   }
+}
+
+/// Map a read of remote state onto a status, and answer with a machine code.
+///
+/// Separate from `remote_session_error_response` on purpose. That one serves
+/// the LAUNCH path, whose documented contract is a plain-English diagnostic and
+/// whose only interesting failures are "busy", "already open" and "not on your
+/// plan". A read has a different failure set — chiefly "no such session", which
+/// the launch mapping would report as a 500 — and it is new, so it can answer
+/// with the `{"code":…}` envelope from the start instead of English a client
+/// would have to pattern-match.
+fn remote_session_read_response(
+  err: crate::remote_session::RemoteSessionError,
+) -> (StatusCode, String) {
+  use crate::remote_session::RemoteSessionError;
+  let upstream = match &err {
+    RemoteSessionError::NoCapacity(_) => 503,
+    RemoteSessionError::Conflict(_) => 409,
+    RemoteSessionError::NotAuthorised(_) => 403,
+    // The status was consumed on the way in; the code is recovered from the
+    // backend's own envelope instead.
+    RemoteSessionError::Other(_) => 0,
+  };
+  let body = err.to_error_json();
+  let status = cloud_failure_status(upstream, &error_code_of(&body));
+  (status, body)
+}
+
+fn cookie_bot_error_response(err: crate::cookie_bot::CookieBotError) -> (StatusCode, String) {
+  let status = cloud_failure_status(err.status(), err.code());
+  (status, err.to_error_json())
+}
+
+/// Read the machine code out of a `{"code":…}` body.
+fn error_code_of(body: &str) -> String {
+  serde_json::from_str::<serde_json::Value>(body)
+    .ok()
+    .and_then(|value| {
+      value
+        .get("code")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+    })
+    .unwrap_or_default()
+}
+
+/// Turn a donutbrowser-infra failure into the status a local client can act on.
+///
+/// The upstream status is not echoed blindly. A 401 up there means THIS desktop
+/// has no cloud session, which has nothing to do with the caller's own bearer
+/// token — answering 401 would send an automation client off to rotate a token
+/// that is perfectly good. Likewise the cloud's 403 covers two unrelated
+/// things: "your plan does not include this", which is the 402 this API uses
+/// everywhere else, and "you are not a member of that team", which no payment
+/// fixes.
+fn cloud_failure_status(upstream: u16, code: &str) -> StatusCode {
+  // The disambiguations first, because no status can express them.
+  if code == crate::cloud_errors::NOT_SIGNED_IN {
+    return StatusCode::FORBIDDEN;
+  }
+  if code.ends_with("NOT_ENTITLED") || code == "REMOTE_HOURS_EXHAUSTED" {
+    return StatusCode::PAYMENT_REQUIRED;
+  }
+  if code == crate::cloud_errors::RATE_LIMITED {
+    return StatusCode::TOO_MANY_REQUESTS;
+  }
+  if code == crate::cloud_errors::UNREACHABLE || code == crate::cloud_errors::NO_CAPACITY {
+    return StatusCode::SERVICE_UNAVAILABLE;
+  }
+
+  match upstream {
+    400 | 422 => StatusCode::BAD_REQUEST,
+    402 => StatusCode::PAYMENT_REQUIRED,
+    403 => StatusCode::FORBIDDEN,
+    404 => StatusCode::NOT_FOUND,
+    409 => StatusCode::CONFLICT,
+    429 => StatusCode::TOO_MANY_REQUESTS,
+    503 => StatusCode::SERVICE_UNAVAILABLE,
+    // Some transports keep only the body, so the status is gone by the time
+    // it gets here. Falling straight through to 500 would report every one of
+    // those as our fault, including "no such run".
+    _ => status_for_code(code),
+  }
+}
+
+/// The status a machine code implies when the HTTP status did not survive.
+fn status_for_code(code: &str) -> StatusCode {
+  if code.ends_with("NOT_FOUND") || code == "COOKIE_BOT_NOT_ENROLLED" {
+    StatusCode::NOT_FOUND
+  } else if code.ends_with("CONFLICT")
+    || code == "COOKIE_BOT_RUN_IN_PROGRESS"
+    || code == "REMOTE_SYNC_IN_PROGRESS"
+  {
+    StatusCode::CONFLICT
+  } else if code.starts_with("COOKIE_BOT_INVALID")
+    || code == "COOKIE_BOT_SITE_LIMIT"
+    || code == "REMOTE_SESSION_REFUSED"
+  {
+    StatusCode::BAD_REQUEST
+  } else if code == "NOT_TEAM_MEMBER" {
+    StatusCode::FORBIDDEN
+  } else {
+    StatusCode::INTERNAL_SERVER_ERROR
+  }
+}
+
+// API Handler - Every remote session this account currently owns
+#[utoipa::path(
+  get,
+  path = "/v1/remote-sessions",
+  responses(
+    (status = 200, description = "Sessions owned by the signed-in account", body = ApiRemoteSessionsResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "remote-sessions"
+)]
+async fn list_remote_sessions_api() -> Result<Json<ApiRemoteSessionsResponse>, (StatusCode, String)>
+{
+  let sessions = crate::remote_session::list_remote_sessions()
+    .await
+    .map_err(remote_session_read_response)?;
+  Ok(Json(ApiRemoteSessionsResponse { sessions }))
+}
+
+// API Handler - One remote session's real state
+#[utoipa::path(
+  get,
+  path = "/v1/remote-sessions/{id}",
+  params(
+    ("id" = String, Path, description = "Remote session ID from run-remote")
+  ),
+  responses(
+    (status = 200, description = "Current session state", body = crate::remote_session::RemoteSessionState),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 404, description = "No such remote session"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "remote-sessions"
+)]
+async fn get_remote_session_api(
+  Path(id): Path<String>,
+) -> Result<Json<crate::remote_session::RemoteSessionState>, (StatusCode, String)> {
+  // `run-remote` answers `provisioning` and nothing more. Until this route
+  // existed, an automation client had no way to learn a session had become
+  // usable other than repeatedly trying to drive it.
+  crate::remote_session::get_remote_session(&id)
+    .await
+    .map(Json)
+    .map_err(remote_session_read_response)
+}
+
+// API Handler - The pooled remote-hour budget
+#[utoipa::path(
+  get,
+  path = "/v1/remote-hours",
+  responses(
+    (status = 200, description = "Pooled remote-hour budget and its breakdown", body = crate::cookie_bot::RemoteHoursQuota),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "remote-sessions"
+)]
+async fn get_remote_hours(
+) -> Result<Json<crate::cookie_bot::RemoteHoursQuota>, (StatusCode, String)> {
+  // Bot runs and interactive remote sessions spend one pool. Being refused a
+  // launch should not be the only way to find out how much of it is left.
+  crate::cookie_bot::remote_hours_quota()
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
+}
+
+// --- Cookie bot -------------------------------------------------------------
+//
+// Thin proxies onto donutbrowser-infra, which owns the schedule, the calendar
+// arithmetic, the browsing model and the pooled hour budget. Nothing here
+// decides when a run happens or what it does. What this file DOES decide is
+// which profiles may be offered to it at all.
+
+/// Resolve a profile the cookie bot is allowed to touch.
+///
+/// The bot exists only on the leased fleet: a run materialises the profile on a
+/// remote host from cloud sync, warms it, and pushes it back. A profile that
+/// cannot make that round trip — never synced, encrypted with a key that never
+/// leaves this machine, no recorded OS, an OS the fleet cannot lease, or no
+/// proxy or VPN to egress through — has no path to a run and must never reach
+/// an enrolment, a quota check or a leased host.
+///
+/// Every cookie-bot WRITE on this server goes through here, so there is no
+/// surface on which a local-only profile can be pointed at the bot. The server
+/// re-checks all of it; this exists so the refusal happens at the moment the
+/// caller asks rather than silently at 02:00.
+fn cookie_bot_eligible_profile(
+  profile_id: &str,
+) -> Result<crate::profile::types::BrowserProfile, (StatusCode, String)> {
+  let profiles = ProfileManager::instance()
+    .list_profiles()
+    .map_err(manager_error_response)?;
+  let profile = profiles
+    .into_iter()
+    .find(|p| p.id.to_string() == profile_id)
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
+
+  crate::cookie_bot::bot_precondition(&profile)
+    .map_err(|reason| (StatusCode::BAD_REQUEST, reason))?;
+  Ok(profile)
+}
+
+// API Handler - Every cookie-bot enrolment the caller can see
+#[utoipa::path(
+  get,
+  path = "/v1/cookie-bot/schedules",
+  params(
+    ("scope" = Option<String>, Query, description = "`mine` (default) or `team`")
+  ),
+  responses(
+    (status = 200, description = "Enrolled profiles", body = crate::cookie_bot::CookieBotScheduleList),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Plan does not include the cookie bot"),
+    (status = 403, description = "Not signed in, or scope=team from a non-member"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn list_cookie_bot_schedules(
+  Query(query): Query<CookieBotScopeQuery>,
+) -> Result<Json<crate::cookie_bot::CookieBotScheduleList>, (StatusCode, String)> {
+  crate::cookie_bot::list_schedules(query.scope.as_deref())
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
+}
+
+// API Handler - One profile's enrolment
+#[utoipa::path(
+  get,
+  path = "/v1/cookie-bot/schedules/{profile_id}",
+  params(
+    ("profile_id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 200, description = "The profile's enrolment", body = crate::cookie_bot::CookieBotSchedule),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 404, description = "This profile is not enrolled"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn get_cookie_bot_schedule(
+  Path(profile_id): Path<String>,
+) -> Result<Json<crate::cookie_bot::CookieBotSchedule>, (StatusCode, String)> {
+  // Deliberately NOT gated on eligibility: a profile whose sync was turned off
+  // after it was enrolled must still be able to show what it is enrolled as,
+  // otherwise the only way to see the schedule is to be allowed to run it.
+  match crate::cookie_bot::get_schedule(&profile_id)
+    .await
+    .map_err(cookie_bot_error_response)?
+  {
+    Some(schedule) => Ok(Json(schedule)),
+    None => Err((
+      StatusCode::NOT_FOUND,
+      serde_json::json!({ "code": "COOKIE_BOT_NOT_ENROLLED" }).to_string(),
+    )),
+  }
+}
+
+// API Handler - Enrol a profile, or replace its enrolment
+#[utoipa::path(
+  put,
+  path = "/v1/cookie-bot/schedules/{profile_id}",
+  params(
+    ("profile_id" = String, Path, description = "Profile ID")
+  ),
+  request_body = SetCookieBotScheduleRequest,
+  responses(
+    (status = 200, description = "Enrolment saved", body = crate::cookie_bot::CookieBotScheduleSaved),
+    (status = 400, description = "Invalid schedule, or a profile the bot cannot run"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Plan does not include the cookie bot"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "A teammate already enrols this profile; retry with acknowledge_conflict"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn set_cookie_bot_schedule(
+  Path(profile_id): Path<String>,
+  Json(request): Json<SetCookieBotScheduleRequest>,
+) -> Result<Json<crate::cookie_bot::CookieBotScheduleSaved>, (StatusCode, String)> {
+  let profile = cookie_bot_eligible_profile(&profile_id)?;
+  // `bot_precondition` already proved the profile has a resolvable OS the
+  // fleet can lease, so this cannot fail; taking it from the profile rather
+  // than the request is what stops a caller enrolling a macOS profile onto a
+  // Windows host.
+  let platform = profile
+    .resolved_os()
+    .ok_or((
+      StatusCode::BAD_REQUEST,
+      serde_json::json!({ "code": "COOKIE_BOT_UNKNOWN_PLATFORM" }).to_string(),
+    ))?
+    .to_string();
+
+  if let Some(requested) = request.platform.as_deref() {
+    if requested != platform {
+      return Err((
+        StatusCode::BAD_REQUEST,
+        serde_json::json!({
+          "code": "COOKIE_BOT_UNSUPPORTED_PLATFORM",
+          "params": { "platform": requested }
+        })
+        .to_string(),
+      ));
+    }
+  }
+
+  let input = crate::cookie_bot::CookieBotScheduleInput {
+    profile_name: request.profile_name.unwrap_or_else(|| profile.name.clone()),
+    platform,
+    enabled: request.enabled,
+    run_at_minute: request.run_at_minute,
+    days_mask: request.days_mask,
+    timezone: request.timezone,
+    preset: request.preset,
+    max_minutes: request.max_minutes,
+    sites: request.sites,
+    jitter_seconds: request.jitter_seconds,
+    ..Default::default()
+  }
+  // The server requires these and cannot read them itself — the profile lives
+  // in the user's sync namespace, not its database.
+  .with_profile_state(crate::cookie_bot::profile_state(&profile));
+
+  crate::cookie_bot::save_schedule(&profile_id, &input, request.acknowledge_conflict)
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
+}
+
+// API Handler - Turn the bot off for a profile
+#[utoipa::path(
+  delete,
+  path = "/v1/cookie-bot/schedules/{profile_id}",
+  params(
+    ("profile_id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 200, description = "Enrolment removed, or there was none", body = crate::cookie_bot::CookieBotScheduleDeleted),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn delete_cookie_bot_schedule(
+  Path(profile_id): Path<String>,
+) -> Result<Json<crate::cookie_bot::CookieBotScheduleDeleted>, (StatusCode, String)> {
+  // No eligibility gate and no 404: "turn the bot off" must be safe to repeat,
+  // and a profile that has since become ineligible is exactly the one a caller
+  // most needs to be able to unenrol.
+  crate::cookie_bot::delete_schedule(&profile_id)
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
+}
+
+// API Handler - Who else already warms this profile
+#[utoipa::path(
+  get,
+  path = "/v1/cookie-bot/conflicts",
+  params(
+    ("profile_id" = String, Query, description = "Profile ID"),
+    ("run_at_minute" = Option<u16>, Query, description = "Proposed minute past local midnight"),
+    ("timezone" = Option<String>, Query, description = "Proposed IANA zone"),
+    ("days_mask" = Option<u8>, Query, description = "Proposed weekday bitmask, bit 0 = Monday")
+  ),
+  responses(
+    (status = 200, description = "Teammates enrolling the same profile", body = crate::cookie_bot::CookieBotConflictCheck),
+    (status = 400, description = "profile_id missing"),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn get_cookie_bot_conflicts(
+  Query(query): Query<CookieBotConflictsQuery>,
+) -> Result<Json<crate::cookie_bot::CookieBotConflictCheck>, (StatusCode, String)> {
+  // A dry run that writes nothing, so an automation client can find a
+  // collision before it makes one instead of after two operators have quietly
+  // scheduled the same profile against itself.
+  crate::cookie_bot::check_conflicts(
+    &query.profile_id,
+    query.run_at_minute,
+    query.timezone.as_deref(),
+    query.days_mask,
+  )
+  .await
+  .map(Json)
+  .map_err(cookie_bot_error_response)
+}
+
+// API Handler - Run history
+#[utoipa::path(
+  get,
+  path = "/v1/cookie-bot/runs",
+  params(
+    ("profile_id" = Option<String>, Query, description = "Restrict to one profile"),
+    ("scope" = Option<String>, Query, description = "`mine` (default) or `team`"),
+    ("limit" = Option<u32>, Query, description = "Page size, 1..100 (default 30)"),
+    ("before" = Option<String>, Query, description = "Keyset cursor from a previous page's next_before")
+  ),
+  responses(
+    (status = 200, description = "One page of runs, newest first", body = crate::cookie_bot::CookieBotRunPage),
+    (status = 400, description = "limit out of range or malformed cursor"),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "Not signed in, or scope=team from a non-member"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn list_cookie_bot_runs(
+  Query(query): Query<CookieBotRunsQuery>,
+) -> Result<Json<crate::cookie_bot::CookieBotRunPage>, (StatusCode, String)> {
+  crate::cookie_bot::list_runs(
+    query.profile_id.as_deref(),
+    query.scope.as_deref(),
+    query.limit,
+    query.before.as_deref(),
+  )
+  .await
+  .map(Json)
+  .map_err(cookie_bot_error_response)
+}
+
+// API Handler - Warm a profile now instead of waiting for tonight
+#[utoipa::path(
+  post,
+  path = "/v1/cookie-bot/runs",
+  request_body = StartCookieBotRunRequest,
+  responses(
+    (status = 202, description = "Run accepted; it keeps executing for minutes after this response", body = crate::cookie_bot::CookieBotRunStarted),
+    (status = 400, description = "A profile the bot cannot run"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Plan does not include the cookie bot, or the pooled hours are spent"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 404, description = "Profile not found, or not enrolled"),
+    (status = 409, description = "A run or remote session already holds this profile"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "No host of that operating system has a free slot"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn start_cookie_bot_run(
+  Json(request): Json<StartCookieBotRunRequest>,
+) -> Result<(StatusCode, Json<crate::cookie_bot::CookieBotRunStarted>), (StatusCode, String)> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .can_use_browser_automation()
+    .await
+  {
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
+  }
+
+  cookie_bot_eligible_profile(&request.profile_id)?;
+
+  let started = crate::cookie_bot::run_now(&request.profile_id, request.max_minutes)
+    .await
+    .map_err(cookie_bot_error_response)?;
+
+  // 202, not 200: the fleet is still browsing when this returns. Answering 200
+  // would tell a client the work is done when it has barely started.
+  Ok((StatusCode::ACCEPTED, Json(started)))
+}
+
+// API Handler - Stop a run that is still going
+#[utoipa::path(
+  delete,
+  path = "/v1/cookie-bot/runs/{run_id}",
+  params(
+    ("run_id" = String, Path, description = "Run ID")
+  ),
+  responses(
+    (status = 200, description = "The run, cancelled (or unchanged if it had already finished)", body = crate::cookie_bot::CookieBotRun),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 404, description = "No such run for this account"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 503, description = "The fleet could not be reached; the run is still live"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn cancel_cookie_bot_run(
+  Path(run_id): Path<String>,
+) -> Result<Json<crate::cookie_bot::CookieBotRun>, (StatusCode, String)> {
+  // No entitlement gate. A lapsed plan must never be the reason a user cannot
+  // stop something that is spending their hours.
+  crate::cookie_bot::cancel_run(&run_id)
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
+}
+
+// API Handler - The intensities the server offers
+#[utoipa::path(
+  get,
+  path = "/v1/cookie-bot/presets",
+  responses(
+    (status = 200, description = "Selectable presets", body = crate::cookie_bot::CookieBotPresetList),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "This desktop is not signed in to Donut cloud"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn list_cookie_bot_presets(
+) -> Result<Json<crate::cookie_bot::CookieBotPresetList>, (StatusCode, String)> {
+  // Ids and a rough duration only. What a preset expands to — the site
+  // ordering, the dwell model, the scroll and click programme — is the
+  // server's, and stays there.
+  crate::cookie_bot::list_presets()
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
+}
+
+// API Handler - Who spent what, for a calendar month
+#[utoipa::path(
+  get,
+  path = "/v1/cookie-bot/usage",
+  params(
+    ("period" = Option<String>, Query, description = "`YYYY-MM`; defaults to the current UTC month")
+  ),
+  responses(
+    (status = 200, description = "Per-member and per-profile spend", body = crate::cookie_bot::CookieBotUsage),
+    (status = 400, description = "Malformed period"),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "Not signed in, or not a member of that team"),
+    (status = 503, description = "Donut cloud could not be reached"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookie-bot"
+)]
+async fn get_cookie_bot_usage(
+  Query(query): Query<CookieBotUsageQuery>,
+) -> Result<Json<crate::cookie_bot::CookieBotUsage>, (StatusCode, String)> {
+  // Reporting, never enforcement: the pooled budget is spent against by the
+  // server, and this is how an owner finds out where it went.
+  crate::cookie_bot::team_usage(query.period.as_deref())
+    .await
+    .map(Json)
+    .map_err(cookie_bot_error_response)
 }
 
 // API Handler - Open URL in existing browser
@@ -2959,12 +3782,12 @@ mod tests {
   // would launch an empty browser and push that emptiness over the real one.
   #[test]
   fn remote_launch_requires_cloud_sync() {
-    let err = remote_launch_precondition(&profile_with(SyncMode::Disabled, Some("macos")))
+    let err = remote_launch_profile_rules(&profile_with(SyncMode::Disabled, Some("macos")))
       .expect_err("a non-synced profile must be refused");
     assert!(err.contains("cloud sync"), "unhelpful message: {err}");
 
     assert!(
-      remote_launch_precondition(&profile_with(SyncMode::Regular, Some("macos"))).is_ok(),
+      remote_launch_profile_rules(&profile_with(SyncMode::Regular, Some("macos"))).is_ok(),
       "a synced profile must be allowed"
     );
   }
@@ -2976,7 +3799,7 @@ mod tests {
     // the corruption back over the user's real profile. Refusing here also
     // saves taking the profile lock and a slot on leased hardware for a
     // session that cannot possibly work.
-    let err = remote_launch_precondition(&profile_with(SyncMode::Encrypted, Some("macos")))
+    let err = remote_launch_profile_rules(&profile_with(SyncMode::Encrypted, Some("macos")))
       .expect_err("an encrypted profile must be refused");
     assert!(
       err.contains("encrypted") && err.contains("Regular"),
@@ -2988,7 +3811,7 @@ mod tests {
   fn remote_launch_requires_a_known_operating_system() {
     // Without one there is no way to pick a matching host, and guessing would
     // be the cross-OS mismatch this whole design exists to prevent.
-    assert!(remote_launch_precondition(&profile_with(SyncMode::Regular, None)).is_err());
+    assert!(remote_launch_profile_rules(&profile_with(SyncMode::Regular, None)).is_err());
   }
 
   #[test]
@@ -3007,7 +3830,33 @@ mod tests {
     );
     // Local /run refuses this; running it remotely on a host of its own OS is
     // exactly what /run-remote is for.
-    assert!(remote_launch_precondition(&foreign).is_ok());
+    assert!(remote_launch_profile_rules(&foreign).is_ok());
+  }
+
+  #[tokio::test]
+  async fn remote_launch_is_refused_while_the_profile_is_mid_upload() {
+    // The manifest is written last. A host that pulls during the upload gets
+    // files that are about to be replaced described by a manifest that does
+    // not match them, launches Chromium on that, and pushes the result back
+    // over the real profile.
+    let scheduler = std::sync::Arc::new(crate::sync::SyncScheduler::new());
+    crate::sync::set_global_scheduler(scheduler.clone());
+
+    let mut profile = profile_with(SyncMode::Regular, Some("macos"));
+    profile.id = uuid::Uuid::new_v4();
+    assert!(
+      remote_launch_precondition(&profile).await.is_ok(),
+      "an idle profile must be launchable"
+    );
+
+    scheduler.queue_profile_sync(profile.id.to_string()).await;
+    let err = remote_launch_precondition(&profile)
+      .await
+      .expect_err("a profile mid-upload must be refused");
+    assert!(
+      err.contains("REMOTE_SYNC_IN_PROGRESS"),
+      "the refusal must be a code the frontend can translate: {err}"
+    );
   }
 
   #[test]
@@ -3106,12 +3955,31 @@ mod tests {
       "/v1/profiles/profile-id/run",
       "/v1/profiles/profile-id/open-url",
       "/v1/profiles/profile-id/kill",
+      // Launching on leased remote hardware is the most expensive automation
+      // action there is; it went unmetered because `run-remote` is its own
+      // path segment and never matched `run`.
+      "/v1/profiles/profile-id/run-remote",
       "/v1/profiles/batch/run",
       "/v1/profiles/batch/stop",
+      // Starting a bot run leases a host for up to two hours and spends the
+      // account's pooled remote-hour budget.
+      "/v1/cookie-bot/runs",
     ] {
       assert!(
         is_automation_request(&Method::POST, path),
         "automation route was not limited: {path}"
+      );
+    }
+
+    // Stopping a remote session is a DELETE, and its handler declares a 429.
+    // Cancelling a bot run reaches the same fleet and is metered the same way.
+    for path in [
+      "/v1/remote-sessions/session-id",
+      "/v1/cookie-bot/runs/run-id",
+    ] {
+      assert!(
+        is_automation_request(&Method::DELETE, path),
+        "metered stop was not limited: {path}"
       );
     }
 
@@ -3121,12 +3989,165 @@ mod tests {
       (Method::POST, "/v1/profiles/import"),
       (Method::GET, "/v1/profiles"),
       (Method::GET, "/openapi.json"),
+      // Only the single-session DELETE is automation; the collection is not a
+      // route, and a GET of one never launches anything.
+      (Method::DELETE, "/v1/remote-sessions/"),
+      (Method::GET, "/v1/remote-sessions/session-id"),
+      (Method::GET, "/v1/remote-sessions"),
+      // Enrolling a profile writes one row on the server and leases nothing.
+      // Metering it would 429 a client setting up a fleet of profiles, while
+      // the budget that actually protects the hardware is spent per RUN and
+      // enforced server-side however the run was scheduled.
+      (Method::PUT, "/v1/cookie-bot/schedules/profile-id"),
+      (Method::DELETE, "/v1/cookie-bot/schedules/profile-id"),
+      (Method::GET, "/v1/cookie-bot/schedules"),
+      (Method::GET, "/v1/cookie-bot/runs"),
+      (Method::GET, "/v1/cookie-bot/usage"),
+      (Method::GET, "/v1/remote-hours"),
+      // A run id is required; the collection DELETE is not a route.
+      (Method::DELETE, "/v1/cookie-bot/runs/"),
     ] {
       assert!(
         !is_automation_request(&method, path),
         "free or non-mutating route was limited: {method} {path}"
       );
     }
+  }
+
+  // The bot exists only on the leased fleet. Every write surface resolves the
+  // profile through `bot_precondition` first, so there is no request shape on
+  // this server that points it at a profile which could never make the round
+  // trip to a remote host and back.
+  #[test]
+  fn a_profile_the_bot_could_never_run_is_refused_before_the_cloud_is_asked() {
+    let mut local_only = profile_with(SyncMode::Disabled, Some("macos"));
+    local_only.proxy_id = Some("proxy-1".to_string());
+    assert!(
+      crate::cookie_bot::bot_precondition(&local_only).is_err(),
+      "a profile with no cloud copy has nothing for a host to open"
+    );
+
+    let mut encrypted = profile_with(SyncMode::Encrypted, Some("macos"));
+    encrypted.proxy_id = Some("proxy-1".to_string());
+    assert!(
+      crate::cookie_bot::bot_precondition(&encrypted).is_err(),
+      "a host cannot decrypt a profile whose key never leaves this machine"
+    );
+
+    let mut datacenter_egress = profile_with(SyncMode::Regular, Some("macos"));
+    datacenter_egress.proxy_id = None;
+    datacenter_egress.vpn_id = None;
+    assert!(
+      crate::cookie_bot::bot_precondition(&datacenter_egress).is_err(),
+      "hours of traffic from a hosting ASN damages the identity being warmed"
+    );
+
+    let mut eligible = profile_with(SyncMode::Regular, Some("macos"));
+    eligible.proxy_id = Some("proxy-1".to_string());
+    assert!(crate::cookie_bot::bot_precondition(&eligible).is_ok());
+  }
+
+  #[test]
+  fn a_cloud_401_is_not_reported_as_the_callers_own_token_being_wrong() {
+    // The caller's bearer token was accepted — the auth middleware ran. It is
+    // THIS desktop that has no cloud session, and answering 401 would send an
+    // automation client off to rotate a token that is perfectly good.
+    assert_eq!(
+      cloud_failure_status(401, crate::cloud_errors::NOT_SIGNED_IN),
+      StatusCode::FORBIDDEN
+    );
+  }
+
+  #[test]
+  fn the_clouds_403_splits_into_the_two_things_it_means() {
+    // "Your plan does not include this" is the 402 this API uses everywhere
+    // else; "you are not in that team" is not something a payment fixes.
+    assert_eq!(
+      cloud_failure_status(403, "COOKIE_BOT_NOT_ENTITLED"),
+      StatusCode::PAYMENT_REQUIRED
+    );
+    assert_eq!(
+      cloud_failure_status(403, "NOT_TEAM_MEMBER"),
+      StatusCode::FORBIDDEN
+    );
+  }
+
+  #[test]
+  fn spending_the_pooled_hours_is_a_payment_problem_not_a_server_fault() {
+    // It arrives as a 403 with a code. Reporting it as a plain forbidden would
+    // hide the one thing the user can act on.
+    assert_eq!(
+      cloud_failure_status(403, "REMOTE_HOURS_EXHAUSTED"),
+      StatusCode::PAYMENT_REQUIRED
+    );
+  }
+
+  #[test]
+  fn a_busy_or_unreachable_fleet_is_never_reported_as_broken() {
+    // 503 means "try again shortly". Turning it into a 500 tells the user
+    // their automation is broken when nothing is.
+    assert_eq!(
+      cloud_failure_status(503, crate::cloud_errors::NO_CAPACITY),
+      StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+      cloud_failure_status(0, crate::cloud_errors::UNREACHABLE),
+      StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+      cloud_failure_status(429, crate::cloud_errors::RATE_LIMITED),
+      StatusCode::TOO_MANY_REQUESTS
+    );
+  }
+
+  #[test]
+  fn a_missing_schedule_and_a_missing_run_both_stay_a_404() {
+    assert_eq!(
+      cloud_failure_status(404, "COOKIE_BOT_NOT_ENROLLED"),
+      StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+      cloud_failure_status(404, "COOKIE_BOT_RUN_NOT_FOUND"),
+      StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+      cloud_failure_status(409, "COOKIE_BOT_SCHEDULE_CONFLICT"),
+      StatusCode::CONFLICT
+    );
+    assert_eq!(
+      cloud_failure_status(400, "COOKIE_BOT_INVALID_SCHEDULE"),
+      StatusCode::BAD_REQUEST
+    );
+  }
+
+  #[test]
+  fn a_read_of_a_session_that_does_not_exist_is_a_404_not_a_500() {
+    // The launch mapping folds every unrecognised status into 500, which for a
+    // read means "no such session" is indistinguishable from "our backend
+    // fell over".
+    let missing =
+      crate::remote_session::classify_backend_status(404, r#"{"code":"REMOTE_SESSION_NOT_FOUND"}"#);
+    let (status, body) = remote_session_read_response(missing);
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(error_code_of(&body), "REMOTE_SESSION_NOT_FOUND");
+  }
+
+  #[test]
+  fn a_read_answers_with_a_code_rather_than_the_backends_english() {
+    let busy = crate::remote_session::classify_backend_status(503, "no macos host has a free slot");
+    let (status, body) = remote_session_read_response(busy);
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(error_code_of(&body), crate::cloud_errors::NO_CAPACITY);
+  }
+
+  // Axum panics when two handlers claim one path, and the router is only built
+  // when the API server is switched on — so a conflict introduced here would
+  // ship as an app that dies the first time a user enables the API. Both
+  // `/v1/remote-sessions/{id}` and `/v1/cookie-bot/schedules/{profile_id}` now
+  // carry several methods, which is exactly the shape that trips it.
+  #[test]
+  fn every_v1_route_can_be_registered_together() {
+    let _router: Router<ApiServerState> = build_v1_router();
   }
 
   fn schema_required(spec: &serde_json::Value, schema: &str) -> Vec<String> {
@@ -3151,6 +4172,20 @@ mod tests {
     assert!(
       !create_profile.iter().any(|f| f == "wayfern_config"),
       "wayfern_config must be optional, required list: {create_profile:?}"
+    );
+
+    // `ApiProfile` is the response body of every profile-returning route, so a
+    // wrongly-required `group_id` makes generated clients assume a group is
+    // always present on an ungrouped profile.
+    let api_profile = schema_required(&spec, "ApiProfile");
+    assert!(
+      !api_profile.iter().any(|f| f == "group_id"),
+      "group_id must be optional on ApiProfile, required list: {api_profile:?}"
+    );
+    assert_eq!(
+      spec["components"]["schemas"]["ApiProfile"]["properties"]["group_id"]["type"],
+      serde_json::json!(["string", "null"]),
+      "group_id must be a nullable string, not a free-form object"
     );
 
     let update_profile = schema_required(&spec, "UpdateProfileRequest");
@@ -3192,6 +4227,91 @@ mod tests {
         "{field} must be optional on import items, required list: {import_item:?}"
       );
     }
+
+    // A remote launch with no URL just opens the browser; forcing generated
+    // clients to send one would make the common case the awkward one.
+    let run_remote = schema_required(&spec, "RunRemoteRequest");
+    assert!(
+      !run_remote.iter().any(|f| f == "url"),
+      "url must be optional on a remote launch, required list: {run_remote:?}"
+    );
+
+    // A run-now with no cap inherits the schedule's own.
+    let start_run = schema_required(&spec, "StartCookieBotRunRequest");
+    assert!(
+      start_run.iter().any(|f| f == "profile_id"),
+      "profile_id is the one thing a run cannot infer, required list: {start_run:?}"
+    );
+    assert!(
+      !start_run.iter().any(|f| f == "max_minutes"),
+      "max_minutes must be optional, required list: {start_run:?}"
+    );
+
+    // This machine already knows the profile's name and operating system, and
+    // a caller-supplied platform that disagrees is refused rather than
+    // honoured — so neither may be marked required.
+    let set_schedule = schema_required(&spec, "SetCookieBotScheduleRequest");
+    for field in [
+      "profile_name",
+      "platform",
+      "jitter_seconds",
+      "sites",
+      "acknowledge_conflict",
+    ] {
+      assert!(
+        !set_schedule.iter().any(|f| f == field),
+        "{field} must be optional when enrolling, required list: {set_schedule:?}"
+      );
+    }
+
+    // A freshly created enrolment has never run, so every one of these is
+    // absent on the first read. Marking them required would make a generated
+    // client reject the response it gets immediately after enrolling.
+    let schedule = schema_required(&spec, "CookieBotSchedule");
+    for field in ["next_run_at", "last_run_at", "last_run_id", "updated_at"] {
+      assert!(
+        !schedule.iter().any(|f| f == field),
+        "{field} must be optional on a schedule, required list: {schedule:?}"
+      );
+    }
+
+    let run = schema_required(&spec, "CookieBotRun");
+    for field in ["started_at", "ended_at", "outcome_code", "session_id"] {
+      assert!(
+        !run.iter().any(|f| f == field),
+        "{field} must be optional on a run, required list: {run:?}"
+      );
+    }
+
+    // Only `session_id` and `status` are guaranteed while a session is still
+    // provisioning; everything else arrives as the session progresses.
+    let session = schema_required(&spec, "RemoteSessionState");
+    for field in [
+      "profile_id",
+      "platform",
+      "kind",
+      "run_id",
+      "started_at",
+      "ready_at",
+      "closed_at",
+      "close_reason",
+      "billed_seconds",
+    ] {
+      assert!(
+        !session.iter().any(|f| f == field),
+        "{field} must be optional on a session, required list: {session:?}"
+      );
+    }
+
+    // The route predates the pooled budget and returned only two keys. A
+    // deployment that has not rolled forward must still satisfy the spec.
+    let quota = schema_required(&spec, "RemoteHoursQuota");
+    for field in ["members", "breakdown", "scope", "team_id", "seats"] {
+      assert!(
+        !quota.iter().any(|f| f == field),
+        "{field} must be optional on the quota, required list: {quota:?}"
+      );
+    }
   }
 
   #[test]
@@ -3225,25 +4345,205 @@ mod tests {
       "/v1/profiles/import",
       "/v1/profiles/import/detect",
       "/v1/proxies/import",
+      // The whole remote-execution surface was registered on the router but
+      // absent from ApiDoc, so it never appeared in the served spec. This list
+      // is a hand-maintained allowlist, which is exactly why that drift went
+      // unnoticed — every route added here must also be added below.
+      "/v1/profiles/{id}/run-remote",
+      "/v1/profiles/{id}/cloud-sync",
+      "/v1/remote-sessions/{id}",
+      // Remote-session observability and the whole cookie-bot surface. Same
+      // hazard, so the same guard: registered on the router is not registered
+      // in the spec, and the spec is what an automation client is written from.
+      "/v1/remote-sessions",
+      "/v1/remote-hours",
+      "/v1/cookie-bot/schedules",
+      "/v1/cookie-bot/schedules/{profile_id}",
+      "/v1/cookie-bot/conflicts",
+      "/v1/cookie-bot/runs",
+      "/v1/cookie-bot/runs/{run_id}",
+      "/v1/cookie-bot/presets",
+      "/v1/cookie-bot/usage",
     ] {
       assert!(paths.contains_key(path), "missing from ApiDoc: {path}");
     }
+
+    // Every method of every shared path must survive. Registering two handlers
+    // on one path in separate `routes!` calls silently drops one of them, and
+    // the spec is where that shows up.
+    for (path, method) in [
+      ("/v1/remote-sessions/{id}", "get"),
+      ("/v1/remote-sessions/{id}", "delete"),
+      ("/v1/cookie-bot/schedules/{profile_id}", "get"),
+      ("/v1/cookie-bot/schedules/{profile_id}", "put"),
+      ("/v1/cookie-bot/schedules/{profile_id}", "delete"),
+      ("/v1/cookie-bot/runs", "get"),
+      ("/v1/cookie-bot/runs", "post"),
+      ("/v1/cookie-bot/runs/{run_id}", "delete"),
+    ] {
+      assert!(
+        paths[path].get(method).is_some(),
+        "missing from ApiDoc: {method} {path}"
+      );
+    }
+
+    // Every cookie-bot operation must be findable by tag, or it is invisible in
+    // a generated client's grouping even though the path exists.
+    for (path, method) in [
+      ("/v1/cookie-bot/schedules", "get"),
+      ("/v1/cookie-bot/schedules/{profile_id}", "put"),
+      ("/v1/cookie-bot/runs", "post"),
+      ("/v1/cookie-bot/usage", "get"),
+    ] {
+      let tags = paths[path][method]["tags"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{method} {path} has no tags"));
+      assert!(
+        tags.iter().any(|tag| tag == "cookie-bot"),
+        "{method} {path} is not tagged cookie-bot: {tags:?}"
+      );
+    }
+
+    // A bot run is accepted, not completed: the fleet browses for minutes
+    // after the response. A 200 here would be a lie the client acts on.
+    assert!(
+      paths["/v1/cookie-bot/runs"]["post"]["responses"]
+        .get("202")
+        .is_some(),
+      "starting a bot run must declare 202 Accepted"
+    );
 
     assert!(
       !paths.keys().any(|p| p.contains("wayfern-token")),
       "wayfern-token endpoints were removed and must stay out of the spec"
     );
 
+    // A path with a body that resolves to nothing is worse than a missing
+    // path: a generator emits a client for it and the response type is empty.
+    // These live in other modules, so `components(schemas(...))` is the only
+    // thing pulling them in.
+    for schema in [
+      "RemoteSessionState",
+      "ApiRemoteSessionsResponse",
+      "SetCookieBotScheduleRequest",
+      "StartCookieBotRunRequest",
+      "CookieBotSchedule",
+      "CookieBotScheduleList",
+      "CookieBotScheduleSaved",
+      "CookieBotScheduleDeleted",
+      "CookieBotConflict",
+      "CookieBotConflictCheck",
+      "CookieBotRun",
+      "CookieBotRunPage",
+      "CookieBotRunStarted",
+      "CookieBotPreset",
+      "CookieBotPresetList",
+      "CookieBotUsage",
+      "CookieBotUsageMember",
+      "CookieBotUsageProfile",
+      "RemoteHoursQuota",
+      "RemoteHoursMember",
+      "RemoteHoursBreakdown",
+    ] {
+      assert!(
+        spec["components"]["schemas"][schema]["properties"].is_object(),
+        "schema is missing from the served spec: {schema}"
+      );
+    }
+
+    // A response body declared as a path outside this module must resolve to
+    // the component that path registered, not to a dangling or inlined name.
+    for (path, method, status, schema) in [
+      (
+        "/v1/cookie-bot/schedules",
+        "get",
+        "200",
+        "CookieBotScheduleList",
+      ),
+      ("/v1/cookie-bot/runs", "post", "202", "CookieBotRunStarted"),
+      (
+        "/v1/cookie-bot/runs/{run_id}",
+        "delete",
+        "200",
+        "CookieBotRun",
+      ),
+      (
+        "/v1/remote-sessions/{id}",
+        "get",
+        "200",
+        "RemoteSessionState",
+      ),
+      ("/v1/remote-hours", "get", "200", "RemoteHoursQuota"),
+    ] {
+      let reference =
+        &paths[path][method]["responses"][status]["content"]["application/json"]["schema"]["$ref"];
+      assert_eq!(
+        reference.as_str(),
+        Some(format!("#/components/schemas/{schema}").as_str()),
+        "{method} {path} {status} does not reference {schema}: {reference:?}"
+      );
+    }
+
+    // The presets a client may choose from must never carry the behaviour they
+    // expand to. A site list, a dwell range or a step programme appearing here
+    // would mean the browsing model had leaked out of the server.
+    let preset_properties = spec["components"]["schemas"]["CookieBotPreset"]["properties"]
+      .as_object()
+      .expect("preset properties");
+    for leaked in [
+      "sites",
+      "dwell",
+      "dwell_seconds",
+      "steps",
+      "actions",
+      "corpus",
+    ] {
+      assert!(
+        !preset_properties.contains_key(leaked),
+        "the browsing model leaked into the client contract: {leaked}"
+      );
+    }
+
     for path in [
       "/v1/profiles/{id}/run",
       "/v1/profiles/{id}/open-url",
       "/v1/profiles/{id}/kill",
+      "/v1/profiles/{id}/run-remote",
       "/v1/profiles/batch/run",
       "/v1/profiles/batch/stop",
     ] {
       assert!(
         paths[path]["post"]["responses"].get("429").is_some(),
         "automation route is missing its 429 response: {path}"
+      );
+    }
+
+    assert!(
+      paths["/v1/cookie-bot/runs"]["post"]["responses"]
+        .get("429")
+        .is_some(),
+      "starting a bot run is metered and must declare its 429"
+    );
+
+    // The automation routes that are not POSTs. Both declared a 429 that
+    // `is_automation_request` could never produce, because that function
+    // returned early for every non-POST method.
+    for path in ["/v1/remote-sessions/{id}", "/v1/cookie-bot/runs/{run_id}"] {
+      assert!(
+        paths[path]["delete"]["responses"].get("429").is_some(),
+        "metered stop route is missing its 429 response: {path}"
+      );
+    }
+
+    // Schedule writes are configuration, not automation. Declaring a 429 they
+    // can never return would send a client building retry logic for a status
+    // it will never see.
+    for method in ["put", "delete"] {
+      assert!(
+        paths["/v1/cookie-bot/schedules/{profile_id}"][method]["responses"]
+          .get("429")
+          .is_none(),
+        "a schedule write must not declare a 429: {method}"
       );
     }
   }

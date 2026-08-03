@@ -67,6 +67,39 @@ export type BackendErrorCode =
   | "XRAY_UNAVAILABLE"
   | "XRAY_UNSUPPORTED_OS"
   | "XRAY_START_FAILED"
+  | "CLOUD_NOT_SIGNED_IN"
+  | "CLOUD_UNREACHABLE"
+  | "CLOUD_REQUEST_FAILED"
+  | "REMOTE_RATE_LIMITED"
+  | "REMOTE_NO_CAPACITY"
+  | "REMOTE_NOT_ENTITLED"
+  | "REMOTE_SESSION_REFUSED"
+  | "REMOTE_SESSION_NOT_FOUND"
+  | "REMOTE_SESSION_CONFLICT"
+  | "REMOTE_SYNC_IN_PROGRESS"
+  | "REMOTE_HOURS_EXHAUSTED"
+  | "NOT_TEAM_MEMBER"
+  | "COOKIE_BOT_NOT_ENTITLED"
+  | "COOKIE_BOT_NOT_ENROLLED"
+  | "COOKIE_BOT_SCHEDULE_CONFLICT"
+  | "COOKIE_BOT_RUN_IN_PROGRESS"
+  | "COOKIE_BOT_RUN_NOT_FOUND"
+  | "COOKIE_BOT_INVALID_SCHEDULE"
+  | "COOKIE_BOT_INVALID_TIMEZONE"
+  | "COOKIE_BOT_INVALID_PERIOD"
+  | "COOKIE_BOT_SITE_LIMIT"
+  | "COOKIE_BOT_REQUIRES_CLOUD_SYNC"
+  | "COOKIE_BOT_ENCRYPTED_SYNC_UNSUPPORTED"
+  | "COOKIE_BOT_UNKNOWN_PLATFORM"
+  | "COOKIE_BOT_UNSUPPORTED_PLATFORM"
+  | "COOKIE_BOT_REQUIRES_EXIT_NODE"
+  // The server's own names for two refusals it throws from `putSchedule`,
+  // `updateProfileState` and `runNow`. `COOKIE_BOT_REQUIRES_PROXY` is the
+  // server-side twin of the local `COOKIE_BOT_REQUIRES_EXIT_NODE` precondition;
+  // without a case here the single most important refusal in the feature
+  // rendered as the raw machine identifier.
+  | "COOKIE_BOT_REQUIRES_PROXY"
+  | "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -256,12 +289,90 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.xrayStartFailed");
     case "CLEAR_ON_CLOSE_UNAVAILABLE":
       return t("backendErrors.clearOnCloseUnavailable");
+    case "CLOUD_NOT_SIGNED_IN":
+      return t("backendErrors.cloudNotSignedIn");
+    case "CLOUD_UNREACHABLE":
+      return t("backendErrors.cloudUnreachable");
+    case "CLOUD_REQUEST_FAILED":
+      return t("backendErrors.cloudRequestFailed");
+    case "REMOTE_RATE_LIMITED":
+      return t("backendErrors.remoteRateLimited");
+    case "REMOTE_NO_CAPACITY":
+      return t("backendErrors.remoteNoCapacity");
+    case "REMOTE_NOT_ENTITLED":
+      return t("backendErrors.remoteNotEntitled");
+    case "REMOTE_SESSION_REFUSED":
+      return t("backendErrors.remoteSessionRefused");
+    case "REMOTE_SESSION_NOT_FOUND":
+      return t("backendErrors.remoteSessionNotFound");
+    case "REMOTE_SESSION_CONFLICT":
+      return t("backendErrors.remoteSessionConflict");
+    case "REMOTE_SYNC_IN_PROGRESS":
+      return t("backendErrors.remoteSyncInProgress");
+    case "REMOTE_HOURS_EXHAUSTED":
+      return t("backendErrors.remoteHoursExhausted", {
+        granted: parsed.params?.granted ?? "0",
+        used: parsed.params?.used ?? "0",
+      });
+    case "NOT_TEAM_MEMBER":
+      return t("backendErrors.notTeamMember");
+    case "COOKIE_BOT_NOT_ENTITLED":
+      return t("backendErrors.cookieBotNotEntitled");
+    case "COOKIE_BOT_NOT_ENROLLED":
+      return t("backendErrors.cookieBotNotEnrolled");
+    case "COOKIE_BOT_SCHEDULE_CONFLICT":
+      return t("backendErrors.cookieBotScheduleConflict", {
+        email: parsed.params?.email ?? "",
+        time: parsed.params?.time ?? "",
+      });
+    case "COOKIE_BOT_RUN_IN_PROGRESS":
+      return t("backendErrors.cookieBotRunInProgress");
+    case "COOKIE_BOT_RUN_NOT_FOUND":
+      return t("backendErrors.cookieBotRunNotFound");
+    case "COOKIE_BOT_INVALID_SCHEDULE":
+      return t("backendErrors.cookieBotInvalidSchedule");
+    case "COOKIE_BOT_INVALID_TIMEZONE":
+      return t("backendErrors.cookieBotInvalidTimezone", {
+        timezone: parsed.params?.timezone ?? "",
+      });
+    case "COOKIE_BOT_INVALID_PERIOD":
+      return t("backendErrors.cookieBotInvalidPeriod");
+    case "COOKIE_BOT_SITE_LIMIT":
+      // The server sends both bounds. Defaulting `min` to 1 was not the
+      // problem — the message never mentioned a minimum at all, so a user who
+      // submitted no sites was told about a maximum they had not reached.
+      return t("backendErrors.cookieBotSiteLimit", {
+        min: parsed.params?.min ?? "1",
+        max: parsed.params?.max ?? "40",
+      });
+    case "COOKIE_BOT_REQUIRES_CLOUD_SYNC":
+      return t("backendErrors.cookieBotRequiresCloudSync");
+    case "COOKIE_BOT_ENCRYPTED_SYNC_UNSUPPORTED":
+      return t("backendErrors.cookieBotEncryptedSyncUnsupported");
+    case "COOKIE_BOT_UNKNOWN_PLATFORM":
+      return t("backendErrors.cookieBotUnknownPlatform");
+    case "COOKIE_BOT_UNSUPPORTED_PLATFORM":
+      return t("backendErrors.cookieBotUnsupportedPlatform", {
+        platform: parsed.params?.platform ?? "",
+      });
+    case "COOKIE_BOT_REQUIRES_EXIT_NODE":
+    // One condition, two names: the desktop refuses it locally as
+    // REQUIRES_EXIT_NODE and the server refuses it as REQUIRES_PROXY. Both
+    // resolve to the one sentence a user can act on.
+    case "COOKIE_BOT_REQUIRES_PROXY":
+      return t("backendErrors.cookieBotRequiresExitNode");
+    case "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED":
+      return t("backendErrors.cookieBotTouchFingerprintUnsupported");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",
       });
     default:
-      return err instanceof Error ? err.message : String(err);
+      // The payload parsed as a structured error but carries a code this build
+      // does not know: the server can add codes faster than the desktop ships.
+      // Returning the raw message here would render the literal JSON to the
+      // user, so show a translated line that still names the code for support.
+      return t("backendErrors.unknownCode", { code: String(parsed.code) });
   }
 }
 

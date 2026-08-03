@@ -258,7 +258,8 @@
       "emptyCreate": "Profil oluştur",
       "emptyImport": "Profilleri içe aktar",
       "emptyFilteredTitle": "Profil bulunamadı",
-      "emptyFilteredHint": "Bu grup veya aramayla eşleşen profil yok. Başka bir filtre deneyin veya yeni bir profil oluşturun."
+      "emptyFilteredHint": "Bu grup veya aramayla eşleşen profil yok. Başka bir filtre deneyin veya yeni bir profil oluşturun.",
+      "bot": "Bot"
     },
     "actions": {
       "launch": "Başlat",
@@ -1851,7 +1852,35 @@
     "vlessConfigInvalid": "VLESS URI'si geçersiz.",
     "xrayUnavailable": "Xray-core bu sistemde kullanılamıyor.",
     "xrayUnsupportedOs": "VLESS için macOS 12 veya sonraki bir sürüm gerekir.",
-    "xrayStartFailed": "Xray-core başlatılamadı."
+    "xrayStartFailed": "Xray-core başlatılamadı.",
+    "cloudNotSignedIn": "Bunu kullanmak için Donut Browser hesabınıza giriş yapın.",
+    "cloudUnreachable": "Donut Browser sunucularına ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.",
+    "cloudRequestFailed": "İstek başarısız oldu. Birazdan tekrar deneyin.",
+    "remoteRateLimited": "Çok fazla istek. Biraz bekleyip tekrar deneyin.",
+    "remoteNoCapacity": "Şu anda boş uzak makine yok. Birkaç dakika sonra tekrar deneyin.",
+    "remoteNotEntitled": "Planınız uzaktan çalıştırmayı içermiyor.",
+    "remoteSessionRefused": "Uzak makine bu oturumu reddetti.",
+    "remoteSessionNotFound": "Bu uzak oturum artık mevcut değil.",
+    "remoteSessionConflict": "Bu profil başka bir yerde zaten açık.",
+    "remoteSyncInProgress": "Bu profil hâlâ buluta yükleniyor. Eşitleme bitince tekrar deneyin.",
+    "remoteHoursExhausted": "Bu ayki {{granted}} uzak saatinizin {{used}} saatinin tamamını kullandınız.",
+    "notTeamMember": "Herhangi bir ekibin üyesi değilsiniz.",
+    "cookieBotNotEntitled": "Planınız Cookie Bot'u içermiyor.",
+    "cookieBotNotEnrolled": "Bu profil henüz Cookie Bot için ayarlanmadı.",
+    "cookieBotScheduleConflict": "{{email}} bu profili zaten {{time}} saatinde ısıtıyor.",
+    "cookieBotRunInProgress": "Bu profil için zaten devam eden bir çalışma var.",
+    "cookieBotRunNotFound": "Bu çalışma artık mevcut değil.",
+    "cookieBotInvalidSchedule": "Bu zamanlama geçerli değil. Çalışma saatini, günleri ve süreyi kontrol edin.",
+    "cookieBotInvalidTimezone": "{{timezone}}, sunucunun tanıdığı bir saat dilimi değil.",
+    "cookieBotInvalidPeriod": "Bu dönem geçerli değil. 2026-08 gibi bir ay kullanın.",
+    "cookieBotSiteLimit": "En az {{min}}, en çok {{max}} site girin; her biri tam http veya https adresi olsun.",
+    "cookieBotRequiresCloudSync": "Önce bu profil için bulut eşitlemeyi açın: uzak makinenin profili almasının başka yolu yok.",
+    "cookieBotEncryptedSyncUnsupported": "Bu profil, uzak makinenin çözemeyeceği uçtan uca şifreli eşitleme kullanıyor. Normal eşitlemeye geçirin.",
+    "cookieBotUnknownPlatform": "Bu profilde kayıtlı bir işletim sistemi yok, bu yüzden bir makineyle eşleştirilemiyor.",
+    "cookieBotUnsupportedPlatform": "Cookie Bot, {{platform}} profillerini çalıştıramaz. Yalnızca Windows ve macOS profilleri desteklenir.",
+    "cookieBotRequiresExitNode": "Önce bir proxy veya VPN ekleyin. Aksi hâlde çalışma bir veri merkezi adresinden çıkar ve bu, profilin kimliğine zarar verir.",
+    "unknownCode": "Bir sorun oluştu: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "Bu profil dokunmatik bir cihaz olduğunu bildiriyor ve bot bunu süremez. Masaüstü parmak izi kullanın."
   },
   "rail": {
     "profiles": "Profiller",
@@ -1870,7 +1899,9 @@
     },
     "network": "Ağ",
     "integrations": "Entegrasyonlar",
-    "account": "Hesap"
+    "account": "Hesap",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot — şu anda çalışıyor"
   },
   "pageTitle": {
     "proxies": "Ağ",
@@ -1881,7 +1912,8 @@
     "integrations": "Entegrasyonlar",
     "account": "Hesap",
     "import": "Profil içe aktar",
-    "shortcuts": "Klavye kısayolları"
+    "shortcuts": "Klavye kısayolları",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1956,8 @@
     },
     "tabs": {
       "account": "Hesap",
-      "selfHosted": "Kendi sunucunuz"
+      "selfHosted": "Kendi sunucunuz",
+      "teamUsage": "Ekip kullanımı"
     },
     "selfHosted": {
       "title": "Kendi eşitleme sunucunuz",
@@ -1937,7 +1970,8 @@
     },
     "deviceOrdinal": "{{ordinal}} / {{count}}",
     "automationPrimaryOnly": "Tarayıcı otomasyonu yalnızca birincil cihazınızda (Cihaz 1) çalışır. Burada kullanmak için oradaki oturumu kapatın.",
-    "automationActiveHere": "Tarayıcı otomasyonu bu cihazda etkin."
+    "automationActiveHere": "Tarayıcı otomasyonu bu cihazda etkin.",
+    "viewTeamUsage": "Ekip kullanımını görüntüle"
   },
   "shortcutsPage": {
     "title": "Klavye kısayolları",
@@ -1970,7 +2004,8 @@
     "goGroups": "Gruplar'a git",
     "goIntegrations": "Entegrasyonlar'a git",
     "goAccount": "Hesap'a git",
-    "goSettings": "Ayarlar'a git"
+    "goSettings": "Ayarlar'a git",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "Donut Browser kapatılsın mı?",
@@ -2102,5 +2137,287 @@
     "matchToProxy": "Parmak izini proxy'ye eşle",
     "matching": "Eşleniyor…",
     "matchSuccess": "Parmak izi proxy'ye uyacak şekilde güncellendi. Uygulamak için profili yeniden başlatın."
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "Uzak bir makinede gece boyunca profil ısıtma.",
+    "tabs": {
+      "overview": "Genel bakış",
+      "schedule": "Zamanlama",
+      "activity": "Etkinlik",
+      "team": "Ekip"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "Cookie Bot, profillerinizi gece boyunca uzak bir makinede ısıtır; böylece bilgisayarınız açık olmadan çerezlerini ve geçmişlerini korurlar. Pro veya Team planı gerekir."
+    },
+    "empty": {
+      "title": "Kayıtlı profil yok",
+      "hint": "Bir profil seçin, bot onu gece boyunca uzak bir makinede ısıtsın. Bilgisayarınız kapalı olabilir.",
+      "cta": "Profil kaydet"
+    },
+    "tonight": {
+      "label": "Bu gece",
+      "nextRun": "Sonraki çalışma {{time}}",
+      "dueCount_one": "{{count}} profil sırada",
+      "dueCount_other": "{{count}} profil sırada",
+      "nothingScheduled": "Zamanlanmış bir şey yok"
+    },
+    "lastDay": {
+      "label": "Son 24 saat",
+      "none": "Henüz çalışma yok",
+      "ran_one": "{{count}} çalıştı",
+      "ran_other": "{{count}} çalıştı",
+      "partial_one": "{{count}} kısmi",
+      "partial_other": "{{count}} kısmi",
+      "failed_one": "{{count}} başarısız",
+      "failed_other": "{{count}} başarısız"
+    },
+    "chart": {
+      "machineTime": "Gece başına makine süresi",
+      "minutes": "{{minutes}} dk"
+    },
+    "hours": {
+      "label": "Uzak saatler",
+      "remaining": "{{total}} saatin {{remaining}} saati kaldı",
+      "remainingOf": "/ {{total}} sa",
+      "used": "{{total}} saatin {{used}} saati kullanıldı",
+      "resets": "{{date}} tarihinde sıfırlanır",
+      "exhausted": "Uzak saat kalmadı. Zamanlamalar kayıtlı kalır ve sonraki döngüde devam eder.",
+      "exhaustedOn": "Uzak saat kalmadı. Zamanlamalar kayıtlı kalır ve {{date}} tarihinde devam eder.",
+      "estimate": "Haftada yaklaşık {{hours}} sa · bu döngüde {{remaining}} sa kaldı",
+      "estimateOverBudget": "Haftada yaklaşık {{hours}} sa gerekiyor — yalnızca {{remaining}} sa kaldı",
+      "estimateOnly": "Haftada yaklaşık {{hours}} sa"
+    },
+    "enrolled": {
+      "columnProfile": "Profil",
+      "columnCadence": "Sıklık",
+      "columnTime": "Saat",
+      "columnNextRun": "Sonraki çalışma",
+      "columnLastRun": "Son çalışma",
+      "enrolProfiles": "Profilleri kaydet",
+      "edit": "Zamanlamayı düzenle",
+      "neverRun": "Hiç",
+      "pausedNoHours": "Duraklatıldı — saat kalmadı",
+      "profileMissing": "Bu profil bu bilgisayarda değil."
+    },
+    "schedule": {
+      "empty": "Henüz hiçbir şey zamanlanmadı.",
+      "quietHours_one": "{{count}} boş saat",
+      "quietHours_other": "{{count}} boş saat",
+      "crowded_one": "{{count}} profil aynı anda başlıyor",
+      "crowded_other": "{{count}} profil aynı anda başlıyor",
+      "unenrol": "Cookie Bot'tan çıkar",
+      "unenrolTitle": "{{name}} Cookie Bot'tan çıkarılsın mı?",
+      "unenrolDescription": "Bu gece ısıtma duracak. Geçmiş çalışmalar Etkinlik sekmesinde kalır.",
+      "unenrolled": "Cookie Bot'tan çıkarıldı"
+    },
+    "status": {
+      "provisioning": "Makine hazırlanıyor",
+      "ready": "Profil yükleniyor",
+      "warming": "Isıtılıyor",
+      "finished": "Tamamlanıyor",
+      "failed": "Başarısız"
+    },
+    "runStatus": {
+      "pending": "Sırada",
+      "running": "Çalışıyor",
+      "succeeded": "Tamamlandı",
+      "partial": "Kısmi",
+      "failed": "Başarısız",
+      "skipped": "Atlandı",
+      "cancelled": "Durduruldu"
+    },
+    "running": {
+      "label": "Şu anda çalışıyor",
+      "more": "+{{count}} daha",
+      "stop": "Çalışmayı durdur",
+      "stopped": "Çalışma durduruldu"
+    },
+    "live": {
+      "idle": "Şu anda çalışan bir şey yok",
+      "streamOffline": "Canlı güncellemeler çevrimdışı",
+      "streamOfflineDetail": "Canlı güncellemeler çevrimdışı — yeniden bağlanılıyor. Aşağıdaki çalışmalar güncel olmayabilir.",
+      "unnamedSession": "Uzak oturum",
+      "notStartedYet": "Makine henüz bir başlangıç saati bildirmedi.",
+      "sitesProgress": "{{total}} sitenin {{visited}} tanesi",
+      "sitesUnknown": "Siteler henüz bildirilmedi",
+      "consentHandled_one": "{{count}} çerez izni istemi işlendi",
+      "consentHandled_other": "{{count}} çerez izni istemi işlendi",
+      "consentUnknown": "Çerez izni istemleri henüz bildirilmedi",
+      "billed": "{{duration}} faturalandırıldı",
+      "billedUnknown": "Faturalandırılan süre henüz bildirilmedi",
+      "chunk": "{{total}} bölümden {{index}}."
+    },
+    "history": {
+      "title": "Çalışmalar",
+      "allProfiles": "Tüm profiller",
+      "searchPlaceholder": "Profillerde ara…",
+      "filterAll": "Tüm çalışmalar",
+      "filterComplete": "Tamamlanan",
+      "filterPartial": "Kısmi",
+      "filterFailed": "Başarısız",
+      "columnStarted": "Başlangıç",
+      "columnProfile": "Profil",
+      "columnDuration": "Süre",
+      "columnSites": "Siteler",
+      "columnStatus": "Durum",
+      "columnOperator": "Operatör",
+      "empty": "Henüz çalışma yok.",
+      "noMatch": "Bu filtreye uyan çalışma yok.",
+      "unknownProfile": "Bilinmeyen profil",
+      "outcome": "Neden: {{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "{{count}} siteye ulaşılamadı",
+      "sitesFailed_other": "{{count}} siteye ulaşılamadı",
+      "consentHandled_one": "{{count}} çerez izni istemi işlendi",
+      "consentHandled_other": "{{count}} çerez izni istemi işlendi",
+      "sitesUnknown": "Bildirilmedi"
+    },
+    "duration": {
+      "hm": "{{hours}} sa {{minutes}} dk",
+      "ms": "{{minutes}} dk {{seconds}} sn",
+      "s": "{{seconds}} sn"
+    },
+    "picker": {
+      "title": "Profilleri kaydet",
+      "description": "Botun gece boyunca ısıtacağı profilleri seçin.",
+      "searchPlaceholder": "Profillerde ara…",
+      "noProfiles": "Eşleşen profil yok.",
+      "alreadyEnrolled": "Kayıtlı",
+      "continue_one": "{{count}} ile devam et",
+      "continue_other": "{{count}} ile devam et"
+    },
+    "enrol": {
+      "titleOne": "{{name}} profilini kaydet",
+      "titleCount_one": "{{count}} profili kaydet",
+      "titleCount_other": "{{count}} profili kaydet",
+      "editTitle": "Zamanlamayı düzenle",
+      "description": "Bot, profili uzak bir makinede açar ve listelediğiniz siteleri gezer. Bilgisayarınız kapalı olabilir.",
+      "summaryNightly": "Her gece {{time}} saatinde, her seferinde en fazla {{minutes}} dk çalışır.",
+      "summaryWeeknights": "Pazartesiden cumaya {{time}} saatinde, her seferinde en fazla {{minutes}} dk çalışır.",
+      "summaryAlternate": "Gün aşırı {{time}} saatinde, her seferinde en fazla {{minutes}} dk çalışır.",
+      "summaryCustom_one": "Haftada {{count}} gece {{time}} saatinde, her seferinde en fazla {{minutes}} dk çalışır.",
+      "summaryCustom_other": "Haftada {{count}} gece {{time}} saatinde, her seferinde en fazla {{minutes}} dk çalışır.",
+      "confirm": "Bu gece için kaydet",
+      "confirmSome": "Bu gece {{total}} profilden {{eligible}} tanesini kaydet",
+      "fixFirst": "Önce bunları düzeltin",
+      "saving": "Kaydediliyor…",
+      "saved": "Zamanlama kaydedildi",
+      "enrolled_one": "{{count}} profil kaydedildi",
+      "enrolled_other": "{{count}} profil kaydedildi",
+      "adjust": "Zamanlamayı ayarla",
+      "cadenceLabel": "Sıklık",
+      "cadenceNightly": "Her gece",
+      "cadenceWeeknights": "Hafta içi geceler",
+      "cadenceAlternate": "Gün aşırı",
+      "cadenceCustom_one": "Haftada {{count}} gece",
+      "cadenceCustom_other": "Haftada {{count}} gece",
+      "timeLabel": "Başlangıç saati",
+      "timeHint": "Her profilin parmak izi saat dilimine göre.",
+      "maxMinutesLabel": "En fazla dakika",
+      "intensityLabel": "Derinlik",
+      "sitesLabel": "Siteler",
+      "sitesPlaceholder": "Her satıra bir adres",
+      "sitesHint_one": "{{count}} site. Yalnızca burada listelediğiniz sayfalar ziyaret edilir.",
+      "sitesHint_other": "{{count}} site. Yalnızca burada listelediğiniz sayfalar ziyaret edilir.",
+      "sitesTooMany": "En fazla {{max}} site.",
+      "presetsUnavailable": "Derinlik ön ayarları yüklenemedi. Birazdan tekrar deneyin.",
+      "confirmBulkTitle_one": "{{count}} profil Cookie Bot'a kaydedilsin mi?",
+      "confirmBulkTitle_other": "{{count}} profil Cookie Bot'a kaydedilsin mi?",
+      "confirmBulkDescription_one": "Bu, ortak uzak saatlerinizden bir gecelik çalışma ayırır. Saati ve siteleri sonraki adımda seçersiniz.",
+      "confirmBulkDescription_other": "Bu, ortak uzak saatlerinizden {{count}} gecelik çalışma ayırır. Saati ve siteleri sonraki adımda seçersiniz.",
+      "confirmBulkButton_one": "{{count}} profille devam et",
+      "confirmBulkButton_other": "{{count}} profille devam et",
+      "sitesRequired": "En az bir site ekleyin.",
+      "addSitesFirst": "Önce bir site ekleyin",
+      "presetsMissing": "Derinlik ön ayarları kullanılamıyor"
+    },
+    "preset": {
+      "light": "Hafif",
+      "balanced": "Standart",
+      "deep": "Derin"
+    },
+    "preflight": {
+      "ineligible_one": "{{count}} profil uzaktan çalıştırılamıyor",
+      "ineligible_other": "{{count}} profil uzaktan çalıştırılamıyor",
+      "reasonSync": "Eşitleme kapalı",
+      "reasonEncrypted": "Uçtan uca şifreli",
+      "reasonNoFingerprint": "Kayıtlı işletim sistemi yok",
+      "reasonCrossOs": "{{os}} için oluşturuldu — eşleşen uzak makine yok",
+      "reasonNoExitNode": "Proxy veya VPN yok",
+      "fixSync": "Eşitlemeyi aç",
+      "fixEncrypted": "Eşitleme ayarlarını aç",
+      "fixProxy": "Bir proxy ata",
+      "fixFailed": "Bu düzeltme uygulanamadı.",
+      "exitNodeHint": "Proxy veya VPN olmadan çalışma, filonun kendi veri merkezi adresinden çıkar. Bir barındırma ağından saatlerce gelen trafik, profilin kimliğine hiç ısıtmamaktan daha çok zarar verir."
+    },
+    "conflict": {
+      "title": "{{email}} bu profili zaten {{time}} saatinde ısıtıyor",
+      "detail": "Tek bir profildeki iki zamanlama saatleri iki kez harcar ve çalışma sırasında çakışabilir.",
+      "keepTheirs": "Onun zamanlamasını kullan",
+      "replace": "Benimkiyle değiştir",
+      "replaceForbidden": "Başkasının zamanlamasını yalnızca ekip sahibi veya yöneticisi değiştirebilir.",
+      "askThem": "{{email}} adresini kopyala",
+      "emailCopied": "E-posta kopyalandı",
+      "copyFailed": "Adres kopyalanamadı."
+    },
+    "actionBar": {
+      "enrol": "Cookie Bot'a kaydet",
+      "proRequired": "Cookie Bot için Pro veya Team planı gerekir",
+      "noneEligible": "Seçili profillerin hiçbiri uzaktan ısıtılamaz"
+    },
+    "actions": {
+      "enrol": "Cookie Bot'a kaydet",
+      "editSchedule": "Zamanlamayı düzenle",
+      "runNow": "Şimdi çalıştır",
+      "runStarted": "Çalışma başlatıldı",
+      "viewActivity": "Etkinliği görüntüle",
+      "runNotStarted": "Çalışma başlamadı: {{reason}}"
+    },
+    "state": {
+      "enrolled": "Kayıtlı",
+      "notEnrolled": "Kayıtlı değil",
+      "paused": "Duraklatıldı",
+      "summary": "{{cadence}}, {{time}}",
+      "rowMenu": "{{name}} için Cookie Bot seçenekleri",
+      "blocked": "Çalışamıyor: {{reason}}"
+    },
+    "team": {
+      "title": "Ekip kullanımı",
+      "pooled_one": "{{total}} saatin {{used}} saati, {{count}} koltuk",
+      "pooled_other": "{{total}} saatin {{used}} saati, {{count}} koltuk arasında ortak",
+      "hours": "{{hours}} sa",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "Etkileşimli",
+      "columnMember": "Üye",
+      "columnRuns": "Çalışmalar",
+      "columnHours": "Saat",
+      "columnShare": "Pay",
+      "noActivity": "Bu dönemde uzak oturum yok.",
+      "soloNote": "Şimdilik yalnızca kendi kullanımınız. Havuzun üyelere göre dağılımını görmek için ekip arkadaşlarınızı davet edin.",
+      "runsFailed": "· {{n}} başarısız"
+    },
+    "closeReason": {
+      "stoppedByUser": "Elle durduruldu",
+      "maxDuration": "Süre sınırına ulaşıldı",
+      "other": "Sona erdi: {{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "Planınıza dahil değil",
+      "syncDisabled": "Bu profilde bulut eşitlemesi kapalı",
+      "encryptedSync": "Uçtan uca şifreli eşitleme desteklenmiyor",
+      "proxyRequired": "Bağlı proxy veya VPN yok",
+      "touchFingerprint": "Dokunmatik parmak izleri desteklenmiyor",
+      "platformUnsupported": "Bu profilin sistemini çalıştıran makine yok",
+      "noSites": "Ziyaret edilecek site yok",
+      "quotaExhausted": "Uzak saatler tükendi",
+      "profileLocked": "Profil başka bir yerde açıktı",
+      "noCapacity": "Boş makine yoktu",
+      "managerError": "Filo tarayıcıyı başlatamadı",
+      "budgetExceeded": "Gecenin süresi doldu",
+      "cancelledByUser": "Elle durduruldu",
+      "unknown": "Bilinmeyen neden ({{code}})"
+    }
   }
 }

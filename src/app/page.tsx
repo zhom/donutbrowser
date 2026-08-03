@@ -18,6 +18,7 @@ import {
   ConsistencyWarningDialog,
   isConsistencyWarningSuppressed,
 } from "@/components/consistency-warning-dialog";
+import { CookieBotPage, type CookieBotTab } from "@/components/cookie-bot-page";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
@@ -55,6 +56,7 @@ import { WindowResizeWarningDialog } from "@/components/window-resize-warning-di
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
+import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -66,7 +68,7 @@ import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
-import { getEntitlements } from "@/lib/entitlements";
+import { canUseCookieBot, getEntitlements } from "@/lib/entitlements";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import {
   ONBOARDING_TOUR_CLOSED_EVENT,
@@ -253,6 +255,14 @@ export default function Home() {
   // /v1/profiles/batch/run API gate. Free/starter users see the bulk Run/Stop
   // actions disabled with a Pro badge.
   const automationUnlocked = getEntitlements(cloudUser).browserAutomation;
+  // The rail needs to show a live run from every page, so the shell subscribes
+  // to the shared cookie-bot store too. It is a module singleton, so this costs
+  // one more listener and no extra request. This is also what starts the event
+  // stream for a user who signs in without restarting the app.
+  const { liveSessions: cookieBotLiveSessions } = useCookieBot(
+    canUseCookieBot(cloudUser),
+    cookieBotScopeFor(cloudUser),
+  );
 
   const [selfHostedSyncConfigured, setSelfHostedSyncConfigured] =
     useState(false);
@@ -283,6 +293,9 @@ export default function Home() {
   const [integrationsInitialTab, setIntegrationsInitialTab] = useState<
     "api" | "mcp"
   >("api");
+  const [cookieBotDialogOpen, setCookieBotDialogOpen] = useState(false);
+  const [cookieBotInitialTab, setCookieBotInitialTab] =
+    useState<CookieBotTab>("overview");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
@@ -379,6 +392,7 @@ export default function Home() {
     setIntegrationsDialogOpen(false);
     setImportProfileDialogOpen(false);
     setAccountDialogOpen(false);
+    setCookieBotDialogOpen(false);
 
     setCurrentPage(page);
     switch (page) {
@@ -396,6 +410,9 @@ export default function Home() {
         break;
       case "groups":
         setGroupManagementDialogOpen(true);
+        break;
+      case "cookieBot":
+        setCookieBotDialogOpen(true);
         break;
       case "integrations":
         setIntegrationsDialogOpen(true);
@@ -462,6 +479,19 @@ export default function Home() {
         case "goGroups":
           handleRailNavigate("groups");
           break;
+        case "goCookieBot": {
+          // Mod+B: navigate first time; flip overview↔activity while already
+          // there, matching how Mod+I flips the integrations tabs.
+          if (currentPage === "cookieBot") {
+            setCookieBotInitialTab((cur) =>
+              cur === "overview" ? "activity" : "overview",
+            );
+          } else {
+            setCookieBotInitialTab("overview");
+            handleRailNavigate("cookieBot");
+          }
+          break;
+        }
         case "goIntegrations": {
           // Mod+I: flip api↔mcp tab when already on integrations.
           if (currentPage === "integrations") {
@@ -1636,6 +1666,7 @@ export default function Home() {
           onOpenAbout={() => {
             setAboutDialogOpen(true);
           }}
+          cookieBotRunning={Object.keys(cookieBotLiveSessions).length > 0}
         />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {currentPage === "profiles" && (
@@ -1666,6 +1697,7 @@ export default function Home() {
                 isUpdating={isUpdating}
                 onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
                 onAssignProfilesToGroup={handleAssignProfilesToGroup}
+                onAssignProfilesToProxy={handleAssignProfilesToProxy}
                 selectedGroupId={selectedGroupId}
                 selectedProfiles={selectedProfiles}
                 onSelectedProfilesChange={setSelectedProfiles}
@@ -1783,6 +1815,22 @@ export default function Home() {
               }}
               crossOsUnlocked={crossOsUnlocked}
               subPage={currentPage === "import"}
+            />
+          )}
+
+          {cookieBotDialogOpen && (
+            <CookieBotPage
+              isOpen={cookieBotDialogOpen}
+              onClose={() => {
+                setCookieBotDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "cookieBot"}
+              initialTab={cookieBotInitialTab}
+              profiles={profiles}
+              cloudUser={cloudUser}
+              onOpenProfileSync={handleOpenProfileSyncDialog}
+              onAssignProxy={handleAssignProfilesToProxy}
             />
           )}
 

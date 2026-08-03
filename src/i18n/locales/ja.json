@@ -258,7 +258,8 @@
       "emptyCreate": "プロファイルを作成",
       "emptyImport": "プロファイルをインポート",
       "emptyFilteredTitle": "プロファイルが見つかりません",
-      "emptyFilteredHint": "このグループまたは検索に一致するプロファイルはありません。別のフィルターを試すか、新規作成してください。"
+      "emptyFilteredHint": "このグループまたは検索に一致するプロファイルはありません。別のフィルターを試すか、新規作成してください。",
+      "bot": "ボット"
     },
     "actions": {
       "launch": "起動",
@@ -1851,7 +1852,35 @@
     "vlessConfigInvalid": "VLESS URI が無効です。",
     "xrayUnavailable": "このシステムでは Xray-core を利用できません。",
     "xrayUnsupportedOs": "VLESS には macOS 12 以降が必要です。",
-    "xrayStartFailed": "Xray-core を起動できませんでした。"
+    "xrayStartFailed": "Xray-core を起動できませんでした。",
+    "cloudNotSignedIn": "この機能を使うには Donut Browser アカウントにサインインしてください。",
+    "cloudUnreachable": "Donut Browser のサーバーに接続できませんでした。接続を確認してもう一度お試しください。",
+    "cloudRequestFailed": "リクエストに失敗しました。しばらくしてからもう一度お試しください。",
+    "remoteRateLimited": "リクエストが多すぎます。少し待ってからもう一度お試しください。",
+    "remoteNoCapacity": "現在空いているリモートマシンがありません。数分後にもう一度お試しください。",
+    "remoteNotEntitled": "ご利用のプランにはリモート実行が含まれていません。",
+    "remoteSessionRefused": "リモートマシンがこのセッションを拒否しました。",
+    "remoteSessionNotFound": "そのリモートセッションはすでに存在しません。",
+    "remoteSessionConflict": "このプロファイルはすでに別の場所で開かれています。",
+    "remoteSyncInProgress": "このプロファイルはまだクラウド同期にアップロード中です。同期の完了を待ってからお試しください。",
+    "remoteHoursExhausted": "今月のリモート時間 {{granted}} のうち {{used}} をすべて使い切りました。",
+    "notTeamMember": "どのチームにも所属していません。",
+    "cookieBotNotEntitled": "ご利用のプランには Cookie Bot が含まれていません。",
+    "cookieBotNotEnrolled": "このプロファイルはまだ Cookie Bot 用に設定されていません。",
+    "cookieBotScheduleConflict": "{{email}} がすでにこのプロファイルを {{time}} にウォームアップしています。",
+    "cookieBotRunInProgress": "このプロファイルではすでに実行が進行中です。",
+    "cookieBotRunNotFound": "その実行はすでに存在しません。",
+    "cookieBotInvalidSchedule": "そのスケジュールは無効です。実行時刻、曜日、時間の長さを確認してください。",
+    "cookieBotInvalidTimezone": "{{timezone}} はサーバーが認識できないタイムゾーンです。",
+    "cookieBotInvalidPeriod": "その期間は無効です。2026-08 のような月を指定してください。",
+    "cookieBotSiteLimit": "サイトは {{min}} 件以上 {{max}} 件以下で、それぞれ完全な http または https のアドレスにしてください。",
+    "cookieBotRequiresCloudSync": "先にこのプロファイルのクラウド同期を有効にしてください。リモートマシンが取得する手段が他にありません。",
+    "cookieBotEncryptedSyncUnsupported": "このプロファイルはエンドツーエンド暗号化された同期を使用しており、リモートマシンでは復号できません。通常の同期に切り替えてください。",
+    "cookieBotUnknownPlatform": "このプロファイルには OS が記録されていないため、マシンを割り当てられません。",
+    "cookieBotUnsupportedPlatform": "Cookie Bot は {{platform}} のプロファイルを実行できません。対応しているのは Windows と macOS のプロファイルのみです。",
+    "cookieBotRequiresExitNode": "先にプロキシまたは VPN を設定してください。設定しないと通信がデータセンターのアドレスから出て、プロファイルの信頼性を損ないます。",
+    "unknownCode": "エラーが発生しました: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "このプロファイルはタッチ端末を名乗っており、ボットは操作できません。デスクトップのフィンガープリントをお使いください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1870,7 +1899,9 @@
     },
     "network": "ネットワーク",
     "integrations": "連携",
-    "account": "アカウント"
+    "account": "アカウント",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot — 実行中"
   },
   "pageTitle": {
     "proxies": "ネットワーク",
@@ -1881,7 +1912,8 @@
     "integrations": "連携",
     "account": "アカウント",
     "import": "プロファイルをインポート",
-    "shortcuts": "キーボードショートカット"
+    "shortcuts": "キーボードショートカット",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1956,8 @@
     },
     "tabs": {
       "account": "アカウント",
-      "selfHosted": "セルフホスト"
+      "selfHosted": "セルフホスト",
+      "teamUsage": "チームの使用状況"
     },
     "selfHosted": {
       "title": "セルフホスト同期サーバー",
@@ -1937,7 +1970,8 @@
     },
     "deviceOrdinal": "{{count}} 台中 {{ordinal}} 台目",
     "automationPrimaryOnly": "ブラウザの自動化はプライマリデバイス（デバイス1）でのみ実行できます。ここで使用するには、そのデバイスでサインアウトしてください。",
-    "automationActiveHere": "ブラウザの自動化はこのデバイスで有効です。"
+    "automationActiveHere": "ブラウザの自動化はこのデバイスで有効です。",
+    "viewTeamUsage": "チームの使用状況を表示"
   },
   "shortcutsPage": {
     "title": "キーボードショートカット",
@@ -1970,7 +2004,8 @@
     "goGroups": "グループへ移動",
     "goIntegrations": "統合へ移動",
     "goAccount": "アカウントへ移動",
-    "goSettings": "設定へ移動"
+    "goSettings": "設定へ移動",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "Donut Browser を閉じますか？",
@@ -2102,5 +2137,287 @@
     "matchToProxy": "フィンガープリントをプロキシに合わせる",
     "matching": "調整中…",
     "matchSuccess": "フィンガープリントをプロキシに合わせて更新しました。反映するにはプロファイルを再起動してください。"
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "リモートマシンで夜間にプロファイルをウォームアップします。",
+    "tabs": {
+      "overview": "概要",
+      "schedule": "スケジュール",
+      "activity": "アクティビティ",
+      "team": "チーム"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "Cookie Bot はリモートマシンで夜間にプロファイルをウォームアップするため、お使いのコンピューターを起動していなくても Cookie と履歴が維持されます。Pro または Team プランが必要です。"
+    },
+    "empty": {
+      "title": "登録されたプロファイルはありません",
+      "hint": "プロファイルを選ぶと、ボットが夜間にリモートマシンでウォームアップします。お使いのコンピューターは電源を切っていて構いません。",
+      "cta": "プロファイルを登録"
+    },
+    "tonight": {
+      "label": "今夜",
+      "nextRun": "次回の実行 {{time}}",
+      "dueCount_one": "{{count}} 件のプロファイルが予定",
+      "dueCount_other": "{{count}} 件のプロファイルが予定",
+      "nothingScheduled": "予定はありません"
+    },
+    "lastDay": {
+      "label": "過去 24 時間",
+      "none": "実行はまだありません",
+      "ran_one": "{{count}} 件実行",
+      "ran_other": "{{count}} 件実行",
+      "partial_one": "{{count}} 件が部分完了",
+      "partial_other": "{{count}} 件が部分完了",
+      "failed_one": "{{count}} 件が失敗",
+      "failed_other": "{{count}} 件が失敗"
+    },
+    "chart": {
+      "machineTime": "1 晩あたりのマシン時間",
+      "minutes": "{{minutes}} 分"
+    },
+    "hours": {
+      "label": "リモート時間",
+      "remaining": "{{total}} 時間のうち残り {{remaining}} 時間",
+      "remainingOf": "/ {{total}} 時間",
+      "used": "{{total}} 時間のうち {{used}} 時間を使用",
+      "resets": "{{date}} にリセット",
+      "exhausted": "リモート時間を使い切りました。スケジュールは登録されたままで、次のサイクルで再開します。",
+      "exhaustedOn": "リモート時間を使い切りました。スケジュールは登録されたままで、{{date}} に再開します。",
+      "estimate": "週あたり約 {{hours}} 時間 · 今サイクルの残り {{remaining}} 時間",
+      "estimateOverBudget": "週あたり約 {{hours}} 時間が必要ですが、残りは {{remaining}} 時間のみです",
+      "estimateOnly": "週あたり約 {{hours}} 時間"
+    },
+    "enrolled": {
+      "columnProfile": "プロファイル",
+      "columnCadence": "頻度",
+      "columnTime": "時刻",
+      "columnNextRun": "次回の実行",
+      "columnLastRun": "前回の実行",
+      "enrolProfiles": "プロファイルを登録",
+      "edit": "スケジュールを編集",
+      "neverRun": "なし",
+      "pausedNoHours": "一時停止 — 時間切れ",
+      "profileMissing": "そのプロファイルはこのコンピューターにありません。"
+    },
+    "schedule": {
+      "empty": "まだ何も予定されていません。",
+      "quietHours_one": "空き時間 {{count}} 時間",
+      "quietHours_other": "空き時間 {{count}} 時間",
+      "crowded_one": "{{count}} 件のプロファイルが同時に開始",
+      "crowded_other": "{{count}} 件のプロファイルが同時に開始",
+      "unenrol": "Cookie Bot から削除",
+      "unenrolTitle": "{{name}} を Cookie Bot から削除しますか?",
+      "unenrolDescription": "今夜からウォームアップを停止します。過去の実行はアクティビティに残ります。",
+      "unenrolled": "Cookie Bot から削除しました"
+    },
+    "status": {
+      "provisioning": "マシンを準備中",
+      "ready": "プロファイルを読み込み中",
+      "warming": "ウォームアップ中",
+      "finished": "終了処理中",
+      "failed": "失敗"
+    },
+    "runStatus": {
+      "pending": "待機中",
+      "running": "実行中",
+      "succeeded": "完了",
+      "partial": "部分完了",
+      "failed": "失敗",
+      "skipped": "スキップ",
+      "cancelled": "停止"
+    },
+    "running": {
+      "label": "実行中",
+      "more": "他 {{count}} 件",
+      "stop": "実行を停止",
+      "stopped": "実行を停止しました"
+    },
+    "live": {
+      "idle": "現在実行中のものはありません",
+      "streamOffline": "ライブ更新はオフラインです",
+      "streamOfflineDetail": "ライブ更新はオフラインです。再接続しています。以下の実行は古い可能性があります。",
+      "unnamedSession": "リモートセッション",
+      "notStartedYet": "マシンから開始時刻がまだ報告されていません。",
+      "sitesProgress": "{{total}} サイト中 {{visited}} サイト",
+      "sitesUnknown": "サイトはまだ報告されていません",
+      "consentHandled_one": "同意ダイアログを {{count}} 件処理",
+      "consentHandled_other": "同意ダイアログを {{count}} 件処理",
+      "consentUnknown": "同意ダイアログはまだ報告されていません",
+      "billed": "{{duration}} を課金",
+      "billedUnknown": "課金時間はまだ報告されていません",
+      "chunk": "{{total}} 分割中 {{index}} 番目"
+    },
+    "history": {
+      "title": "実行履歴",
+      "allProfiles": "すべてのプロファイル",
+      "searchPlaceholder": "プロファイルを検索…",
+      "filterAll": "すべての実行",
+      "filterComplete": "完了",
+      "filterPartial": "部分完了",
+      "filterFailed": "失敗",
+      "columnStarted": "開始",
+      "columnProfile": "プロファイル",
+      "columnDuration": "所要時間",
+      "columnSites": "サイト",
+      "columnStatus": "ステータス",
+      "columnOperator": "実行者",
+      "empty": "実行はまだありません。",
+      "noMatch": "このフィルターに一致する実行はありません。",
+      "unknownProfile": "不明なプロファイル",
+      "outcome": "理由: {{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "{{count}} サイトに接続できませんでした",
+      "sitesFailed_other": "{{count}} サイトに接続できませんでした",
+      "consentHandled_one": "同意ダイアログを {{count}} 件処理",
+      "consentHandled_other": "同意ダイアログを {{count}} 件処理",
+      "sitesUnknown": "未報告"
+    },
+    "duration": {
+      "hm": "{{hours}} 時間 {{minutes}} 分",
+      "ms": "{{minutes}} 分 {{seconds}} 秒",
+      "s": "{{seconds}} 秒"
+    },
+    "picker": {
+      "title": "プロファイルを登録",
+      "description": "ボットが夜間にウォームアップするプロファイルを選びます。",
+      "searchPlaceholder": "プロファイルを検索…",
+      "noProfiles": "一致するプロファイルはありません。",
+      "alreadyEnrolled": "登録済み",
+      "continue_one": "{{count}} 件で続行",
+      "continue_other": "{{count}} 件で続行"
+    },
+    "enrol": {
+      "titleOne": "{{name}} を登録",
+      "titleCount_one": "{{count}} 件のプロファイルを登録",
+      "titleCount_other": "{{count}} 件のプロファイルを登録",
+      "editTitle": "スケジュールを編集",
+      "description": "ボットはリモートマシンでプロファイルを開き、指定したサイトを閲覧します。お使いのコンピューターは電源を切っていて構いません。",
+      "summaryNightly": "毎晩 {{time}} に、1 回あたり最大 {{minutes}} 分実行します。",
+      "summaryWeeknights": "月曜から金曜の {{time}} に、1 回あたり最大 {{minutes}} 分実行します。",
+      "summaryAlternate": "1 晩おきに {{time}} に、1 回あたり最大 {{minutes}} 分実行します。",
+      "summaryCustom_one": "週 {{count}} 晩、{{time}} に、1 回あたり最大 {{minutes}} 分実行します。",
+      "summaryCustom_other": "週 {{count}} 晩、{{time}} に、1 回あたり最大 {{minutes}} 分実行します。",
+      "confirm": "今夜から登録",
+      "confirmSome": "今夜は {{total}} 件中 {{eligible}} 件を登録",
+      "fixFirst": "先にこちらを解決してください",
+      "saving": "登録中…",
+      "saved": "スケジュールを保存しました",
+      "enrolled_one": "{{count}} 件のプロファイルを登録しました",
+      "enrolled_other": "{{count}} 件のプロファイルを登録しました",
+      "adjust": "スケジュールを調整",
+      "cadenceLabel": "頻度",
+      "cadenceNightly": "毎晩",
+      "cadenceWeeknights": "平日の夜",
+      "cadenceAlternate": "1 晩おき",
+      "cadenceCustom_one": "週 {{count}} 晩",
+      "cadenceCustom_other": "週 {{count}} 晩",
+      "timeLabel": "開始時刻",
+      "timeHint": "各プロファイルのフィンガープリントのタイムゾーン基準です。",
+      "maxMinutesLabel": "最大分数",
+      "intensityLabel": "深さ",
+      "sitesLabel": "サイト",
+      "sitesPlaceholder": "1 行に 1 つのアドレス",
+      "sitesHint_one": "{{count}} サイト。ここに記載したページのみ閲覧します。",
+      "sitesHint_other": "{{count}} サイト。ここに記載したページのみ閲覧します。",
+      "sitesTooMany": "サイトは最大 {{max}} 件までです。",
+      "presetsUnavailable": "深さのプリセットを読み込めませんでした。しばらくしてからもう一度お試しください。",
+      "confirmBulkTitle_one": "{{count}} 件のプロファイルを Cookie Bot に登録しますか?",
+      "confirmBulkTitle_other": "{{count}} 件のプロファイルを Cookie Bot に登録しますか?",
+      "confirmBulkDescription_one": "共有のリモート時間から夜間の実行を 1 件予約します。時刻とサイトは次の画面で選びます。",
+      "confirmBulkDescription_other": "共有のリモート時間から夜間の実行を {{count}} 件予約します。時刻とサイトは次の画面で選びます。",
+      "confirmBulkButton_one": "{{count}} 件のプロファイルで続行",
+      "confirmBulkButton_other": "{{count}} 件のプロファイルで続行",
+      "sitesRequired": "サイトを 1 件以上追加してください。",
+      "addSitesFirst": "先にサイトを追加してください",
+      "presetsMissing": "深さのプリセットを利用できません"
+    },
+    "preset": {
+      "light": "軽め",
+      "balanced": "標準",
+      "deep": "深め"
+    },
+    "preflight": {
+      "ineligible_one": "{{count}} 件のプロファイルはリモートで実行できません",
+      "ineligible_other": "{{count}} 件のプロファイルはリモートで実行できません",
+      "reasonSync": "同期がオフです",
+      "reasonEncrypted": "エンドツーエンド暗号化",
+      "reasonNoFingerprint": "記録された OS がありません",
+      "reasonCrossOs": "{{os}} 向け — 一致するリモートマシンがありません",
+      "reasonNoExitNode": "プロキシも VPN もありません",
+      "fixSync": "同期をオンにする",
+      "fixEncrypted": "同期設定を開く",
+      "fixProxy": "プロキシを割り当てる",
+      "fixFailed": "その修正を適用できませんでした。",
+      "exitNodeHint": "プロキシも VPN もない場合、通信はマシン群自身のデータセンターのアドレスから出ていきます。ホスティングネットワークからの長時間のトラフィックは、ウォームアップしない場合よりもプロファイルの信頼性を損ないます。"
+    },
+    "conflict": {
+      "title": "{{email}} がすでにこのプロファイルを {{time}} にウォームアップしています",
+      "detail": "1 つのプロファイルに 2 つのスケジュールがあると時間が二重に消費され、実行中に衝突する可能性があります。",
+      "keepTheirs": "相手のスケジュールを使う",
+      "replace": "自分のもので置き換える",
+      "replaceForbidden": "他の人のスケジュールを変更できるのはチームのオーナーまたは管理者のみです。",
+      "askThem": "{{email}} をコピー",
+      "emailCopied": "メールアドレスをコピーしました",
+      "copyFailed": "アドレスをコピーできませんでした。"
+    },
+    "actionBar": {
+      "enrol": "Cookie Bot に登録",
+      "proRequired": "Cookie Bot には Pro または Team プランが必要です",
+      "noneEligible": "選択したプロファイルはいずれもリモートでウォームアップできません"
+    },
+    "actions": {
+      "enrol": "Cookie Bot に登録",
+      "editSchedule": "スケジュールを編集",
+      "runNow": "今すぐ実行",
+      "runStarted": "実行を開始しました",
+      "viewActivity": "アクティビティを表示",
+      "runNotStarted": "実行を開始できませんでした: {{reason}}"
+    },
+    "state": {
+      "enrolled": "登録済み",
+      "notEnrolled": "未登録",
+      "paused": "一時停止",
+      "summary": "{{cadence}} {{time}}",
+      "rowMenu": "{{name}} の Cookie Bot オプション",
+      "blocked": "実行できません: {{reason}}"
+    },
+    "team": {
+      "title": "チームの使用状況",
+      "pooled_one": "{{total}} 時間中 {{used}} 時間、{{count}} シート",
+      "pooled_other": "{{total}} 時間中 {{used}} 時間を {{count}} シートで共有",
+      "hours": "{{hours}} 時間",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "対話操作",
+      "columnMember": "メンバー",
+      "columnRuns": "実行回数",
+      "columnHours": "時間",
+      "columnShare": "割合",
+      "noActivity": "この期間にリモートセッションはありません。",
+      "soloNote": "今のところ表示されるのはご自身の使用状況のみです。メンバーごとの内訳を見るにはチームメイトを招待してください。",
+      "runsFailed": "・失敗 {{n}} 件"
+    },
+    "closeReason": {
+      "stoppedByUser": "手動で停止しました",
+      "maxDuration": "時間の上限に達しました",
+      "other": "終了: {{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "現在のプランには含まれていません",
+      "syncDisabled": "このプロファイルはクラウド同期がオフです",
+      "encryptedSync": "エンドツーエンド暗号化された同期には対応していません",
+      "proxyRequired": "プロキシまたは VPN が設定されていません",
+      "touchFingerprint": "タッチ端末のフィンガープリントには対応していません",
+      "platformUnsupported": "このプロファイルの OS を実行できるマシンがありません",
+      "noSites": "訪問するサイトがありません",
+      "quotaExhausted": "リモート時間を使い切りました",
+      "profileLocked": "プロファイルが別の場所で開かれていました",
+      "noCapacity": "空きマシンがありませんでした",
+      "managerError": "フリートがブラウザーを起動できませんでした",
+      "budgetExceeded": "その晩の持ち時間を使い切りました",
+      "cancelledByUser": "手動で停止しました",
+      "unknown": "不明な理由 ({{code}})"
+    }
   }
 }

@@ -258,7 +258,8 @@
       "emptyCreate": "Criar perfil",
       "emptyImport": "Importar perfis",
       "emptyFilteredTitle": "Nenhum perfil encontrado",
-      "emptyFilteredHint": "Nenhum perfil corresponde a este grupo ou pesquisa. Tente outro filtro ou crie um novo."
+      "emptyFilteredHint": "Nenhum perfil corresponde a este grupo ou pesquisa. Tente outro filtro ou crie um novo.",
+      "bot": "Bot"
     },
     "actions": {
       "launch": "Iniciar",
@@ -421,6 +422,7 @@
       "deleteProxy": "Excluir proxy",
       "cannotDelete_one": "Não é possível excluir: em uso por {{count}} perfil",
       "cannotDelete_other": "Não é possível excluir: em uso por {{count}} perfis",
+      "cannotDelete_many": "Não é possível excluir: em uso por {{count}} perfis",
       "syncEnabled": "Sincronização ativada",
       "syncDisabled": "Sincronização desativada",
       "updateSyncFailed": "Falha ao atualizar a sincronização",
@@ -814,6 +816,7 @@
       "selectedCount_plural": "{{count}} cookies selecionados",
       "dialogDescription_one": "Copiar cookies de um perfil de origem para {{count}} perfil selecionado.",
       "dialogDescription_other": "Copiar cookies de um perfil de origem para {{count}} perfis selecionados.",
+      "dialogDescription_many": "Copiar cookies de um perfil de origem para {{count}} perfis selecionados.",
       "sourceProfile": "Perfil de origem",
       "sourcePlaceholder": "Selecione um perfil para copiar os cookies",
       "running": "(em execução)",
@@ -832,6 +835,7 @@
       "failedMessage": "Falha ao copiar cookies: {{error}}",
       "copyButton_one": "Copiar {{count}} cookie",
       "copyButton_other": "Copiar {{count}} cookies",
+      "copyButton_many": "Copiar {{count}} cookies",
       "copyButtonEmpty": "Copiar cookies"
     },
     "success": "Cookies copiados com sucesso",
@@ -1403,6 +1407,7 @@
       "deleteVpn": "Excluir VPN",
       "cannotDelete_one": "Não é possível excluir: em uso por {{count}} perfil",
       "cannotDelete_other": "Não é possível excluir: em uso por {{count}} perfis",
+      "cannotDelete_many": "Não é possível excluir: em uso por {{count}} perfis",
       "syncCannotDisable": "A sincronização não pode ser desativada enquanto esta VPN estiver em uso por perfis sincronizados",
       "deleteSuccess": "VPN excluída com sucesso",
       "deleteFailed": "Falha ao excluir VPN",
@@ -1481,6 +1486,7 @@
     "loading": "Carregando grupos...",
     "profileCount_one": "{{count}} perfil",
     "profileCount_other": "{{count}} perfis",
+    "profileCount_many": "{{count}} perfis",
     "groupsLabel": "Grupos",
     "profilesCol": "Perfis",
     "syncCannotDisable": "A sincronização não pode ser desativada enquanto este grupo estiver em uso por perfis sincronizados",
@@ -1498,6 +1504,7 @@
     "title": "Atribuir proxy / VPN",
     "description_one": "Atribuir um proxy ou VPN a {{count}} perfil selecionado.",
     "description_other": "Atribuir um proxy ou VPN a {{count}} perfis selecionados.",
+    "description_many": "Atribuir um proxy ou VPN a {{count}} perfis selecionados.",
     "selectLabel": "Proxy / VPN",
     "placeholder": "Selecione um proxy ou VPN",
     "noProxy": "Sem proxy / VPN",
@@ -1517,6 +1524,7 @@
     "title": "Atribuir grupo",
     "description_one": "Atribuir um grupo a {{count}} perfil selecionado.",
     "description_other": "Atribuir um grupo a {{count}} perfis selecionados.",
+    "description_many": "Atribuir um grupo a {{count}} perfis selecionados.",
     "selectLabel": "Grupo",
     "placeholder": "Selecione um grupo",
     "noGroup": "Sem grupo (Padrão)",
@@ -1851,7 +1859,35 @@
     "vlessConfigInvalid": "O URI VLESS é inválido.",
     "xrayUnavailable": "O Xray-core não está disponível neste sistema.",
     "xrayUnsupportedOs": "O VLESS requer macOS 12 ou posterior.",
-    "xrayStartFailed": "Não foi possível iniciar o Xray-core."
+    "xrayStartFailed": "Não foi possível iniciar o Xray-core.",
+    "cloudNotSignedIn": "Entre na sua conta do Donut Browser para usar este recurso.",
+    "cloudUnreachable": "Não foi possível contatar os servidores do Donut Browser. Verifique sua conexão e tente novamente.",
+    "cloudRequestFailed": "A solicitação falhou. Tente novamente em instantes.",
+    "remoteRateLimited": "Solicitações demais. Aguarde um momento e tente novamente.",
+    "remoteNoCapacity": "Nenhuma máquina remota está livre agora. Tente novamente em alguns minutos.",
+    "remoteNotEntitled": "Seu plano não inclui execução remota.",
+    "remoteSessionRefused": "A máquina remota recusou esta sessão.",
+    "remoteSessionNotFound": "Essa sessão remota não existe mais.",
+    "remoteSessionConflict": "Este perfil já está aberto em outro lugar.",
+    "remoteSyncInProgress": "Este perfil ainda está sendo enviado para a sincronização na nuvem. Aguarde a conclusão e tente novamente.",
+    "remoteHoursExhausted": "Você usou as {{used}} de suas {{granted}} horas remotas deste mês.",
+    "notTeamMember": "Você não faz parte de nenhuma equipe.",
+    "cookieBotNotEntitled": "Seu plano não inclui o Cookie Bot.",
+    "cookieBotNotEnrolled": "Este perfil ainda não está configurado para o Cookie Bot.",
+    "cookieBotScheduleConflict": "{{email}} já aquece este perfil às {{time}}.",
+    "cookieBotRunInProgress": "Já há uma execução em andamento para este perfil.",
+    "cookieBotRunNotFound": "Essa execução não existe mais.",
+    "cookieBotInvalidSchedule": "Essa agenda não é válida. Verifique o horário, os dias e a duração.",
+    "cookieBotInvalidTimezone": "{{timezone}} não é um fuso horário reconhecido pelo servidor.",
+    "cookieBotInvalidPeriod": "Esse período não é válido. Use um mês como 2026-08.",
+    "cookieBotSiteLimit": "Introduza entre {{min}} e {{max}} sites, cada um com um endereço http ou https completo.",
+    "cookieBotRequiresCloudSync": "Ative primeiro a sincronização na nuvem para este perfil: a máquina remota não tem outra forma de obtê-lo.",
+    "cookieBotEncryptedSyncUnsupported": "Este perfil usa sincronização criptografada de ponta a ponta, que a máquina remota não consegue descriptografar. Mude para a sincronização normal.",
+    "cookieBotUnknownPlatform": "Este perfil não tem sistema operacional registrado, então não é possível associá-lo a uma máquina.",
+    "cookieBotUnsupportedPlatform": "O Cookie Bot não pode executar perfis de {{platform}}. Somente perfis Windows e macOS são suportados.",
+    "cookieBotRequiresExitNode": "Anexe primeiro um proxy ou VPN. Sem isso, a execução sairia de um endereço de data center, o que prejudica a identidade do perfil.",
+    "unknownCode": "Algo deu errado: {{code}}",
+    "cookieBotTouchFingerprintUnsupported": "Este perfil declara um dispositivo de toque, que o bot não consegue controlar. Use uma impressão digital de computador."
   },
   "rail": {
     "profiles": "Perfis",
@@ -1870,7 +1906,9 @@
     },
     "network": "Rede",
     "integrations": "Integrações",
-    "account": "Conta"
+    "account": "Conta",
+    "cookieBot": "Cookie Bot",
+    "cookieBotRunning": "Cookie Bot: em execução agora"
   },
   "pageTitle": {
     "proxies": "Rede",
@@ -1881,7 +1919,8 @@
     "integrations": "Integrações",
     "account": "Conta",
     "import": "Importar perfil",
-    "shortcuts": "Atalhos de teclado"
+    "shortcuts": "Atalhos de teclado",
+    "cookieBot": "Cookie Bot"
   },
   "encryption": {
     "required": {
@@ -1924,7 +1963,8 @@
     },
     "tabs": {
       "account": "Conta",
-      "selfHosted": "Auto-hospedado"
+      "selfHosted": "Auto-hospedado",
+      "teamUsage": "Uso da equipe"
     },
     "selfHosted": {
       "title": "Servidor de sincronização auto-hospedado",
@@ -1937,7 +1977,8 @@
     },
     "deviceOrdinal": "{{ordinal}} de {{count}}",
     "automationPrimaryOnly": "A automação do navegador funciona apenas no seu dispositivo principal (Dispositivo 1). Saia da conta nele para usá-la aqui.",
-    "automationActiveHere": "A automação do navegador está ativa neste dispositivo."
+    "automationActiveHere": "A automação do navegador está ativa neste dispositivo.",
+    "viewTeamUsage": "Ver o uso da equipe"
   },
   "shortcutsPage": {
     "title": "Atalhos de teclado",
@@ -1970,7 +2011,8 @@
     "goGroups": "Ir para Grupos",
     "goIntegrations": "Ir para Integrações",
     "goAccount": "Ir para Conta",
-    "goSettings": "Ir para Configurações"
+    "goSettings": "Ir para Configurações",
+    "goCookieBot": "Cookie Bot"
   },
   "closeConfirm": {
     "title": "Fechar Donut Browser?",
@@ -2102,5 +2144,307 @@
     "matchToProxy": "Ajustar impressão ao proxy",
     "matching": "Ajustando…",
     "matchSuccess": "Impressão digital atualizada para corresponder ao proxy. Reinicie o perfil para aplicar."
+  },
+  "cookieBot": {
+    "title": "Cookie Bot",
+    "description": "Aquecimento noturno de perfis em uma máquina remota.",
+    "tabs": {
+      "overview": "Visão geral",
+      "schedule": "Agenda",
+      "activity": "Atividade",
+      "team": "Equipe"
+    },
+    "locked": {
+      "title": "Cookie Bot",
+      "hint": "O Cookie Bot aquece seus perfis durante a noite em uma máquina remota, para que mantenham os cookies e o histórico sem o seu computador ligado. Requer um plano Pro ou Team."
+    },
+    "empty": {
+      "title": "Nenhum perfil inscrito",
+      "hint": "Escolha um perfil e o bot o aquece durante a noite em uma máquina remota. Seu computador pode ficar desligado.",
+      "cta": "Inscrever um perfil"
+    },
+    "tonight": {
+      "label": "Hoje à noite",
+      "nextRun": "Próxima execução {{time}}",
+      "dueCount_one": "{{count}} perfil pendente",
+      "dueCount_other": "{{count}} perfis pendentes",
+      "dueCount_many": "{{count}} perfis pendentes",
+      "nothingScheduled": "Nada agendado"
+    },
+    "lastDay": {
+      "label": "Últimas 24 horas",
+      "none": "Ainda sem execuções",
+      "ran_one": "{{count}} executado",
+      "ran_other": "{{count}} executados",
+      "ran_many": "{{count}} executados",
+      "partial_one": "{{count}} parcial",
+      "partial_other": "{{count}} parciais",
+      "partial_many": "{{count}} parciais",
+      "failed_one": "{{count}} com falha",
+      "failed_other": "{{count}} com falha",
+      "failed_many": "{{count}} com falha"
+    },
+    "chart": {
+      "machineTime": "Tempo de máquina por noite",
+      "minutes": "{{minutes}} min"
+    },
+    "hours": {
+      "label": "Horas remotas",
+      "remaining": "Restam {{remaining}} h de {{total}}",
+      "remainingOf": "de {{total}} h",
+      "used": "{{used}} de {{total}} h usadas",
+      "resets": "Renova em {{date}}",
+      "exhausted": "Sem horas remotas restantes. As agendas continuam inscritas e retomam no próximo ciclo.",
+      "exhaustedOn": "Sem horas remotas restantes. As agendas continuam inscritas e retomam em {{date}}.",
+      "estimate": "Cerca de {{hours}} h por semana · restam {{remaining}} h neste ciclo",
+      "estimateOverBudget": "Precisa de cerca de {{hours}} h por semana: restam apenas {{remaining}} h",
+      "estimateOnly": "Cerca de {{hours}} h por semana"
+    },
+    "enrolled": {
+      "columnProfile": "Perfil",
+      "columnCadence": "Frequência",
+      "columnTime": "Horário",
+      "columnNextRun": "Próxima execução",
+      "columnLastRun": "Última execução",
+      "enrolProfiles": "Inscrever perfis",
+      "edit": "Editar agenda",
+      "neverRun": "Nunca",
+      "pausedNoHours": "Pausado: sem horas",
+      "profileMissing": "Esse perfil não está neste computador."
+    },
+    "schedule": {
+      "empty": "Ainda não há nada agendado.",
+      "quietHours_one": "{{count}} hora livre",
+      "quietHours_other": "{{count}} horas livres",
+      "quietHours_many": "{{count}} horas livres",
+      "crowded_one": "{{count}} perfil começa ao mesmo tempo",
+      "crowded_other": "{{count}} perfis começam ao mesmo tempo",
+      "crowded_many": "{{count}} perfis começam ao mesmo tempo",
+      "unenrol": "Remover do Cookie Bot",
+      "unenrolTitle": "Remover {{name}} do Cookie Bot?",
+      "unenrolDescription": "Ele deixa de aquecer hoje à noite. As execuções anteriores permanecem em Atividade.",
+      "unenrolled": "Removido do Cookie Bot"
+    },
+    "status": {
+      "provisioning": "Preparando uma máquina",
+      "ready": "Carregando o perfil",
+      "warming": "Aquecendo",
+      "finished": "Finalizando",
+      "failed": "Com falha"
+    },
+    "runStatus": {
+      "pending": "Na fila",
+      "running": "Em execução",
+      "succeeded": "Concluída",
+      "partial": "Parcial",
+      "failed": "Com falha",
+      "skipped": "Ignorada",
+      "cancelled": "Interrompida"
+    },
+    "running": {
+      "label": "Em execução agora",
+      "more": "+{{count}} mais",
+      "stop": "Parar a execução",
+      "stopped": "Execução interrompida"
+    },
+    "live": {
+      "idle": "Nada em execução no momento",
+      "streamOffline": "As atualizações ao vivo estão offline",
+      "streamOfflineDetail": "As atualizações ao vivo estão offline; reconectando. As execuções abaixo podem estar desatualizadas.",
+      "unnamedSession": "Sessão remota",
+      "notStartedYet": "A máquina ainda não informou um horário de início.",
+      "sitesProgress": "{{visited}} de {{total}} sites",
+      "sitesUnknown": "Sites ainda não informados",
+      "consentHandled_one": "{{count}} aviso de consentimento tratado",
+      "consentHandled_other": "{{count}} avisos de consentimento tratados",
+      "consentHandled_many": "{{count}} avisos de consentimento tratados",
+      "consentUnknown": "Avisos de consentimento ainda não informados",
+      "billed": "{{duration}} cobrados",
+      "billedUnknown": "Tempo cobrado ainda não informado",
+      "chunk": "Parte {{index}} de {{total}}"
+    },
+    "history": {
+      "title": "Execuções",
+      "allProfiles": "Todos os perfis",
+      "searchPlaceholder": "Pesquisar perfis…",
+      "filterAll": "Todas as execuções",
+      "filterComplete": "Concluídas",
+      "filterPartial": "Parciais",
+      "filterFailed": "Com falha",
+      "columnStarted": "Início",
+      "columnProfile": "Perfil",
+      "columnDuration": "Duração",
+      "columnSites": "Sites",
+      "columnStatus": "Status",
+      "columnOperator": "Operador",
+      "empty": "Ainda sem execuções.",
+      "noMatch": "Nenhuma execução corresponde a este filtro.",
+      "unknownProfile": "Perfil desconhecido",
+      "outcome": "Motivo: {{reason}}",
+      "sitesVisited": "{{visited}}/{{total}}",
+      "sitesFailed_one": "Não foi possível acessar {{count}} site",
+      "sitesFailed_other": "Não foi possível acessar {{count}} sites",
+      "sitesFailed_many": "Não foi possível acessar {{count}} sites",
+      "consentHandled_one": "{{count}} aviso de consentimento tratado",
+      "consentHandled_other": "{{count}} avisos de consentimento tratados",
+      "consentHandled_many": "{{count}} avisos de consentimento tratados",
+      "sitesUnknown": "Sem dados"
+    },
+    "duration": {
+      "hm": "{{hours}} h {{minutes}} min",
+      "ms": "{{minutes}} min {{seconds}} s",
+      "s": "{{seconds}} s"
+    },
+    "picker": {
+      "title": "Inscrever perfis",
+      "description": "Escolha os perfis que o bot deve aquecer durante a noite.",
+      "searchPlaceholder": "Pesquisar perfis…",
+      "noProfiles": "Nenhum perfil corresponde.",
+      "alreadyEnrolled": "Inscrito",
+      "continue_one": "Continuar com {{count}}",
+      "continue_other": "Continuar com {{count}}",
+      "continue_many": "Continuar com {{count}}"
+    },
+    "enrol": {
+      "titleOne": "Inscrever {{name}}",
+      "titleCount_one": "Inscrever {{count}} perfil",
+      "titleCount_other": "Inscrever {{count}} perfis",
+      "titleCount_many": "Inscrever {{count}} perfis",
+      "editTitle": "Editar agenda",
+      "description": "O bot abre o perfil em uma máquina remota e navega pelos sites que você listar. Seu computador pode ficar desligado.",
+      "summaryNightly": "Executa toda noite às {{time}}, até {{minutes}} min por vez.",
+      "summaryWeeknights": "Executa de segunda a sexta às {{time}}, até {{minutes}} min por vez.",
+      "summaryAlternate": "Executa em noites alternadas às {{time}}, até {{minutes}} min por vez.",
+      "summaryCustom_one": "Executa {{count}} noite por semana às {{time}}, até {{minutes}} min por vez.",
+      "summaryCustom_other": "Executa {{count}} noites por semana às {{time}}, até {{minutes}} min por vez.",
+      "summaryCustom_many": "Executa {{count}} noites por semana às {{time}}, até {{minutes}} min por vez.",
+      "confirm": "Inscrever para hoje à noite",
+      "confirmSome": "Inscrever {{eligible}} de {{total}} hoje à noite",
+      "fixFirst": "Corrija isto primeiro",
+      "saving": "Inscrevendo…",
+      "saved": "Agenda salva",
+      "enrolled_one": "{{count}} perfil inscrito",
+      "enrolled_other": "{{count}} perfis inscritos",
+      "enrolled_many": "{{count}} perfis inscritos",
+      "adjust": "Ajustar a agenda",
+      "cadenceLabel": "Frequência",
+      "cadenceNightly": "Toda noite",
+      "cadenceWeeknights": "Noites de semana",
+      "cadenceAlternate": "Noites alternadas",
+      "cadenceCustom_one": "{{count}} noite por semana",
+      "cadenceCustom_other": "{{count}} noites por semana",
+      "cadenceCustom_many": "{{count}} noites por semana",
+      "timeLabel": "Horário de início",
+      "timeHint": "No fuso horário da impressão digital de cada perfil.",
+      "maxMinutesLabel": "Minutos máximos",
+      "intensityLabel": "Profundidade",
+      "sitesLabel": "Sites",
+      "sitesPlaceholder": "Um endereço por linha",
+      "sitesHint_one": "{{count}} site. Somente as páginas listadas aqui são visitadas.",
+      "sitesHint_other": "{{count}} sites. Somente as páginas listadas aqui são visitadas.",
+      "sitesHint_many": "{{count}} sites. Somente as páginas listadas aqui são visitadas.",
+      "sitesTooMany": "No máximo {{max}} sites.",
+      "presetsUnavailable": "Não foi possível carregar as predefinições de profundidade. Tente novamente em instantes.",
+      "confirmBulkTitle_one": "Inscrever {{count}} perfil no Cookie Bot?",
+      "confirmBulkTitle_other": "Inscrever {{count}} perfis no Cookie Bot?",
+      "confirmBulkTitle_many": "Inscrever {{count}} perfis no Cookie Bot?",
+      "confirmBulkDescription_one": "Reserva uma execução noturna nas suas horas remotas compartilhadas. Você escolhe o horário e os sites em seguida.",
+      "confirmBulkDescription_other": "Reservam {{count}} execuções noturnas nas suas horas remotas compartilhadas. Você escolhe o horário e os sites em seguida.",
+      "confirmBulkDescription_many": "Reservam {{count}} execuções noturnas nas suas horas remotas compartilhadas. Você escolhe o horário e os sites em seguida.",
+      "confirmBulkButton_one": "Continuar com {{count}} perfil",
+      "confirmBulkButton_other": "Continuar com {{count}} perfis",
+      "confirmBulkButton_many": "Continuar com {{count}} perfis",
+      "sitesRequired": "Adicione pelo menos um site.",
+      "addSitesFirst": "Adicione um site primeiro",
+      "presetsMissing": "Predefinições de profundidade indisponíveis"
+    },
+    "preset": {
+      "light": "Leve",
+      "balanced": "Padrão",
+      "deep": "Profunda"
+    },
+    "preflight": {
+      "ineligible_one": "{{count}} perfil não pode ser executado remotamente",
+      "ineligible_other": "{{count}} perfis não podem ser executados remotamente",
+      "ineligible_many": "{{count}} perfis não podem ser executados remotamente",
+      "reasonSync": "A sincronização está desativada",
+      "reasonEncrypted": "Criptografado de ponta a ponta",
+      "reasonNoFingerprint": "Sem sistema operacional registrado",
+      "reasonCrossOs": "Criado para {{os}}: nenhuma máquina remota corresponde",
+      "reasonNoExitNode": "Sem proxy nem VPN",
+      "fixSync": "Ativar a sincronização",
+      "fixEncrypted": "Abrir as configurações de sincronização",
+      "fixProxy": "Anexar um proxy",
+      "fixFailed": "Não foi possível aplicar essa correção.",
+      "exitNodeHint": "Sem proxy nem VPN, a execução sai pelo próprio endereço do data center da frota. Horas de tráfego vindo de uma rede de hospedagem danificam a identidade do perfil mais do que não aquecê-lo."
+    },
+    "conflict": {
+      "title": "{{email}} já aquece este perfil às {{time}}",
+      "detail": "Duas agendas no mesmo perfil gastam horas em dobro e podem colidir durante a execução.",
+      "keepTheirs": "Usar a agenda dessa pessoa",
+      "replace": "Substituir pela minha",
+      "replaceForbidden": "Somente o proprietário ou um administrador da equipe pode alterar a agenda de outra pessoa.",
+      "askThem": "Copiar {{email}}",
+      "emailCopied": "E-mail copiado",
+      "copyFailed": "Não foi possível copiar o endereço."
+    },
+    "actionBar": {
+      "enrol": "Inscrever no Cookie Bot",
+      "proRequired": "O Cookie Bot requer um plano Pro ou Team",
+      "noneEligible": "Nenhum dos perfis selecionados pode ser aquecido remotamente"
+    },
+    "actions": {
+      "enrol": "Inscrever no Cookie Bot",
+      "editSchedule": "Editar agenda",
+      "runNow": "Executar agora",
+      "runStarted": "Execução iniciada",
+      "viewActivity": "Ver a atividade",
+      "runNotStarted": "A execução não começou: {{reason}}"
+    },
+    "state": {
+      "enrolled": "Inscrito",
+      "notEnrolled": "Não inscrito",
+      "paused": "Pausado",
+      "summary": "{{cadence}} às {{time}}",
+      "rowMenu": "Opções do Cookie Bot para {{name}}",
+      "blocked": "Não pode executar: {{reason}}"
+    },
+    "team": {
+      "title": "Uso da equipe",
+      "pooled_one": "{{used}} de {{total}} h, {{count}} assento",
+      "pooled_other": "{{used}} de {{total}} h compartilhadas entre {{count}} assentos",
+      "pooled_many": "{{used}} de {{total}} h compartilhadas entre {{count}} assentos",
+      "hours": "{{hours}} h",
+      "legendBot": "Cookie Bot",
+      "legendInteractive": "Interativo",
+      "columnMember": "Membro",
+      "columnRuns": "Execuções",
+      "columnHours": "Horas",
+      "columnShare": "Parcela",
+      "noActivity": "Nenhuma sessão remota neste período.",
+      "soloNote": "Por enquanto, apenas o seu uso. Convide colegas para ver a divisão por membro.",
+      "runsFailed": "· {{n}} com falha"
+    },
+    "closeReason": {
+      "stoppedByUser": "Parado à mão",
+      "maxDuration": "Atingiu o limite de tempo",
+      "other": "Terminou: {{reason}}"
+    },
+    "outcome": {
+      "notEntitled": "Não está incluído no seu plano",
+      "syncDisabled": "A sincronização está desligada neste perfil",
+      "encryptedSync": "A sincronização com criptografia ponta a ponta não é suportada",
+      "proxyRequired": "Sem proxy nem VPN associado",
+      "touchFingerprint": "Impressões digitais de toque não são suportadas",
+      "platformUnsupported": "Nenhuma máquina executa o sistema deste perfil",
+      "noSites": "Nenhum site para visitar",
+      "quotaExhausted": "Horas remotas esgotadas",
+      "profileLocked": "O perfil estava aberto noutro lugar",
+      "noCapacity": "Nenhuma máquina estava livre",
+      "managerError": "A frota não conseguiu iniciar o navegador",
+      "budgetExceeded": "O tempo previsto para a noite acabou",
+      "cancelledByUser": "Parado à mão",
+      "unknown": "Motivo desconhecido ({{code}})"
+    }
   }
 }
