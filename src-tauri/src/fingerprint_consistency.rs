@@ -1,11 +1,15 @@
-//! Launch-time consistency check: resolve the proxy's exit IP, geolocate it
-//! with the bundled MaxMind database (the same source the fingerprint generator
-//! uses), then compare its timezone and country against the profile
-//! fingerprint's timezone and language. A mismatch (e.g. a US fingerprint
-//! behind a German exit IP) is a strong anti-bot tell even though the real
-//! device never leaks — so we warn the user after launch and offer to match the
-//! fingerprint to the exit. Launches never rewrite the fingerprint silently, so
-//! a real mismatch always surfaces here.
+//! Measures a proxy's exit node and compares it to a profile's fingerprint.
+//!
+//! Resolve the exit IP through the upstream, geolocate it with the bundled
+//! MaxMind database (the same source the fingerprint generator uses), then
+//! compare its timezone and country against the fingerprint's timezone and
+//! language. A mismatch (e.g. a US fingerprint behind a German exit IP) is a
+//! strong anti-bot tell even though the real device never leaks.
+//!
+//! This module only measures. Deciding what a mismatch *means* for a launch —
+//! block, warn, or ignore — belongs to `launch_gate`, which calls
+//! `probe_and_check_consistency` before the browser is spawned. Launches never
+//! rewrite the fingerprint silently, so a real mismatch always surfaces.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -19,18 +23,66 @@ use crate::proxy_manager::PROXY_MANAGER;
 /// on every launch is wasteful.
 const EXIT_CACHE_TTL_SECS: u64 = 30 * 60;
 
+/// Ceiling on a single exit probe. `fetch_public_ip` races six endpoints with
+/// a 10s timeout each, which is fine for a background check but far longer
+/// than a user will wait staring at a launch that has not started yet.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
 #[derive(Clone)]
 struct CachedExit {
   fetched_at: u64,
-  /// The proxy URL this exit was measured through. Editing a stored proxy keeps
+  /// The endpoint this exit was measured through. Editing a stored proxy keeps
   /// its id, so without this an entry outlives the endpoint it describes: the
   /// check would compare a re-generated fingerprint against the *old* exit and
   /// either warn about a correct profile or — worse — call a genuinely
   /// mismatched one consistent, which is exactly the tell it exists to catch.
-  proxy_url: String,
+  ///
+  /// Never a loopback URL: the Xray/VPN workers a launch spins up get a fresh
+  /// random port and credentials each time, so keying on those would miss on
+  /// every relaunch and re-probe forever.
+  identity: String,
   timezone: Option<String>,
   country_code: Option<String>,
   ip: Option<String>,
+}
+
+/// Identity of the exit a profile routes through, stable across worker
+/// restarts.
+///
+/// `scope` keys the cache; `identity` detects that the endpoint behind that
+/// key changed. Cloud-derived proxies inject a per-profile sticky-session id,
+/// so two profiles sharing one stored proxy correctly get different identities
+/// and never inherit each other's verdict.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExitCacheKey {
+  pub scope: String,
+  pub identity: String,
+}
+
+/// Resolve the cache identity from the profile's *stored* configuration.
+///
+/// Deliberately not derived from the normalized upstream the launcher passes
+/// to the probe: for VLESS and VPN that upstream is a loopback worker whose
+/// port and credentials are regenerated per launch.
+pub fn exit_cache_key(profile: &BrowserProfile) -> Option<ExitCacheKey> {
+  if let Some(proxy_id) = &profile.proxy_id {
+    let settings = PROXY_MANAGER
+      .resolve_proxy_for_profile(proxy_id, &profile.id.to_string())
+      .or_else(|| PROXY_MANAGER.get_proxy_settings_by_id(proxy_id))?;
+    // build_proxy_url returns the VLESS URI verbatim for vless proxies, so one
+    // call covers every transport.
+    return Some(ExitCacheKey {
+      scope: format!("proxy:{proxy_id}"),
+      identity: crate::proxy_manager::ProxyManager::build_proxy_url(&settings),
+    });
+  }
+  if let Some(vpn_id) = &profile.vpn_id {
+    return Some(ExitCacheKey {
+      scope: format!("vpn:{vpn_id}"),
+      identity: vpn_id.clone(),
+    });
+  }
+  None
 }
 
 lazy_static::lazy_static! {
@@ -54,7 +106,7 @@ pub struct ConsistencyResult {
 }
 
 impl ConsistencyResult {
-  fn skip() -> Self {
+  pub fn skip() -> Self {
     Self {
       consistent: true,
       checked: false,
@@ -68,18 +120,15 @@ impl ConsistencyResult {
   }
 }
 
-/// URL for handing this proxy to reqwest. VLESS is reached through the
-/// authenticated loopback Xray-core worker already serving the profile.
-fn proxy_url(settings: &crate::browser::ProxySettings, profile_id: Option<&str>) -> Option<String> {
+/// Whether this upstream can carry a probe request at all.
+///
+/// Shadowsocks and anything else reqwest cannot dial directly is skipped
+/// rather than guessed at.
+fn probe_url(settings: &crate::browser::ProxySettings) -> Option<String> {
   match settings.proxy_type.to_lowercase().as_str() {
     "http" | "https" | "socks4" | "socks5" => Some(
-      crate::proxy_manager::ProxyManager::build_proxy_url(settings),
+      crate::proxy_manager::ProxyManager::build_probe_proxy_url(settings),
     ),
-    "vless" => profile_id
-      .and_then(crate::xray_worker_storage::find_xray_worker_by_profile_id)
-      .map(|worker| {
-        crate::proxy_manager::ProxyManager::build_proxy_url(&worker.local_proxy_settings())
-      }),
     _ => None,
   }
 }
@@ -119,120 +168,174 @@ fn fingerprint_locale(profile: &BrowserProfile) -> (Option<String>, Option<Strin
   (timezone, language)
 }
 
-/// Run the check for a profile. No-ops (consistent, unchecked) when the
-/// profile has no proxy or the exit node can't be reached.
-pub async fn check_profile_consistency(
+/// A mutex whose poison is not fatal.
+///
+/// A panic anywhere under this lock used to brick the check process-wide.
+/// That was tolerable when a failed check only skipped a warning; now a launch
+/// consults it, so a poisoned lock must degrade rather than propagate.
+fn exit_cache() -> std::sync::MutexGuard<'static, HashMap<String, CachedExit>> {
+  EXIT_CACHE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Compare a measured exit against a profile's fingerprint. Pure — no I/O.
+pub fn compare_exit_to_fingerprint(
   profile: &BrowserProfile,
-) -> Result<ConsistencyResult, String> {
-  let Some(proxy_id) = &profile.proxy_id else {
-    return Ok(ConsistencyResult::skip());
-  };
-  let Some(settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) else {
-    return Ok(ConsistencyResult::skip());
-  };
-  let profile_id = profile.id.to_string();
-  let Some(url) = proxy_url(&settings, Some(&profile_id)) else {
-    return Ok(ConsistencyResult::skip());
-  };
-  let cache_identity = if settings.proxy_type.eq_ignore_ascii_case("vless") {
-    settings.vless_uri.clone().unwrap_or_else(|| url.clone())
-  } else {
-    url.clone()
-  };
-
-  let now = crate::proxy_manager::now_secs();
-
-  // Serve a fresh cached exit lookup for this proxy if we have one, but only if
-  // it was measured through the proxy's current endpoint and credentials.
-  let cached = {
-    let cache = EXIT_CACHE.lock().unwrap();
-    cache
-      .get(proxy_id)
-      .filter(|c| {
-        c.proxy_url == cache_identity && now.saturating_sub(c.fetched_at) < EXIT_CACHE_TTL_SECS
-      })
-      .cloned()
-  };
-
-  let (exit_tz, exit_cc, exit_ip) = if let Some(c) = cached {
-    (c.timezone, c.country_code, c.ip)
-  } else {
-    // Resolve the exit IP through the proxy, then geolocate it with the SAME
-    // bundled MaxMind database the fingerprint generator (and the on-demand
-    // match) use. Using one geo source everywhere means the check can never
-    // disagree with what generation produced — a second source (e.g. ip-api)
-    // routinely reports a different IANA zone for the same IP in multi-zone
-    // countries, which would flag correctly-generated fingerprints and would
-    // leave the "match to proxy" fix unable to satisfy the check.
-    let exit_ip = crate::ip_utils::fetch_public_ip(Some(&url))
-      .await
-      .map_err(|e| format!("exit-node lookup failed: {e}"))?;
-    match crate::geolocation::get_geolocation(&exit_ip) {
-      Ok(geo) => {
-        let tz = Some(geo.timezone);
-        let cc = geo.locale.region.clone();
-        let ip = Some(exit_ip);
-        EXIT_CACHE.lock().unwrap().insert(
-          proxy_id.clone(),
-          CachedExit {
-            fetched_at: now,
-            proxy_url: cache_identity,
-            timezone: tz.clone(),
-            country_code: cc.clone(),
-            ip: ip.clone(),
-          },
-        );
-        (tz, cc, ip)
-      }
-      // Reached the exit but couldn't place it (database missing, or a private
-      // exit IP). Skip rather than warn on an unknown location — the same
-      // database gates fingerprint geo, so there's nothing to disagree with.
-      Err(e) => {
-        log::debug!("Consistency check: could not geolocate exit IP: {e}");
-        return Ok(ConsistencyResult::skip());
-      }
-    }
-  };
-
+  exit_timezone: Option<String>,
+  exit_country_code: Option<String>,
+  exit_ip: Option<String>,
+) -> ConsistencyResult {
   let (fp_tz, fp_lang) = fingerprint_locale(profile);
   let mut mismatches = Vec::new();
 
-  if let (Some(exit), Some(fp)) = (&exit_tz, &fp_tz) {
+  if let (Some(exit), Some(fp)) = (&exit_timezone, &fp_tz) {
     if !exit.eq_ignore_ascii_case(fp) {
       mismatches.push("timezone".to_string());
     }
   }
 
-  if let (Some(cc), Some(lang)) = (&exit_cc, &fp_lang) {
+  if let (Some(cc), Some(lang)) = (&exit_country_code, &fp_lang) {
     if language_matches_country(cc, lang) == Some(false) {
       mismatches.push("language".to_string());
     }
   }
 
-  Ok(ConsistencyResult {
+  ConsistencyResult {
     consistent: mismatches.is_empty(),
     checked: true,
     exit_ip,
-    exit_country_code: exit_cc,
-    exit_timezone: exit_tz,
+    exit_country_code,
+    exit_timezone,
     fingerprint_timezone: fp_tz,
     fingerprint_language: fp_lang,
     mismatches,
-  })
+  }
 }
 
-#[tauri::command]
-pub async fn check_profile_fingerprint_consistency(
-  profile_id: String,
+/// Look up a still-valid cached exit for this profile.
+fn cached_exit(key: &ExitCacheKey) -> Option<CachedExit> {
+  let now = crate::proxy_manager::now_secs();
+  exit_cache()
+    .get(&key.scope)
+    .filter(|c| {
+      c.identity == key.identity && now.saturating_sub(c.fetched_at) < EXIT_CACHE_TTL_SECS
+    })
+    .cloned()
+}
+
+/// Cache-only check. Never performs I/O, so it is safe to call before a launch
+/// and for every profile in a bulk run. Returns an unchecked result on a miss.
+pub fn check_profile_consistency_cached(profile: &BrowserProfile) -> ConsistencyResult {
+  let Some(key) = exit_cache_key(profile) else {
+    return ConsistencyResult::skip();
+  };
+  let Some(cached) = cached_exit(&key) else {
+    return ConsistencyResult::skip();
+  };
+  compare_exit_to_fingerprint(profile, cached.timezone, cached.country_code, cached.ip)
+}
+
+/// Drop any cached exit for this profile, so the next check re-measures.
+pub fn invalidate_exit_cache(profile: &BrowserProfile) {
+  if let Some(key) = exit_cache_key(profile) {
+    exit_cache().remove(&key.scope);
+  }
+}
+
+/// Measure the exit through an already-normalized upstream and compare it to
+/// the fingerprint.
+///
+/// `upstream` is what the launcher will actually hand the browser — a loopback
+/// worker for VLESS and VPN, the resolved endpoint for a stored proxy — so one
+/// code path covers every transport. `None` means a genuine direct connection,
+/// which has nothing to disagree with.
+pub async fn probe_and_check_consistency(
+  profile: &BrowserProfile,
+  upstream: Option<&crate::browser::ProxySettings>,
+  key: &ExitCacheKey,
 ) -> Result<ConsistencyResult, String> {
-  let profiles = crate::profile::ProfileManager::instance()
-    .list_profiles()
-    .map_err(|e| e.to_string())?;
-  let profile = profiles
-    .into_iter()
-    .find(|p| p.id.to_string() == profile_id)
-    .ok_or_else(|| serde_json::json!({ "code": "PROFILE_NOT_FOUND" }).to_string())?;
-  check_profile_consistency(&profile).await
+  if let Some(cached) = cached_exit(key) {
+    return Ok(compare_exit_to_fingerprint(
+      profile,
+      cached.timezone,
+      cached.country_code,
+      cached.ip,
+    ));
+  }
+
+  let Some(settings) = upstream else {
+    return Ok(ConsistencyResult::skip());
+  };
+  let Some(url) = probe_url(settings) else {
+    return Ok(ConsistencyResult::skip());
+  };
+
+  // Resolve the exit IP through the proxy, then geolocate it with the SAME
+  // bundled MaxMind database the fingerprint generator (and the on-demand
+  // match) use. Using one geo source everywhere means the check can never
+  // disagree with what generation produced — a second source (e.g. ip-api)
+  // routinely reports a different IANA zone for the same IP in multi-zone
+  // countries, which would flag correctly-generated fingerprints and would
+  // leave the "match to proxy" fix unable to satisfy the check.
+  //
+  // Bounded independently of fetch_public_ip's own per-request timeout: that
+  // one races six endpoints and can add up to far longer than a user will wait
+  // in front of a launch.
+  let fetched = tokio::time::timeout(PROBE_TIMEOUT, crate::ip_utils::fetch_public_ip(Some(&url)))
+    .await
+    .map_err(|_| crate::backend_error("EXIT_PROBE_FAILED"))?;
+  let exit_ip = fetched.map_err(|e| crate::backend_error_with_detail("EXIT_PROBE_FAILED", e))?;
+
+  match crate::geolocation::get_geolocation(&exit_ip) {
+    Ok(geo) => {
+      let tz = Some(geo.timezone);
+      let cc = geo.locale.region.clone();
+      exit_cache().insert(
+        key.scope.clone(),
+        CachedExit {
+          fetched_at: crate::proxy_manager::now_secs(),
+          identity: key.identity.clone(),
+          timezone: tz.clone(),
+          country_code: cc.clone(),
+          ip: Some(exit_ip.clone()),
+        },
+      );
+      Ok(compare_exit_to_fingerprint(profile, tz, cc, Some(exit_ip)))
+    }
+    // Reached the exit but couldn't place it (database missing, or a private
+    // exit IP). Skip rather than warn on an unknown location — the same
+    // database gates fingerprint geo, so there's nothing to disagree with.
+    Err(e) => {
+      log::debug!("Consistency check: could not geolocate exit IP: {e}");
+      Ok(ConsistencyResult::skip())
+    }
+  }
+}
+
+/// Measure the exit this machine reaches without any proxy, and compare it to
+/// the fingerprint.
+///
+/// Used when a profile declares a route that did not materialize: the browser
+/// is about to connect directly, so the direct exit is the one that matters.
+/// Deliberately NOT cached — a direct exit belongs to this machine's network,
+/// not to any stored proxy, and it changes without a config edit.
+pub async fn probe_direct_and_check(profile: &BrowserProfile) -> Result<ConsistencyResult, String> {
+  let fetched = tokio::time::timeout(PROBE_TIMEOUT, crate::ip_utils::fetch_public_ip(None))
+    .await
+    .map_err(|_| crate::backend_error("EXIT_PROBE_FAILED"))?;
+  let exit_ip = fetched.map_err(|e| crate::backend_error_with_detail("EXIT_PROBE_FAILED", e))?;
+
+  match crate::geolocation::get_geolocation(&exit_ip) {
+    Ok(geo) => Ok(compare_exit_to_fingerprint(
+      profile,
+      Some(geo.timezone),
+      geo.locale.region.clone(),
+      Some(exit_ip),
+    )),
+    Err(e) => {
+      log::debug!("Consistency check: could not geolocate direct exit IP: {e}");
+      Ok(ConsistencyResult::skip())
+    }
+  }
 }
 
 /// Rewrite a profile's stored fingerprint so its geolocation (timezone,
@@ -279,6 +382,10 @@ pub async fn match_profile_fingerprint_to_exit(
     serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
       .to_string()
   })?;
+
+  // The stored verdict was computed against the fingerprint we just rewrote.
+  // Leaving it would re-block the very launch this fix exists to unblock.
+  invalidate_exit_cache(&profile);
 
   Ok(())
 }
@@ -344,55 +451,218 @@ mod tests {
     assert!(language_matches_country("CH", "de-CH").is_some());
   }
 
-  #[test]
-  fn proxy_url_percent_encodes_credentials_and_skips_shadowsocks() {
-    let http = crate::browser::ProxySettings {
-      proxy_type: "http".into(),
-      host: "h".into(),
+  fn settings(
+    proxy_type: &str,
+    user: Option<&str>,
+    pass: Option<&str>,
+  ) -> crate::browser::ProxySettings {
+    crate::browser::ProxySettings {
+      proxy_type: proxy_type.into(),
+      host: "gw.provider.io".into(),
       port: 8080,
-      username: Some("u".into()),
-      password: Some("p".into()),
+      username: user.map(str::to_string),
+      password: pass.map(str::to_string),
       vless_uri: None,
-    };
-    assert_eq!(proxy_url(&http, None).as_deref(), Some("http://u:p@h:8080"));
+    }
+  }
+
+  #[test]
+  fn probe_url_percent_encodes_credentials_and_skips_shadowsocks() {
+    assert_eq!(
+      probe_url(&settings("http", Some("u"), Some("p"))).as_deref(),
+      Some("http://u:p@gw.provider.io:8080")
+    );
 
     // A password with URL-reserved characters must not break the authority —
     // unencoded, the `/` truncates the host and reqwest targets `u` instead.
-    let reserved = crate::browser::ProxySettings {
-      proxy_type: "http".into(),
-      host: "gw.provider.io".into(),
-      port: 8080,
-      username: Some("user".into()),
-      password: Some("ab/cd@ef".into()),
-      vless_uri: None,
-    };
     assert_eq!(
-      proxy_url(&reserved, None).as_deref(),
+      probe_url(&settings("http", Some("user"), Some("ab/cd@ef"))).as_deref(),
       Some("http://user:ab%2Fcd%40ef@gw.provider.io:8080")
     );
 
     // Username-only proxies keep their auth.
-    let user_only = crate::browser::ProxySettings {
-      proxy_type: "socks5".into(),
-      host: "h".into(),
-      port: 1080,
-      username: Some("justuser".into()),
-      password: None,
-      vless_uri: None,
-    };
     assert_eq!(
-      proxy_url(&user_only, None).as_deref(),
-      Some("socks5://justuser@h:1080")
+      probe_url(&settings("socks4", Some("justuser"), None)).as_deref(),
+      Some("socks4://justuser@gw.provider.io:8080")
     );
 
-    let ss = crate::browser::ProxySettings {
-      proxy_type: "ss".into(),
-      host: "h".into(),
-      port: 8080,
-      username: None,
-      password: None,
-      vless_uri: None,
+    // Shadowsocks cannot carry a reqwest probe, so it is skipped rather than
+    // guessed at.
+    assert_eq!(probe_url(&settings("ss", None, None)), None);
+  }
+
+  #[test]
+  fn probe_url_uses_socks5h_so_dns_resolves_at_the_exit() {
+    let url = probe_url(&settings("socks5", Some("u"), Some("p"))).unwrap();
+    assert!(
+      url.starts_with("socks5h://"),
+      "probe must not resolve the echo host locally, got {url}"
+    );
+    // The browser-facing builder is deliberately left alone.
+    assert!(
+      crate::proxy_manager::ProxyManager::build_proxy_url(&settings(
+        "socks5",
+        Some("u"),
+        Some("p")
+      ))
+      .starts_with("socks5://")
+    );
+  }
+
+  fn profile_with_fingerprint(timezone: &str, language: &str) -> BrowserProfile {
+    let mut profile = BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: "p".into(),
+      browser: "wayfern".into(),
+      ..Default::default()
     };
-    assert_eq!(proxy_url(&ss, None), None);
+    profile.wayfern_config = Some(crate::wayfern_manager::WayfernConfig {
+      fingerprint: Some(
+        serde_json::json!({ "timezone": timezone, "language": language }).to_string(),
+      ),
+      ..Default::default()
+    });
+    profile
+  }
+
+  #[test]
+  fn compare_flags_a_timezone_mismatch() {
+    let profile = profile_with_fingerprint("America/New_York", "en-US");
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+    assert!(result.checked);
+    assert!(!result.consistent);
+    assert!(result.mismatches.contains(&"timezone".to_string()));
+  }
+
+  #[test]
+  fn compare_accepts_a_matching_exit() {
+    let profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+    assert!(result.consistent, "{:?}", result.mismatches);
+  }
+
+  #[test]
+  fn compare_is_case_insensitive_on_timezone() {
+    let profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("europe/berlin".into()),
+      Some("DE".into()),
+      None,
+    );
+    assert!(result.consistent);
+  }
+
+  #[test]
+  fn compare_skips_dimensions_the_fingerprint_does_not_declare() {
+    // A profile with no fingerprint has nothing to contradict; it must not be
+    // reported as a mismatch and so must never block a launch.
+    let profile = BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      browser: "wayfern".into(),
+      ..Default::default()
+    };
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      None,
+    );
+    assert!(result.consistent);
+    assert!(result.mismatches.is_empty());
+  }
+
+  #[test]
+  fn cached_check_reports_unchecked_without_a_proxy_or_vpn() {
+    let profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    let result = check_profile_consistency_cached(&profile);
+    assert!(!result.checked);
+    assert!(result.consistent, "an unchecked profile must never block");
+  }
+
+  #[test]
+  fn exit_cache_key_is_absent_without_a_proxy_or_vpn() {
+    let profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    assert_eq!(exit_cache_key(&profile), None);
+  }
+
+  #[test]
+  fn exit_cache_key_scopes_a_vpn_profile_by_vpn_id() {
+    let mut profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    profile.vpn_id = Some("vpn-abc".into());
+    let key = exit_cache_key(&profile).expect("vpn profiles must be cacheable");
+    assert_eq!(key.scope, "vpn:vpn-abc");
+    assert_eq!(key.identity, "vpn-abc");
+  }
+
+  #[test]
+  fn cached_entry_is_ignored_once_the_endpoint_identity_changes() {
+    let key = ExitCacheKey {
+      scope: "proxy:test-identity-change".into(),
+      identity: "http://old@host:1".into(),
+    };
+    exit_cache().insert(
+      key.scope.clone(),
+      CachedExit {
+        fetched_at: crate::proxy_manager::now_secs(),
+        identity: key.identity.clone(),
+        timezone: Some("Europe/Berlin".into()),
+        country_code: Some("DE".into()),
+        ip: Some("1.2.3.4".into()),
+      },
+    );
+    assert!(cached_exit(&key).is_some());
+
+    // Editing a stored proxy keeps its id but changes the endpoint; the old
+    // measurement must not be reused for the new one.
+    let rotated = ExitCacheKey {
+      identity: "http://new@host:2".into(),
+      ..key.clone()
+    };
+    assert!(cached_exit(&rotated).is_none());
+    exit_cache().remove(&key.scope);
+  }
+
+  #[test]
+  fn cached_entry_expires_after_the_ttl() {
+    let key: ExitCacheKey = ExitCacheKey {
+      scope: "proxy:test-ttl".into(),
+      identity: "http://host:1".into(),
+    };
+    exit_cache().insert(
+      key.scope.clone(),
+      CachedExit {
+        fetched_at: crate::proxy_manager::now_secs() - EXIT_CACHE_TTL_SECS - 1,
+        identity: key.identity.clone(),
+        timezone: Some("Europe/Berlin".into()),
+        country_code: Some("DE".into()),
+        ip: None,
+      },
+    );
+    assert!(cached_exit(&key).is_none());
+    exit_cache().remove(&key.scope);
+  }
+
+  #[test]
+  fn exit_cache_survives_a_poisoned_lock() {
+    // A panic under this lock must degrade the check, not brick every
+    // subsequent launch that consults it.
+    let _ = std::thread::spawn(|| {
+      let _guard = EXIT_CACHE.lock().unwrap();
+      panic!("poison the cache");
+    })
+    .join();
+    assert!(EXIT_CACHE.is_poisoned());
+    exit_cache().remove("nonexistent-scope");
   }
 }

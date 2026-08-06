@@ -13,11 +13,6 @@ import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CloseConfirmDialog } from "@/components/close-confirm-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
-import {
-  type ConsistencyResult,
-  ConsistencyWarningDialog,
-  isConsistencyWarningSuppressed,
-} from "@/components/consistency-warning-dialog";
 import { CookieBotPage, type CookieBotTab } from "@/components/cookie-bot-page";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
@@ -33,6 +28,11 @@ import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
 import { ONBOARDING_TOUR } from "@/components/onboarding-provider";
 import { PermissionDialog } from "@/components/permission-dialog";
+import {
+  type GateDecision,
+  type GateFindings,
+  PreLaunchGateDialog,
+} from "@/components/pre-launch-gate-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import {
   type PasswordDialogMode,
@@ -67,7 +67,7 @@ import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
-import { translateBackendError } from "@/lib/backend-errors";
+import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { canUseCookieBot, getEntitlements } from "@/lib/entitlements";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import {
@@ -88,7 +88,42 @@ import {
   showSyncProgressToast,
   showToast,
 } from "@/lib/toast-utils";
-import type { BrowserProfile, SyncSettings, WayfernConfig } from "@/types";
+import type {
+  BrowserProfile,
+  ConsistencyResult,
+  PreLaunchChecks,
+  SyncSettings,
+  WayfernConfig,
+} from "@/types";
+
+type GateRequest = {
+  profile: BrowserProfile;
+  findings: GateFindings;
+};
+
+type LaunchResult = {
+  status: "launched" | "cancelled" | "blocked";
+};
+
+/**
+ * Rebuild the mismatch detail the gate dialog renders from a
+ * FINGERPRINT_EXIT_MISMATCH error's params. Every param is a string, because
+ * backend error params always are.
+ */
+function consistencyFromErrorParams(
+  params?: Record<string, string>,
+): ConsistencyResult {
+  return {
+    consistent: false,
+    checked: true,
+    exit_ip: params?.exitIp || null,
+    exit_country_code: params?.exitCountry || null,
+    exit_timezone: params?.exitTimezone || null,
+    fingerprint_timezone: params?.fingerprintTimezone || null,
+    fingerprint_language: params?.fingerprintLanguage || null,
+    mismatches: (params?.mismatches ?? "").split(",").filter(Boolean),
+  };
+}
 
 type BrowserTypeString = "wayfern";
 
@@ -252,7 +287,7 @@ export default function Home() {
   const { user: cloudUser } = useCloudAuth();
   const crossOsUnlocked = getEntitlements(cloudUser).crossOsFingerprints;
   // Bulk run/stop is a paid (browser automation) feature, matching the
-  // /v1/profiles/batch/run API gate. Free/starter users see the bulk Run/Stop
+  // /v1/profiles/batch/run API gate. Free/solo users see the bulk Run/Stop
   // actions disabled with a Pro badge.
   const automationUnlocked = getEntitlements(cloudUser).browserAutomation;
   // The rail needs to show a live run from every page, so the shell subscribes
@@ -365,10 +400,30 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
-  const [consistencyWarning, setConsistencyWarning] = useState<{
-    profile: BrowserProfile;
-    result: ConsistencyResult;
+  // Pre-launch gate. Requests queue instead of overwriting a single resolver:
+  // a bulk run enqueues one per profile, and every waiter must settle or the
+  // Promise.allSettled below it never resolves and the bulk spinner sticks.
+  const gateQueueRef = useRef<
+    Array<{ req: GateRequest; resolve: (decision: GateDecision) => void }>
+  >([]);
+  const [gateState, setGateState] = useState<{
+    req: GateRequest;
+    remaining: number;
   } | null>(null);
+  // Set when the user ticks "apply to the remaining profiles" during a bulk
+  // run, so the rest are answered without prompting again. Scoped to one bulk
+  // run and to the severity it was given for.
+  const blanketGateDecisionRef = useRef<{
+    decision: GateDecision;
+    /// Only auto-answers gates no more severe than the one the user saw. A
+    /// choice made on an extension warning must never silently bypass a hard
+    /// block on a later profile.
+    coversBlocking: boolean;
+    /// Identifies the bulk run, so a single launch started while a bulk run is
+    /// in flight still gets its own dialog.
+    runId: number;
+  } | null>(null);
+  const bulkRunIdRef = useRef(0);
   // Owned by page.tsx so the command palette can request opening the profile
   // info dialog. ProfilesDataTable consumes it through controlled props.
   const [profileInfoDialog, setProfileInfoDialog] =
@@ -933,8 +988,137 @@ export default function Home() {
     [selectedGroupId, t],
   );
 
+  // Show the queue's head, and how many are waiting behind it.
+  // The backend gate downgrades to advisory rather than blocking when it
+  // cannot trust its own measurement (a confirmed VPN extension can reroute
+  // traffic away from the proxy it just probed), and for unattended launches.
+  // Without a listener that finding was emitted into the void.
+  useEffect(() => {
+    const unlisten = listen<ConsistencyResult>(
+      "fingerprint-consistency-warning",
+      (event) => {
+        const { exit_timezone, fingerprint_timezone } = event.payload;
+        showErrorToast(t("backendErrors.fingerprintExitMismatch"), {
+          // The cause differs by path (an unverifiable measurement vs an
+          // unattended launch), so state the measurement rather than guess.
+          description:
+            exit_timezone && fingerprint_timezone
+              ? t("consistencyWarning.timezoneDetail", {
+                  exit: exit_timezone,
+                  fingerprint: fingerprint_timezone,
+                })
+              : undefined,
+          id: `fingerprint-mismatch-${exit_timezone ?? "unknown"}`,
+        });
+      },
+    );
+    return () => {
+      void unlisten.then((fn) => {
+        fn();
+      });
+    };
+  }, [t]);
+
+  const syncGateUi = useCallback(() => {
+    const queue = gateQueueRef.current;
+    setGateState(
+      queue.length > 0
+        ? { req: queue[0].req, remaining: queue.length - 1 }
+        : null,
+    );
+  }, []);
+
+  const requestGateDecision = useCallback(
+    (req: GateRequest, runId?: number): Promise<GateDecision> => {
+      const blanket = blanketGateDecisionRef.current;
+      const isBlocking = req.findings.fingerprint !== null;
+      if (
+        blanket &&
+        blanket.runId === runId &&
+        (blanket.coversBlocking || !isBlocking)
+      ) {
+        // A blanket answer covers only whether to launch. The acknowledgements
+        // it carried were about the first profile's specific mismatch and
+        // extensions, and must not be persisted against profiles the user
+        // never saw.
+        return Promise.resolve({
+          ...blanket.decision,
+          ackFingerprint: false,
+          ackExtensionKeys: [],
+        });
+      }
+      return new Promise<GateDecision>((resolve) => {
+        gateQueueRef.current.push({ req, resolve });
+        syncGateUi();
+      });
+    },
+    [syncGateUi],
+  );
+
+  const settleGate = useCallback(
+    (decision: GateDecision) => {
+      const entry = gateQueueRef.current.shift();
+      entry?.resolve(decision);
+      if (decision.applyToRemaining) {
+        const coversBlocking = entry?.req.findings.fingerprint !== null;
+        blanketGateDecisionRef.current = {
+          decision,
+          coversBlocking,
+          runId: bulkRunIdRef.current,
+        };
+        // Drain the queue rather than leaving promises pending forever — but
+        // only those the blanket actually covers. A hard block still deserves
+        // its own dialog even after the user blanket-approved a warning.
+        const remaining = gateQueueRef.current.splice(0);
+        const kept = remaining.filter(
+          (queued) =>
+            !coversBlocking && queued.req.findings.fingerprint !== null,
+        );
+        for (const queued of remaining) {
+          if (kept.includes(queued)) {
+            continue;
+          }
+          queued.resolve({
+            ...decision,
+            ackFingerprint: false,
+            ackExtensionKeys: [],
+          });
+        }
+        gateQueueRef.current = kept;
+      }
+      syncGateUi();
+    },
+    [syncGateUi],
+  );
+
+  const persistGateAcks = useCallback(
+    async (profileId: string, decision: GateDecision) => {
+      // Only on proceed. Cancel is the autofocused default action, so a stray
+      // Enter would otherwise permanently disarm the gate for this profile.
+      if (!decision.proceed) {
+        return;
+      }
+      if (!decision.ackFingerprint && decision.ackExtensionKeys.length === 0) {
+        return;
+      }
+      try {
+        await invoke("ack_launch_gate", {
+          profileId,
+          ackFingerprint: decision.ackFingerprint,
+          ackExtensionKeys: decision.ackExtensionKeys,
+        });
+      } catch (err) {
+        console.warn("Failed to persist launch gate acknowledgement:", err);
+      }
+    },
+    [],
+  );
+
   const launchProfile = useCallback(
-    async (profile: BrowserProfile) => {
+    async (
+      profile: BrowserProfile,
+      opts?: { bulkRunId?: number },
+    ): Promise<LaunchResult> => {
       console.log("Starting launch for profile:", profile.name);
 
       // Password-protected: must be unlocked before launch
@@ -947,7 +1131,7 @@ export default function Home() {
             pendingLaunchAfterUnlockRef.current = profile;
             setPasswordDialogMode("unlock");
             setPasswordDialogProfile(profile);
-            return;
+            return { status: "cancelled" };
           }
         } catch (err) {
           console.error("Failed to check profile lock state:", err);
@@ -966,7 +1150,7 @@ export default function Home() {
               setWindowResizeWarningOpen(true);
             });
             if (!proceed) {
-              return;
+              return { status: "cancelled" };
             }
           }
         } catch (error) {
@@ -974,30 +1158,106 @@ export default function Home() {
         }
       }
 
+      // Tier 1: purely local checks — an extension scan and a cached exit
+      // verdict. No network, no worker started, so a profile whose exit is
+      // already known blocks before the launch touches anything.
+      let consentToken: string | null = null;
+      try {
+        // One-shot migration of the old per-profile "don't warn again" flag,
+        // so a user who already dismissed this profile isn't hard-blocked by
+        // the new gate. Granted against the profile's current exit, which is
+        // the mismatch they were looking at when they dismissed it.
+        const legacySkipKey = `consistency-warn-skip-${profile.id}`;
+        if (localStorage.getItem(legacySkipKey) === "1") {
+          await invoke("ack_launch_gate", {
+            profileId: profile.id,
+            ackFingerprint: true,
+            ackExtensionKeys: [],
+          }).catch((err: unknown) => {
+            console.warn("Failed to migrate consistency skip flag:", err);
+          });
+          localStorage.removeItem(legacySkipKey);
+        }
+
+        const checks = await invoke<PreLaunchChecks>(
+          "get_profile_pre_launch_checks",
+          { profileId: profile.id },
+        );
+        const blocked =
+          checks.consistency.checked && !checks.consistency.consistent;
+        if (blocked || checks.vpn_extensions.length > 0) {
+          const decision = await requestGateDecision(
+            {
+              profile,
+              findings: {
+                vpnExtensions: checks.vpn_extensions,
+                scanState: checks.scan_state,
+                fingerprint: blocked ? checks.consistency : null,
+                measurementUnreliable: checks.exit_measurement_unreliable,
+                probePending: checks.exit_probe_pending,
+              },
+            },
+            opts?.bulkRunId,
+          );
+          await persistGateAcks(profile.id, decision);
+          if (!decision.proceed) {
+            return { status: "cancelled" };
+          }
+          consentToken = checks.consent_token;
+        }
+      } catch (err) {
+        // Same posture as the password and window-resize gates: a check that
+        // cannot run must not make profiles unlaunchable.
+        console.warn("Pre-launch checks failed, launching anyway:", err);
+      }
+
       try {
         const result = await invoke<BrowserProfile>("launch_browser_profile", {
           profile,
+          consentToken,
         });
         console.log("Successfully launched profile:", result.name);
-
-        // Non-blocking: after a successful launch, check that the proxy exit
-        // node's timezone/country agrees with the fingerprint. A mismatch is a
-        // strong anti-bot tell even though the real device never leaks.
-        if (profile.proxy_id && !isConsistencyWarningSuppressed(profile.id)) {
-          void invoke<ConsistencyResult>(
-            "check_profile_fingerprint_consistency",
-            { profileId: profile.id },
-          )
-            .then((res) => {
-              if (res.checked && !res.consistent) {
-                setConsistencyWarning({ profile, result: res });
-              }
-            })
-            .catch((e) => {
-              console.warn("Consistency check failed:", e);
-            });
-        }
+        return { status: "launched" };
       } catch (err: unknown) {
+        // Tier 2: the enforcing gate measured the exit mid-launch and stopped
+        // before spawning the browser. Offer the same decision, then retry
+        // exactly once with the token it minted — bounded, so a gate loop is
+        // structurally impossible.
+        const parsed = parseBackendError(err);
+        if (parsed?.code === "FINGERPRINT_EXIT_MISMATCH") {
+          const decision = await requestGateDecision(
+            {
+              profile,
+              findings: {
+                vpnExtensions: [],
+                scanState: "scanned",
+                fingerprint: consistencyFromErrorParams(parsed.params),
+                measurementUnreliable: false,
+                probePending: false,
+              },
+            },
+            opts?.bulkRunId,
+          );
+          await persistGateAcks(profile.id, decision);
+          if (!decision.proceed) {
+            return { status: "cancelled" };
+          }
+          try {
+            await invoke<BrowserProfile>("launch_browser_profile", {
+              profile,
+              consentToken: parsed.params?.token ?? null,
+            });
+            return { status: "launched" };
+          } catch (retryErr: unknown) {
+            showErrorToast(
+              t("errors.launchBrowserFailed", {
+                error: translateBackendError(t, retryErr),
+              }),
+            );
+            return { status: "blocked" };
+          }
+        }
+
         console.error("Failed to launch browser:", err);
         const errorMessage = translateBackendError(t, err);
         showErrorToast(
@@ -1006,7 +1266,7 @@ export default function Home() {
         throw err;
       }
     },
-    [t],
+    [persistGateAcks, requestGateDecision, t],
   );
 
   const handleCloneProfile = useCallback((profile: BrowserProfile) => {
@@ -1203,15 +1463,34 @@ export default function Home() {
   const executeBulkRun = useCallback(
     async (targets: BrowserProfile[]) => {
       setIsBulkActing(true);
+      blanketGateDecisionRef.current = null;
+      bulkRunIdRef.current += 1;
+      const runId = bulkRunIdRef.current;
       try {
-        await Promise.allSettled(targets.map((p) => launchProfile(p)));
+        const results = await Promise.allSettled(
+          targets.map((p) => launchProfile(p, { bulkRunId: runId })),
+        );
+        const stopped = results.filter(
+          (r) => r.status === "fulfilled" && r.value.status !== "launched",
+        ).length;
+        if (stopped > 0) {
+          // Previously a declined launch resolved to undefined, so allSettled
+          // reported success and the user was told nothing.
+          showErrorToast(
+            t("prelaunchGate.cancelledSummary", {
+              cancelled: stopped,
+              total: targets.length,
+            }),
+          );
+        }
         setSelectedProfiles([]);
       } finally {
+        blanketGateDecisionRef.current = null;
         setIsBulkActing(false);
         setPendingBulkAction(null);
       }
     },
-    [launchProfile],
+    [launchProfile, t],
   );
 
   const executeBulkStop = useCallback(
@@ -1898,14 +2177,13 @@ export default function Home() {
         }}
       />
 
-      <ConsistencyWarningDialog
-        isOpen={consistencyWarning !== null}
-        onClose={() => {
-          setConsistencyWarning(null);
-        }}
-        profileName={consistencyWarning?.profile.name ?? ""}
-        profileId={consistencyWarning?.profile.id ?? ""}
-        result={consistencyWarning?.result ?? null}
+      <PreLaunchGateDialog
+        isOpen={gateState !== null}
+        profileName={gateState?.req.profile.name ?? ""}
+        profileId={gateState?.req.profile.id ?? ""}
+        findings={gateState?.req.findings ?? null}
+        remainingCount={gateState?.remaining ?? 0}
+        onResult={settleGate}
       />
 
       {pendingUrls.map((pendingUrl) => (

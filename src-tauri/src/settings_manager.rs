@@ -54,6 +54,14 @@ pub struct AppSettings {
   pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ko", "ru", or None for system default
   #[serde(default)]
   pub window_resize_warning_dismissed: bool,
+  /// Stop blocking launches whose proxy exit disagrees with the fingerprint.
+  /// Lives here rather than in localStorage because the Rust launch path is
+  /// what enforces the block and cannot read the frontend's storage.
+  #[serde(default)]
+  pub fingerprint_gate_disabled: bool,
+  /// Stop warning about VPN/proxy extensions found in a profile.
+  #[serde(default)]
+  pub vpn_extension_warning_disabled: bool,
   #[serde(default)]
   pub onboarding_completed: bool, // First-launch onboarding has been shown/handled (one-shot)
   #[serde(default)]
@@ -96,6 +104,8 @@ impl Default for AppSettings {
       mcp_token: None,
       language: None,
       window_resize_warning_dismissed: false,
+      fingerprint_gate_disabled: false,
+      vpn_extension_warning_disabled: false,
       onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
@@ -1190,6 +1200,8 @@ mod tests {
       mcp_token: None,
       language: None,
       window_resize_warning_dismissed: false,
+      fingerprint_gate_disabled: false,
+      vpn_extension_warning_disabled: false,
       onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,

@@ -168,7 +168,7 @@ impl SynchronizerManager {
     );
 
     // Launch leader first so it gets focus
-    crate::browser_runner::launch_browser_profile(app_handle.clone(), leader.clone(), None)
+    crate::browser_runner::launch_browser_profile(app_handle.clone(), leader.clone(), None, None)
       .await
       .map_err(|e| format!("Failed to launch leader: {e}"))?;
 
@@ -179,7 +179,7 @@ impl SynchronizerManager {
         let ah = app_handle.clone();
         let fp = fp.clone();
         set.spawn(async move {
-          crate::browser_runner::launch_browser_profile(ah, fp.clone(), None)
+          crate::browser_runner::launch_browser_profile(ah, fp.clone(), None, None)
             .await
             .map_err(|e| (fp.name.clone(), e.to_string()))
         });

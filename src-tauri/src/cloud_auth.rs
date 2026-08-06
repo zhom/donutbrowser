@@ -28,9 +28,9 @@ const DEFAULT_REQUESTS_PER_HOUR: i64 = 100;
 
 /// Capability + limit set the account is entitled to, derived from its plan.
 /// Mirrors `apps/backend/src/plans/entitlements.ts`. Features are gated on these
-/// flags instead of a single "is paid?" boolean, so a plan like the future
-/// "starter" tier (cross-OS fingerprints + cloud backup, no automation) is just
-/// data here.
+/// flags instead of a single "is paid?" boolean, so a plan like "solo" (cloud
+/// backup + nightly cookie bot, no automation, no fingerprint editing, no
+/// hands-on remote session) is just data here.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entitlements {
   #[serde(default)]
@@ -49,6 +49,12 @@ pub struct Entitlements {
   /// together.
   #[serde(rename = "cookieBot", default)]
   pub cookie_bot: bool,
+  /// Whether the plan may open a HANDS-ON remote session. Distinct from
+  /// `cookie_bot`: solo funds a nightly bot out of its remote hours but may not
+  /// drive a remote browser itself, so anything that offers interactive remote
+  /// control must read THIS rather than `remote_browser_hours > 0`.
+  #[serde(rename = "remoteInteractive", default)]
+  pub remote_interactive: bool,
   #[serde(rename = "profileLimit", default)]
   pub profile_limit: i64,
   #[serde(rename = "requestsPerHour", default)]
@@ -77,16 +83,29 @@ fn derive_entitlements(
       cloud_backup: false,
       team_collaboration: false,
       cookie_bot: false,
+      remote_interactive: false,
       profile_limit: 0,
       requests_per_hour: 0,
       remote_browser_hours: 0,
     };
   }
-  // pro and any unrecognized paid plan -> pro-level (never team).
-  let (browser_automation, cross_os_fingerprints, cloud_backup, team_collaboration) = match plan {
-    "starter" => (false, true, true, false),
-    "team" | "enterprise" => (true, true, true, true),
-    _ => (true, true, true, false),
+  // Tuple order: (browser_automation, cross_os_fingerprints, cloud_backup,
+  // team_collaboration, cookie_bot, remote_interactive).
+  //
+  // pro and any unrecognized paid plan -> pro-level (never team). Solo is the
+  // one row where cookie_bot and browser_automation disagree, which is why
+  // cookie_bot can no longer be derived from browser_automation below.
+  let (
+    browser_automation,
+    cross_os_fingerprints,
+    cloud_backup,
+    team_collaboration,
+    cookie_bot,
+    remote_interactive,
+  ) = match plan {
+    "solo" => (false, false, true, false, true, false),
+    "team" | "enterprise" => (true, true, true, true, true, true),
+    _ => (true, true, true, false, true, true),
   };
   Entitlements {
     active,
@@ -94,9 +113,8 @@ fn derive_entitlements(
     cross_os_fingerprints,
     cloud_backup,
     team_collaboration,
-    // A bot run IS remote automation on leased hardware, so the two capabilities
-    // never diverge: a plan that cannot drive a browser cannot warm one either.
-    cookie_bot: browser_automation,
+    cookie_bot,
+    remote_interactive,
     profile_limit,
     requests_per_hour: if browser_automation {
       DEFAULT_REQUESTS_PER_HOUR
@@ -155,6 +173,13 @@ impl CloudUser {
   /// locally from the plan fields (keeps older cached state / backends working).
   pub fn entitlements(&self) -> Entitlements {
     if let Some(e) = &self.entitlements {
+      // Returned verbatim, INCLUDING the `#[serde(default)]` false that a
+      // backend older than this release leaves on `cookie_bot` /
+      // `remote_interactive`. Repairing it here is impossible anyway — serde's
+      // default erases the difference between "sent false" and "not sent" — and
+      // it is not this layer's job: nothing in Rust gates on either flag, and
+      // `getEntitlements()` in `src/lib/entitlements.ts` fills both gaps at the
+      // single point every UI consumer already goes through.
       return e.clone();
     }
     derive_entitlements(

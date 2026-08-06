@@ -73,6 +73,8 @@ interface AppSettings {
   api_token?: string;
   disable_auto_updates?: boolean;
   keep_decrypted_profiles_in_ram?: boolean;
+  fingerprint_gate_disabled?: boolean;
+  vpn_extension_warning_disabled?: boolean;
 }
 
 interface CustomThemeState {
@@ -127,15 +129,6 @@ export function SettingsDialog({
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [isClearingTraffic, setIsClearingTraffic] = useState(false);
-  const [consistencyWarningEnabled, setConsistencyWarningEnabled] = useState(
-    () => {
-      try {
-        return localStorage.getItem("consistency-warn-disabled") !== "1";
-      } catch {
-        return true;
-      }
-    },
-  );
   const [permissions, setPermissions] = useState<PermissionInfo[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
   const [requestingPermission, setRequestingPermission] =
@@ -267,9 +260,28 @@ export function SettingsDialog({
             ? normalizeThemeColors(appSettings.custom_theme)
             : tokyoNightTheme.colors,
       };
-      setSettings(merged);
-      setOriginalSettings(merged);
-      originalSettingsRef.current = merged;
+      // One-shot migration off the old localStorage flag. Without it, a user
+      // who explicitly turned the warning off would start getting hard blocks
+      // after updating — the single most likely support complaint here.
+      let migrated = merged;
+      try {
+        if (
+          localStorage.getItem("consistency-warn-disabled") === "1" &&
+          !merged.fingerprint_gate_disabled
+        ) {
+          migrated = { ...merged, fingerprint_gate_disabled: true };
+          await invoke<AppSettings>("save_app_settings", {
+            settings: migrated,
+          });
+        }
+        localStorage.removeItem("consistency-warn-disabled");
+      } catch (err) {
+        console.warn("Failed to migrate consistency warning preference:", err);
+      }
+
+      setSettings(migrated);
+      setOriginalSettings(migrated);
+      originalSettingsRef.current = migrated;
       hasLoadedSettingsRef.current = true;
       setHasLoadedSettings(true);
 
@@ -687,7 +699,11 @@ export function SettingsDialog({
     (settings.theme !== "custom" &&
       JSON.stringify(settings.custom_theme ?? {}) !==
         JSON.stringify(originalSettings.custom_theme ?? {})) ||
-    settings.disable_auto_updates !== originalSettings.disable_auto_updates;
+    settings.disable_auto_updates !== originalSettings.disable_auto_updates ||
+    settings.fingerprint_gate_disabled !==
+      originalSettings.fingerprint_gate_disabled ||
+    settings.vpn_extension_warning_disabled !==
+      originalSettings.vpn_extension_warning_disabled;
 
   return (
     <>
@@ -1392,21 +1408,32 @@ export function SettingsDialog({
                   </div>
                   <AnimatedSwitch
                     aria-label={t("settings.privacy.consistencyWarning")}
-                    checked={consistencyWarningEnabled}
+                    checked={!(settings.fingerprint_gate_disabled ?? false)}
                     onCheckedChange={(v) => {
-                      setConsistencyWarningEnabled(v === true);
-                      try {
-                        if (v === true) {
-                          localStorage.removeItem("consistency-warn-disabled");
-                        } else {
-                          localStorage.setItem(
-                            "consistency-warn-disabled",
-                            "1",
-                          );
-                        }
-                      } catch {
-                        // localStorage unavailable
-                      }
+                      updateSetting("fingerprint_gate_disabled", v !== true);
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-x-3 rounded-lg border p-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.privacy.vpnExtensionWarning")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.privacy.vpnExtensionWarningDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    aria-label={t("settings.privacy.vpnExtensionWarning")}
+                    checked={
+                      !(settings.vpn_extension_warning_disabled ?? false)
+                    }
+                    onCheckedChange={(v) => {
+                      updateSetting(
+                        "vpn_extension_warning_disabled",
+                        v !== true,
+                      );
                     }}
                   />
                 </div>

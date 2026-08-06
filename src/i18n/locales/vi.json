@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "Giữ hồ sơ đã giải mã trong RAM",
     "keepDecryptedProfilesInRamDescription": "Giữ bản sao đã giải mã trong RAM của hồ sơ được bảo vệ bằng mật khẩu giữa các lần khởi chạy để khởi động nhanh hơn. Bản sao trên ổ đĩa vẫn được mã hóa.",
     "privacy": {
-      "consistencyWarning": "Cảnh báo nhất quán vân tay",
-      "consistencyWarningDescription": "Cảnh báo khi khởi chạy nếu múi giờ hoặc ngôn ngữ của hồ sơ không khớp với nút thoát proxy.",
+      "consistencyWarning": "Chặn khi dấu vân tay không khớp",
+      "consistencyWarningDescription": "Ngăn trình duyệt khởi động khi múi giờ hoặc ngôn ngữ của hồ sơ không khớp với nút thoát của proxy. Bạn vẫn có thể chọn khởi chạy.",
       "clearTraffic": "Xóa toàn bộ lịch sử lưu lượng",
       "clearTrafficDescription": "Xóa an toàn số liệu thống kê lưu lượng đã ghi của mọi hồ sơ.",
-      "clearTrafficSuccess": "Đã xóa lịch sử lưu lượng"
+      "clearTrafficSuccess": "Đã xóa lịch sử lưu lượng",
+      "vpnExtensionWarning": "Cảnh báo tiện ích VPN",
+      "vpnExtensionWarningDescription": "Cảnh báo trước khi khởi chạy khi hồ sơ có tiện ích có thể định tuyến lại lưu lượng của trình duyệt."
     }
   },
   "header": {
@@ -1863,6 +1865,7 @@
     "remoteRateLimited": "Quá nhiều yêu cầu. Hãy đợi một lát rồi thử lại.",
     "remoteNoCapacity": "Hiện không có máy từ xa nào rảnh. Hãy thử lại sau vài phút.",
     "remoteNotEntitled": "Gói của bạn không bao gồm chạy từ xa.",
+    "remoteInteractiveNotEntitled": "Gói của bạn chỉ bao gồm giờ từ xa cho Cookie Bot, không dùng cho phiên từ xa thao tác trực tiếp.",
     "remoteSessionRefused": "Máy từ xa đã từ chối phiên này.",
     "remoteSessionNotFound": "Phiên từ xa đó không còn tồn tại.",
     "remoteSessionConflict": "Hồ sơ này đang được mở ở nơi khác.",
@@ -1889,7 +1892,11 @@
     "profileRemoteSyncPending": "Một phiên từ xa vừa kết thúc. Đang chờ tải các thay đổi về trước khi mở hồ sơ này tại đây.",
     "profileLockedByMember": "Hồ sơ này đang được {{email}} sử dụng.",
     "profileLockedElsewhere": "Hồ sơ này đang được sử dụng trên thiết bị khác.",
-    "profileLockUnavailable": "Không thể kiểm tra hồ sơ này có đang được dùng ở nơi khác hay không. Hãy kiểm tra kết nối và thử lại."
+    "profileLockUnavailable": "Không thể kiểm tra hồ sơ này có đang được dùng ở nơi khác hay không. Hãy kiểm tra kết nối và thử lại.",
+    "fingerprintExitMismatch": "Nút thoát của proxy không khớp với dấu vân tay của hồ sơ này.",
+    "launchConsentExpired": "Xác nhận đó không còn hiệu lực. Hãy thử khởi chạy lại.",
+    "vpnWorkerStartFailed": "Không thể khởi động kết nối VPN: {{detail}}",
+    "exitProbeFailed": "Không thể kết nối tới nút thoát của proxy để kiểm tra vị trí."
   },
   "rail": {
     "profiles": "Profile",
@@ -2135,14 +2142,9 @@
     "description": "Xóa cookie, lịch sử và bộ nhớ đệm khi trình duyệt đóng. Tiện ích mở rộng và dấu trang được giữ lại."
   },
   "consistencyWarning": {
-    "title": "Vân tay không khớp",
-    "intro": "Điểm thoát proxy của \"{{name}}\" không khớp với vân tay của hồ sơ này:",
-    "timezoneTitle": "Múi giờ không khớp",
     "timezoneDetail": "Nút thoát nằm ở {{exit}} nhưng vân tay báo là {{fingerprint}}.",
-    "languageTitle": "Ngôn ngữ không khớp",
     "languageDetail": "Quốc gia thoát là {{country}} nhưng ngôn ngữ của vân tay là {{fingerprint}}.",
     "explainer": "Múi giờ hoặc ngôn ngữ không khớp với IP thoát là một tín hiệu chống bot rất mạnh, dù thiết bị thật của bạn không bao giờ bị lộ. Hãy căn chỉnh vân tay theo vị trí proxy để giảm bị đối xử khắt khe.",
-    "dontWarnAgain": "Không cảnh báo lại cho hồ sơ này",
     "matchToProxy": "Khớp vân tay với proxy",
     "matching": "Đang khớp…",
     "matchSuccess": "Đã cập nhật vân tay để khớp với proxy. Khởi động lại hồ sơ để áp dụng."
@@ -2428,5 +2430,31 @@
       "cancelledByUser": "Đã dừng thủ công",
       "unknown": "Lý do không xác định ({{code}})"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "Đã chặn khởi chạy",
+    "titleWarning": "Trước khi khởi chạy",
+    "intro": "Hãy xem lại các vấn đề của \"{{name}}\" trước khi khởi động trình duyệt.",
+    "fingerprintHeading": "Điểm ra của proxy không khớp với dấu vân tay",
+    "vpnExtensionHeading": "Đã phát hiện tiện ích VPN",
+    "vpnExtensionIntro": "Các tiện ích trong hồ sơ này có thể định tuyến lại lưu lượng của trình duyệt:",
+    "vpnExtensionConfirmed": "Có thể thay đổi proxy",
+    "vpnExtensionLikely": "Có khả năng thay đổi proxy",
+    "vpnExtensionExplainer": "Nếu một trong số đó chuyển lưu lượng của bạn đi nơi khác, vị trí thực của trình duyệt sẽ không còn khớp với múi giờ, ngôn ngữ và vị trí địa lý mà hồ sơ này được tạo ra, và Donut không thể phát hiện điều đó từ bên ngoài.",
+    "sourceDonut": "Do Donut quản lý",
+    "sourceBrowser": "Đã cài trong hồ sơ",
+    "measurementUnreliable": "Vì tiện ích VPN có thể ghi đè proxy, kết quả kiểm tra điểm ra có thể không phản ánh tuyến đường mà trình duyệt thực sự dùng.",
+    "scanIncompleteEncrypted": "Hồ sơ này được mã hóa nên chỉ có thể kiểm tra các tiện ích do Donut quản lý.",
+    "scanIncompleteEphemeral": "Hồ sơ này chưa có dữ liệu nên chỉ có thể kiểm tra các tiện ích do Donut quản lý.",
+    "scanIncompletePartial": "Quá trình quét tiện ích bị ngắt giữa chừng nên có thể thiếu một số tiện ích.",
+    "probePending": "Điểm ra của proxy chưa được đo. Donut sẽ kiểm tra trong lúc khởi động và dừng lại nếu không khớp.",
+    "launchAnyway": "Vẫn khởi chạy",
+    "dontBlockAgain": "Không chặn lại với đúng sai lệch này",
+    "dontWarnExtensions": "Không cảnh báo lại về các tiện ích này",
+    "applyToRemaining": "Áp dụng lựa chọn này cho các hồ sơ còn lại",
+    "cancelledSummary": "Đã hủy {{cancelled}} trên {{total}} lượt khởi chạy",
+    "cancelled": "Đã hủy khởi chạy",
+    "vpnExtensionEntry": " {{version}} — {{capability}}, {{source}}",
+    "scanIncompleteMissing": "Hồ sơ này chưa từng được khởi chạy nên chỉ có thể kiểm tra các tiện ích do Donut quản lý."
   }
 }

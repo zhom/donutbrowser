@@ -85,11 +85,11 @@ export interface SyncSettings {
 
 /**
  * Capability/limit set derived from the plan by the backend. Features are gated
- * on these flags instead of a single "is paid?" check, so a plan like the future
- * "starter" tier (cross-OS fingerprints + cloud backup, no automation) is just
- * data. Mirrors `apps/backend/src/plans/entitlements.ts`. Resolve via
- * `getEntitlements()` — the desktop populates it, but it stays optional for
- * safety on older state.
+ * on these flags instead of a single "is paid?" check, so a plan like "solo"
+ * (cloud backup + nightly cookie bot, no automation, no fingerprint editing, no
+ * hands-on remote session) is just data. Mirrors
+ * `apps/backend/src/plans/entitlements.ts`. Resolve via `getEntitlements()` —
+ * the desktop populates it, but it stays optional for safety on older state.
  */
 export interface Entitlements {
   active: boolean;
@@ -99,6 +99,13 @@ export interface Entitlements {
   teamCollaboration: boolean;
   /** Overnight profile warming on a leased remote host. */
   cookieBot: boolean;
+  /**
+   * May open a HANDS-ON remote session. Not implied by `cookieBot` or by a
+   * non-zero `remoteBrowserHours`: solo funds a nightly bot out of its hours and
+   * may not drive a remote browser itself, so any UI offering interactive remote
+   * control must read this flag.
+   */
+  remoteInteractive: boolean;
   profileLimit: number;
   requestsPerHour: number;
   /**
@@ -110,15 +117,22 @@ export interface Entitlements {
 }
 
 /**
- * What a backend older than the cookie-bot release actually sends. Read it
- * through `getEntitlements()`, which fills the gap — never off `CloudUser`
- * directly, or a paying customer's Cookie Bot silently reads `false`.
+ * What a backend older than the current release actually sends. Read it through
+ * `getEntitlements()`, which fills the gaps — never off `CloudUser` directly, or
+ * a paying customer's Cookie Bot silently reads `false`.
+ *
+ * `remoteInteractive` joins the optional set for the same reason `cookieBot`
+ * did: a backend predating the solo tier omits it, and reading the absent key as
+ * `false` would take interactive remote sessions away from a Pro customer whose
+ * only mistake was a stale cached login.
  */
 export type ServerEntitlements = Omit<
   Entitlements,
-  "cookieBot" | "remoteBrowserHours"
+  "cookieBot" | "remoteBrowserHours" | "remoteInteractive"
 > &
-  Partial<Pick<Entitlements, "cookieBot" | "remoteBrowserHours">>;
+  Partial<
+    Pick<Entitlements, "cookieBot" | "remoteBrowserHours" | "remoteInteractive">
+  >;
 
 export interface CloudUser {
   id: string;
@@ -644,4 +658,40 @@ export interface VpnStatus {
   bytes_sent?: number;
   bytes_received?: number;
   last_handshake?: number;
+}
+
+/** Result of comparing a proxy's exit node against a profile's fingerprint. */
+export interface ConsistencyResult {
+  consistent: boolean;
+  checked: boolean;
+  exit_ip: string | null;
+  exit_country_code: string | null;
+  exit_timezone: string | null;
+  fingerprint_timezone: string | null;
+  fingerprint_language: string | null;
+  /** Which dimensions disagree: "timezone", "language". */
+  mismatches: string[];
+}
+
+/** A VPN/proxy extension found in a profile, which can reroute browser traffic. */
+export interface DetectedVpnExtension {
+  /** Acknowledgement identity: `donut:<uuid>` or `crx:<id>`. */
+  key: string;
+  name: string;
+  version: string | null;
+  /** "donut" (managed by Donut) or "browser" (installed in the profile). */
+  source: string;
+  /** "confirmed" (holds the proxy permission) or "likely". */
+  confidence: string;
+  signals: string[];
+}
+
+/** Local-only checks answered before a launch starts any worker. */
+export interface PreLaunchChecks {
+  vpn_extensions: DetectedVpnExtension[];
+  scan_state: string;
+  consistency: ConsistencyResult;
+  exit_probe_pending: boolean;
+  exit_measurement_unreliable: boolean;
+  consent_token: string | null;
 }

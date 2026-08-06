@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "在内存中保留已解密的配置文件",
     "keepDecryptedProfilesInRamDescription": "在启动之间保留密码保护配置文件的已解密内存副本,以便更快地启动。无论如何磁盘上的副本始终保持加密。",
     "privacy": {
-      "consistencyWarning": "指纹一致性警告",
-      "consistencyWarningDescription": "当配置文件的时区或语言与其代理出口节点不匹配时,在启动时发出警告。",
+      "consistencyWarning": "指纹不匹配时阻止启动",
+      "consistencyWarningDescription": "当配置文件的时区或语言与其代理出口节点不一致时，阻止浏览器启动。你仍可以选择启动。",
       "clearTraffic": "清除所有流量历史",
       "clearTrafficDescription": "安全清除所有配置文件的已记录流量统计数据。",
-      "clearTrafficSuccess": "流量历史已清除"
+      "clearTrafficSuccess": "流量历史已清除",
+      "vpnExtensionWarning": "VPN 扩展警告",
+      "vpnExtensionWarningDescription": "当配置文件中存在可改变浏览器流量路径的扩展时，在启动前发出警告。"
     }
   },
   "header": {
@@ -1863,6 +1865,7 @@
     "remoteRateLimited": "请求过于频繁。请稍候再试。",
     "remoteNoCapacity": "当前没有空闲的远程机器。请几分钟后再试。",
     "remoteNotEntitled": "你的套餐不包含远程运行。",
+    "remoteInteractiveNotEntitled": "您的套餐中的远程时长仅供 Cookie Bot 使用，不能用于手动远程会话。",
     "remoteSessionRefused": "远程机器拒绝了此会话。",
     "remoteSessionNotFound": "该远程会话已不存在。",
     "remoteSessionConflict": "此配置文件已在别处打开。",
@@ -1889,7 +1892,11 @@
     "profileRemoteSyncPending": "远程会话刚刚结束。正在等待其更改下载完成后才能在此打开该配置文件。",
     "profileLockedByMember": "该配置文件正在被 {{email}} 使用。",
     "profileLockedElsewhere": "该配置文件正在另一台设备上使用。",
-    "profileLockUnavailable": "无法检查该配置文件是否正在别处使用。请检查网络连接后重试。"
+    "profileLockUnavailable": "无法检查该配置文件是否正在别处使用。请检查网络连接后重试。",
+    "fingerprintExitMismatch": "代理出口节点与此配置文件的指纹不匹配。",
+    "launchConsentExpired": "该确认已失效。请重新启动。",
+    "vpnWorkerStartFailed": "无法启动 VPN 连接：{{detail}}",
+    "exitProbeFailed": "无法连接代理出口节点以检查其位置。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2135,14 +2142,9 @@
     "description": "浏览器关闭时清除 Cookie、历史记录和缓存。扩展和书签将被保留。"
   },
   "consistencyWarning": {
-    "title": "指纹不匹配",
-    "intro": "「{{name}}」的代理出口与此配置文件的指纹不匹配:",
-    "timezoneTitle": "时区不匹配",
     "timezoneDetail": "出口节点位于 {{exit}},但指纹报告为 {{fingerprint}}。",
-    "languageTitle": "语言不匹配",
     "languageDetail": "出口国家/地区为 {{country}},但指纹语言为 {{fingerprint}}。",
     "explainer": "时区或语言与出口 IP 不一致是强烈的反机器人信号,即使您的真实设备信息从未泄露。请让指纹与代理位置保持一致,以减少被针对的风险。",
-    "dontWarnAgain": "不再为此配置文件发出警告",
     "matchToProxy": "将指纹匹配到代理",
     "matching": "匹配中…",
     "matchSuccess": "指纹已更新以匹配代理。重新启动配置文件以生效。"
@@ -2428,5 +2430,31 @@
       "cancelledByUser": "已手动停止",
       "unknown": "未知原因（{{code}}）"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "启动已阻止",
+    "titleWarning": "启动前请注意",
+    "intro": "启动浏览器前，请检查“{{name}}”的以下问题。",
+    "fingerprintHeading": "代理出口与指纹不匹配",
+    "vpnExtensionHeading": "检测到 VPN 扩展",
+    "vpnExtensionIntro": "此配置文件中可能改变浏览器流量路径的扩展：",
+    "vpnExtensionConfirmed": "可以更改代理",
+    "vpnExtensionLikely": "可能会更改代理",
+    "vpnExtensionExplainer": "如果其中之一将流量转发到别处，浏览器的真实位置将不再与创建此配置文件时使用的时区、语言和地理位置一致，而 Donut 无法从外部察觉。",
+    "sourceDonut": "由 Donut 管理",
+    "sourceBrowser": "已安装在配置文件中",
+    "measurementUnreliable": "由于 VPN 扩展可以覆盖代理设置，出口检测结果可能并非浏览器实际使用的线路。",
+    "scanIncompleteEncrypted": "此配置文件已加密，因此只能检查由 Donut 管理的扩展。",
+    "scanIncompleteEphemeral": "此配置文件尚无数据，因此只能检查由 Donut 管理的扩展。",
+    "scanIncompletePartial": "扩展扫描被中断，可能有部分扩展未列出。",
+    "probePending": "尚未测量代理出口。Donut 会在启动过程中检查，如不匹配则停止。",
+    "launchAnyway": "仍要启动",
+    "dontBlockAgain": "不再因这一完全相同的不匹配而阻止",
+    "dontWarnExtensions": "不再就这些扩展发出警告",
+    "applyToRemaining": "将此选择应用于其余配置文件",
+    "cancelledSummary": "已取消 {{total}} 次启动中的 {{cancelled}} 次",
+    "cancelled": "已取消启动",
+    "vpnExtensionEntry": " {{version}} — {{capability}}、{{source}}",
+    "scanIncompleteMissing": "此配置文件尚未启动过，因此只能检查由 Donut 管理的扩展。"
   }
 }

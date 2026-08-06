@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "復号済みプロファイルをRAMに保持",
     "keepDecryptedProfilesInRamDescription": "起動を高速化するため、パスワード保護されたプロファイルの復号済みコピーをRAMに保持します。ディスク上のコピーは常に暗号化されたままです。",
     "privacy": {
-      "consistencyWarning": "フィンガープリント整合性の警告",
-      "consistencyWarningDescription": "プロファイルのタイムゾーンや言語がプロキシ出口ノードと一致しない場合、起動時に警告します。",
+      "consistencyWarning": "フィンガープリント不一致時に起動をブロック",
+      "consistencyWarningDescription": "プロファイルのタイムゾーンや言語がプロキシの出口ノードと一致しない場合、ブラウザーの起動を停止します。それでも起動を選択できます。",
       "clearTraffic": "すべてのトラフィック履歴を消去",
       "clearTrafficDescription": "すべてのプロファイルの記録されたトラフィック統計を安全に消去します。",
-      "clearTrafficSuccess": "トラフィック履歴を消去しました"
+      "clearTrafficSuccess": "トラフィック履歴を消去しました",
+      "vpnExtensionWarning": "VPN拡張機能の警告",
+      "vpnExtensionWarningDescription": "ブラウザーの通信を経路変更できる拡張機能がプロファイルに含まれる場合、起動前に警告します。"
     }
   },
   "header": {
@@ -1863,6 +1865,7 @@
     "remoteRateLimited": "リクエストが多すぎます。少し待ってからもう一度お試しください。",
     "remoteNoCapacity": "現在空いているリモートマシンがありません。数分後にもう一度お試しください。",
     "remoteNotEntitled": "ご利用のプランにはリモート実行が含まれていません。",
+    "remoteInteractiveNotEntitled": "ご利用のプランのリモート時間は Cookie Bot 専用で、手動のリモートセッションには使えません。",
     "remoteSessionRefused": "リモートマシンがこのセッションを拒否しました。",
     "remoteSessionNotFound": "そのリモートセッションはすでに存在しません。",
     "remoteSessionConflict": "このプロファイルはすでに別の場所で開かれています。",
@@ -1889,7 +1892,11 @@
     "profileRemoteSyncPending": "リモートセッションが終了しました。この profile をここで開く前に、変更のダウンロードを待っています。",
     "profileLockedByMember": "このプロファイルは {{email}} が使用中です。",
     "profileLockedElsewhere": "このプロファイルは別のデバイスで使用中です。",
-    "profileLockUnavailable": "このプロファイルが他で使用中か確認できませんでした。接続を確認して再試行してください。"
+    "profileLockUnavailable": "このプロファイルが他で使用中か確認できませんでした。接続を確認して再試行してください。",
+    "fingerprintExitMismatch": "プロキシの出口ノードがこのプロファイルのフィンガープリントと一致しません。",
+    "launchConsentExpired": "この確認は無効になりました。もう一度起動してください。",
+    "vpnWorkerStartFailed": "VPN接続を開始できませんでした: {{detail}}",
+    "exitProbeFailed": "プロキシの出口ノードに接続できず、所在地を確認できませんでした。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2135,14 +2142,9 @@
     "description": "ブラウザを閉じるときに Cookie、履歴、キャッシュを消去します。拡張機能とブックマークは保持されます。"
   },
   "consistencyWarning": {
-    "title": "フィンガープリントの不一致",
-    "intro": "「{{name}}」のプロキシ出口がこのプロファイルのフィンガープリントと一致していません:",
-    "timezoneTitle": "タイムゾーンの不一致",
     "timezoneDetail": "出口ノードは {{exit}} にありますが、フィンガープリントは {{fingerprint}} を示しています。",
-    "languageTitle": "言語の不一致",
     "languageDetail": "出口の国は {{country}} ですが、フィンガープリントの言語は {{fingerprint}} です。",
     "explainer": "出口 IP と食い違うタイムゾーンや言語は、実際のデバイス情報が漏れていなくても強力なアンチボットシグナルになります。フィンガープリントをプロキシの場所に合わせて、警戒される扱いを減らしましょう。",
-    "dontWarnAgain": "このプロファイルでは今後警告しない",
     "matchToProxy": "フィンガープリントをプロキシに合わせる",
     "matching": "調整中…",
     "matchSuccess": "フィンガープリントをプロキシに合わせて更新しました。反映するにはプロファイルを再起動してください。"
@@ -2428,5 +2430,31 @@
       "cancelledByUser": "手動で停止しました",
       "unknown": "不明な理由 ({{code}})"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "起動をブロックしました",
+    "titleWarning": "起動する前に",
+    "intro": "ブラウザーを起動する前に、「{{name}}」に関する次の問題を確認してください。",
+    "fingerprintHeading": "プロキシの出口がフィンガープリントと一致しません",
+    "vpnExtensionHeading": "VPN拡張機能を検出しました",
+    "vpnExtensionIntro": "このプロファイル内で、ブラウザーの通信を経路変更できる拡張機能:",
+    "vpnExtensionConfirmed": "プロキシを変更できます",
+    "vpnExtensionLikely": "プロキシを変更する可能性があります",
+    "vpnExtensionExplainer": "いずれかが通信を別の経路に変えると、ブラウザーの実際の所在地は、このプロファイルの作成時に設定されたタイムゾーン・言語・位置情報と一致しなくなります。Donutは外部からそれを検出できません。",
+    "sourceDonut": "Donutが管理",
+    "sourceBrowser": "プロファイルにインストール済み",
+    "measurementUnreliable": "VPN拡張機能はプロキシを上書きできるため、出口の確認結果がブラウザーの実際の経路を表していない可能性があります。",
+    "scanIncompleteEncrypted": "このプロファイルは暗号化されているため、Donutが管理する拡張機能のみ確認できました。",
+    "scanIncompleteEphemeral": "このプロファイルにはまだデータがないため、Donutが管理する拡張機能のみ確認できました。",
+    "scanIncompletePartial": "拡張機能のスキャンが途中で終了したため、一部が表示されていない可能性があります。",
+    "probePending": "プロキシの出口はまだ測定されていません。Donutは起動中に確認し、一致しない場合は停止します。",
+    "launchAnyway": "このまま起動",
+    "dontBlockAgain": "この不一致では今後ブロックしない",
+    "dontWarnExtensions": "これらの拡張機能について今後警告しない",
+    "applyToRemaining": "この選択を残りのプロファイルにも適用",
+    "cancelledSummary": "{{total}}件中{{cancelled}}件の起動をキャンセルしました",
+    "cancelled": "起動をキャンセルしました",
+    "vpnExtensionEntry": " {{version}}（{{capability}}、{{source}}）",
+    "scanIncompleteMissing": "このプロファイルはまだ起動されていないため、Donutが管理する拡張機能のみ確認できました。"
   }
 }

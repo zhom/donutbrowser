@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "Conserver les profils déchiffrés en RAM",
     "keepDecryptedProfilesInRamDescription": "Conserver en RAM la copie déchiffrée des profils protégés par mot de passe entre les lancements pour un démarrage plus rapide. La copie sur disque reste chiffrée dans tous les cas.",
     "privacy": {
-      "consistencyWarning": "Avertissement de cohérence d'empreinte",
-      "consistencyWarningDescription": "Avertir au lancement lorsque le fuseau horaire ou la langue d'un profil ne correspond pas à son nœud de sortie proxy.",
+      "consistencyWarning": "Bloquer en cas d'empreinte incohérente",
+      "consistencyWarningDescription": "Empêche le navigateur de démarrer lorsque le fuseau horaire ou la langue d'un profil ne correspond pas à son nœud de sortie. Vous pourrez tout de même lancer.",
       "clearTraffic": "Effacer tout l'historique de trafic",
       "clearTrafficDescription": "Efface en toute sécurité les statistiques de trafic enregistrées pour chaque profil.",
-      "clearTrafficSuccess": "Historique de trafic effacé"
+      "clearTrafficSuccess": "Historique de trafic effacé",
+      "vpnExtensionWarning": "Avertissement d'extension VPN",
+      "vpnExtensionWarningDescription": "Avertir avant le lancement lorsqu'un profil contient une extension capable de rerouter le trafic du navigateur."
     }
   },
   "header": {
@@ -1870,6 +1872,7 @@
     "remoteRateLimited": "Trop de requêtes. Patientez un instant et réessayez.",
     "remoteNoCapacity": "Aucune machine distante n'est libre pour le moment. Réessayez dans quelques minutes.",
     "remoteNotEntitled": "Votre forfait n'inclut pas l'exécution à distance.",
+    "remoteInteractiveNotEntitled": "Votre forfait inclut des heures distantes uniquement pour le Cookie Bot, pas pour les sessions distantes interactives.",
     "remoteSessionRefused": "La machine distante a refusé cette session.",
     "remoteSessionNotFound": "Cette session distante n'existe plus.",
     "remoteSessionConflict": "Ce profil est déjà ouvert ailleurs.",
@@ -1896,7 +1899,11 @@
     "profileRemoteSyncPending": "Une session distante vient de se terminer. Ses modifications doivent être téléchargées avant d'ouvrir ce profil ici.",
     "profileLockedByMember": "Ce profil est utilisé par {{email}}.",
     "profileLockedElsewhere": "Ce profil est utilisé sur un autre appareil.",
-    "profileLockUnavailable": "Impossible de vérifier si ce profil est utilisé ailleurs. Vérifiez votre connexion et réessayez."
+    "profileLockUnavailable": "Impossible de vérifier si ce profil est utilisé ailleurs. Vérifiez votre connexion et réessayez.",
+    "fingerprintExitMismatch": "Le nœud de sortie du proxy ne correspond pas à l'empreinte de ce profil.",
+    "launchConsentExpired": "Cette confirmation n'est plus valide. Relancez le profil.",
+    "vpnWorkerStartFailed": "Impossible de démarrer la connexion VPN : {{detail}}",
+    "exitProbeFailed": "Impossible de joindre le nœud de sortie du proxy pour vérifier sa localisation."
   },
   "rail": {
     "profiles": "Profils",
@@ -2142,14 +2149,9 @@
     "description": "Supprime les cookies, l'historique et le cache à la fermeture du navigateur. Les extensions et les favoris sont conservés."
   },
   "consistencyWarning": {
-    "title": "Incohérence d'empreinte",
-    "intro": "La sortie du proxy de « {{name}} » ne correspond pas à l'empreinte de ce profil :",
-    "timezoneTitle": "Incohérence de fuseau horaire",
     "timezoneDetail": "Le nœud de sortie est dans {{exit}}, mais l'empreinte indique {{fingerprint}}.",
-    "languageTitle": "Incohérence de langue",
     "languageDetail": "Le pays de sortie est {{country}}, mais la langue de l'empreinte est {{fingerprint}}.",
     "explainer": "Un fuseau horaire ou une langue en désaccord avec votre IP de sortie est un signal anti-bot fort, même si votre appareil réel ne fuite jamais. Alignez l'empreinte sur l'emplacement du proxy pour réduire les traitements hostiles.",
-    "dontWarnAgain": "Ne plus avertir pour ce profil",
     "matchToProxy": "Aligner l'empreinte sur le proxy",
     "matching": "Alignement…",
     "matchSuccess": "Empreinte mise à jour pour correspondre au proxy. Relancez le profil pour l'appliquer."
@@ -2455,5 +2457,31 @@
       "cancelledByUser": "Arrêté à la main",
       "unknown": "Raison inconnue ({{code}})"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "Lancement bloqué",
+    "titleWarning": "Avant de lancer",
+    "intro": "Examinez ces problèmes concernant « {{name}} » avant de démarrer le navigateur.",
+    "fingerprintHeading": "La sortie du proxy ne correspond pas à l'empreinte",
+    "vpnExtensionHeading": "Extension VPN détectée",
+    "vpnExtensionIntro": "Extensions de ce profil pouvant rerouter le trafic du navigateur :",
+    "vpnExtensionConfirmed": "Peut changer le proxy",
+    "vpnExtensionLikely": "Pourrait changer le proxy",
+    "vpnExtensionExplainer": "Si l'une d'elles redirige votre trafic ailleurs, la position réelle du navigateur ne correspondra plus au fuseau horaire, à la langue et à la géolocalisation avec lesquels ce profil a été créé, et Donut ne peut pas le détecter de l'extérieur.",
+    "sourceDonut": "Gérée par Donut",
+    "sourceBrowser": "Installée dans le profil",
+    "measurementUnreliable": "Comme une extension VPN peut remplacer le proxy, la vérification de la sortie peut ne pas refléter la route réellement empruntée par le navigateur.",
+    "scanIncompleteEncrypted": "Ce profil est chiffré : seules les extensions gérées par Donut ont pu être vérifiées.",
+    "scanIncompleteEphemeral": "Ce profil n'a pas encore de données : seules les extensions gérées par Donut ont pu être vérifiées.",
+    "scanIncompletePartial": "L'analyse des extensions a été interrompue, certaines peuvent manquer.",
+    "probePending": "La sortie du proxy n'a pas encore été mesurée. Donut la vérifiera au démarrage et s'arrêtera si elle ne correspond pas.",
+    "launchAnyway": "Lancer quand même",
+    "dontBlockAgain": "Ne plus bloquer pour cette incohérence exacte",
+    "dontWarnExtensions": "Ne plus m'avertir à propos de ces extensions",
+    "applyToRemaining": "Appliquer ce choix aux profils restants",
+    "cancelledSummary": "{{cancelled}} lancements sur {{total}} annulés",
+    "cancelled": "Lancement annulé",
+    "vpnExtensionEntry": " {{version}} — {{capability}}, {{source}}",
+    "scanIncompleteMissing": "Ce profil n'a jamais été lancé : seules les extensions gérées par Donut ont pu être vérifiées."
   }
 }

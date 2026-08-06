@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "Keep Decrypted Profiles In RAM",
     "keepDecryptedProfilesInRamDescription": "Preserve the decrypted in-RAM copy of password-protected profiles between launches for faster startup. The on-disk copy stays encrypted regardless.",
     "privacy": {
-      "consistencyWarning": "Fingerprint consistency warning",
-      "consistencyWarningDescription": "Warn on launch when a profile's timezone or language doesn't match its proxy exit node.",
+      "consistencyWarning": "Block on fingerprint mismatch",
+      "consistencyWarningDescription": "Stop the browser from starting when a profile's timezone or language doesn't match its proxy exit node. You can still choose to launch.",
       "clearTraffic": "Clear all traffic history",
       "clearTrafficDescription": "Securely erase recorded traffic statistics for every profile.",
-      "clearTrafficSuccess": "Traffic history cleared"
+      "clearTrafficSuccess": "Traffic history cleared",
+      "vpnExtensionWarning": "VPN extension warning",
+      "vpnExtensionWarningDescription": "Warn before launching when a profile contains an extension that can reroute the browser's traffic."
     }
   },
   "header": {
@@ -1863,6 +1865,7 @@
     "remoteRateLimited": "Too many requests. Wait a moment and try again.",
     "remoteNoCapacity": "No remote host is free right now. Try again in a few minutes.",
     "remoteNotEntitled": "Your plan does not include remote execution.",
+    "remoteInteractiveNotEntitled": "Your plan includes remote hours for the Cookie Bot only, not for hands-on remote sessions.",
     "remoteSessionRefused": "The remote host refused this session.",
     "remoteSessionNotFound": "That remote session no longer exists.",
     "remoteSessionConflict": "This profile is already open somewhere else.",
@@ -1889,7 +1892,11 @@
     "profileRemoteSyncPending": "A remote session just finished. Waiting for its changes to download before this profile can open here.",
     "profileLockedByMember": "This profile is in use by {{email}}.",
     "profileLockedElsewhere": "This profile is in use on another device.",
-    "profileLockUnavailable": "Could not check whether this profile is in use elsewhere. Check your connection and try again."
+    "profileLockUnavailable": "Could not check whether this profile is in use elsewhere. Check your connection and try again.",
+    "fingerprintExitMismatch": "The proxy exit node doesn't match this profile's fingerprint.",
+    "launchConsentExpired": "That confirmation is no longer valid. Try launching again.",
+    "vpnWorkerStartFailed": "Couldn't start the VPN connection: {{detail}}",
+    "exitProbeFailed": "Couldn't reach the proxy exit node to check its location."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2135,14 +2142,9 @@
     "description": "Wipe cookies, history and cache when the browser closes. Extensions and bookmarks are kept."
   },
   "consistencyWarning": {
-    "title": "Fingerprint mismatch",
-    "intro": "Your proxy exit for \"{{name}}\" doesn't match this profile's fingerprint:",
-    "timezoneTitle": "Timezone mismatch",
     "timezoneDetail": "Exit node is in {{exit}} but the fingerprint reports {{fingerprint}}.",
-    "languageTitle": "Language mismatch",
     "languageDetail": "Exit country is {{country}} but the fingerprint language is {{fingerprint}}.",
     "explainer": "A timezone or language that disagrees with your exit IP is a strong anti-bot signal, even though your real device never leaks. Align the fingerprint with the proxy location to reduce hostile treatment.",
-    "dontWarnAgain": "Don't warn again for this profile",
     "matchToProxy": "Match fingerprint to proxy",
     "matching": "Matching…",
     "matchSuccess": "Fingerprint updated to match the proxy. Relaunch the profile to apply."
@@ -2428,5 +2430,31 @@
       "cancelledByUser": "Stopped by hand",
       "unknown": "Unknown reason ({{code}})"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "Launch blocked",
+    "titleWarning": "Before you launch",
+    "intro": "Review these issues with \"{{name}}\" before starting the browser.",
+    "fingerprintHeading": "Proxy exit doesn't match the fingerprint",
+    "vpnExtensionHeading": "VPN extension detected",
+    "vpnExtensionIntro": "Extensions in this profile that can reroute the browser's traffic:",
+    "vpnExtensionConfirmed": "Can change the proxy",
+    "vpnExtensionLikely": "May change the proxy",
+    "vpnExtensionExplainer": "If one of these routes your traffic elsewhere, the browser's real location will no longer match the timezone, language and geolocation this profile was created with, and Donut cannot detect that from the outside.",
+    "sourceDonut": "Managed by Donut",
+    "sourceBrowser": "Installed in the profile",
+    "measurementUnreliable": "Because a VPN extension can override the proxy, the exit check may not describe the route the browser actually takes.",
+    "scanIncompleteEncrypted": "This profile is encrypted, so only Donut-managed extensions could be checked.",
+    "scanIncompleteEphemeral": "This profile has no data yet, so only Donut-managed extensions could be checked.",
+    "scanIncompletePartial": "The extension scan was cut short, so some extensions may not be listed.",
+    "probePending": "The proxy exit hasn't been measured yet. Donut will check it while starting and stop if it doesn't match.",
+    "launchAnyway": "Launch anyway",
+    "dontBlockAgain": "Don't block again for this exact mismatch",
+    "dontWarnExtensions": "Don't warn again about these extensions",
+    "applyToRemaining": "Apply this choice to the remaining profiles",
+    "cancelledSummary": "{{cancelled}} of {{total}} launches cancelled",
+    "cancelled": "Launch cancelled",
+    "vpnExtensionEntry": " {{version}} — {{capability}}, {{source}}",
+    "scanIncompleteMissing": "This profile has not been launched yet, so only Donut-managed extensions could be checked."
   }
 }

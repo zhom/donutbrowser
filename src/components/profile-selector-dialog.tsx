@@ -28,7 +28,9 @@ import {
 import { useBrowserState } from "@/hooks/use-browser-state";
 import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { translateBackendError } from "@/lib/backend-errors";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
+import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile } from "@/types";
 import { CopyToClipboard } from "./ui/copy-to-clipboard";
 import { RippleButton } from "./ui/ripple";
@@ -108,10 +110,15 @@ export function ProfileSelectorDialog({
       await invoke("open_url_with_profile", {
         profileId: selected.id,
         url,
+        consentToken: null,
       });
       onClose();
     } catch (error) {
       console.error("Failed to open URL with profile:", error);
+      // This path reaches the browser without going through page.tsx's gate,
+      // so a launch the gate blocks surfaces here. Without a toast the deep
+      // link would simply appear to do nothing.
+      showErrorToast(translateBackendError(t, error));
     } finally {
       setIsLaunching(false);
       if (selected) {
@@ -122,7 +129,7 @@ export function ProfileSelectorDialog({
         });
       }
     }
-  }, [selectedProfile, url, onClose, profiles]);
+  }, [selectedProfile, url, onClose, profiles, t]);
 
   const handleCancel = useCallback(() => {
     setSelectedProfile(null);

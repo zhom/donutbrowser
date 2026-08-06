@@ -2493,9 +2493,7 @@ impl McpServer {
       app_handle.clone(),
       profile.clone(),
       url.map(|s| s.to_string()),
-      None,
-      headless,
-      true,
+      crate::browser_runner::LaunchOptions::automation(None, headless),
     )
     .await
     .map_err(|e| McpError {
@@ -2651,9 +2649,7 @@ impl McpServer {
         app_handle.clone(),
         profile.clone(),
         url.map(|s| s.to_string()),
-        None,
-        headless,
-        true,
+        crate::browser_runner::LaunchOptions::automation(None, headless),
       )
       .await
       {

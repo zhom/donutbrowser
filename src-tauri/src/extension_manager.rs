@@ -86,6 +86,62 @@ fn find_zip_start(data: &[u8]) -> usize {
   0
 }
 
+/// Read and parse an extension archive's `manifest.json`. Handles the CRX3
+/// header by seeking to the embedded ZIP. Shared with
+/// `vpn_extension_detect`, which classifies from the raw manifest rather than
+/// from the metadata subset persisted on `Extension`.
+pub(crate) fn read_manifest_from_archive(
+  file_data: &[u8],
+  file_type: &str,
+) -> Option<serde_json::Value> {
+  let zip_start = if file_type == "crx" {
+    find_zip_start(file_data)
+  } else {
+    0
+  };
+
+  let cursor = std::io::Cursor::new(file_data.get(zip_start..)?);
+  let mut archive = zip::ZipArchive::new(cursor).ok()?;
+
+  let mut contents = String::new();
+  {
+    let mut file = archive.by_name("manifest.json").ok()?;
+    std::io::Read::read_to_string(&mut file, &mut contents).ok()?;
+  }
+  serde_json::from_str(&contents).ok()
+}
+
+/// Resolve a `__MSG_key__` placeholder against the archive's default locale
+/// messages. Chromium extensions routinely localize `name`/`description`, and
+/// showing the raw placeholder in a warning dialog reads as a bug.
+pub(crate) fn resolve_archive_i18n(
+  file_data: &[u8],
+  file_type: &str,
+  manifest: &serde_json::Value,
+  value: &str,
+) -> Option<String> {
+  let key = crate::vpn_extension_detect::message_placeholder_key(value)?;
+  let default_locale = manifest.get("default_locale")?.as_str()?;
+
+  let zip_start = if file_type == "crx" {
+    find_zip_start(file_data)
+  } else {
+    0
+  };
+  let cursor = std::io::Cursor::new(file_data.get(zip_start..)?);
+  let mut archive = zip::ZipArchive::new(cursor).ok()?;
+
+  let mut contents = String::new();
+  {
+    let mut file = archive
+      .by_name(&format!("_locales/{default_locale}/messages.json"))
+      .ok()?;
+    std::io::Read::read_to_string(&mut file, &mut contents).ok()?;
+  }
+  let messages: serde_json::Value = serde_json::from_str(&contents).ok()?;
+  crate::vpn_extension_detect::lookup_message(&messages, &key)
+}
+
 #[allow(clippy::type_complexity)]
 fn extract_manifest_metadata(
   file_data: &[u8],
@@ -97,37 +153,9 @@ fn extract_manifest_metadata(
   Option<String>,
   Option<String>,
 ) {
-  let zip_start = if file_type == "crx" {
-    find_zip_start(file_data)
-  } else {
-    0
-  };
-
-  let cursor = std::io::Cursor::new(&file_data[zip_start..]);
-  let mut archive = match zip::ZipArchive::new(cursor) {
-    Ok(a) => a,
-    Err(_) => return (None, None, None, None, None),
-  };
-
-  let manifest_content = if let Ok(mut file) = archive.by_name("manifest.json") {
-    let mut contents = String::new();
-    if std::io::Read::read_to_string(&mut file, &mut contents).is_ok() {
-      Some(contents)
-    } else {
-      None
-    }
-  } else {
-    None
-  };
-
-  let manifest_content = match manifest_content {
-    Some(c) => c,
+  let manifest = match read_manifest_from_archive(file_data, file_type) {
+    Some(v) => v,
     None => return (None, None, None, None, None),
-  };
-
-  let manifest: serde_json::Value = match serde_json::from_str(&manifest_content) {
-    Ok(v) => v,
-    Err(_) => return (None, None, None, None, None),
   };
 
   let name = manifest

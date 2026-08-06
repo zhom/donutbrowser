@@ -244,13 +244,49 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       profileId: profile.id,
       exitIp: "8.8.8.8",
     });
-    const consistency = await app.invoke(
-      "check_profile_fingerprint_consistency",
-      {
-        profileId: profile.id,
-      },
+    // Pre-launch gate: local-only checks that must answer without starting a
+    // proxy, an Xray worker or the browser.
+    const checks = await app.invoke("get_profile_pre_launch_checks", {
+      profileId: profile.id,
+    });
+    assert.ok(Array.isArray(checks.vpn_extensions));
+    assert.equal(
+      typeof checks.scan_state,
+      "string",
+      "the scan must report whether it saw the whole profile",
     );
-    assert.equal(typeof consistency, "object");
+    assert.equal(typeof checks.consistency, "object");
+    assert.equal(typeof checks.exit_probe_pending, "boolean");
+    assert.equal(typeof checks.exit_measurement_unreliable, "boolean");
+    // This profile has no VPN extension, so nothing may block its launch.
+    assert.equal(
+      checks.vpn_extensions.length,
+      0,
+      "a clean profile must not report a VPN extension",
+    );
+    assert.equal(
+      checks.consent_token,
+      null,
+      "a consent token is only minted when a cached mismatch is blocking",
+    );
+
+    // Acknowledgements are per-profile and must be accepted for both kinds.
+    await app.invoke("ack_launch_gate", {
+      profileId: profile.id,
+      ackFingerprint: false,
+      ackExtensionKeys: ["crx:e2e-nonexistent-extension"],
+    });
+    await app.invoke("ack_launch_gate", {
+      profileId: profile.id,
+      ackFingerprint: true,
+      ackExtensionKeys: [],
+    });
+    assert.match(
+      await app.invokeError("get_profile_pre_launch_checks", {
+        profileId: "00000000-0000-0000-0000-000000000000",
+      }),
+      /PROFILE_NOT_FOUND/,
+    );
 
     const directProfile = (await app.invoke("list_browser_profiles")).find(
       (item) => item.id === profile.id,

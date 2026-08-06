@@ -172,12 +172,15 @@ impl BrowserRunner {
     });
   }
 
+  /// Resolve the upstream a launch will use.
+  ///
+  /// Deliberately does NOT fire the launch hook: that moved below the gate, so
+  /// a launch the user blocks and then retries calls the user's webhook once
+  /// rather than once per attempt.
   async fn resolve_launch_proxy(
     &self,
     profile: &BrowserProfile,
   ) -> Result<Option<ProxySettings>, String> {
-    Self::fire_launch_hook(profile);
-
     self
       .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
       .await
@@ -210,9 +213,9 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
     url: Option<String>,
-    _local_proxy_settings: Option<&ProxySettings>,
     remote_debugging_port: Option<u16>,
     headless: bool,
+    gate: &crate::launch_gate::FingerprintGate,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Handle Wayfern profiles using WayfernManager
     if profile.browser == "wayfern" {
@@ -277,12 +280,61 @@ impl BrowserRunner {
         upstream_proxy = Some(worker.local_proxy_settings());
       }
 
+      /// Stops a VPN worker this launch started, if the launch then fails.
+      ///
+      /// `created` is the whole point: `start_vpn_worker` reuses a live worker
+      /// for the same VPN, so an unconditional stop would sever the tunnel a
+      /// *different* profile is browsing through the moment this one is
+      /// cancelled. The in-use check is a second belt for a worker adopted by a
+      /// browser that started between the two points.
+      struct VpnLaunchGuard {
+        worker_id: Option<String>,
+        vpn_id: String,
+        created: bool,
+        profile_name: String,
+      }
+      impl Drop for VpnLaunchGuard {
+        fn drop(&mut self) {
+          let Some(worker_id) = self.worker_id.take() else {
+            return;
+          };
+          if !self.created {
+            return;
+          }
+          log::warn!(
+            "Launch failed after VPN worker start for profile {}; stopping worker",
+            self.profile_name
+          );
+          let vpn_id = self.vpn_id.clone();
+          tauri::async_runtime::spawn(async move {
+            // Serialize against worker startup for the whole check-then-stop.
+            // Without it another launch can adopt this worker between the
+            // in-use check and the kill, and lose its tunnel a moment later.
+            let _adopt_guard = crate::vpn_worker_runner::lock_vpn_starts().await;
+            if crate::vpn_worker_runner::vpn_id_in_use_by_running_browser(&vpn_id) {
+              log::info!("VPN {vpn_id} is still in use by a running browser; leaving it up");
+              return;
+            }
+            if let Err(error) = crate::vpn_worker_runner::stop_vpn_worker(&worker_id).await {
+              log::warn!("Failed to stop VPN worker after failed launch: {error}");
+            }
+          });
+        }
+      }
+      let mut vpn_launch_guard: Option<VpnLaunchGuard> = None;
+
       // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
       if upstream_proxy.is_none() {
         if let Some(ref vpn_id) = profile.vpn_id {
-          match crate::vpn_worker_runner::start_vpn_worker(vpn_id).await {
-            Ok(vpn_worker) => {
-              if let Some(port) = vpn_worker.local_port {
+          match crate::vpn_worker_runner::start_vpn_worker_tracked(vpn_id).await {
+            Ok(started) => {
+              vpn_launch_guard = Some(VpnLaunchGuard {
+                worker_id: Some(started.config.id.clone()),
+                vpn_id: vpn_id.clone(),
+                created: started.created,
+                profile_name: profile.name.clone(),
+              });
+              if let Some(port) = started.config.local_port {
                 upstream_proxy = Some(ProxySettings {
                   proxy_type: "socks5".to_string(),
                   host: "127.0.0.1".to_string(),
@@ -295,11 +347,32 @@ impl BrowserRunner {
               }
             }
             Err(e) => {
-              return Err(format!("Failed to start VPN worker: {e}").into());
+              return Err(crate::backend_error_with_detail("VPN_WORKER_START_FAILED", e).into());
             }
           }
         }
       }
+
+      // The gate sits exactly here on purpose. By this line the upstream is
+      // fully normalized across all three transports — VLESS and VPN are
+      // authenticated loopback workers, a stored proxy is its resolved
+      // settings — so one probe covers every profile. And it is still ahead of
+      // the local proxy worker, the decrypted profile copy, the extension
+      // unpack, and the browser process, so a blocked launch has nothing to
+      // undo beyond the two workers whose guards are already armed above.
+      //
+      // Run concurrently with the blocklist compile so the added wall clock is
+      // max(), not sum().
+      let (blocklist, gate_result) = tokio::join!(
+        Self::resolve_blocklist_file(profile),
+        crate::launch_gate::enforce_fingerprint_gate(profile, upstream_proxy.as_ref(), gate),
+      );
+      gate_result.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+      let (blocklist_file, dns_allowlist_mode) = blocklist?;
+
+      // Past the gate: this launch is really happening, so tell the user's
+      // webhook exactly once.
+      Self::fire_launch_hook(profile);
 
       log::info!(
         "Starting local proxy for Wayfern profile: {} (upstream: {})",
@@ -313,7 +386,6 @@ impl BrowserRunner {
       // Start the proxy and get local proxy settings
       // If proxy startup fails, DO NOT launch Wayfern - it requires local proxy
       let profile_id_str = profile.id.to_string();
-      let (blocklist_file, dns_allowlist_mode) = Self::resolve_blocklist_file(profile).await?;
       // Unique per-launch key: a shared constant here would let concurrent
       // launches overwrite each other's active_proxies entry, ending with one
       // browser's worker tracked under another browser's PID.
@@ -553,11 +625,14 @@ impl BrowserRunner {
         }
       }
 
-      // The browser and both detached routing workers now share one verified
+      // The browser and every detached routing worker now share one verified
       // process identity, so later profile-persistence failures must not tear
       // down a live route.
       proxy_launch_guard.armed = false;
       xray_launch_guard.worker_id = None;
+      if let Some(guard) = vpn_launch_guard.as_mut() {
+        guard.worker_id = None;
+      }
 
       // Wayfern.setFingerprint echoes back the fingerprint the browser actually
       // applied, which may be UPGRADED from the stored one (e.g. when the
@@ -694,6 +769,7 @@ impl BrowserRunner {
     url: Option<String>,
     remote_debugging_port: Option<u16>,
     headless: bool,
+    gate: &crate::launch_gate::FingerprintGate,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Wayfern starts (and PID-reconciles) its own local proxy
     // inside `launch_browser_internal`, so we hand it None here rather than
@@ -703,9 +779,9 @@ impl BrowserRunner {
         app_handle,
         profile,
         url,
-        None,
         remote_debugging_port,
         headless,
+        gate,
       )
       .await
   }
@@ -716,6 +792,7 @@ impl BrowserRunner {
     profile: &BrowserProfile,
     url: Option<String>,
     internal_proxy_settings: Option<&ProxySettings>,
+    gate: &crate::launch_gate::FingerprintGate,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     log::info!(
       "launch_or_open_url called for profile: {} (ID: {})",
@@ -796,14 +873,7 @@ impl BrowserRunner {
     } else {
       log::info!("Launching new browser instance - browser not running");
       self
-        .launch_browser_internal(
-          app_handle.clone(),
-          &final_profile,
-          url,
-          internal_proxy_settings,
-          None,
-          false,
-        )
+        .launch_browser_internal(app_handle.clone(), &final_profile, url, None, false, gate)
         .await
     }
   }
@@ -1270,6 +1340,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile_id: String,
     url: String,
+    gate: crate::launch_gate::FingerprintGate,
   ) -> Result<(), String> {
     // Get the profile by name
     let profiles = self
@@ -1319,21 +1390,30 @@ impl BrowserRunner {
     // dropped event stream plus an unreachable backend) fell straight through
     // to a local launch on a profile a host was writing to.
     crate::remote_handoff::ensure_local_launch_allowed(&profile.id.to_string())?;
-    crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
+    let acquired_team_lock = crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
 
     log::info!("Opening URL with selected profile");
 
     // Use launch_or_open_url which handles both launching new instances and opening in existing ones
-    self
-      .launch_or_open_url(app_handle, &profile, Some(url.clone()), None)
+    if let Err(e) = self
+      .launch_or_open_url(app_handle, &profile, Some(url.clone()), None, &gate)
       .await
-      .map_err(|e| {
-        log::info!(
-          "Failed to open URL with selected profile: {}",
-          crate::log_redaction::text(&e.to_string())
-        );
-        format!("Failed to open URL with profile: {e}")
-      })?;
+    {
+      log::info!(
+        "Failed to open URL with selected profile: {}",
+        crate::log_redaction::text(&e.to_string())
+      );
+      // This path takes the team lock too, and a blocked launch never records a
+      // process_id for the status sweep to release it from.
+      unwind_launch(&profile, acquired_team_lock).await;
+      // Pass structured errors through untouched: the gate's block carries the
+      // mismatch detail the dialog renders, and wrapping it in English would
+      // reach the user as raw JSON.
+      return Err(crate::wrap_backend_error(
+        e,
+        "Failed to open URL with profile",
+      ));
+    }
 
     log::info!("Successfully opened URL with selected profile");
     Ok(())
@@ -1345,18 +1425,115 @@ pub async fn launch_browser_profile(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
   url: Option<String>,
+  consent_token: Option<String>,
 ) -> Result<BrowserProfile, String> {
-  launch_browser_profile_impl(app_handle, profile, url, None, false, false).await
+  let options = LaunchOptions {
+    gate: match consent_token {
+      Some(token) => crate::launch_gate::FingerprintGate::Consented(token),
+      None => crate::launch_gate::FingerprintGate::Enforce,
+    },
+    ..Default::default()
+  };
+  launch_browser_profile_impl(app_handle, profile, url, options).await
+}
+
+/// How one launch should behave.
+///
+/// A struct rather than four trailing positional arguments: `headless` and
+/// `force_new` are already passed adjacently as bare booleans, so a fifth would
+/// compile everywhere while silently inverting behavior wherever the order was
+/// got wrong.
+#[derive(Debug, Clone, Default)]
+pub struct LaunchOptions {
+  pub remote_debugging_port: Option<u16>,
+  pub headless: bool,
+  pub force_new: bool,
+  pub gate: crate::launch_gate::FingerprintGate,
+}
+
+impl LaunchOptions {
+  /// Automation defaults: report, never block, never probe. A headless client
+  /// has no dialog to answer and cannot regenerate its fingerprint mid-run, so
+  /// a hard failure would turn a warning into an outage for a whole fleet.
+  pub fn automation(remote_debugging_port: Option<u16>, headless: bool) -> Self {
+    Self {
+      remote_debugging_port,
+      headless,
+      force_new: true,
+      gate: crate::launch_gate::FingerprintGate::Advisory,
+    }
+  }
+}
+
+/// Release the team lock a launch attempt took before it failed.
+///
+/// Until the gate existed, failing here was rare enough that leaking was merely
+/// untidy. Cancelling a blocked launch is now an ordinary outcome, and the lock
+/// renews itself on a 30s heartbeat while only ever being released via a stored
+/// `process_id` — which a launch that never spawned does not have. So a leak
+/// leaves the profile reading as locked to the whole team until the app quits.
+///
+/// `acquired` is threaded from `acquire_team_lock_if_needed` so this releases
+/// only what this call took, never a lock a REST handler up the stack owns.
+///
+/// Several of these error paths are reachable while a browser for the profile
+/// is genuinely still running — `PROFILE_RUNNING`, or a failure to open a URL
+/// in an existing window. That browser owns the lock and the running mark, so
+/// releasing either would strand it: the team would see the profile as free
+/// while someone is typing in it, and `mark_profile_stopped` would queue a sync
+/// of a profile directory being written to. Hence the liveness check.
+async fn unwind_launch(profile: &BrowserProfile, acquired_team_lock: bool) {
+  if browser_is_running_for(&profile.id.to_string()) {
+    log::debug!(
+      "Not unwinding launch state for {}: a browser is still running for it",
+      profile.name
+    );
+    return;
+  }
+
+  if acquired_team_lock {
+    crate::team_lock::release_team_lock_if_needed(profile).await;
+  }
+  // Otherwise this mark sticks for the rest of the session and silently defers
+  // every sync of the profile. Safe here precisely because nothing is running.
+  if let Some(scheduler) = crate::sync::get_global_scheduler() {
+    scheduler
+      .mark_profile_stopped(&profile.id.to_string())
+      .await;
+  }
+}
+
+/// Whether a live browser process is recorded for this profile right now.
+/// Re-read from disk: the caller's copy predates the launch attempt.
+fn browser_is_running_for(profile_id: &str) -> bool {
+  BrowserRunner::instance()
+    .profile_manager
+    .list_profiles()
+    .ok()
+    .and_then(|profiles| {
+      profiles
+        .into_iter()
+        .find(|p| p.id.to_string() == profile_id)
+        .map(|p| {
+          p.process_id
+            .is_some_and(crate::proxy_storage::is_process_running)
+        })
+    })
+    .unwrap_or(false)
 }
 
 pub async fn launch_browser_profile_impl(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
   url: Option<String>,
-  remote_debugging_port: Option<u16>,
-  headless: bool,
-  force_new: bool,
+  options: LaunchOptions,
 ) -> Result<BrowserProfile, String> {
+  let LaunchOptions {
+    remote_debugging_port,
+    headless,
+    force_new,
+    gate,
+  } = options;
   log::info!(
     "Launch request received for profile: {} (ID: {})",
     profile.name,
@@ -1379,7 +1556,7 @@ pub async fn launch_browser_profile_impl(
   crate::remote_handoff::ensure_local_launch_allowed(&profile.id.to_string())?;
 
   // Team lock check: if profile is sync-enabled and user is on a team, acquire lock
-  crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
+  let acquired_team_lock = crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
 
   // Notify sync scheduler that profile is now running and queue sync for when it stops
   if let Some(scheduler) = crate::sync::get_global_scheduler() {
@@ -1403,6 +1580,7 @@ pub async fn launch_browser_profile_impl(
       .find(|p| p.id == profile.id)
       .unwrap_or_else(|| profile.clone()),
     Err(e) => {
+      unwind_launch(&profile, acquired_team_lock).await;
       return Err(e);
     }
   };
@@ -1419,15 +1597,24 @@ pub async fn launch_browser_profile_impl(
     profile_for_launch.id
   );
 
-  if force_new
-    && browser_runner
+  if force_new {
+    let already_running = match browser_runner
       .check_browser_status(app_handle.clone(), &profile_for_launch)
       .await
-      .map_err(|error| {
-        crate::wrap_backend_error(error, "Failed to check browser status before launch")
-      })?
-  {
-    return Err(crate::backend_error("PROFILE_RUNNING"));
+    {
+      Ok(running) => running,
+      Err(error) => {
+        unwind_launch(&profile, acquired_team_lock).await;
+        return Err(crate::wrap_backend_error(
+          error,
+          "Failed to check browser status before launch",
+        ));
+      }
+    };
+    if already_running {
+      unwind_launch(&profile, acquired_team_lock).await;
+      return Err(crate::backend_error("PROFILE_RUNNING"));
+    }
   }
 
   // Launch browser or open URL in existing instance. Wayfern starts its
@@ -1445,39 +1632,54 @@ pub async fn launch_browser_profile_impl(
         url,
         remote_debugging_port,
         headless,
+        &gate,
       )
       .await
   } else {
     browser_runner
-      .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, None)
+      .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, None, &gate)
       .await
   };
-  let updated_profile = launch_result.map_err(|e| {
-    log::info!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
+  let updated_profile = match launch_result {
+    Ok(updated) => updated,
+    Err(e) => {
+      log::info!(
+        "Browser launch failed for profile: {}, error: {}",
+        profile_for_launch.name,
+        e
+      );
 
-    // Emit a failure event to clear loading states in the frontend
-    #[derive(serde::Serialize)]
-    struct RunningChangedPayload {
-      id: String,
-      is_running: bool,
-    }
-    let payload = RunningChangedPayload {
-      id: profile_for_launch.id.to_string(),
-      is_running: false,
-    };
-
-    if let Err(e) = events::emit("profile-running-changed", &payload) {
-      log::warn!("Warning: Failed to emit profile running changed event: {e}");
-    }
-
-    // Check if this is an architecture compatibility issue
-    if let Some(io_error) = e.downcast_ref::<std::io::Error>() {
-      if io_error.kind() == std::io::ErrorKind::Other && io_error.to_string().contains("Exec format error") {
-        return format!("Failed to launch browser: Executable format error. This browser version is not compatible with your system architecture ({}). Please try a different browser or version that supports your platform.", std::env::consts::ARCH);
+      // Emit a failure event to clear loading states in the frontend
+      #[derive(serde::Serialize)]
+      struct RunningChangedPayload {
+        id: String,
+        is_running: bool,
       }
+      let payload = RunningChangedPayload {
+        id: profile_for_launch.id.to_string(),
+        is_running: false,
+      };
+
+      if let Err(e) = events::emit("profile-running-changed", &payload) {
+        log::warn!("Warning: Failed to emit profile running changed event: {e}");
+      }
+
+      unwind_launch(&profile, acquired_team_lock).await;
+
+      // Check if this is an architecture compatibility issue
+      if let Some(io_error) = e.downcast_ref::<std::io::Error>() {
+        if io_error.kind() == std::io::ErrorKind::Other
+          && io_error.to_string().contains("Exec format error")
+        {
+          return Err(format!("Failed to launch browser: Executable format error. This browser version is not compatible with your system architecture ({}). Please try a different browser or version that supports your platform.", std::env::consts::ARCH));
+        }
+      }
+      return Err(crate::wrap_backend_error(
+        e,
+        "Failed to launch browser or open URL",
+      ));
     }
-    crate::wrap_backend_error(e, "Failed to launch browser or open URL")
-  })?;
+  };
 
   log::info!(
     "Browser launch completed for profile: {} (ID: {})",
@@ -1610,10 +1812,15 @@ pub async fn open_url_with_profile(
   app_handle: tauri::AppHandle,
   profile_id: String,
   url: String,
+  consent_token: Option<String>,
 ) -> Result<(), String> {
   let browser_runner = BrowserRunner::instance();
+  let gate = match consent_token {
+    Some(token) => crate::launch_gate::FingerprintGate::Consented(token),
+    None => crate::launch_gate::FingerprintGate::Enforce,
+  };
   browser_runner
-    .open_url_with_profile(app_handle, profile_id, url)
+    .open_url_with_profile(app_handle, profile_id, url, gate)
     .await
 }
 

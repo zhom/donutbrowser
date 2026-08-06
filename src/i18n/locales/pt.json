@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "Manter Perfis Descriptografados na RAM",
     "keepDecryptedProfilesInRamDescription": "Preserva a cópia descriptografada na RAM dos perfis protegidos por senha entre execuções para um início mais rápido. A cópia em disco permanece criptografada em qualquer caso.",
     "privacy": {
-      "consistencyWarning": "Aviso de consistência de impressão digital",
-      "consistencyWarningDescription": "Avisar ao iniciar quando o fuso horário ou o idioma de um perfil não corresponder ao seu nó de saída do proxy.",
+      "consistencyWarning": "Bloquear quando a impressão digital divergir",
+      "consistencyWarningDescription": "Impede que o navegador inicie quando o fuso horário ou o idioma de um perfil não corresponde ao seu nó de saída do proxy. Você ainda pode optar por iniciar.",
       "clearTraffic": "Limpar todo o histórico de tráfego",
       "clearTrafficDescription": "Apaga com segurança as estatísticas de tráfego registradas de todos os perfis.",
-      "clearTrafficSuccess": "Histórico de tráfego limpo"
+      "clearTrafficSuccess": "Histórico de tráfego limpo",
+      "vpnExtensionWarning": "Aviso de extensão VPN",
+      "vpnExtensionWarningDescription": "Avisar antes de iniciar quando um perfil contiver uma extensão capaz de redirecionar o tráfego do navegador."
     }
   },
   "header": {
@@ -1870,6 +1872,7 @@
     "remoteRateLimited": "Solicitações demais. Aguarde um momento e tente novamente.",
     "remoteNoCapacity": "Nenhuma máquina remota está livre agora. Tente novamente em alguns minutos.",
     "remoteNotEntitled": "Seu plano não inclui execução remota.",
+    "remoteInteractiveNotEntitled": "Seu plano inclui horas remotas apenas para o Cookie Bot, não para sessões remotas interativas.",
     "remoteSessionRefused": "A máquina remota recusou esta sessão.",
     "remoteSessionNotFound": "Essa sessão remota não existe mais.",
     "remoteSessionConflict": "Este perfil já está aberto em outro lugar.",
@@ -1896,7 +1899,11 @@
     "profileRemoteSyncPending": "Uma sessão remota acabou de terminar. A aguardar a transferência das alterações antes de abrir este perfil aqui.",
     "profileLockedByMember": "Este perfil está a ser utilizado por {{email}}.",
     "profileLockedElsewhere": "Este perfil está a ser utilizado noutro dispositivo.",
-    "profileLockUnavailable": "Não foi possível verificar se este perfil está a ser utilizado noutro local. Verifique a ligação e tente novamente."
+    "profileLockUnavailable": "Não foi possível verificar se este perfil está a ser utilizado noutro local. Verifique a ligação e tente novamente.",
+    "fingerprintExitMismatch": "O nó de saída do proxy não corresponde à impressão digital deste perfil.",
+    "launchConsentExpired": "Essa confirmação não é mais válida. Tente iniciar novamente.",
+    "vpnWorkerStartFailed": "Não foi possível iniciar a conexão VPN: {{detail}}",
+    "exitProbeFailed": "Não foi possível alcançar o nó de saída do proxy para verificar sua localização."
   },
   "rail": {
     "profiles": "Perfis",
@@ -2142,14 +2149,9 @@
     "description": "Apaga cookies, histórico e cache quando o navegador é fechado. Extensões e favoritos são mantidos."
   },
   "consistencyWarning": {
-    "title": "Divergência de impressão digital",
-    "intro": "A saída do proxy de \"{{name}}\" não corresponde à impressão digital deste perfil:",
-    "timezoneTitle": "Divergência de fuso horário",
     "timezoneDetail": "O nó de saída está em {{exit}}, mas a impressão digital indica {{fingerprint}}.",
-    "languageTitle": "Divergência de idioma",
     "languageDetail": "O país de saída é {{country}}, mas o idioma da impressão digital é {{fingerprint}}.",
     "explainer": "Um fuso horário ou idioma que não combina com seu IP de saída é um forte sinal anti-bot, mesmo que seu dispositivo real nunca vaze. Alinhe a impressão digital com a localização do proxy para reduzir tratamentos hostis.",
-    "dontWarnAgain": "Não avisar novamente para este perfil",
     "matchToProxy": "Ajustar impressão ao proxy",
     "matching": "Ajustando…",
     "matchSuccess": "Impressão digital atualizada para corresponder ao proxy. Reinicie o perfil para aplicar."
@@ -2455,5 +2457,31 @@
       "cancelledByUser": "Parado à mão",
       "unknown": "Motivo desconhecido ({{code}})"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "Inicialização bloqueada",
+    "titleWarning": "Antes de iniciar",
+    "intro": "Revise estes problemas de \"{{name}}\" antes de iniciar o navegador.",
+    "fingerprintHeading": "A saída do proxy não corresponde à impressão digital",
+    "vpnExtensionHeading": "Extensão VPN detectada",
+    "vpnExtensionIntro": "Extensões neste perfil que podem redirecionar o tráfego do navegador:",
+    "vpnExtensionConfirmed": "Pode alterar o proxy",
+    "vpnExtensionLikely": "Talvez altere o proxy",
+    "vpnExtensionExplainer": "Se alguma delas redirecionar seu tráfego, a localização real do navegador deixará de corresponder ao fuso horário, ao idioma e à geolocalização com que este perfil foi criado, e o Donut não consegue detectar isso de fora.",
+    "sourceDonut": "Gerenciada pelo Donut",
+    "sourceBrowser": "Instalada no perfil",
+    "measurementUnreliable": "Como uma extensão VPN pode substituir o proxy, a verificação de saída pode não refletir a rota que o navegador realmente usa.",
+    "scanIncompleteEncrypted": "Este perfil está criptografado, portanto só foi possível verificar as extensões gerenciadas pelo Donut.",
+    "scanIncompleteEphemeral": "Este perfil ainda não tem dados, portanto só foi possível verificar as extensões gerenciadas pelo Donut.",
+    "scanIncompletePartial": "A verificação de extensões foi interrompida, então algumas podem não estar listadas.",
+    "probePending": "A saída do proxy ainda não foi medida. O Donut vai verificá-la durante a inicialização e parar se não corresponder.",
+    "launchAnyway": "Iniciar mesmo assim",
+    "dontBlockAgain": "Não bloquear novamente para esta divergência exata",
+    "dontWarnExtensions": "Não avisar novamente sobre estas extensões",
+    "applyToRemaining": "Aplicar esta escolha aos perfis restantes",
+    "cancelledSummary": "{{cancelled}} de {{total}} inicializações canceladas",
+    "cancelled": "Inicialização cancelada",
+    "vpnExtensionEntry": " {{version}} — {{capability}}, {{source}}",
+    "scanIncompleteMissing": "Este perfil ainda não foi iniciado, portanto só foi possível verificar as extensões gerenciadas pelo Donut."
   }
 }

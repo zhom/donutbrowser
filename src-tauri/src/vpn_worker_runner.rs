@@ -99,7 +99,50 @@ async fn wait_for_vpn_worker_ready(
   }
 }
 
+/// Serializes worker startup for a given VPN, so two concurrent launches cannot
+/// both observe "no worker" and both believe they created it. Benign until a
+/// launch guard may stop one on failure; then double-ownership means a
+/// cancelled launch tears down a tunnel another profile is using. Mirrors
+/// `xray_worker_runner::XRAY_START_LOCK`.
+static VPN_START_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// A started VPN worker plus whether *this* call spawned it.
+pub struct VpnWorkerStart {
+  pub config: VpnWorkerConfig,
+  /// False when an already-running worker was adopted. Only the creator may
+  /// stop it while unwinding a failed launch.
+  pub created: bool,
+}
+
+/// Whether any profile with a live browser process is routing through this VPN.
+///
+/// Extracted from the startup sweep so the launch guard and the sweep agree on
+/// what "in use" means instead of each carrying its own copy.
+pub fn vpn_id_in_use_by_running_browser(vpn_id: &str) -> bool {
+  let Ok(profiles) = crate::profile::ProfileManager::instance().list_profiles() else {
+    // Unable to tell — assume in use rather than tear down a live tunnel.
+    return true;
+  };
+  profiles
+    .iter()
+    .filter(|p| p.process_id.is_some_and(is_process_running))
+    .any(|p| p.vpn_id.as_deref() == Some(vpn_id))
+}
+
+/// Hold the start lock across an adopt-sensitive section (a launch guard
+/// deciding whether to stop a worker it created).
+pub async fn lock_vpn_starts() -> tokio::sync::MutexGuard<'static, ()> {
+  VPN_START_LOCK.lock().await
+}
+
 pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn std::error::Error>> {
+  start_vpn_worker_tracked(vpn_id).await.map(|s| s.config)
+}
+
+pub async fn start_vpn_worker_tracked(
+  vpn_id: &str,
+) -> Result<VpnWorkerStart, Box<dyn std::error::Error>> {
+  let _start_guard = VPN_START_LOCK.lock().await;
   crate::proxy_runner::ensure_sidecar_version().await?;
 
   for config in list_vpn_worker_configs() {
@@ -117,10 +160,18 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     if let Some(pid) = existing.pid {
       if is_process_running(pid) {
         if vpn_worker_accepting_connections(&existing).await {
-          return Ok(existing);
+          return Ok(VpnWorkerStart {
+            config: existing,
+            created: false,
+          });
         }
 
-        return wait_for_vpn_worker_ready(&existing.id).await;
+        return wait_for_vpn_worker_ready(&existing.id)
+          .await
+          .map(|config| VpnWorkerStart {
+            config,
+            created: false,
+          });
       }
     }
     // Worker config exists but process is dead, clean up
@@ -263,7 +314,12 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     drop(child);
   }
 
-  wait_for_vpn_worker_ready(&id).await
+  wait_for_vpn_worker_ready(&id)
+    .await
+    .map(|config| VpnWorkerStart {
+      config,
+      created: true,
+    })
 }
 
 pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error>> {

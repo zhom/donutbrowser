@@ -65,6 +65,8 @@ mod geolocation;
 mod group_manager;
 mod human_typing;
 mod ip_utils;
+mod launch_gate;
+mod launch_gate_prefs;
 mod log_redaction;
 mod platform_browser;
 mod profile;
@@ -95,6 +97,7 @@ mod tag_manager;
 mod team_lock;
 mod version_updater;
 pub mod vpn;
+mod vpn_extension_detect;
 pub mod vpn_worker_runner;
 pub mod vpn_worker_storage;
 pub mod xray;
@@ -2673,8 +2676,9 @@ pub fn run_with_builder(
       clear_all_traffic_stats,
       clear_profile_traffic_stats,
       get_traffic_stats_for_period,
-      fingerprint_consistency::check_profile_fingerprint_consistency,
       fingerprint_consistency::match_profile_fingerprint_to_exit,
+      launch_gate::get_profile_pre_launch_checks,
+      launch_gate::ack_launch_gate,
       get_sync_settings,
       save_sync_settings,
       set_profile_sync_mode,

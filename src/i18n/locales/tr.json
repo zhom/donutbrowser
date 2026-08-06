@@ -199,11 +199,13 @@
     "keepDecryptedProfilesInRam": "Şifresi Çözülmüş Profilleri RAM'de Tut",
     "keepDecryptedProfilesInRamDescription": "Daha hızlı başlatma için parola korumalı profillerin şifresi çözülmüş RAM kopyasını başlatmalar arasında koruyun. Diskteki kopya her durumda şifreli kalır.",
     "privacy": {
-      "consistencyWarning": "Parmak izi tutarlılık uyarısı",
-      "consistencyWarningDescription": "Bir profilin saat dilimi veya dili proxy çıkış düğümüyle eşleşmediğinde başlatma sırasında uyar.",
+      "consistencyWarning": "Parmak izi uyuşmazlığında engelle",
+      "consistencyWarningDescription": "Bir profilin saat dilimi veya dili proxy çıkış düğümüyle eşleşmediğinde tarayıcının başlamasını durdurur. Yine de başlatmayı seçebilirsiniz.",
       "clearTraffic": "Tüm trafik geçmişini temizle",
       "clearTrafficDescription": "Tüm profillerin kayıtlı trafik istatistiklerini güvenli bir şekilde siler.",
-      "clearTrafficSuccess": "Trafik geçmişi temizlendi"
+      "clearTrafficSuccess": "Trafik geçmişi temizlendi",
+      "vpnExtensionWarning": "VPN uzantısı uyarısı",
+      "vpnExtensionWarningDescription": "Bir profil, tarayıcı trafiğini yeniden yönlendirebilecek bir uzantı içerdiğinde başlatmadan önce uyarır."
     }
   },
   "header": {
@@ -1863,6 +1865,7 @@
     "remoteRateLimited": "Çok fazla istek. Biraz bekleyip tekrar deneyin.",
     "remoteNoCapacity": "Şu anda boş uzak makine yok. Birkaç dakika sonra tekrar deneyin.",
     "remoteNotEntitled": "Planınız uzaktan çalıştırmayı içermiyor.",
+    "remoteInteractiveNotEntitled": "Planınızdaki uzak saatler yalnızca Cookie Bot için geçerlidir, elle kullanılan uzak oturumlar için değil.",
     "remoteSessionRefused": "Uzak makine bu oturumu reddetti.",
     "remoteSessionNotFound": "Bu uzak oturum artık mevcut değil.",
     "remoteSessionConflict": "Bu profil başka bir yerde zaten açık.",
@@ -1889,7 +1892,11 @@
     "profileRemoteSyncPending": "Uzak oturum az önce bitti. Bu profili burada açmadan önce değişikliklerinin inmesi bekleniyor.",
     "profileLockedByMember": "Bu profil {{email}} tarafından kullanılıyor.",
     "profileLockedElsewhere": "Bu profil başka bir cihazda kullanılıyor.",
-    "profileLockUnavailable": "Bu profilin başka bir yerde kullanılıp kullanılmadığı denetlenemedi. Bağlantınızı kontrol edip yeniden deneyin."
+    "profileLockUnavailable": "Bu profilin başka bir yerde kullanılıp kullanılmadığı denetlenemedi. Bağlantınızı kontrol edip yeniden deneyin.",
+    "fingerprintExitMismatch": "Proxy çıkış düğümü bu profilin parmak iziyle eşleşmiyor.",
+    "launchConsentExpired": "Bu onay artık geçerli değil. Yeniden başlatmayı deneyin.",
+    "vpnWorkerStartFailed": "VPN bağlantısı başlatılamadı: {{detail}}",
+    "exitProbeFailed": "Konumunu denetlemek için proxy çıkış düğümüne ulaşılamadı."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2135,14 +2142,9 @@
     "description": "Tarayıcı kapanırken çerezleri, geçmişi ve önbelleği siler. Uzantılar ve yer imleri korunur."
   },
   "consistencyWarning": {
-    "title": "Parmak izi uyuşmazlığı",
-    "intro": "\"{{name}}\" için proxy çıkışı bu profilin parmak iziyle eşleşmiyor:",
-    "timezoneTitle": "Saat dilimi uyuşmazlığı",
     "timezoneDetail": "Çıkış düğümü {{exit}} konumunda, ancak parmak izi {{fingerprint}} bildiriyor.",
-    "languageTitle": "Dil uyuşmazlığı",
     "languageDetail": "Çıkış ülkesi {{country}}, ancak parmak izi dili {{fingerprint}}.",
     "explainer": "Çıkış IP'nizle uyuşmayan bir saat dilimi veya dil, gerçek cihazınız hiç sızdırmasa bile güçlü bir anti-bot sinyalidir. Şüpheli muameleyi azaltmak için parmak izini proxy konumuyla hizalayın.",
-    "dontWarnAgain": "Bu profil için bir daha uyarma",
     "matchToProxy": "Parmak izini proxy'ye eşle",
     "matching": "Eşleniyor…",
     "matchSuccess": "Parmak izi proxy'ye uyacak şekilde güncellendi. Uygulamak için profili yeniden başlatın."
@@ -2428,5 +2430,31 @@
       "cancelledByUser": "Elle durduruldu",
       "unknown": "Bilinmeyen neden ({{code}})"
     }
+  },
+  "prelaunchGate": {
+    "titleBlocked": "Başlatma engellendi",
+    "titleWarning": "Başlatmadan önce",
+    "intro": "Tarayıcıyı başlatmadan önce \"{{name}}\" ile ilgili şu sorunları inceleyin.",
+    "fingerprintHeading": "Proxy çıkışı parmak iziyle eşleşmiyor",
+    "vpnExtensionHeading": "VPN uzantısı algılandı",
+    "vpnExtensionIntro": "Bu profildeki, tarayıcı trafiğini yeniden yönlendirebilecek uzantılar:",
+    "vpnExtensionConfirmed": "Proxy'yi değiştirebilir",
+    "vpnExtensionLikely": "Proxy'yi değiştirebilir (olası)",
+    "vpnExtensionExplainer": "Bunlardan biri trafiğinizi başka bir yere yönlendirirse, tarayıcının gerçek konumu artık bu profilin oluşturulduğu saat dilimi, dil ve coğrafi konumla eşleşmez ve Donut bunu dışarıdan algılayamaz.",
+    "sourceDonut": "Donut tarafından yönetiliyor",
+    "sourceBrowser": "Profile yüklenmiş",
+    "measurementUnreliable": "Bir VPN uzantısı proxy'yi geçersiz kılabileceğinden, çıkış kontrolü tarayıcının gerçekte kullandığı rotayı yansıtmayabilir.",
+    "scanIncompleteEncrypted": "Bu profil şifreli olduğundan yalnızca Donut tarafından yönetilen uzantılar denetlenebildi.",
+    "scanIncompleteEphemeral": "Bu profilde henüz veri olmadığından yalnızca Donut tarafından yönetilen uzantılar denetlenebildi.",
+    "scanIncompletePartial": "Uzantı taraması yarıda kesildi, bu nedenle bazıları listelenmemiş olabilir.",
+    "probePending": "Proxy çıkışı henüz ölçülmedi. Donut başlatma sırasında kontrol edecek ve eşleşmezse duracak.",
+    "launchAnyway": "Yine de başlat",
+    "dontBlockAgain": "Bu tam uyuşmazlık için bir daha engelleme",
+    "dontWarnExtensions": "Bu uzantılar için bir daha uyarma",
+    "applyToRemaining": "Bu seçimi kalan profillere uygula",
+    "cancelledSummary": "{{total}} başlatmadan {{cancelled}} tanesi iptal edildi",
+    "cancelled": "Başlatma iptal edildi",
+    "vpnExtensionEntry": " {{version}} — {{capability}}, {{source}}",
+    "scanIncompleteMissing": "Bu profil henüz başlatılmadığından yalnızca Donut tarafından yönetilen uzantılar denetlenebildi."
   }
 }

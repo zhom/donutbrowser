@@ -313,14 +313,17 @@ fn lock_conflict_error(
 }
 
 /// Acquire profile lock if profile is sync-enabled and user has a paid subscription.
+/// Returns whether a lock was actually taken, so a caller that unwinds a failed
+/// launch releases only what it acquired. Releasing unconditionally would drop
+/// a lock a REST handler up the stack still owns.
 pub async fn acquire_team_lock_if_needed(
   profile: &crate::profile::BrowserProfile,
-) -> Result<(), String> {
+) -> Result<bool, String> {
   if !profile.is_sync_enabled() {
-    return Ok(());
+    return Ok(false);
   }
   if !CLOUD_AUTH.has_active_paid_subscription().await {
-    return Ok(());
+    return Ok(false);
   }
 
   // Ensure lock manager is connected
@@ -340,7 +343,10 @@ pub async fn acquire_team_lock_if_needed(
     ));
   }
 
-  PROFILE_LOCK.acquire_lock(&profile.id.to_string()).await
+  PROFILE_LOCK
+    .acquire_lock(&profile.id.to_string())
+    .await
+    .map(|()| true)
 }
 
 /// Release profile lock if profile is sync-enabled and user has a paid subscription.

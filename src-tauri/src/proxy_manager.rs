@@ -1152,6 +1152,21 @@ impl ProxyManager {
     url
   }
 
+  /// Proxy URL for a diagnostic probe made by the app itself (reqwest), as
+  /// opposed to `build_proxy_url`, which feeds the browser.
+  ///
+  /// SOCKS5 becomes `socks5h://` so the probe endpoint's hostname resolves at
+  /// the exit rather than on this machine. Resolving locally would leak the
+  /// real DNS and, behind a split-horizon resolver, can reach a different host
+  /// than the browser would.
+  pub fn build_probe_proxy_url(proxy_settings: &ProxySettings) -> String {
+    let url = Self::build_proxy_url(proxy_settings);
+    if proxy_settings.proxy_type.eq_ignore_ascii_case("socks5") {
+      return url.replacen("socks5://", "socks5h://", 1);
+    }
+    url
+  }
+
   // Check if a proxy is valid by routing through a temporary donut-proxy process.
   // This tests the exact same code path the browser uses.
   // Falls back to direct reqwest check if the proxy worker fails to start.

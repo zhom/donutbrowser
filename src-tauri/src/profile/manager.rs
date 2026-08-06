@@ -479,6 +479,10 @@ impl ProfileManager {
       );
     }
 
+    // Launch-gate acknowledgements are keyed by profile id and are not synced,
+    // so nothing else would ever clean them up.
+    crate::launch_gate_prefs::forget_profile(profile_id);
+
     // Remember sync mode before deleting local files
     let was_sync_enabled = profile.is_sync_enabled();
 

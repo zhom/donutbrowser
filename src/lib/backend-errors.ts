@@ -73,6 +73,7 @@ export type BackendErrorCode =
   | "REMOTE_RATE_LIMITED"
   | "REMOTE_NO_CAPACITY"
   | "REMOTE_NOT_ENTITLED"
+  | "REMOTE_INTERACTIVE_NOT_ENTITLED"
   | "REMOTE_SESSION_REFUSED"
   | "REMOTE_SESSION_NOT_FOUND"
   | "REMOTE_SESSION_CONFLICT"
@@ -105,6 +106,10 @@ export type BackendErrorCode =
   // rendered as the raw machine identifier.
   | "COOKIE_BOT_REQUIRES_PROXY"
   | "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED"
+  | "FINGERPRINT_EXIT_MISMATCH"
+  | "LAUNCH_CONSENT_EXPIRED"
+  | "VPN_WORKER_START_FAILED"
+  | "EXIT_PROBE_FAILED"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -306,6 +311,12 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.remoteNoCapacity");
     case "REMOTE_NOT_ENTITLED":
       return t("backendErrors.remoteNotEntitled");
+    // Distinct from the above: the plan HAS remote hours, it just may not spend
+    // them by hand (solo funds a nightly Cookie Bot only). Telling such a user
+    // "your plan does not include remote execution" while their bot visibly
+    // runs every night is the confusing case this code exists to avoid.
+    case "REMOTE_INTERACTIVE_NOT_ENTITLED":
+      return t("backendErrors.remoteInteractiveNotEntitled");
     case "REMOTE_SESSION_REFUSED":
       return t("backendErrors.remoteSessionRefused");
     case "REMOTE_SESSION_NOT_FOUND":
@@ -380,6 +391,19 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.cookieBotRequiresExitNode");
     case "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED":
       return t("backendErrors.cookieBotTouchFingerprintUnsupported");
+    // The launch gate's block. The dialog renders the mismatch detail from
+    // `params` itself; this string is the fallback for anywhere that only has
+    // room for one sentence.
+    case "FINGERPRINT_EXIT_MISMATCH":
+      return t("backendErrors.fingerprintExitMismatch");
+    case "LAUNCH_CONSENT_EXPIRED":
+      return t("backendErrors.launchConsentExpired");
+    case "VPN_WORKER_START_FAILED":
+      return t("backendErrors.vpnWorkerStartFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "EXIT_PROBE_FAILED":
+      return t("backendErrors.exitProbeFailed");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

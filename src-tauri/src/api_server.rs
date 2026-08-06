@@ -2392,9 +2392,7 @@ async fn run_profile(
     state.app_handle.clone(),
     profile.clone(),
     url,
-    Some(remote_debugging_port),
-    headless,
-    true,
+    crate::browser_runner::LaunchOptions::automation(Some(remote_debugging_port), headless),
   )
   .await
   .map_err(manager_error_response)?;
@@ -3469,7 +3467,12 @@ async fn open_url_in_profile(
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
 
   browser_runner
-    .open_url_with_profile(state.app_handle.clone(), id, request.url)
+    .open_url_with_profile(
+      state.app_handle.clone(),
+      id,
+      request.url,
+      crate::launch_gate::FingerprintGate::Advisory,
+    )
     .await
     .map_err(manager_error_response)?;
 
@@ -3626,9 +3629,7 @@ async fn batch_run_profiles(
       state.app_handle.clone(),
       profile.clone(),
       request.url.clone(),
-      Some(port),
-      headless,
-      true,
+      crate::browser_runner::LaunchOptions::automation(Some(port), headless),
     )
     .await
     {

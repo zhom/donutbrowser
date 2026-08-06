@@ -242,7 +242,7 @@ interface TableMeta {
   setLaunchingProfiles: React.Dispatch<React.SetStateAction<Set<string>>>;
   setStoppingProfiles: React.Dispatch<React.SetStateAction<Set<string>>>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
-  onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
+  onLaunchProfile: (profile: BrowserProfile) => void | Promise<unknown>;
 
   // Overflow actions
   onAssignProfilesToGroup?: (profileIds: string[]) => void;
@@ -1394,7 +1394,7 @@ BotCell.displayName = "BotCell";
 
 interface ProfilesDataTableProps {
   profiles: BrowserProfile[];
-  onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
+  onLaunchProfile: (profile: BrowserProfile) => void | Promise<unknown>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
   onCloneProfile: (profile: BrowserProfile) => void | Promise<void>;
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;

@@ -41,7 +41,7 @@ fn is_kept(name: &str) -> bool {
 /// step since it regenerates — leaves a populated `Default/` without it. Such a
 /// directory would then be treated as stale and removed wholesale, destroying the
 /// Extensions and Bookmarks this feature exists to preserve.
-fn is_profile_dir_name(name: &str) -> bool {
+pub(crate) fn is_profile_dir_name(name: &str) -> bool {
   matches!(name, "Default" | "Guest Profile" | "System Profile")
     || name
       .strip_prefix("Profile ")
