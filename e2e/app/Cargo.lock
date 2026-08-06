@@ -1809,6 +1809,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "globset",
+ "gtk",
  "http-body-util",
  "hyper",
  "hyper-util",

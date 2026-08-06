@@ -92,7 +92,8 @@
     "window": {
       "minimize": "Minimize",
       "maximize": "Maximize",
-      "restore": "Restore"
+      "restore": "Restore",
+      "close": "Close window"
     },
     "commandPalette": {
       "title": "Command Palette",
@@ -467,7 +468,7 @@
       "ssCipherRequired": "Cipher and password are required for Shadowsocks",
       "selectType": "Select proxy type",
       "saveFailed": "Failed to save proxy: {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "VLESS URI",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "Requires XTLS Vision and REALITY.",
@@ -1866,6 +1867,7 @@
     "remoteNoCapacity": "No remote host is free right now. Try again in a few minutes.",
     "remoteNotEntitled": "Your plan does not include remote execution.",
     "remoteInteractiveNotEntitled": "Your plan includes remote hours for the Cookie Bot only, not for hands-on remote sessions.",
+    "remoteRequiresRemoteExitNode": "This profile's proxy only works on this computer (for example 127.0.0.1 or a home network address). A remote session runs on our hosts, so it needs a proxy with a public address.",
     "remoteSessionRefused": "The remote host refused this session.",
     "remoteSessionNotFound": "That remote session no longer exists.",
     "remoteSessionConflict": "This profile is already open somewhere else.",
@@ -1886,6 +1888,7 @@
     "cookieBotUnknownPlatform": "This profile has no recorded operating system, so it cannot be matched to a host.",
     "cookieBotUnsupportedPlatform": "The cookie bot cannot run {{platform}} profiles. Only Windows and macOS profiles are supported.",
     "cookieBotRequiresExitNode": "Attach a proxy or VPN first. Without one the run would come from a datacenter address, which damages the profile's identity.",
+    "cookieBotRequiresRemoteExitNode": "This profile's proxy only works on this computer (for example 127.0.0.1 or a home network address). Cookie Bot runs on our hosts, so it needs a proxy with a public address.",
     "unknownCode": "Something went wrong: {{code}}",
     "cookieBotTouchFingerprintUnsupported": "This profile claims a touch device, which the bot cannot drive. Use a desktop fingerprint.",
     "profileRunningRemotely": "This profile is running on a remote machine. Stop the remote session first.",
@@ -1896,7 +1899,22 @@
     "fingerprintExitMismatch": "The proxy exit node doesn't match this profile's fingerprint.",
     "launchConsentExpired": "That confirmation is no longer valid. Try launching again.",
     "vpnWorkerStartFailed": "Couldn't start the VPN connection: {{detail}}",
-    "exitProbeFailed": "Couldn't reach the proxy exit node to check its location."
+    "exitProbeFailed": "Couldn't reach the proxy exit node to check its location.",
+    "vlessUnsupported": {
+      "security": "This VLESS server does not use REALITY. Donut supports VLESS with REALITY only.",
+      "flow": "This VLESS server does not use XTLS Vision flow, which Donut requires.",
+      "transport": "Donut supports VLESS over plain TCP only — this server uses a different transport (such as WebSocket or gRPC).",
+      "encryption": "This VLESS server uses an encryption setting Donut does not support.",
+      "headerType": "This VLESS server uses a header obfuscation Donut does not support.",
+      "fingerprint": "This VLESS URI requests a TLS fingerprint Donut does not support.",
+      "sni": "The VLESS URI is missing the SNI (sni) needed for REALITY.",
+      "publicKey": "The VLESS URI is missing the REALITY public key (pbk).",
+      "scheme": "That is not a VLESS link. It must start with vless://.",
+      "parameter": "The VLESS URI contains an option Donut does not support.",
+      "malformed": "The VLESS URI is invalid."
+    },
+    "camoufoxRemoved": "Camoufox is no longer supported. Recreate this profile with Wayfern.",
+    "noE2ePasswordSet": "No end-to-end encryption password is set. Set one before syncing encrypted data."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2342,12 +2360,47 @@
       "confirmBulkButton_other": "Continue with {{count}} profiles",
       "sitesRequired": "Add at least one site.",
       "addSitesFirst": "Add a site first",
-      "presetsMissing": "Depth presets unavailable"
+      "presetsMissing": "Depth presets unavailable",
+      "sourceOwn": "My own list",
+      "sourceCurated": "Curated",
+      "sourceSaved": "Saved",
+      "curatedEmpty": "No curated lists are available right now.",
+      "curatedNote": "A curated list we keep up to date. Every profile draws its own sample from it, so no two profiles browse the same set — which is what stops the list itself becoming a signature. The addresses stay on our side.",
+      "savedEmpty": "Nothing saved yet. Type a list under My own list, then save it from there.",
+      "savedNote": "The sites are copied onto the schedule when you save it, so editing a list later leaves existing schedules alone.",
+      "savedUnavailable": "Could not load your saved lists.",
+      "saveAsList": "Save as a list",
+      "listNamePlaceholder": "Name this list",
+      "listSaved": "List saved",
+      "listRenamed": "List renamed",
+      "listDeleted": "List deleted",
+      "listRename": "Rename",
+      "listDeleteConfirm": "Delete?",
+      "templateMissing": "That saved list no longer exists. Pick another one.",
+      "templateNameTaken": "You already have a list with that name.",
+      "templateNameInvalid": "Give the list a name of {{max}} characters or fewer.",
+      "calendarLabel": "When it runs",
+      "daysLabel": "Days of the week",
+      "addSlot": "Add a time",
+      "slotsFull": "At most {{max}} start times.",
+      "removeSlot": "Remove this time",
+      "pickListFirst": "Pick a list first",
+      "finishCalendarFirst": "Finish the schedule first",
+      "duplicateSlot": "Two rows have the same days and time",
+      "listSites_one": "{{count}} site",
+      "listSites_other": "{{count}} sites",
+      "summarySlots_one": "Runs {{count}} time a week, up to {{minutes}} min each.",
+      "summarySlots_other": "Runs {{count}} times a week, up to {{minutes}} min each.",
+      "templateNameInvalidNoMax": "That name can't be used for a saved list."
     },
     "preset": {
       "light": "Light",
       "balanced": "Standard",
       "deep": "Deep"
+    },
+    "template": {
+      "lowIntentPurchaser": "Low-intent purchaser",
+      "lowIntentPurchaserHint": "Positions the profile as a price-sensitive buyer: comparison, coupon, cashback and resale sites, reaching retailers through aggregators rather than directly."
     },
     "preflight": {
       "ineligible_one": "{{count}} profile can't run remotely",

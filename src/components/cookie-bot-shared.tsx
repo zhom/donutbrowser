@@ -11,9 +11,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import type {
   CookieBotRun,
   CookieBotSchedule,
+  CookieBotSlot,
   RemoteHoursQuota,
 } from "@/lib/cookie-bot";
 import { MOTION_EASE_OUT } from "@/lib/motion";
@@ -64,6 +66,84 @@ export function nightsPerWeek(mask: number): number {
     if ((mask & (1 << bit)) !== 0) count += 1;
   }
   return count;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Slots                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every time-of-day an enrolment fires, from whichever shape the server sent.
+ *
+ * ALWAYS at least one slot. A server that predates multi-slot scheduling sends
+ * only the mirrored `run_at_minute` / `days_mask` pair, and a renderer that read
+ * `slots` directly would show an enrolment as firing at no time at all. Reading
+ * the wire through here is what keeps that fallback in one place.
+ */
+export function scheduleSlots(schedule: {
+  slots?: CookieBotSlot[];
+  run_at_minute: number;
+  days_mask: number;
+}): CookieBotSlot[] {
+  const slots = schedule.slots ?? [];
+  if (slots.length > 0) return slots;
+  return [
+    { days_mask: schedule.days_mask, run_at_minute: schedule.run_at_minute },
+  ];
+}
+
+/**
+ * How many times a week a whole calendar fires.
+ *
+ * Counted across slots, not read off the first one: an enrolment with three
+ * slots costs three times the hours, and the budget estimate beside it is the
+ * only place a user sees that before committing.
+ *
+ * DISTINCT (weekday, minute) pairs rather than a sum of night counts, because
+ * two slots landing on the same weekday at the same minute are the same
+ * instant and the server dispatches them as ONE run — `upcomingSlotsMulti`
+ * collapses coincident fires. Summing quoted a Mon+Tue and a Tue+Wed slot at
+ * 02:00 as four nights when it is three, and that inflated figure is what the
+ * over-budget warning is compared against.
+ */
+export function weeklyRuns(
+  slots: { days_mask: number; run_at_minute: number }[],
+): number {
+  const fires = new Set<number>();
+  for (const slot of slots) {
+    for (let bit = 0; bit < 7; bit += 1) {
+      if ((slot.days_mask & (1 << bit)) !== 0) {
+        fires.add(bit * 1440 + slot.run_at_minute);
+      }
+    }
+  }
+  return fires.size;
+}
+
+/**
+ * Monday-first weekday names, from the viewer's own locale.
+ *
+ * Derived rather than translated into ten locale files: `narrow` already gives
+ * each language its own single-letter convention, and a hand-written table
+ * would be ten more places for Monday-first to be got wrong. The reference week
+ * is formatted in UTC so a user east of Greenwich does not see it shift by a
+ * day.
+ */
+export function weekdayNames(): { narrow: string; long: string }[] {
+  // 2024-01-01 was a Monday, which is bit 0 of the server's mask.
+  const monday = Date.UTC(2024, 0, 1);
+  const narrow = new Intl.DateTimeFormat(undefined, {
+    weekday: "narrow",
+    timeZone: "UTC",
+  });
+  const long = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(monday + index * 24 * 60 * 60 * 1000);
+    return { narrow: narrow.format(day), long: long.format(day) };
+  });
 }
 
 /** A human cadence label. Unknown masks fall back to the night count. */
@@ -407,6 +487,36 @@ export function outcomeLabel(
   if (!code) return null;
   const key = OUTCOME_KEYS[code];
   return key ? t(key) : t("cookieBot.outcome.unknown", { code });
+}
+
+/**
+ * The three refusals only the saved-list routes can raise.
+ *
+ * They are absent from the shared `backendErrors` table, so
+ * `translateBackendError` renders them through its unknown-code fallback: a
+ * user who reuses a name would be told "Something went wrong:
+ * COOKIE_BOT_TEMPLATE_NAME_TAKEN" instead of that the name is taken, in the one
+ * dialog where the fix is a single keystroke. Everything else — a signed-out
+ * desktop, an unreachable cloud — still goes through the shared translator.
+ */
+const TEMPLATE_ERROR_KEYS: Record<string, string> = {
+  COOKIE_BOT_TEMPLATE_NAME_TAKEN: "cookieBot.enrol.templateNameTaken",
+  COOKIE_BOT_INVALID_TEMPLATE_NAME: "cookieBot.enrol.templateNameInvalid",
+  COOKIE_BOT_TEMPLATE_NOT_FOUND: "cookieBot.enrol.templateMissing",
+};
+
+export function templateErrorMessage(t: TFunction, error: unknown): string {
+  const parsed = parseBackendError(error);
+  const key = parsed ? TEMPLATE_ERROR_KEYS[parsed.code] : undefined;
+  if (!key) return translateBackendError(t, error);
+  const max = parsed?.params?.max;
+  // The server does not always send a limit. Interpolating an empty string
+  // rendered "a name of  characters or fewer", so fall back to wording that
+  // does not need the number.
+  if (key === "cookieBot.enrol.templateNameInvalid" && !max) {
+    return t("cookieBot.enrol.templateNameInvalidNoMax");
+  }
+  return t(key, { max });
 }
 
 /**

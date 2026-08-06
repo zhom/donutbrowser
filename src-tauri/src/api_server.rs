@@ -3033,7 +3033,7 @@ fn cookie_bot_eligible_profile(
     .find(|p| p.id.to_string() == profile_id)
     .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
 
-  crate::cookie_bot::bot_precondition(&profile)
+  crate::cookie_bot::bot_precondition(&profile, &crate::cookie_bot::exit_reachability(&profile))
     .map_err(|reason| (StatusCode::BAD_REQUEST, reason))?;
   Ok(profile)
 }
@@ -3315,10 +3315,7 @@ async fn list_cookie_bot_runs(
 async fn start_cookie_bot_run(
   Json(request): Json<StartCookieBotRunRequest>,
 ) -> Result<(StatusCode, Json<crate::cookie_bot::CookieBotRunStarted>), (StatusCode, String)> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .can_use_browser_automation()
-    .await
-  {
+  if !crate::cloud_auth::CLOUD_AUTH.can_use_cookie_bot().await {
     return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
   }
 
@@ -4234,14 +4231,22 @@ mod tests {
     let mut local_only = profile_with(SyncMode::Disabled, Some("macos"));
     local_only.proxy_id = Some("proxy-1".to_string());
     assert!(
-      crate::cookie_bot::bot_precondition(&local_only).is_err(),
+      crate::cookie_bot::bot_precondition(
+        &local_only,
+        &crate::remote_exit::ExitReachability::Remote
+      )
+      .is_err(),
       "a profile with no cloud copy has nothing for a host to open"
     );
 
     let mut encrypted = profile_with(SyncMode::Encrypted, Some("macos"));
     encrypted.proxy_id = Some("proxy-1".to_string());
     assert!(
-      crate::cookie_bot::bot_precondition(&encrypted).is_err(),
+      crate::cookie_bot::bot_precondition(
+        &encrypted,
+        &crate::remote_exit::ExitReachability::Remote
+      )
+      .is_err(),
       "a host cannot decrypt a profile whose key never leaves this machine"
     );
 
@@ -4249,13 +4254,21 @@ mod tests {
     datacenter_egress.proxy_id = None;
     datacenter_egress.vpn_id = None;
     assert!(
-      crate::cookie_bot::bot_precondition(&datacenter_egress).is_err(),
+      crate::cookie_bot::bot_precondition(
+        &datacenter_egress,
+        &crate::remote_exit::ExitReachability::None
+      )
+      .is_err(),
       "hours of traffic from a hosting ASN damages the identity being warmed"
     );
 
     let mut eligible = profile_with(SyncMode::Regular, Some("macos"));
     eligible.proxy_id = Some("proxy-1".to_string());
-    assert!(crate::cookie_bot::bot_precondition(&eligible).is_ok());
+    assert!(crate::cookie_bot::bot_precondition(
+      &eligible,
+      &crate::remote_exit::ExitReachability::Remote
+    )
+    .is_ok());
   }
 
   #[test]

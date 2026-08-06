@@ -156,6 +156,9 @@ async fn enforce_direct_exit(
   profile: &BrowserProfile,
   gate: &FingerprintGate,
 ) -> Result<(), String> {
+  if gate_disabled() {
+    return Ok(());
+  }
   if crate::launch_gate_prefs::fingerprint_ack_matches(profile, DIRECT_EXIT_IDENTITY) {
     return Ok(());
   }
@@ -207,21 +210,27 @@ pub async fn enforce_fingerprint_gate(
   if upstream.is_none() && !declares_route {
     return Ok(());
   }
-  let Some(key) = fingerprint_consistency::exit_cache_key(profile) else {
-    // Declares a route we can no longer resolve at all (e.g. the stored proxy
-    // was deleted). Nothing identifies the exit, so measure the direct one.
-    if declares_route {
-      log::warn!(
-        "Fingerprint gate: {} declares a proxy/VPN that did not resolve; \
-         measuring the direct exit it will actually use",
-        profile.name
-      );
-    }
-    return enforce_direct_exit(profile, gate).await;
-  };
   if gate_disabled() {
     return Ok(());
   }
+
+  // Decide *once*, before any consent handling, whether this launch is going
+  // out directly. Both a route that no longer resolves (deleted proxy) and one
+  // that produced no usable upstream (a VPN worker with no local port) end up
+  // connecting directly, and both must mint and redeem consent under the same
+  // identity — splitting that decision across the function meant the first
+  // attempt minted under "direct" while the retry redeemed against the proxy
+  // identity, so "Launch anyway" could never succeed.
+  let key = fingerprint_consistency::exit_cache_key(profile);
+  if key.is_none() || upstream.is_none() {
+    log::warn!(
+      "Fingerprint gate: {} declares a proxy/VPN that yielded no usable upstream; \
+       measuring the direct exit it will actually use",
+      profile.name
+    );
+    return enforce_direct_exit(profile, gate).await;
+  }
+  let key = key.expect("checked above");
 
   // Ack first: a persisted acknowledgement already permits this launch, so a
   // stale token must not turn it into a hard failure.
@@ -232,16 +241,6 @@ pub async fn enforce_fingerprint_gate(
   if let FingerprintGate::Consented(token) = gate {
     redeem_consent(token, profile, &key.identity)?;
     return Ok(());
-  }
-
-  // The route is known but produced no usable upstream (e.g. a VPN worker that
-  // came up without a local port). The browser still launches, direct.
-  if upstream.is_none() {
-    log::warn!(
-      "Fingerprint gate: {} has a route that yielded no upstream; measuring the direct exit",
-      profile.name
-    );
-    return enforce_direct_exit(profile, gate).await;
   }
 
   let result = if matches!(gate, FingerprintGate::Advisory) {
@@ -390,9 +389,13 @@ pub async fn ack_launch_gate(
   let profile = load_profile(&profile_id)?;
 
   if ack_fingerprint {
-    if let Some(key) = fingerprint_consistency::exit_cache_key(&profile) {
-      crate::launch_gate_prefs::ack_fingerprint(&profile, &key.identity);
-    }
+    // Must match the identity the block was issued against. A profile whose
+    // route did not resolve is gated on the direct exit and has no cache key,
+    // so falling back here is what makes "don't block again" stick for it.
+    let identity = fingerprint_consistency::exit_cache_key(&profile)
+      .map(|key| key.identity)
+      .unwrap_or_else(|| DIRECT_EXIT_IDENTITY.to_string());
+    crate::launch_gate_prefs::ack_fingerprint(&profile, &identity);
   }
   crate::launch_gate_prefs::ack_extensions(&profile_id, &ack_extension_keys);
   Ok(())
@@ -506,21 +509,32 @@ mod tests {
 
   #[tokio::test]
   async fn gate_allows_a_profile_with_no_proxy_or_vpn() {
-    // No exit identity means nothing to compare against, so the launch must
-    // proceed rather than block on an unmeasurable profile.
+    // A profile that declares no route has no upstream either — that pairing is
+    // the only one the launcher can actually produce. It must return without
+    // measuring anything, so this stays a pure unit test with no network.
     let profile = profile_with(r#"{"timezone":"Europe/Berlin"}"#);
-    let upstream = crate::browser::ProxySettings {
-      proxy_type: "socks5".into(),
-      host: "127.0.0.1".into(),
-      port: 1080,
-      username: None,
-      password: None,
-      vless_uri: None,
-    };
     assert!(
-      enforce_fingerprint_gate(&profile, Some(&upstream), &FingerprintGate::Enforce)
+      enforce_fingerprint_gate(&profile, None, &FingerprintGate::Enforce)
         .await
         .is_ok()
+    );
+  }
+
+  #[tokio::test]
+  async fn consent_for_a_direct_launch_is_redeemable_by_the_gate() {
+    // Regression: a route that yields no usable upstream is gated on the direct
+    // exit, so consent is minted under DIRECT_EXIT_IDENTITY. If the gate then
+    // redeemed against the proxy/VPN identity instead, "Launch anyway" would
+    // fail forever and the profile could never be started.
+    let mut profile = profile_with(r#"{"timezone":"Europe/Berlin"}"#);
+    profile.vpn_id = Some("vpn-with-no-port".into());
+
+    let token = mint_consent(&profile, DIRECT_EXIT_IDENTITY);
+    // No upstream: the launcher could not bring the route up.
+    let result = enforce_fingerprint_gate(&profile, None, &FingerprintGate::Consented(token)).await;
+    assert!(
+      result.is_ok(),
+      "consent minted for the direct exit must be redeemable, got {result:?}"
     );
   }
 }

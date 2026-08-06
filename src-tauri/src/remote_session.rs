@@ -8,6 +8,7 @@
 
 use crate::cloud_errors::{self, FailureCodes};
 use crate::profile::types::BrowserProfile;
+use crate::remote_exit::ExitReachability;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -115,6 +116,54 @@ pub fn idempotency_key(profile_id: &str, attempt: &str) -> String {
   format!("run-remote:{profile_id}:{attempt}")
 }
 
+/// Whether this profile's exit rules out running it on a leased host.
+///
+/// A session runs on a fleet host that pulls the profile — and its proxy record
+/// — out of the user's sync namespace, rewriting no addresses along the way. A
+/// proxy stored as `127.0.0.1:8080` therefore arrives meaning THAT host's
+/// loopback: the browser either cannot connect and the leased hour is burned on
+/// a session that never worked, or it falls through and the user's identity
+/// egresses from our datacenter. The Cookie Bot has refused this since
+/// `remote_exit` existed; interactive sessions take the same profile onto the
+/// same hosts and did not, so the same mistake cost a leased hour here.
+///
+/// A profile with NO exit at all is deliberately allowed through. The Cookie
+/// Bot refuses that separately because a night of unattended browsing from a
+/// hosting ASN damages an identity, but an interactive session is a person at a
+/// keyboard who chose to open this profile and can see where it comes out —
+/// and no rule has ever required an exit here. Refusing it would be a new
+/// product restriction wearing this bug's error code.
+///
+/// Split out from the launch because that is the only testable seam:
+/// `exit_reachability` reads this machine's proxy and VPN stores and the launch
+/// itself needs a fleet.
+fn local_exit_refusal(verdict: &ExitReachability) -> Option<RemoteSessionError> {
+  match verdict {
+    // An address anyone can dial, so the leased host can dial it too.
+    ExitReachability::Remote => None,
+    // See the second paragraph above: allowed on purpose, not overlooked.
+    ExitReachability::None => None,
+    // `LocalOnly`, plus `Unknown` — which `remote_exit` produces when it could
+    // not read the config and which fails closed by design, because "we could
+    // not confirm it" guessed as "yes" is the failure this whole check exists
+    // to stop.
+    unusable => {
+      // The prose names the offending host, which belongs in the log where
+      // support can read it. The toast gets the code so it stays translated.
+      if let Some(detail) = unusable.refusal_detail() {
+        log::warn!("Refusing an interactive remote session: {detail}");
+      }
+      // `Other` rather than a typed variant: the other three are each pinned to
+      // a status and a meaning — "the fleet is busy", "already open somewhere",
+      // "not on your plan" — and this refusal is none of them. The code in the
+      // body is what every surface renders.
+      Some(RemoteSessionError::Other(
+        serde_json::json!({ "code": "REMOTE_REQUIRES_REMOTE_EXIT_NODE" }).to_string(),
+      ))
+    }
+  }
+}
+
 /// Ask donutbrowser-infra to start a remote session for this profile.
 ///
 /// Goes through `api_call_with_retry` so an expired access token is refreshed
@@ -132,6 +181,14 @@ pub async fn start_remote_session(
     })?
     .to_string();
   let profile_id = profile.id.to_string();
+
+  // Checked here, before the request: the backend is told which profile to
+  // start but never sees the proxy record, so it cannot derive this — and by
+  // the time it could, an hour is already leased and billed. Resolving a proxy
+  // id to an address is only possible on the machine that stores it.
+  if let Some(refusal) = local_exit_refusal(&crate::cookie_bot::exit_reachability(profile)) {
+    return Err(refusal);
+  }
 
   // One key for this user action: a retry inside api_call_with_retry must
   // de-duplicate rather than open a second browser on the same profile.
@@ -1178,6 +1235,50 @@ mod tests {
       taken.to_error_json(),
       r#"{"code":"REMOTE_SESSION_CONFLICT"}"#
     );
+  }
+
+  #[test]
+  fn a_local_only_exit_is_refused_before_a_host_is_leased() {
+    // The profile and its proxy record are copied onto the fleet unrewritten,
+    // so this loopback address would mean the FLEET's loopback. Accepting the
+    // launch bills an hour for a session that cannot reach the user's exit.
+    let refusal = local_exit_refusal(&ExitReachability::LocalOnly {
+      host: "127.0.0.1".to_string(),
+      source: "proxy",
+    })
+    .expect("a loopback proxy is unusable from a leased host");
+
+    assert_eq!(
+      refusal.to_error_json(),
+      r#"{"code":"REMOTE_REQUIRES_REMOTE_EXIT_NODE"}"#
+    );
+  }
+
+  #[test]
+  fn an_exit_that_could_not_be_read_is_refused_too() {
+    // `Unknown` is "we could not confirm this works from elsewhere". Treating
+    // that as a yes reintroduces exactly the burned hour above, so it fails
+    // closed here as it does everywhere else `remote_exit` is consulted.
+    let refusal = local_exit_refusal(&ExitReachability::Unknown {
+      reason: "the profile references a proxy that no longer exists".to_string(),
+      source: "proxy",
+    })
+    .expect("an unreadable exit is not evidence of a reachable one");
+
+    assert_eq!(
+      refusal.to_error_json(),
+      r#"{"code":"REMOTE_REQUIRES_REMOTE_EXIT_NODE"}"#
+    );
+  }
+
+  #[test]
+  fn a_reachable_exit_and_no_exit_at_all_are_both_allowed_to_launch() {
+    assert!(local_exit_refusal(&ExitReachability::Remote).is_none());
+    // Deliberate, and the reason this gate is not simply `!is_remote()`: a
+    // proxyless interactive session has always been permitted, and refusing it
+    // with a code that says "your proxy is local" would be both a new product
+    // rule and a sentence that does not describe the profile.
+    assert!(local_exit_refusal(&ExitReachability::None).is_none());
   }
 
   #[test]

@@ -718,6 +718,33 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         }),
         notSignedIn,
       );
+      // Saved site lists are cloud-backed like the schedules above, so they
+      // must refuse the same way rather than appearing to work offline.
+      assert.match(
+        await app.invokeError("get_cookie_bot_user_templates", {}),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("create_cookie_bot_user_template", {
+          name: "e2e list",
+          sites: ["example.com"],
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("update_cookie_bot_user_template", {
+          id: "00000000-0000-0000-0000-000000000000",
+          name: "renamed",
+          sites: null,
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("delete_cookie_bot_user_template", {
+          id: "00000000-0000-0000-0000-000000000000",
+        }),
+        notSignedIn,
+      );
       assert.match(
         await app.invokeError("check_cookie_bot_conflicts", {
           profileId: missingProfileId,

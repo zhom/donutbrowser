@@ -51,6 +51,20 @@ const REPORT_CODES: FailureCodes = FailureCodes {
   conflict: cloud_errors::UNAVAILABLE,
 };
 
+/// Failure codes for the user-template routes.
+///
+/// Distinct from `SCHEDULE_CODES` on every axis that matters: a 404 here is a
+/// template that was deleted (possibly from another device), not an unenrolled
+/// profile, and a 409 is a name the user already used, not a teammate's
+/// enrolment. Sharing the schedule set would have told someone renaming a site
+/// list that a colleague already warms this profile.
+const TEMPLATE_CODES: FailureCodes = FailureCodes {
+  bad_request: "COOKIE_BOT_INVALID_TEMPLATE_NAME",
+  forbidden: "COOKIE_BOT_NOT_ENTITLED",
+  not_found: "COOKIE_BOT_TEMPLATE_NOT_FOUND",
+  conflict: "COOKIE_BOT_TEMPLATE_NAME_TAKEN",
+};
+
 /// Every cookie-bot call fails as a code the frontend can translate.
 ///
 /// There is no `Other(String)` carrying backend English: a raw message reaches
@@ -91,6 +105,18 @@ impl From<BackendFailure> for CookieBotError {
 // One place for every request and response shape, so a backend contract change
 // is a single edit here rather than a hunt through call sites.
 
+/// One time-of-day an enrolment fires, on a set of local weekdays.
+///
+/// Copy, and deliberately tiny: a calendar is a list of these, and the desktop
+/// rebuilds that list on every keystroke in the enrolment form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct CookieBotSlot {
+  /// Bitmask of local weekdays, bit 0 = Monday. At least one bit set.
+  pub days_mask: u8,
+  /// Minutes past local midnight, in the schedule's timezone.
+  pub run_at_minute: u16,
+}
+
 /// A profile enrolled in the nightly bot.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CookieBotSchedule {
@@ -98,13 +124,31 @@ pub struct CookieBotSchedule {
   pub profile_name: String,
   pub platform: String,
   pub enabled: bool,
-  /// Minutes past local midnight the run is anchored to.
+  /// Minutes past local midnight the FIRST slot is anchored to. The server
+  /// mirrors `slots[0]` onto this pair on every write.
   pub run_at_minute: u16,
-  /// Bitmask of local weekdays, bit 0 = Monday.
+  /// The first slot's weekdays, bit 0 = Monday. See `run_at_minute`.
   pub days_mask: u8,
+  /// Every time-of-day this enrolment fires.
+  ///
+  /// `default` rather than required because a server older than multi-slot
+  /// scheduling sends only the mirrored pair above, and a decode failure there
+  /// would blank the whole Cookie Bot surface rather than show one time instead
+  /// of several. Callers must therefore fall back to the pair when this is
+  /// empty — never treat an empty list as "fires at no time".
+  #[serde(default)]
+  pub slots: Vec<CookieBotSlot>,
   pub timezone: String,
   /// Server-issued preset id. Opaque here — what it expands to is infra's.
   pub preset: String,
+  /// The template the sites came from, or `None` for the user's own list.
+  ///
+  /// A built-in id (`low-intent-purchaser`) means `sites` is EMPTY on purpose:
+  /// its URLs are server-owned and never sent to a client. A `user:<uuid>` id
+  /// is provenance only — those sites were copied onto the enrolment and are
+  /// present below.
+  #[serde(default)]
+  pub template_id: Option<String>,
   pub max_minutes: u32,
   #[serde(default)]
   pub sites: Vec<String>,
@@ -120,6 +164,11 @@ pub struct CookieBotSchedule {
   pub encrypted_sync: bool,
   #[serde(default)]
   pub has_proxy: bool,
+  /// Whether that exit is one a leased fleet host could dial. Defaults to false
+  /// on an older server that does not send it, which reads as "not reachable"
+  /// and is the safe direction.
+  #[serde(default)]
+  pub proxy_remote_reachable: bool,
   #[serde(default)]
   pub touch_fingerprint: bool,
   #[serde(default)]
@@ -162,8 +211,26 @@ pub struct CookieBotScheduleInput {
   pub enabled: bool,
   pub run_at_minute: u16,
   pub days_mask: u8,
+  /// The whole calendar, when the caller has one.
+  ///
+  /// `skip_serializing_if` is load-bearing rather than tidiness: the server
+  /// reads an ABSENT `slots` as "one slot, from the pair above" and refuses a
+  /// present-but-empty one, and `null` takes the refusing branch. Serialising
+  /// `None` as null would 400 every write from a single-slot form.
+  ///
+  /// The pair above is still sent, mirrored from `slots[0]`, so a server that
+  /// predates multi-slot stores the first time rather than nothing.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub slots: Option<Vec<CookieBotSlot>>,
   pub timezone: String,
   pub preset: String,
+  /// A browsing template instead of a typed site list.
+  ///
+  /// Mutually exclusive with a non-empty `sites`: the server refuses a write
+  /// carrying both, because merging a curated persona with the user's own list
+  /// produces neither. A caller naming a template sends `sites: []`.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub template_id: Option<String>,
   pub max_minutes: u32,
   pub sites: Vec<String>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -190,6 +257,8 @@ pub struct CookieBotScheduleInput {
   pub sync_enabled: bool,
   #[serde(default)]
   pub has_proxy: bool,
+  #[serde(default)]
+  pub proxy_remote_reachable: bool,
   #[serde(default)]
   pub encrypted_sync: bool,
   #[serde(default)]
@@ -331,6 +400,53 @@ pub struct CookieBotPreset {
   pub description: Option<String>,
 }
 
+/// A server-owned browsing template: a named answer to "what is this profile
+/// for", which the user picks INSTEAD of typing a site list.
+///
+/// Carries no URLs, and must not gain any. The pool a template draws from is
+/// server-side for the same reason a preset's browsing model is: a published
+/// list is one a retailer can filter, and each profile is given its own sample
+/// so the template never becomes a fleet-wide fingerprint.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct CookieBotTemplate {
+  pub id: String,
+  /// How many sites this template browses. Not which.
+  #[serde(default)]
+  pub site_count: u32,
+  /// Server-supplied English label and blurb, present only so a template added
+  /// after this build still renders. The UI prefers its own `t()` key for an id
+  /// it recognises.
+  #[serde(default)]
+  pub name: Option<String>,
+  #[serde(default)]
+  pub description: Option<String>,
+}
+
+/// The bounds the schedule routes actually enforce, as this build reads them.
+///
+/// Every field is optional because a server that predates `limits` sends none
+/// of them, and a client that read a missing bound as `0` would refuse every
+/// value the form can produce. Only the bounds the desktop acts on are decoded
+/// — serde drops the rest, and this struct is what the GUI ultimately receives,
+/// so adding a field here is what makes one reachable from TypeScript.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct CookieBotLimits {
+  #[serde(default)]
+  pub min_minutes: Option<u32>,
+  #[serde(default)]
+  pub max_minutes: Option<u32>,
+  #[serde(default)]
+  pub min_sites: Option<u32>,
+  #[serde(default)]
+  pub max_sites: Option<u32>,
+  /// Most entries a calendar may carry.
+  #[serde(default)]
+  pub max_slots: Option<u32>,
+  /// Longest name a saved site list may be given.
+  #[serde(default)]
+  pub max_template_name_length: Option<u32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CookieBotPresetList {
   #[serde(default)]
@@ -339,6 +455,33 @@ pub struct CookieBotPresetList {
   /// preference.
   #[serde(default)]
   pub default_preset: Option<String>,
+  /// The curated templates on offer. Served beside the presets so a template
+  /// added server-side appears without a desktop release.
+  #[serde(default)]
+  pub templates: Vec<CookieBotTemplate>,
+  /// The server's own bounds, when it publishes them. The desktop mirrors a
+  /// copy for offline form validation; these win where they disagree.
+  #[serde(default)]
+  pub limits: Option<CookieBotLimits>,
+}
+
+/// One of the caller's OWN saved site lists.
+///
+/// Carries its URLs, unlike {@link CookieBotTemplate} — they are the user's own
+/// and there is nothing to withhold. Applying one copies the sites onto the
+/// enrolment, so a list edited later does not silently change what an existing
+/// enrolment browses until it is saved again.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct CookieBotUserTemplate {
+  /// Already carries the `user:` prefix: this id's job is to be pasted into a
+  /// schedule's `template_id`, and assembling that convention on the client is
+  /// how the two kinds of template get confused.
+  pub id: String,
+  pub name: String,
+  #[serde(default)]
+  pub sites: Vec<String>,
+  #[serde(default)]
+  pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -465,7 +608,10 @@ pub struct CookieBotUsage {
 /// the client cannot see — but a profile that can never qualify should never
 /// reach a confirm dialog, an hour of quota or a leased host. Returns the
 /// `{"code":…}` string a Tauri command surfaces directly.
-pub fn bot_precondition(profile: &BrowserProfile) -> Result<(), String> {
+pub fn bot_precondition(
+  profile: &BrowserProfile,
+  exit: &crate::remote_exit::ExitReachability,
+) -> Result<(), String> {
   if !profile.is_sync_enabled() {
     // The host materialises the profile by pulling it from donut-sync. A
     // local-only profile has nothing there, so there is no path to a run.
@@ -491,6 +637,21 @@ pub fn bot_precondition(profile: &BrowserProfile) -> Result<(), String> {
     // than not warming it at all.
     return Err(error("COOKIE_BOT_REQUIRES_EXIT_NODE", &[]));
   }
+  // ...and the exit has to be one the leased host can reach. The profile and its
+  // proxy record are pulled onto the fleet with no address rewriting, so
+  // 127.0.0.1 arrives meaning THAT host's loopback — an ordinary mistake (an SSH
+  // tunnel, a local MITM proxy, a locally-run SOCKS client), and by the time the
+  // run fails an hour has been leased and billed.
+  //
+  // Taken as an ARGUMENT rather than resolved here, for the same reason
+  // `ProfileState` is required rather than defaulted: resolving it needs the
+  // proxy and VPN stores, and a function that reaches into those globals is one
+  // no test can set up and every caller silently depends on. `exit_reachability`
+  // is the one place that resolution happens; this stays a pure predicate over
+  // facts it is handed.
+  if !exit.is_remote() {
+    return Err(error("COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE", &[]));
+  }
   Ok(())
 }
 
@@ -511,6 +672,12 @@ pub fn profile_state(profile: &BrowserProfile) -> ProfileState {
     // A VPN is an exit node just as much as a proxy is; the server only asks
     // whether the traffic leaves through something the user brought.
     has_proxy: profile.proxy_id.is_some() || profile.vpn_id.is_some(),
+    // ...and, separately, whether anyone OTHER than this machine could use it.
+    // `has_proxy` answers "did the user bring an exit"; this answers "is that
+    // exit an address a leased host can dial". They disagree for every local
+    // proxy, which is the case that used to be accepted and then fail on the
+    // fleet. See `remote_exit`.
+    proxy_remote_reachable: exit_reachability(profile).is_remote(),
     // Always false: this data model has no mobile/touch profile. `resolved_os`
     // yields only windows, macos or linux, and `bot_precondition` already
     // refuses everything but the first two. Reported rather than omitted so the
@@ -533,8 +700,60 @@ pub struct ProfileState {
   pub sync_enabled: bool,
   pub encrypted_sync: bool,
   pub has_proxy: bool,
+  /// Whether that exit is an address a leased fleet host can dial.
+  pub proxy_remote_reachable: bool,
   pub touch_fingerprint: bool,
   pub sticky_exit: bool,
+}
+
+/// Whether this profile's exit could be used from a host that is not this one.
+///
+/// Resolves the profile's proxy or VPN out of local storage — the server cannot
+/// do this, because it never sees a proxy record until sync has uploaded one and
+/// even then would have to re-derive what the browser will actually dial.
+///
+/// A profile carrying BOTH a proxy and a VPN is judged on the proxy: that is
+/// what the browser is pointed at, and it is the address the fleet has to reach.
+pub fn exit_reachability(profile: &BrowserProfile) -> crate::remote_exit::ExitReachability {
+  use crate::remote_exit::{classify_proxy, classify_wireguard_endpoint, ExitReachability};
+
+  if let Some(proxy_id) = profile.proxy_id.as_deref() {
+    let stored = crate::proxy_manager::PROXY_MANAGER
+      .get_stored_proxies()
+      .into_iter()
+      .find(|candidate| candidate.id == proxy_id);
+    return match stored {
+      Some(proxy) => classify_proxy(&proxy.proxy_settings),
+      // Referenced but missing. Fail closed: a dangling id is not evidence of a
+      // reachable exit, and the launch would fail anyway.
+      None => ExitReachability::Unknown {
+        reason: "the profile references a proxy that no longer exists".to_string(),
+        source: "proxy",
+      },
+    };
+  }
+
+  if let Some(vpn_id) = profile.vpn_id.as_deref() {
+    let config = crate::vpn::VPN_STORAGE
+      .lock()
+      .ok()
+      .and_then(|storage| storage.load_config(vpn_id).ok());
+    return match config {
+      Some(config) => match crate::vpn::parse_wireguard_config(&config.config_data) {
+        Ok(parsed) => classify_wireguard_endpoint(&parsed.peer_endpoint),
+        Err(error) => ExitReachability::Unknown {
+          reason: format!("VPN config could not be parsed ({error})"),
+          source: "VPN",
+        },
+      },
+      None => ExitReachability::Unknown {
+        reason: "the profile references a VPN config that no longer exists".to_string(),
+        source: "VPN",
+      },
+    };
+  }
+
+  ExitReachability::None
 }
 
 impl CookieBotScheduleInput {
@@ -543,6 +762,7 @@ impl CookieBotScheduleInput {
     self.sync_enabled = state.sync_enabled;
     self.encrypted_sync = state.encrypted_sync;
     self.has_proxy = state.has_proxy;
+    self.proxy_remote_reachable = state.proxy_remote_reachable;
     self.touch_fingerprint = state.touch_fingerprint;
     self.sticky_exit = state.sticky_exit;
     self
@@ -663,6 +883,10 @@ pub async fn update_profile_state(
   body.insert("sync_enabled".to_string(), state.sync_enabled.into());
   body.insert("encrypted_sync".to_string(), state.encrypted_sync.into());
   body.insert("has_proxy".to_string(), state.has_proxy.into());
+  body.insert(
+    "proxy_remote_reachable".to_string(),
+    state.proxy_remote_reachable.into(),
+  );
   body.insert(
     "touch_fingerprint".to_string(),
     state.touch_fingerprint.into(),
@@ -855,6 +1079,171 @@ pub async fn list_presets() -> Result<CookieBotPresetList, CookieBotError> {
   .await
 }
 
+// --- User-defined templates -------------------------------------------------
+//
+// The caller's own saved site lists. Unlike every other route in this file
+// these are addressed by an id the SERVER minted and the client echoes back,
+// so each one percent-encodes it: the id is spelled `user:<uuid>`, and a bare
+// colon in a path segment is a spelling the router is free to read differently.
+
+#[derive(Debug, Deserialize)]
+struct UserTemplateListEnvelope {
+  #[serde(default)]
+  templates: Vec<CookieBotUserTemplate>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserTemplateEnvelope {
+  template: CookieBotUserTemplate,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserTemplateDeleted {
+  #[serde(default)]
+  deleted: bool,
+}
+
+/// Every site list this user has saved, most recently edited first.
+pub async fn list_user_templates() -> Result<Vec<CookieBotUserTemplate>, CookieBotError> {
+  let envelope: UserTemplateListEnvelope = request(
+    reqwest::Method::GET,
+    format!("{}/user-templates", base()),
+    Vec::new(),
+    None,
+    TEMPLATE_CODES,
+  )
+  .await?;
+  Ok(envelope.templates)
+}
+
+/// Save a new one.
+pub async fn create_user_template(
+  name: &str,
+  sites: &[String],
+) -> Result<CookieBotUserTemplate, CookieBotError> {
+  let body = serde_json::json!({ "name": name, "sites": sites });
+  let envelope: UserTemplateEnvelope = request(
+    reqwest::Method::POST,
+    format!("{}/user-templates", base()),
+    Vec::new(),
+    Some(body),
+    TEMPLATE_CODES,
+  )
+  .await?;
+  Ok(envelope.template)
+}
+
+/// Rename one, replace its sites, or both.
+///
+/// A PATCH with only the fields that changed, because the two are independent:
+/// a rename that had to carry the whole site list is a rename that silently
+/// reverts an edit made to it from another device in the meantime. Sending an
+/// omitted field as `null` would defeat that, so each is skipped when absent.
+pub async fn update_user_template(
+  id: &str,
+  name: Option<&str>,
+  sites: Option<&[String]>,
+) -> Result<CookieBotUserTemplate, CookieBotError> {
+  let mut body = serde_json::Map::new();
+  if let Some(name) = name {
+    body.insert(
+      "name".to_string(),
+      serde_json::Value::String(name.to_string()),
+    );
+  }
+  if let Some(sites) = sites {
+    body.insert("sites".to_string(), serde_json::json!(sites));
+  }
+
+  let envelope: UserTemplateEnvelope = request(
+    reqwest::Method::PATCH,
+    format!("{}/user-templates/{}", base(), urlencoding::encode(id)),
+    Vec::new(),
+    Some(serde_json::Value::Object(body)),
+    TEMPLATE_CODES,
+  )
+  .await?;
+  Ok(envelope.template)
+}
+
+/// Delete one. Enrolments that used it keep the sites they copied, so this is
+/// never a way to stop a profile being warmed tonight.
+///
+/// Safe to repeat: deleting a list that is already gone answers `false` rather
+/// than 404, which is what makes a retry after a dropped response harmless.
+pub async fn delete_user_template(id: &str) -> Result<bool, CookieBotError> {
+  let deleted: UserTemplateDeleted = request(
+    reqwest::Method::DELETE,
+    format!("{}/user-templates/{}", base(), urlencoding::encode(id)),
+    Vec::new(),
+    None,
+    TEMPLATE_CODES,
+  )
+  .await?;
+  Ok(deleted.deleted)
+}
+
+// --- Tauri commands ---------------------------------------------------------
+//
+// The user-template commands live here rather than in `lib.rs` beside the
+// schedule ones because they carry no local precondition: nothing about a saved
+// site list depends on a profile this machine holds, so there is no profile to
+// look up and no `bot_precondition` to apply. They must still be registered in
+// `lib.rs`'s `invoke_handler` to be reachable.
+
+/// Log a refusal and hand the frontend the envelope it translates.
+///
+/// The raw HTTP text never reaches the user: an untranslated backend sentence
+/// in a Japanese UI is the failure the `{"code":…}` convention exists to stop.
+fn command_error(context: &str, err: CookieBotError) -> String {
+  log::warn!(
+    "Cookie bot {context} failed: {} (HTTP {})",
+    err.code(),
+    err.status()
+  );
+  err.to_error_json()
+}
+
+/// Every site list this user has saved.
+#[tauri::command]
+pub async fn get_cookie_bot_user_templates() -> Result<Vec<CookieBotUserTemplate>, String> {
+  list_user_templates()
+    .await
+    .map_err(|e| command_error("template list", e))
+}
+
+/// Save the current site list under a name.
+#[tauri::command]
+pub async fn create_cookie_bot_user_template(
+  name: String,
+  sites: Vec<String>,
+) -> Result<CookieBotUserTemplate, String> {
+  create_user_template(&name, &sites)
+    .await
+    .map_err(|e| command_error("template create", e))
+}
+
+/// Rename a saved list, replace its sites, or both. Omitted fields are left
+/// exactly as they are.
+#[tauri::command]
+pub async fn update_cookie_bot_user_template(
+  id: String,
+  name: Option<String>,
+  sites: Option<Vec<String>>,
+) -> Result<CookieBotUserTemplate, String> {
+  update_user_template(&id, name.as_deref(), sites.as_deref())
+    .await
+    .map_err(|e| command_error("template update", e))
+}
+
+/// Delete a saved list. `false` means there was nothing left to delete.
+#[tauri::command]
+pub async fn delete_cookie_bot_user_template(id: String) -> Result<bool, String> {
+  delete_user_template(&id)
+    .await
+    .map_err(|e| command_error("template delete", e))
+}
+
 /// Per-member and per-profile spend for a calendar month (`YYYY-MM`).
 pub async fn team_usage(period: Option<&str>) -> Result<CookieBotUsage, CookieBotError> {
   let query = period
@@ -976,6 +1365,7 @@ async fn request<T: DeserializeOwned>(
 mod tests {
   use super::*;
   use crate::profile::types::SyncMode;
+  use crate::remote_exit::ExitReachability;
 
   fn eligible_profile() -> BrowserProfile {
     BrowserProfile {
@@ -1045,7 +1435,8 @@ mod tests {
     // that emptiness over the user's real profile.
     let mut profile = eligible_profile();
     profile.sync_mode = SyncMode::Disabled;
-    let err = bot_precondition(&profile).expect_err("a local-only profile must be refused");
+    let err = bot_precondition(&profile, &ExitReachability::Remote)
+      .expect_err("a local-only profile must be refused");
     assert_eq!(code_of(&err), "COOKIE_BOT_REQUIRES_CLOUD_SYNC");
   }
 
@@ -1055,7 +1446,8 @@ mod tests {
     // one code cannot carry two different instructions.
     let mut profile = eligible_profile();
     profile.sync_mode = SyncMode::Encrypted;
-    let err = bot_precondition(&profile).expect_err("encrypted sync must be refused");
+    let err = bot_precondition(&profile, &ExitReachability::Remote)
+      .expect_err("encrypted sync must be refused");
     assert_eq!(code_of(&err), "COOKIE_BOT_ENCRYPTED_SYNC_UNSUPPORTED");
   }
 
@@ -1063,7 +1455,8 @@ mod tests {
   fn linux_is_refused_at_enrolment_rather_than_at_two_in_the_morning() {
     let mut profile = eligible_profile();
     profile.host_os = Some("linux".to_string());
-    let err = bot_precondition(&profile).expect_err("linux has no host to lease");
+    let err = bot_precondition(&profile, &ExitReachability::Remote)
+      .expect_err("linux has no host to lease");
     let parsed: serde_json::Value = serde_json::from_str(&err).expect("valid envelope");
     assert_eq!(parsed["code"], "COOKIE_BOT_UNSUPPORTED_PLATFORM");
     assert_eq!(
@@ -1076,7 +1469,8 @@ mod tests {
   fn a_profile_with_no_recorded_os_cannot_be_scheduled_onto_a_host() {
     let mut profile = eligible_profile();
     profile.host_os = None;
-    let err = bot_precondition(&profile).expect_err("no OS means no matching host");
+    let err = bot_precondition(&profile, &ExitReachability::Remote)
+      .expect_err("no OS means no matching host");
     assert_eq!(code_of(&err), "COOKIE_BOT_UNKNOWN_PLATFORM");
   }
 
@@ -1087,7 +1481,8 @@ mod tests {
     let mut profile = eligible_profile();
     profile.proxy_id = None;
     profile.vpn_id = None;
-    let err = bot_precondition(&profile).expect_err("datacenter egress must be refused");
+    let err = bot_precondition(&profile, &ExitReachability::None)
+      .expect_err("datacenter egress must be refused");
     assert_eq!(code_of(&err), "COOKIE_BOT_REQUIRES_EXIT_NODE");
   }
 
@@ -1096,21 +1491,60 @@ mod tests {
     let mut profile = eligible_profile();
     profile.proxy_id = None;
     profile.vpn_id = Some("vpn-1".to_string());
-    assert!(bot_precondition(&profile).is_ok());
+    assert!(bot_precondition(&profile, &ExitReachability::Remote).is_ok());
   }
 
   #[test]
   fn a_windows_profile_with_sync_and_a_proxy_qualifies() {
     let mut profile = eligible_profile();
     profile.host_os = Some("windows".to_string());
-    assert!(bot_precondition(&profile).is_ok());
+    assert!(bot_precondition(&profile, &ExitReachability::Remote).is_ok());
+  }
+
+  #[test]
+  fn an_exit_only_this_machine_can_reach_is_refused() {
+    // The gap `has_proxy` alone could never see, and — before the verdict became
+    // an argument — a case no unit test could construct, because resolving it
+    // reached into the global proxy store. The profile is otherwise perfect.
+    let profile = eligible_profile();
+
+    let err = bot_precondition(
+      &profile,
+      &ExitReachability::LocalOnly {
+        host: "127.0.0.1".to_string(),
+        source: "proxy",
+      },
+    )
+    .expect_err("a loopback exit cannot be dialled from a leased host");
+
+    // Its own code: "attach a proxy" is unactionable advice for someone whose
+    // proxy is plainly attached.
+    assert_eq!(code_of(&err), "COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE");
+  }
+
+  #[test]
+  fn an_exit_we_could_not_read_is_refused_too() {
+    // Fails closed. Refusing a working setup costs one support question;
+    // accepting a broken one burns a leased hour and damages an identity.
+    let err = bot_precondition(
+      &eligible_profile(),
+      &ExitReachability::Unknown {
+        reason: "VPN config could not be parsed".to_string(),
+        source: "VPN",
+      },
+    )
+    .expect_err("an unreadable exit must not be assumed reachable");
+
+    assert_eq!(code_of(&err), "COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE");
   }
 
   /// A verbatim `CookieBotScheduleView`, field for field, as `toScheduleView`
   /// in donutbrowser-infra's `cookie-bot.service.ts` builds it.
   const SERVER_SCHEDULE_VIEW: &str = r#"{
     "profile_id":"p1","profile_name":"Yu","platform":"macos","enabled":true,
-    "run_at_minute":120,"days_mask":127,"timezone":"Europe/Berlin",
+    "run_at_minute":120,"days_mask":127,
+    "slots":[{"days_mask":127,"run_at_minute":120},{"days_mask":31,"run_at_minute":690}],
+    "timezone":"Europe/Berlin","template_id":null,
     "preset":"balanced","max_minutes":45,"sites":["https://example.com"],
     "jitter_seconds":900,"sync_enabled":true,"encrypted_sync":false,
     "has_proxy":true,"touch_fingerprint":false,"sticky_exit":false,
@@ -1140,6 +1574,132 @@ mod tests {
     assert!(!schedule.encrypted_sync);
     assert!(schedule.profile_state_at.is_some());
     assert!(schedule.blocked_by.is_none());
+  }
+
+  #[test]
+  fn a_schedule_carries_its_whole_calendar_not_just_the_first_time() {
+    // The mirrored pair is `slots[0]`, so a client that read only the pair
+    // would show "every night at 02:00" for an enrolment that also runs at
+    // 11:30 on weeknights — fewer runs than the user booked, silently.
+    let schedule: CookieBotSchedule =
+      serde_json::from_str(SERVER_SCHEDULE_VIEW).expect("a multi-slot schedule must deserialize");
+
+    assert_eq!(schedule.slots.len(), 2);
+    assert_eq!(schedule.slots[0].run_at_minute, schedule.run_at_minute);
+    assert_eq!(schedule.slots[0].days_mask, schedule.days_mask);
+    assert_eq!(schedule.slots[1].run_at_minute, 690);
+    assert_eq!(schedule.slots[1].days_mask, 31);
+  }
+
+  #[test]
+  fn a_server_that_predates_multi_slot_still_decodes_with_no_slots() {
+    // `slots` absent is a deployment that has not rolled forward, not a broken
+    // enrolment. Requiring it would blank the whole Cookie Bot surface against
+    // an older backend rather than show the one time it does know about.
+    let schedule: CookieBotSchedule = serde_json::from_str(
+      r#"{"profile_id":"p1","profile_name":"Yu","platform":"windows","enabled":true,
+          "run_at_minute":120,"days_mask":31,"timezone":"UTC","preset":"light",
+          "max_minutes":10}"#,
+    )
+    .expect("a pre-multi-slot schedule must deserialize");
+
+    assert!(schedule.slots.is_empty());
+    assert!(schedule.template_id.is_none());
+  }
+
+  #[test]
+  fn a_templated_enrolment_reports_its_template_and_no_sites() {
+    // A built-in template's URLs are server-owned. An empty `sites` here is the
+    // contract working, not a schedule with nothing to browse — anything that
+    // reads it as "no sites" would show a healthy enrolment as broken.
+    let schedule: CookieBotSchedule = serde_json::from_str(
+      &SERVER_SCHEDULE_VIEW
+        .replace(
+          "\"template_id\":null",
+          "\"template_id\":\"low-intent-purchaser\"",
+        )
+        .replace("\"sites\":[\"https://example.com\"]", "\"sites\":[]"),
+    )
+    .expect("a templated schedule must deserialize");
+
+    assert_eq!(
+      schedule.template_id.as_deref(),
+      Some("low-intent-purchaser")
+    );
+    assert!(schedule.sites.is_empty());
+    assert!(schedule.blocked_by.is_none());
+  }
+
+  #[test]
+  fn a_calendar_is_sent_as_slots_and_omitted_entirely_when_there_is_none() {
+    // The server reads an ABSENT `slots` as "one slot, from the legacy pair"
+    // and REFUSES a null or empty one. Serialising `None` as null would 400
+    // every write from a form with a single time on it.
+    let one_slot = CookieBotScheduleInput {
+      profile_name: "Yu".to_string(),
+      platform: "macos".to_string(),
+      enabled: true,
+      run_at_minute: 120,
+      days_mask: 127,
+      timezone: "Europe/Berlin".to_string(),
+      preset: "balanced".to_string(),
+      max_minutes: 45,
+      sites: vec!["https://example.com".to_string()],
+      ..Default::default()
+    };
+    let encoded = serde_json::to_value(&one_slot).expect("input must serialize");
+    assert!(
+      encoded.get("slots").is_none(),
+      "an absent calendar must be absent on the wire, not null"
+    );
+    assert!(encoded.get("template_id").is_none());
+
+    let many = CookieBotScheduleInput {
+      slots: Some(vec![
+        CookieBotSlot {
+          days_mask: 127,
+          run_at_minute: 120,
+        },
+        CookieBotSlot {
+          days_mask: 31,
+          run_at_minute: 690,
+        },
+      ]),
+      ..one_slot
+    };
+    let encoded = serde_json::to_value(&many).expect("input must serialize");
+    let slots = encoded["slots"].as_array().expect("slots must be a list");
+    assert_eq!(slots.len(), 2);
+    // Mirrored, because a server that predates multi-slot ignores `slots` and
+    // stores this pair. Dropping it would leave that server with no time at all.
+    assert_eq!(encoded["run_at_minute"], 120);
+    assert_eq!(encoded["days_mask"], 127);
+  }
+
+  #[test]
+  fn a_templated_write_names_the_template_and_sends_no_sites() {
+    // The server refuses a body carrying both: a curated persona merged with
+    // the user's own list is neither.
+    let input = CookieBotScheduleInput {
+      profile_name: "Yu".to_string(),
+      platform: "macos".to_string(),
+      enabled: true,
+      run_at_minute: 120,
+      days_mask: 127,
+      timezone: "UTC".to_string(),
+      preset: "balanced".to_string(),
+      max_minutes: 45,
+      sites: Vec::new(),
+      template_id: Some("low-intent-purchaser".to_string()),
+      ..Default::default()
+    };
+    let encoded = serde_json::to_value(&input).expect("input must serialize");
+    assert_eq!(encoded["template_id"], "low-intent-purchaser");
+    assert_eq!(
+      encoded["sites"].as_array().map(Vec::len),
+      Some(0),
+      "sites must still be sent, and must be empty, beside a template"
+    );
   }
 
   #[test]
@@ -1419,5 +1979,76 @@ mod tests {
     assert_eq!(presets.presets[0].id, "balanced");
     assert_eq!(presets.presets[0].typical_minutes, Some(35));
     assert_eq!(presets.default_preset.as_deref(), Some("balanced"));
+    // An older deployment sends neither of these, and the dialog has to render
+    // against it: no templates simply means the picker offers the user's own
+    // list, and no limits means the mirrored bounds apply.
+    assert!(presets.templates.is_empty());
+    assert!(presets.limits.is_none());
+  }
+
+  #[test]
+  fn a_template_crosses_the_wire_as_a_count_and_never_as_urls() {
+    // The pool is server-owned for the same reason a preset's browsing model
+    // is. If this type ever gained a `sites` field the curation would be
+    // published, and a published list is one a retailer can filter.
+    let presets: CookieBotPresetList = serde_json::from_str(
+      r#"{"presets":[],"default_preset":"balanced",
+          "templates":[{"id":"low-intent-purchaser","site_count":32,
+            "name":"Low-Intent Purchaser","description":"Price-sensitive browsing."}],
+          "limits":{"min_minutes":5,"max_minutes":120,"min_sites":1,"max_sites":40,
+            "max_site_length":2048,"max_jitter_seconds":3600,"max_slots":14,
+            "max_template_name_length":80}}"#,
+    )
+    .expect("the preset list must carry templates and limits");
+
+    assert_eq!(presets.templates[0].id, "low-intent-purchaser");
+    assert_eq!(presets.templates[0].site_count, 32);
+    let limits = presets.limits.expect("limits must decode");
+    assert_eq!(limits.max_slots, Some(14));
+    assert_eq!(limits.max_template_name_length, Some(80));
+    assert_eq!(limits.max_sites, Some(40));
+  }
+
+  #[test]
+  fn a_saved_list_arrives_with_the_prefix_a_schedule_write_needs() {
+    // The id is what `template_id` takes verbatim. Handing the client a bare
+    // uuid and expecting it to prepend `user:` is how a saved list gets looked
+    // up against the built-in catalogue instead — which answers "no sites" and
+    // silently unschedules the profile.
+    let envelope: UserTemplateListEnvelope = serde_json::from_str(
+      r#"{"templates":[{"id":"user:1c9a…","name":"My shops",
+          "sites":["https://example.com"],"updated_at":"2026-08-05T10:00:00.000Z"}]}"#,
+    )
+    .expect("the user template list must deserialize");
+
+    let template = &envelope.templates[0];
+    assert!(template.id.starts_with("user:"));
+    assert_eq!(template.name, "My shops");
+    assert_eq!(template.sites.len(), 1);
+  }
+
+  #[test]
+  fn deleting_a_saved_list_that_is_already_gone_is_not_a_failure() {
+    // The route never 404s, so a delete retried after a dropped response has to
+    // read as "nothing left to do" rather than as an error the user must act on.
+    let deleted: UserTemplateDeleted =
+      serde_json::from_str(r#"{"deleted":false,"id":"user:gone"}"#)
+        .expect("a no-op delete must deserialize");
+    assert!(!deleted.deleted);
+  }
+
+  #[test]
+  fn a_template_404_is_a_missing_list_and_not_an_unenrolled_profile() {
+    // Sharing SCHEDULE_CODES here would tell someone renaming a site list that
+    // their profile is not enrolled, and a name collision that a teammate
+    // already warms the profile.
+    assert_eq!(
+      cloud_errors::classify_message("(404) Not Found", TEMPLATE_CODES).code,
+      "COOKIE_BOT_TEMPLATE_NOT_FOUND"
+    );
+    assert_eq!(
+      cloud_errors::classify_message("(409) Conflict", TEMPLATE_CODES).code,
+      "COOKIE_BOT_TEMPLATE_NAME_TAKEN"
+    );
   }
 }

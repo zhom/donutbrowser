@@ -464,10 +464,10 @@ impl ProxyManager {
       .as_deref()
       .filter(|uri| !uri.is_empty())
       .ok_or_else(|| crate::backend_error("VLESS_CONFIG_INVALID"))?;
-    let parsed = crate::xray::parse_vless_uri(uri)
-      .map_err(|error| crate::backend_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+    let parsed =
+      crate::xray::parse_vless_uri(uri).map_err(|error| crate::vless_config_error(&error))?;
     let canonical_uri = crate::xray::export_vless_uri(&parsed.config, parsed.name.as_deref())
-      .map_err(|error| crate::backend_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+      .map_err(|error| crate::vless_config_error(&error))?;
 
     proxy_settings.proxy_type = "vless".to_string();
     proxy_settings.host = parsed.config.address;

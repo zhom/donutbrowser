@@ -165,7 +165,7 @@ pub async fn start_xray_worker(
 ) -> Result<XrayWorkerConfig, Box<dyn std::error::Error>> {
   let _start_guard = XRAY_START_LOCK.lock().await;
   parse_vless_uri(vless_uri)
-    .map_err(|error| structured_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+    .map_err(|error| -> Box<dyn std::error::Error> { crate::vless_config_error(&error).into() })?;
   crate::proxy_runner::ensure_sidecar_version().await?;
   ensure_xray_binary()?;
   let owner_pid = std::process::id();
@@ -521,14 +521,14 @@ pub async fn run_xray_worker(config_path: &Path) -> Result<(), Box<dyn std::erro
   save_xray_worker_config_to_path(&config, config_path)
     .map_err(|error| structured_error_with_detail("XRAY_START_FAILED", error))?;
   let parsed = parse_vless_uri(&config.vless_uri)
-    .map_err(|error| structured_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+    .map_err(|error| -> Box<dyn std::error::Error> { crate::vless_config_error(&error).into() })?;
   let runtime = XrayClientRuntime {
     listen_port: config.local_port,
     username: config.username.clone(),
     password: config.password.clone(),
   };
   let runtime_json = build_client_config_json(&parsed.config, &runtime)
-    .map_err(|error| structured_error_with_detail("VLESS_CONFIG_INVALID", error))?;
+    .map_err(|error| -> Box<dyn std::error::Error> { crate::vless_config_error(&error).into() })?;
   write_xray_runtime_config(&config.id, runtime_json.as_bytes())
     .map_err(|error| structured_error_with_detail("XRAY_START_FAILED", error))?;
   let runtime_path = crate::xray_worker_storage::xray_runtime_config_path(&config.id);

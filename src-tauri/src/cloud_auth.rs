@@ -819,6 +819,21 @@ impl CloudAuthManager {
   }
 
   /// Launch/drive profiles programmatically (local API + MCP automation).
+  /// Whether this account may run the nightly Cookie Bot.
+  ///
+  /// NOT `can_use_browser_automation`. Solo is exactly the plan where the two
+  /// disagree — it pays for a nightly bot and has `browser_automation: false` —
+  /// so gating the bot on automation refused a Solo customer the one feature
+  /// their plan is sold on, and answered 402 while their scheduled runs kept
+  /// working server-side.
+  pub async fn can_use_cookie_bot(&self) -> bool {
+    self
+      .entitlements()
+      .await
+      .map(|e| e.cookie_bot)
+      .unwrap_or(false)
+  }
+
   pub async fn can_use_browser_automation(&self) -> bool {
     #[cfg(feature = "e2e")]
     if crate::e2e_automation_enabled()

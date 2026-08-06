@@ -314,7 +314,12 @@ export default function Home() {
     }
   }, [cloudUser]);
 
-  const syncUnlocked = crossOsUnlocked || selfHostedSyncConfigured;
+  // Cloud sync follows `cloudBackup`, NOT `crossOsFingerprints`. They agreed on
+  // every plan until Solo, which buys 20 cloud backups and deliberately has no
+  // fingerprint editing — so deriving sync from the fingerprint capability put a
+  // Pro badge on the one feature a Solo customer is paying for.
+  const cloudBackupUnlocked = getEntitlements(cloudUser).cloudBackup;
+  const syncUnlocked = cloudBackupUnlocked || selfHostedSyncConfigured;
 
   const [currentPage, setCurrentPage] = useState<AppPage>("profiles");
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);

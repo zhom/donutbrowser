@@ -13,24 +13,70 @@ import { invoke } from "@tauri-apps/api/core";
 /** Bit 0 = Monday, bit 6 = Sunday. */
 export const COOKIE_BOT_DAY_BITS = [1, 2, 4, 8, 16, 32, 64] as const;
 
+/**
+ * What marks a `template_id` as one of the USER's own rather than a curated one.
+ *
+ * The two kinds share one field and behave in opposite ways — a curated
+ * template's URLs are server-owned and expanded per profile at dispatch, a
+ * user's are copied onto the enrolment when it is saved. An id read as the wrong
+ * kind is a schedule that browses the wrong list, so every question about which
+ * kind an id is goes through the helper below rather than a `startsWith` at the
+ * call site.
+ */
+export const COOKIE_BOT_USER_TEMPLATE_PREFIX = "user:";
+
+export function isUserTemplateId(id: string | null | undefined): boolean {
+  return (
+    typeof id === "string" && id.startsWith(COOKIE_BOT_USER_TEMPLATE_PREFIX)
+  );
+}
+
 /** Hosts the fleet can lease. Linux is refused at enrolment. */
 export type CookieBotPlatform = "windows" | "macos";
 
 /** `mine` shows the caller's enrolments, `team` the whole team's. */
 export type CookieBotScope = "mine" | "team";
 
+/** One time-of-day an enrolment fires, on a set of local weekdays. */
+export interface CookieBotSlot {
+  /** Bitmask of local weekdays, bit 0 = Monday. At least one bit set. */
+  days_mask: number;
+  /** Minutes past local midnight, in the schedule's timezone. */
+  run_at_minute: number;
+}
+
 export interface CookieBotSchedule {
   profile_id: string;
   profile_name: string;
   platform: string;
   enabled: boolean;
-  /** Minutes past local midnight the run is anchored to. */
+  /**
+   * Minutes past local midnight the FIRST slot is anchored to. The server
+   * mirrors `slots[0]` onto this pair on every write.
+   */
   run_at_minute: number;
-  /** Bitmask of local weekdays, bit 0 = Monday. */
+  /** The first slot's weekdays, bit 0 = Monday. See `run_at_minute`. */
   days_mask: number;
+  /**
+   * Every time-of-day this enrolment fires.
+   *
+   * Optional because a server that predates multi-slot scheduling sends only
+   * the mirrored pair above. Read it through `scheduleSlots()` rather than
+   * directly, so the fallback happens in one place instead of at each renderer
+   * — an empty list here means "this server did not say", never "never fires".
+   */
+  slots?: CookieBotSlot[];
   timezone: string;
   /** Opaque server-issued preset id. */
   preset: string;
+  /**
+   * The template the site list came from, or null for the user's own list.
+   *
+   * A built-in id means `sites` is EMPTY on purpose: those URLs are curated
+   * server-side and deliberately never sent to a client. A `user:<uuid>` id is
+   * provenance — the sites were copied onto the enrolment and are present.
+   */
+  template_id?: string | null;
   max_minutes: number;
   sites: string[];
   jitter_seconds: number;
@@ -70,10 +116,23 @@ export interface CookieBotScheduleInput {
   profile_name: string;
   platform: CookieBotPlatform;
   enabled: boolean;
+  /** Mirror of `slots[0]`, for a server that predates multi-slot scheduling. */
   run_at_minute: number;
+  /** Mirror of `slots[0]`. See `run_at_minute`. */
   days_mask: number;
+  /**
+   * The whole calendar. Omit it — never send an empty array — for "one slot,
+   * from the pair above": the server refuses an empty list, because a schedule
+   * that fires at no time is a mistake rather than a way to pause one.
+   */
+  slots?: CookieBotSlot[];
   timezone: string;
   preset: string;
+  /**
+   * A browsing template instead of a typed site list. Mutually exclusive with a
+   * non-empty `sites`: the server refuses a write carrying both.
+   */
+  template_id?: string;
   max_minutes: number;
   sites: string[];
   jitter_seconds?: number;
@@ -162,9 +221,70 @@ export interface CookieBotPreset {
   description?: string | null;
 }
 
+/**
+ * A curated browsing template: a named answer to "what is this profile for",
+ * picked INSTEAD of typing a site list.
+ *
+ * Carries a count and never the URLs. That is the product working as designed —
+ * the pool is curated server-side and each profile draws its own sample from it,
+ * so the template never becomes one recognisable fleet-wide set of visits. Any
+ * copy describing this must say so as the feature it is.
+ */
+export interface CookieBotTemplate {
+  id: string;
+  /** How many sites this template browses. Not which. */
+  site_count: number;
+  /** Server-supplied English fallbacks, for a template newer than this build. */
+  name?: string | null;
+  description?: string | null;
+}
+
+/**
+ * The server's own form bounds, when it publishes them.
+ *
+ * Every field is optional: a deployment that predates this object sends none of
+ * them, and treating a missing bound as `0` would refuse every value the form
+ * can produce. `SCHEDULE_BOUNDS` in `cookie-bot-limits.ts` is the fallback.
+ */
+export interface CookieBotLimits {
+  min_minutes?: number | null;
+  max_minutes?: number | null;
+  min_sites?: number | null;
+  max_sites?: number | null;
+  /** Most entries a calendar may carry. */
+  max_slots?: number | null;
+  /** Longest name a saved site list may be given. */
+  max_template_name_length?: number | null;
+}
+
 export interface CookieBotPresetList {
   presets: CookieBotPreset[];
   default_preset?: string | null;
+  /**
+   * The curated templates on offer. Served with the presets so one added
+   * server-side becomes selectable without a desktop release.
+   */
+  templates?: CookieBotTemplate[];
+  limits?: CookieBotLimits | null;
+}
+
+/**
+ * One of the caller's OWN saved site lists.
+ *
+ * Carries its URLs, unlike {@link CookieBotTemplate}: they are the user's own
+ * and there is nothing to withhold. Applying one COPIES the sites onto the
+ * enrolment, so editing a list later does not silently change what an existing
+ * schedule browses.
+ */
+export interface CookieBotUserTemplate {
+  /**
+   * Already prefixed `user:<uuid>` — the value `template_id` takes verbatim.
+   * Nothing on this side assembles that convention.
+   */
+  id: string;
+  name: string;
+  sites: string[];
+  updated_at?: string | null;
 }
 
 export interface RemoteHoursBreakdown {
@@ -325,6 +445,47 @@ export function cancelCookieBotRun(runId: string): Promise<CookieBotRun> {
 
 export function getCookieBotPresets(): Promise<CookieBotPresetList> {
   return invoke<CookieBotPresetList>("get_cookie_bot_presets");
+}
+
+/** Every site list this user has saved, most recently edited first. */
+export function getCookieBotUserTemplates(): Promise<CookieBotUserTemplate[]> {
+  return invoke<CookieBotUserTemplate[]>("get_cookie_bot_user_templates");
+}
+
+/** Save the current site list under a name. */
+export function createCookieBotUserTemplate(
+  name: string,
+  sites: string[],
+): Promise<CookieBotUserTemplate> {
+  return invoke<CookieBotUserTemplate>("create_cookie_bot_user_template", {
+    name,
+    sites,
+  });
+}
+
+/**
+ * Rename a saved list, replace its sites, or both.
+ *
+ * Send only what changed. A rename that also carried the site list would
+ * silently revert an edit made to it from another device in between.
+ */
+export function updateCookieBotUserTemplate(
+  id: string,
+  changes: { name?: string; sites?: string[] },
+): Promise<CookieBotUserTemplate> {
+  return invoke<CookieBotUserTemplate>("update_cookie_bot_user_template", {
+    id,
+    name: changes.name,
+    sites: changes.sites,
+  });
+}
+
+/**
+ * Delete a saved list. `false` means there was nothing left to delete, which is
+ * a success — enrolments that used it keep the sites they copied either way.
+ */
+export function deleteCookieBotUserTemplate(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_cookie_bot_user_template", { id });
 }
 
 export function getRemoteHoursQuota(): Promise<RemoteHoursQuota> {

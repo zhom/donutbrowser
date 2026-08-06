@@ -142,14 +142,13 @@ pub fn scan_profile(profile: &BrowserProfile) -> ExtensionScan {
     "partial"
   };
 
-  // The two sources are disjoint by construction, but an imported profile can
-  // carry its own copy of an extension Donut also manages. Collapse only on an
-  // exact name+version match, and never on an unresolved `__MSG_` placeholder —
-  // those are not identities and would fold unrelated extensions into one row.
+  // Collapse only exact duplicates of the same extension. `key` is the real
+  // identity (`donut:<uuid>` / `crx:<id>`); name+version is not, and two
+  // distinct extensions sharing a display name would silently fold into one —
+  // dropping a `confirmed` detection would then flip `has_confirmed()` and stop
+  // the gate treating its own exit measurement as unreliable.
   let mut seen = HashSet::new();
-  extensions.retain(|e| {
-    message_placeholder_key(&e.name).is_some() || seen.insert((e.name.clone(), e.version.clone()))
-  });
+  extensions.retain(|e| seen.insert(e.key.clone()));
 
   ExtensionScan {
     extensions,

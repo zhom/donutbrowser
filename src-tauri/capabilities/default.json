@@ -10,6 +10,7 @@
     "core:event:allow-emit-to",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
     "core:window:allow-close",
     "core:window:allow-is-maximized",
     "core:window:allow-minimize",

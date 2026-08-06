@@ -474,7 +474,7 @@ test("VLESS proxy form keeps the share URI as one clear, validated input", async
     await app.clickSelector('[aria-label="New proxy"]');
     await app.waitForText("Add Proxy");
     await app.fillSelector("#proxy-name", "E2E VLESS");
-    await chooseSelectOption(app, "#proxy-type", "VLESS · Vision · REALITY");
+    await chooseSelectOption(app, "#proxy-type", "VLESS");
 
     assert.equal(
       await app.execute(
@@ -510,6 +510,22 @@ test("VLESS proxy form keeps the share URI as one clear, validated input", async
           ?.disabled === true;`,
       ),
       true,
+    );
+
+    // A well-formed URI for a setup Donut cannot use must say WHICH part is
+    // unsupported, rather than implying the user mistyped it.
+    await app.fillSelector(
+      "#proxy-vless-uri",
+      `${uri.replace("type=tcp", "type=ws")}&path=%2Fray`,
+    );
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return /only|TCP|transport/i.test(
+             document.querySelector("#proxy-vless-uri-help")?.textContent || ""
+           );`,
+        ),
+      { description: "transport-specific unsupported message" },
     );
 
     await app.fillSelector("#proxy-vless-uri", uri);

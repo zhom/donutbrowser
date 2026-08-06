@@ -89,6 +89,12 @@ export function ProxyFormDialog({
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<ProxyFormData>(DEFAULT_FORM);
+  // The local parse only covers scheme/host/port. Whether Donut can actually
+  // use the server — REALITY, XTLS Vision, plain TCP — is decided by the Rust
+  // parser, so ask it (below) and show the specific reason while the user is
+  // still editing rather than after they save. Declared here because
+  // `handleSubmit` guards on it.
+  const [vlessUnsupported, setVlessUnsupported] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setForm(DEFAULT_FORM);
@@ -131,6 +137,11 @@ export function ProxyFormDialog({
 
     if (isVless && !vlessEndpoint) {
       toast.error(t("proxies.form.vlessUriInvalid"));
+      return;
+    }
+
+    if (isVless && vlessUnsupported) {
+      toast.error(vlessUnsupported);
       return;
     }
 
@@ -183,7 +194,7 @@ export function ProxyFormDialog({
     } finally {
       setIsSubmitting(false);
     }
-  }, [editingProxy, form, onClose, t]);
+  }, [editingProxy, form, onClose, t, vlessUnsupported]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
@@ -193,12 +204,37 @@ export function ProxyFormDialog({
 
   const isVless = form.proxy_type === "vless";
   const vlessEndpoint = isVless ? parseVlessEndpoint(form.vless_uri) : null;
+
+  const trimmedVlessUri = form.vless_uri.trim();
+  useEffect(() => {
+    if (!isVless || trimmedVlessUri.length === 0) {
+      setVlessUnsupported(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void invoke("validate_vless_uri", { uri: trimmedVlessUri })
+        .then(() => {
+          if (!cancelled) setVlessUnsupported(null);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) setVlessUnsupported(translateBackendError(t, error));
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isVless, trimmedVlessUri, t]);
+
   const hasInvalidVlessUri =
-    isVless && form.vless_uri.trim().length > 0 && !vlessEndpoint;
+    isVless &&
+    trimmedVlessUri.length > 0 &&
+    (!vlessEndpoint || vlessUnsupported !== null);
   const isFormValid =
     form.name.trim() &&
     (isVless
-      ? vlessEndpoint !== null
+      ? vlessEndpoint !== null && vlessUnsupported === null
       : form.host.trim() &&
         form.port > 0 &&
         form.port <= 65535 &&
@@ -286,7 +322,7 @@ export function ProxyFormDialog({
                 role={hasInvalidVlessUri ? "alert" : undefined}
               >
                 {hasInvalidVlessUri
-                  ? t("proxies.form.vlessUriInvalid")
+                  ? (vlessUnsupported ?? t("proxies.form.vlessUriInvalid"))
                   : t("proxies.form.vlessUriHint")}
               </p>
             </div>

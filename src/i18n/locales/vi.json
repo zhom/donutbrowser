@@ -92,7 +92,8 @@
     "window": {
       "minimize": "Thu nhỏ",
       "maximize": "Phóng to",
-      "restore": "Khôi phục"
+      "restore": "Khôi phục",
+      "close": "Đóng cửa sổ"
     },
     "commandPalette": {
       "title": "Bảng lệnh",
@@ -467,7 +468,7 @@
       "ssCipherRequired": "Cipher và mật khẩu là bắt buộc cho Shadowsocks",
       "selectType": "Chọn loại proxy",
       "saveFailed": "Lưu proxy thất bại: {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "URI VLESS",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "Yêu cầu XTLS Vision và REALITY.",
@@ -1866,6 +1867,7 @@
     "remoteNoCapacity": "Hiện không có máy từ xa nào rảnh. Hãy thử lại sau vài phút.",
     "remoteNotEntitled": "Gói của bạn không bao gồm chạy từ xa.",
     "remoteInteractiveNotEntitled": "Gói của bạn chỉ bao gồm giờ từ xa cho Cookie Bot, không dùng cho phiên từ xa thao tác trực tiếp.",
+    "remoteRequiresRemoteExitNode": "Proxy của hồ sơ này chỉ hoạt động trên máy tính này (ví dụ 127.0.0.1 hoặc địa chỉ mạng nội bộ). Phiên từ xa chạy trên máy chủ của chúng tôi nên cần proxy có địa chỉ công khai.",
     "remoteSessionRefused": "Máy từ xa đã từ chối phiên này.",
     "remoteSessionNotFound": "Phiên từ xa đó không còn tồn tại.",
     "remoteSessionConflict": "Hồ sơ này đang được mở ở nơi khác.",
@@ -1886,6 +1888,7 @@
     "cookieBotUnknownPlatform": "Hồ sơ này chưa ghi nhận hệ điều hành nên không thể ghép với máy nào.",
     "cookieBotUnsupportedPlatform": "Cookie Bot không chạy được hồ sơ {{platform}}. Chỉ hỗ trợ hồ sơ Windows và macOS.",
     "cookieBotRequiresExitNode": "Hãy gán proxy hoặc VPN trước. Nếu không, lần chạy sẽ đi ra từ địa chỉ trung tâm dữ liệu, gây hại cho danh tính hồ sơ.",
+    "cookieBotRequiresRemoteExitNode": "Proxy của hồ sơ này chỉ hoạt động trên máy tính này (ví dụ 127.0.0.1 hoặc địa chỉ mạng nội bộ). Cookie Bot chạy trên máy chủ của chúng tôi nên cần proxy có địa chỉ công khai.",
     "unknownCode": "Đã xảy ra lỗi: {{code}}",
     "cookieBotTouchFingerprintUnsupported": "Hồ sơ này khai báo là thiết bị cảm ứng, bot không điều khiển được. Hãy dùng vân tay máy tính để bàn.",
     "profileRunningRemotely": "Hồ sơ này đang chạy trên máy từ xa. Hãy dừng phiên từ xa trước.",
@@ -1896,7 +1899,22 @@
     "fingerprintExitMismatch": "Nút thoát của proxy không khớp với dấu vân tay của hồ sơ này.",
     "launchConsentExpired": "Xác nhận đó không còn hiệu lực. Hãy thử khởi chạy lại.",
     "vpnWorkerStartFailed": "Không thể khởi động kết nối VPN: {{detail}}",
-    "exitProbeFailed": "Không thể kết nối tới nút thoát của proxy để kiểm tra vị trí."
+    "exitProbeFailed": "Không thể kết nối tới nút thoát của proxy để kiểm tra vị trí.",
+    "vlessUnsupported": {
+      "security": "Máy chủ VLESS này không dùng REALITY. Donut chỉ hỗ trợ VLESS kèm REALITY.",
+      "flow": "Máy chủ VLESS này không dùng luồng XTLS Vision mà Donut yêu cầu.",
+      "transport": "Donut chỉ hỗ trợ VLESS trên TCP thuần — máy chủ này dùng phương thức truyền khác (như WebSocket hoặc gRPC).",
+      "encryption": "Máy chủ VLESS này dùng thiết lập mã hóa mà Donut không hỗ trợ.",
+      "headerType": "Máy chủ VLESS này dùng cách che giấu tiêu đề mà Donut không hỗ trợ.",
+      "fingerprint": "URI VLESS này yêu cầu một dấu vân tay TLS mà Donut không hỗ trợ.",
+      "sni": "URI VLESS thiếu SNI (sni) cần cho REALITY.",
+      "publicKey": "URI VLESS thiếu khóa công khai REALITY (pbk).",
+      "scheme": "Đây không phải liên kết VLESS. Nó phải bắt đầu bằng vless://.",
+      "parameter": "URI VLESS chứa một tùy chọn mà Donut không hỗ trợ.",
+      "malformed": "URI VLESS không hợp lệ."
+    },
+    "camoufoxRemoved": "Camoufox không còn được hỗ trợ. Hãy tạo lại hồ sơ này bằng Wayfern.",
+    "noE2ePasswordSet": "Chưa đặt mật khẩu mã hóa đầu cuối. Hãy đặt trước khi đồng bộ dữ liệu đã mã hóa."
   },
   "rail": {
     "profiles": "Profile",
@@ -2342,12 +2360,47 @@
       "confirmBulkButton_other": "Tiếp tục với {{count}} hồ sơ",
       "sitesRequired": "Hãy thêm ít nhất một trang.",
       "addSitesFirst": "Hãy thêm một trang trước",
-      "presetsMissing": "Không có cài đặt sẵn về độ sâu"
+      "presetsMissing": "Không có cài đặt sẵn về độ sâu",
+      "sourceOwn": "Danh sách của tôi",
+      "sourceCurated": "Tuyển chọn",
+      "sourceSaved": "Đã lưu",
+      "curatedEmpty": "Hiện không có danh sách tuyển chọn nào.",
+      "curatedNote": "Danh sách tuyển chọn do chúng tôi cập nhật. Mỗi hồ sơ lấy một mẫu riêng từ đó, nên không hồ sơ nào duyệt cùng một tập trang — chính điều này khiến danh sách không trở thành dấu hiệu nhận dạng. Các địa chỉ vẫn nằm ở phía chúng tôi.",
+      "savedEmpty": "Chưa lưu gì cả. Hãy nhập danh sách ở mục Danh sách của tôi rồi lưu từ đó.",
+      "savedNote": "Các trang được sao chép vào lịch khi bạn lưu, nên sửa danh sách sau này không ảnh hưởng tới các lịch đã có.",
+      "savedUnavailable": "Không tải được các danh sách đã lưu của bạn.",
+      "saveAsList": "Lưu thành danh sách",
+      "listNamePlaceholder": "Đặt tên cho danh sách",
+      "listSaved": "Đã lưu danh sách",
+      "listRenamed": "Đã đổi tên danh sách",
+      "listDeleted": "Đã xóa danh sách",
+      "listRename": "Đổi tên",
+      "listDeleteConfirm": "Xóa?",
+      "templateMissing": "Danh sách đã lưu đó không còn nữa. Hãy chọn danh sách khác.",
+      "templateNameTaken": "Bạn đã có một danh sách trùng tên.",
+      "templateNameInvalid": "Đặt tên danh sách tối đa {{max}} ký tự.",
+      "calendarLabel": "Thời điểm chạy",
+      "daysLabel": "Các ngày trong tuần",
+      "addSlot": "Thêm một giờ",
+      "slotsFull": "Tối đa {{max}} giờ bắt đầu.",
+      "removeSlot": "Bỏ giờ này",
+      "pickListFirst": "Chọn một danh sách trước",
+      "finishCalendarFirst": "Hoàn tất lịch trước",
+      "duplicateSlot": "Hai hàng có cùng ngày và giờ",
+      "listSites_one": "{{count}} trang",
+      "listSites_other": "{{count}} trang",
+      "summarySlots_one": "Chạy {{count}} lần mỗi tuần, tối đa {{minutes}} phút mỗi lần.",
+      "summarySlots_other": "Chạy {{count}} lần mỗi tuần, tối đa {{minutes}} phút mỗi lần.",
+      "templateNameInvalidNoMax": "Không thể dùng tên đó cho danh sách đã lưu."
     },
     "preset": {
       "light": "Nhẹ",
       "balanced": "Tiêu chuẩn",
       "deep": "Sâu"
+    },
+    "template": {
+      "lowIntentPurchaser": "Người mua ít ý định",
+      "lowIntentPurchaserHint": "Định vị hồ sơ như một người mua nhạy cảm về giá: các trang so sánh, mã giảm giá, hoàn tiền và mua bán lại, đến với người bán qua trang tổng hợp thay vì trực tiếp."
     },
     "preflight": {
       "ineligible_one": "{{count}} hồ sơ không chạy từ xa được",

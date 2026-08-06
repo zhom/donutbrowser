@@ -74,6 +74,11 @@ export type BackendErrorCode =
   | "REMOTE_NO_CAPACITY"
   | "REMOTE_NOT_ENTITLED"
   | "REMOTE_INTERACTIVE_NOT_ENTITLED"
+  // The profile's exit only resolves on this computer, so a leased host cannot
+  // use it. Its own code rather than the Cookie Bot's twin: the two refusals
+  // name different features, and a user told their "Cookie Bot" needs a public
+  // proxy while they were opening a browser by hand cannot act on that.
+  | "REMOTE_REQUIRES_REMOTE_EXIT_NODE"
   | "REMOTE_SESSION_REFUSED"
   | "REMOTE_SESSION_NOT_FOUND"
   | "REMOTE_SESSION_CONFLICT"
@@ -99,6 +104,11 @@ export type BackendErrorCode =
   | "COOKIE_BOT_UNKNOWN_PLATFORM"
   | "COOKIE_BOT_UNSUPPORTED_PLATFORM"
   | "COOKIE_BOT_REQUIRES_EXIT_NODE"
+  // The profile HAS an exit, but only this machine can reach it (127.0.0.1, a
+  // LAN address, a `.local` name). Its own code because the fix is different:
+  // "attach a proxy" is unactionable advice for someone whose proxy is plainly
+  // attached.
+  | "COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE"
   // The server's own names for two refusals it throws from `putSchedule`,
   // `updateProfileState` and `runNow`. `COOKIE_BOT_REQUIRES_PROXY` is the
   // server-side twin of the local `COOKIE_BOT_REQUIRES_EXIT_NODE` precondition;
@@ -110,6 +120,8 @@ export type BackendErrorCode =
   | "LAUNCH_CONSENT_EXPIRED"
   | "VPN_WORKER_START_FAILED"
   | "EXIT_PROBE_FAILED"
+  | "CAMOUFOX_REMOVED"
+  | "NO_E2E_PASSWORD_SET"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -289,8 +301,29 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.mcpAgentRemoveFailed", {
         detail: parsed.params?.detail ?? "",
       });
-    case "VLESS_CONFIG_INVALID":
+    // Donut supports exactly one VLESS shape (REALITY + XTLS Vision over TCP),
+    // so most rejections mean "your server is a kind we do not support", not
+    // "you mistyped". Name the unsupported part instead of implying a typo.
+    case "VLESS_CONFIG_INVALID": {
+      const reason = parsed.params?.reason;
+      const known = [
+        "security",
+        "flow",
+        "transport",
+        "encryption",
+        "headerType",
+        "fingerprint",
+        "sni",
+        "publicKey",
+        "scheme",
+        "parameter",
+        "malformed",
+      ];
+      if (reason && known.includes(reason)) {
+        return t(`backendErrors.vlessUnsupported.${reason}`);
+      }
       return t("backendErrors.vlessConfigInvalid");
+    }
     case "XRAY_UNAVAILABLE":
       return t("backendErrors.xrayUnavailable");
     case "XRAY_UNSUPPORTED_OS":
@@ -317,6 +350,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
     // runs every night is the confusing case this code exists to avoid.
     case "REMOTE_INTERACTIVE_NOT_ENTITLED":
       return t("backendErrors.remoteInteractiveNotEntitled");
+    case "REMOTE_REQUIRES_REMOTE_EXIT_NODE":
+      return t("backendErrors.remoteRequiresRemoteExitNode");
     case "REMOTE_SESSION_REFUSED":
       return t("backendErrors.remoteSessionRefused");
     case "REMOTE_SESSION_NOT_FOUND":
@@ -389,6 +424,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
     // resolve to the one sentence a user can act on.
     case "COOKIE_BOT_REQUIRES_PROXY":
       return t("backendErrors.cookieBotRequiresExitNode");
+    case "COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE":
+      return t("backendErrors.cookieBotRequiresRemoteExitNode");
     case "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED":
       return t("backendErrors.cookieBotTouchFingerprintUnsupported");
     // The launch gate's block. The dialog renders the mismatch detail from
@@ -404,6 +441,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "EXIT_PROBE_FAILED":
       return t("backendErrors.exitProbeFailed");
+    case "CAMOUFOX_REMOVED":
+      return t("backendErrors.camoufoxRemoved");
+    case "NO_E2E_PASSWORD_SET":
+      return t("backendErrors.noE2ePasswordSet");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

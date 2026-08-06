@@ -2341,11 +2341,10 @@ impl McpServer {
       "check_cookie_bot_conflicts" => Self::handle_check_cookie_bot_conflicts(arguments).await,
       "list_cookie_bot_runs" => Self::handle_list_cookie_bot_runs(arguments).await,
       "run_cookie_bot_now" => {
-        Self::require_capability(
-          "Browser automation",
-          CLOUD_AUTH.can_use_browser_automation().await,
-        )
-        .await?;
+        // The Cookie Bot, NOT browser automation. Solo pays for the bot and has
+        // no automation; gating this on automation refused a Solo customer the
+        // feature their plan is sold on while their scheduled runs kept firing.
+        Self::require_capability("Cookie Bot", CLOUD_AUTH.can_use_cookie_bot().await).await?;
         Self::handle_run_cookie_bot_now(arguments).await
       }
       // No capability gate on the cancel. A lapsed plan must never be the
@@ -5730,10 +5729,11 @@ impl McpServer {
         message: format!("Profile not found: {profile_id}"),
       })?;
 
-    crate::cookie_bot::bot_precondition(&profile).map_err(|message| McpError {
-      code: -32000,
-      message,
-    })?;
+    crate::cookie_bot::bot_precondition(&profile, &crate::cookie_bot::exit_reachability(&profile))
+      .map_err(|message| McpError {
+        code: -32000,
+        message,
+      })?;
     Ok(profile)
   }
 
@@ -6177,19 +6177,28 @@ mod tests {
       ..Default::default()
     };
 
-    assert!(crate::cookie_bot::bot_precondition(&eligible()).is_ok());
+    assert!(crate::cookie_bot::bot_precondition(
+      &eligible(),
+      &crate::remote_exit::ExitReachability::Remote
+    )
+    .is_ok());
 
     let mut local_only = eligible();
     local_only.sync_mode = SyncMode::Disabled;
     assert!(
-      crate::cookie_bot::bot_precondition(&local_only).is_err(),
+      crate::cookie_bot::bot_precondition(
+        &local_only,
+        &crate::remote_exit::ExitReachability::Remote
+      )
+      .is_err(),
       "a profile with no cloud copy has nothing for a host to open"
     );
 
     let mut linux = eligible();
     linux.host_os = Some("linux".to_string());
     assert!(
-      crate::cookie_bot::bot_precondition(&linux).is_err(),
+      crate::cookie_bot::bot_precondition(&linux, &crate::remote_exit::ExitReachability::Remote)
+        .is_err(),
       "the fleet cannot lease a linux host"
     );
 
@@ -6197,7 +6206,11 @@ mod tests {
     datacenter_egress.proxy_id = None;
     datacenter_egress.vpn_id = None;
     assert!(
-      crate::cookie_bot::bot_precondition(&datacenter_egress).is_err(),
+      crate::cookie_bot::bot_precondition(
+        &datacenter_egress,
+        &crate::remote_exit::ExitReachability::None
+      )
+      .is_err(),
       "hours of traffic from a hosting ASN damages the identity being warmed"
     );
   }

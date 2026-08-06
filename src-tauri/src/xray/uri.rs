@@ -61,10 +61,10 @@ pub fn parse_vless_uri(input: &str) -> XrayResult<ParsedVlessUri> {
   };
   let port = url.port().ok_or(XrayError::MissingField("port"))?;
 
-  let parameters = parse_parameters(&url)?;
-  require_value(&parameters, "security", "reality")?;
-  require_value(&parameters, "flow", VlessFlow::Vision.as_str())?;
-  optional_value(&parameters, "encryption", "none")?;
+  let (parameters, unsupported) = parse_parameters(&url)?;
+
+  // Transport first: it is the most common reason a real-world VLESS server is
+  // unusable here, and it explains the stray parameters that come with it.
   match parameters.get("type").map(String::as_str) {
     None | Some("tcp" | "raw") => {}
     Some(_) => {
@@ -74,7 +74,16 @@ pub fn parse_vless_uri(input: &str) -> XrayResult<ParsedVlessUri> {
       });
     }
   }
+  require_value(&parameters, "security", "reality")?;
+  require_value(&parameters, "flow", VlessFlow::Vision.as_str())?;
+  optional_value(&parameters, "encryption", "none")?;
   optional_value(&parameters, "headerType", "none")?;
+
+  // Only once the shape is known-good does an unrecognized parameter become
+  // the most useful thing to report.
+  if let Some(name) = unsupported.into_iter().next() {
+    return Err(XrayError::UnsupportedParameter(name));
+  }
 
   let server_name = required_parameter(&parameters, "sni")?.to_string();
   let public_key = required_parameter(&parameters, "pbk")?.to_string();
@@ -162,15 +171,28 @@ pub fn export_vless_uri(config: &VlessRealityConfig, name: Option<&str>) -> Xray
     query.append_pair("type", "tcp");
     query.append_pair("headerType", "none");
   }
-  url.set_fragment(name);
+  // The parser percent-DECODES the fragment, so the exporter must encode it or
+  // a name containing `%` (or `#`) comes back different every time the URI is
+  // canonicalized — the name mutates a little more on each save.
+  let encoded_name = name.map(|value| urlencoding::encode(value).into_owned());
+  url.set_fragment(encoded_name.as_deref());
   Ok(url.into())
 }
 
-fn parse_parameters(url: &Url) -> XrayResult<HashMap<String, String>> {
+/// Split the query into recognized parameters and the names of the rest.
+///
+/// Unrecognized names are returned rather than rejected on the spot so the
+/// caller can report the *shape* problem first. A WebSocket URI always carries
+/// `path` (and usually `host`), gRPC carries `serviceName` — naming those keys
+/// instead of the transport sends the user deleting parameters when the real
+/// answer is that Donut only speaks plain TCP.
+fn parse_parameters(url: &Url) -> XrayResult<(HashMap<String, String>, Vec<String>)> {
   let mut parameters = HashMap::new();
+  let mut unsupported = Vec::new();
   for (name, value) in url.query_pairs() {
     if !SUPPORTED_PARAMETERS.contains(&name.as_ref()) {
-      return Err(XrayError::UnsupportedParameter(name.into_owned()));
+      unsupported.push(name.into_owned());
+      continue;
     }
     if parameters
       .insert(name.to_string(), value.into_owned())
@@ -179,7 +201,7 @@ fn parse_parameters(url: &Url) -> XrayResult<HashMap<String, String>> {
       return Err(XrayError::DuplicateParameter(name.into_owned()));
     }
   }
-  Ok(parameters)
+  Ok((parameters, unsupported))
 }
 
 fn required_parameter<'a>(
@@ -229,6 +251,109 @@ mod tests {
   use super::*;
 
   const ID: &str = "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4";
+
+  /// Donut accepts exactly one VLESS shape, so most rejections mean "your
+  /// server is a kind we do not support" rather than "you mistyped". These pin
+  /// the reason each rejection reports, because the UI turns it into the one
+  /// sentence that tells a user with a working WebSocket or plain-TLS server
+  /// why Donut will not take it.
+  #[test]
+  fn unsupported_setups_report_which_part_is_unsupported() {
+    let good = format!(
+      "vless://{ID}@example.com:443?security=reality&flow=xtls-rprx-vision\
+&encryption=none&type=tcp&sni=a.com&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4&sid=00&fp=chrome"
+    );
+    assert!(parse_vless_uri(&good).is_ok(), "baseline URI must parse");
+
+    let reason = |uri: &str| parse_vless_uri(uri).unwrap_err().reason_code();
+
+    // Plain TLS instead of REALITY — the most common real-world setup.
+    assert_eq!(
+      reason(&good.replace("security=reality", "security=tls")),
+      "security"
+    );
+    assert_eq!(
+      reason(&good.replace("flow=xtls-rprx-vision", "flow=none")),
+      "flow"
+    );
+    // WebSocket / gRPC transports.
+    assert_eq!(reason(&good.replace("type=tcp", "type=ws")), "transport");
+    assert_eq!(reason(&good.replace("type=tcp", "type=grpc")), "transport");
+    assert_eq!(reason(&good.replace("&sni=a.com", "")), "sni");
+    assert_eq!(
+      reason(&good.replace("&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4", "")),
+      "publicKey"
+    );
+    assert_eq!(reason(&good.replace("vless://", "vmess://")), "scheme");
+    assert_eq!(reason("not a uri"), "malformed");
+  }
+
+  /// The URIs users actually paste, not canonical-REALITY-with-one-field-changed.
+  ///
+  /// A real WebSocket link carries `path` (and usually `host`); a gRPC link
+  /// carries `serviceName`. Those keys are not in SUPPORTED_PARAMETERS, so
+  /// before the shape was checked first they produced "unsupported option"
+  /// and sent the user deleting query parameters instead of telling them
+  /// Donut only speaks plain TCP.
+  #[test]
+  fn a_display_name_survives_an_export_parse_round_trip() {
+    // Percent signs are legal in a fragment, so they used to pass through
+    // unencoded and then get decoded on the way back in — "50% off" became
+    // "50 off"-ish and drifted further on every canonicalizing save.
+    for name in ["50% off", "a#b", "spaced name", "100%25", "üñî"] {
+      let parsed = parse_vless_uri(&format!(
+        "vless://{ID}@example.com:443?security=reality&flow=xtls-rprx-vision\
+&encryption=none&type=tcp&sni=a.com&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4"
+      ))
+      .expect("baseline parses");
+
+      let exported = export_vless_uri(&parsed.config, Some(name)).expect("exports");
+      let reparsed = parse_vless_uri(&exported).expect("re-parses");
+      assert_eq!(
+        reparsed.name.as_deref(),
+        Some(name),
+        "display name mutated across a round trip: {exported}"
+      );
+
+      // And a second round trip must be a fixed point, not drift again.
+      let exported_again =
+        export_vless_uri(&reparsed.config, reparsed.name.as_deref()).expect("re-exports");
+      assert_eq!(exported, exported_again);
+    }
+  }
+
+  #[test]
+  fn real_world_websocket_and_grpc_links_name_the_transport() {
+    let ws = format!(
+      "vless://{ID}@cdn.example.com:443?encryption=none&security=tls&type=ws\
+&path=%2Fray&host=cdn.example.com&sni=cdn.example.com#WS%20node"
+    );
+    assert_eq!(
+      parse_vless_uri(&ws).unwrap_err().reason_code(),
+      "transport",
+      "a WebSocket link must be told its transport is unsupported"
+    );
+
+    let grpc = format!(
+      "vless://{ID}@grpc.example.com:443?encryption=none&security=reality&type=grpc\
+&serviceName=gun&sni=a.com&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4"
+    );
+    assert_eq!(
+      parse_vless_uri(&grpc).unwrap_err().reason_code(),
+      "transport"
+    );
+
+    // A genuinely unknown option on an otherwise-supported URI still reports
+    // as a parameter problem, which is the accurate answer there.
+    let odd = format!(
+      "vless://{ID}@example.com:443?security=reality&flow=xtls-rprx-vision\
+&encryption=none&type=tcp&sni=a.com&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4&madeUpKey=1"
+    );
+    assert_eq!(
+      parse_vless_uri(&odd).unwrap_err().reason_code(),
+      "parameter"
+    );
+  }
 
   fn public_key() -> String {
     URL_SAFE_NO_PAD.encode([7_u8; 32])

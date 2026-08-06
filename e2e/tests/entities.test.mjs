@@ -93,6 +93,34 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
     });
     assert.ok(cachedValidity === null || cachedValidity.is_valid === false);
 
+    // Donut accepts one VLESS shape (REALITY + XTLS Vision over TCP). The form
+    // uses this to tell the user WHICH part of their setup is unsupported
+    // instead of implying they mistyped, so the reason must survive the IPC hop.
+    const goodVless =
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@example.com:443" +
+      "?security=reality&flow=xtls-rprx-vision&encryption=none&type=tcp" +
+      "&sni=a.com&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4&sid=00&fp=chrome";
+    assert.equal(
+      await app.invoke("validate_vless_uri", { uri: goodVless }),
+      null,
+    );
+
+    for (const [uri, reason] of [
+      [goodVless.replace("security=reality", "security=tls"), "security"],
+      [goodVless.replace("type=tcp", "type=ws"), "transport"],
+      [goodVless.replace("flow=xtls-rprx-vision", "flow=none"), "flow"],
+    ]) {
+      // invokeError returns the command's error wrapped in a message, so match
+      // rather than JSON.parse the whole string.
+      const error = await app.invokeError("validate_vless_uri", { uri });
+      assert.match(error, /VLESS_CONFIG_INVALID/);
+      assert.match(
+        error,
+        new RegExp(`"reason":"${reason}"`),
+        `expected reason ${reason} for ${uri}, got: ${error}`,
+      );
+    }
+
     const exported = JSON.parse(
       await app.invoke("export_proxies", { format: "json" }),
     );

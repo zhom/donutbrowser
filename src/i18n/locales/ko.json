@@ -92,7 +92,8 @@
     "window": {
       "minimize": "최소화",
       "maximize": "최대화",
-      "restore": "이전 크기로 복원"
+      "restore": "이전 크기로 복원",
+      "close": "창 닫기"
     },
     "commandPalette": {
       "title": "명령 팔레트",
@@ -467,7 +468,7 @@
       "ssCipherRequired": "Shadowsocks에는 암호화와 비밀번호가 필요합니다",
       "selectType": "프록시 유형 선택",
       "saveFailed": "프록시 저장 실패: {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "VLESS URI",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "XTLS Vision 및 REALITY가 필요합니다.",
@@ -1866,6 +1867,7 @@
     "remoteNoCapacity": "지금은 사용 가능한 원격 머신이 없습니다. 몇 분 후에 다시 시도하세요.",
     "remoteNotEntitled": "현재 요금제에는 원격 실행이 포함되어 있지 않습니다.",
     "remoteInteractiveNotEntitled": "현재 플랜의 원격 시간은 Cookie Bot 전용이며, 직접 조작하는 원격 세션에는 사용할 수 없습니다.",
+    "remoteRequiresRemoteExitNode": "이 프로필의 프록시는 이 컴퓨터에서만 작동합니다(예: 127.0.0.1 또는 사설망 주소). 원격 세션은 당사 호스트에서 실행되므로 공용 주소를 가진 프록시가 필요합니다.",
     "remoteSessionRefused": "원격 머신이 이 세션을 거부했습니다.",
     "remoteSessionNotFound": "해당 원격 세션은 더 이상 존재하지 않습니다.",
     "remoteSessionConflict": "이 프로필은 이미 다른 곳에서 열려 있습니다.",
@@ -1886,6 +1888,7 @@
     "cookieBotUnknownPlatform": "이 프로필에는 기록된 운영체제가 없어 머신을 배정할 수 없습니다.",
     "cookieBotUnsupportedPlatform": "Cookie Bot은 {{platform}} 프로필을 실행할 수 없습니다. Windows와 macOS 프로필만 지원합니다.",
     "cookieBotRequiresExitNode": "먼저 프록시나 VPN을 연결하세요. 없으면 실행 트래픽이 데이터센터 주소에서 나가 프로필 신뢰도를 해칩니다.",
+    "cookieBotRequiresRemoteExitNode": "이 프로필의 프록시는 이 컴퓨터에서만 작동합니다(예: 127.0.0.1 또는 사설망 주소). Cookie Bot은 당사 호스트에서 실행되므로 공용 주소를 가진 프록시가 필요합니다.",
     "unknownCode": "문제가 발생했습니다: {{code}}",
     "cookieBotTouchFingerprintUnsupported": "이 프로필은 터치 기기를 표방하며, 봇이 조작할 수 없습니다. 데스크톱 지문을 사용하세요.",
     "profileRunningRemotely": "이 프로필은 원격 머신에서 실행 중입니다. 먼저 원격 세션을 중지하세요.",
@@ -1896,7 +1899,22 @@
     "fingerprintExitMismatch": "프록시 출구 노드가 이 프로필의 핑거프린트와 일치하지 않습니다.",
     "launchConsentExpired": "해당 확인이 더 이상 유효하지 않습니다. 다시 실행해 보세요.",
     "vpnWorkerStartFailed": "VPN 연결을 시작하지 못했습니다: {{detail}}",
-    "exitProbeFailed": "프록시 출구 노드에 연결할 수 없어 위치를 확인하지 못했습니다."
+    "exitProbeFailed": "프록시 출구 노드에 연결할 수 없어 위치를 확인하지 못했습니다.",
+    "vlessUnsupported": {
+      "security": "이 VLESS 서버는 REALITY를 사용하지 않습니다. Donut은 REALITY를 사용하는 VLESS만 지원합니다.",
+      "flow": "이 VLESS 서버는 Donut이 요구하는 XTLS Vision 플로우를 사용하지 않습니다.",
+      "transport": "Donut은 일반 TCP 기반 VLESS만 지원합니다. 이 서버는 다른 전송 방식(WebSocket, gRPC 등)을 사용합니다.",
+      "encryption": "이 VLESS 서버는 Donut이 지원하지 않는 암호화 설정을 사용합니다.",
+      "headerType": "이 VLESS 서버는 Donut이 지원하지 않는 헤더 난독화를 사용합니다.",
+      "fingerprint": "이 VLESS URI는 Donut이 지원하지 않는 TLS 지문을 요청합니다.",
+      "sni": "VLESS URI에 REALITY에 필요한 SNI(sni)가 없습니다.",
+      "publicKey": "VLESS URI에 REALITY 공개 키(pbk)가 없습니다.",
+      "scheme": "VLESS 링크가 아닙니다. vless:// 로 시작해야 합니다.",
+      "parameter": "VLESS URI에 Donut이 지원하지 않는 옵션이 있습니다.",
+      "malformed": "VLESS URI가 올바르지 않습니다."
+    },
+    "camoufoxRemoved": "Camoufox는 더 이상 지원되지 않습니다. Wayfern으로 이 프로필을 다시 만드세요.",
+    "noE2ePasswordSet": "종단 간 암호화 비밀번호가 설정되지 않았습니다. 암호화된 데이터를 동기화하기 전에 설정하세요."
   },
   "rail": {
     "profiles": "프로필",
@@ -2342,12 +2360,47 @@
       "confirmBulkButton_other": "프로필 {{count}}개로 계속",
       "sitesRequired": "사이트를 하나 이상 추가하세요.",
       "addSitesFirst": "사이트를 먼저 추가하세요",
-      "presetsMissing": "깊이 프리셋을 사용할 수 없습니다"
+      "presetsMissing": "깊이 프리셋을 사용할 수 없습니다",
+      "sourceOwn": "내 목록",
+      "sourceCurated": "큐레이션",
+      "sourceSaved": "저장됨",
+      "curatedEmpty": "지금은 사용할 수 있는 큐레이션 목록이 없습니다.",
+      "curatedNote": "저희가 최신 상태로 관리하는 큐레이션 목록입니다. 프로필마다 서로 다른 표본을 뽑기 때문에 같은 조합을 방문하는 프로필은 없습니다. 그래서 목록 자체가 특징이 되지 않습니다. 주소는 서버에만 남습니다.",
+      "savedEmpty": "아직 저장한 것이 없습니다. 내 목록에서 목록을 입력한 뒤 거기서 저장하세요.",
+      "savedNote": "사이트는 일정을 저장할 때 복사됩니다. 나중에 목록을 수정해도 기존 일정은 그대로 유지됩니다.",
+      "savedUnavailable": "저장된 목록을 불러오지 못했습니다.",
+      "saveAsList": "목록으로 저장",
+      "listNamePlaceholder": "목록 이름",
+      "listSaved": "목록을 저장했습니다",
+      "listRenamed": "목록 이름을 변경했습니다",
+      "listDeleted": "목록을 삭제했습니다",
+      "listRename": "이름 변경",
+      "listDeleteConfirm": "삭제할까요?",
+      "templateMissing": "그 저장된 목록은 더 이상 없습니다. 다른 목록을 선택하세요.",
+      "templateNameTaken": "같은 이름의 목록이 이미 있습니다.",
+      "templateNameInvalid": "목록 이름은 {{max}}자 이하로 지어 주세요.",
+      "calendarLabel": "실행 시점",
+      "daysLabel": "요일",
+      "addSlot": "시간 추가",
+      "slotsFull": "시작 시간은 최대 {{max}}개입니다.",
+      "removeSlot": "이 시간 제거",
+      "pickListFirst": "먼저 목록을 선택하세요",
+      "finishCalendarFirst": "먼저 일정을 완성하세요",
+      "duplicateSlot": "두 행의 요일과 시간이 같습니다",
+      "listSites_one": "사이트 {{count}}개",
+      "listSites_other": "사이트 {{count}}개",
+      "summarySlots_one": "주 {{count}}회, 회당 최대 {{minutes}}분 실행합니다.",
+      "summarySlots_other": "주 {{count}}회, 회당 최대 {{minutes}}분 실행합니다.",
+      "templateNameInvalidNoMax": "저장된 목록에 그 이름은 사용할 수 없습니다."
     },
     "preset": {
       "light": "가볍게",
       "balanced": "표준",
       "deep": "깊게"
+    },
+    "template": {
+      "lowIntentPurchaser": "구매 의향이 낮은 쇼핑객",
+      "lowIntentPurchaserHint": "가격에 민감한 구매자로 프로필을 자리매김합니다. 비교·쿠폰·캐시백·중고 거래 사이트를 이용하고, 판매점에는 직접이 아니라 집계 사이트를 거쳐 도달합니다."
     },
     "preflight": {
       "ineligible_one": "프로필 {{count}}개는 원격으로 실행할 수 없습니다",

@@ -22,6 +22,30 @@ test("fresh app renders, completes onboarding, persists settings, and never touc
         true,
       );
 
+      // Where the app draws its own titlebar it also owns the window controls,
+      // so it needs the desktop's button layout to know which side they go on.
+      const decorations = await app.invoke("get_window_decoration_layout");
+      assert.equal(typeof decorations?.client_side, "boolean");
+      if (decorations.client_side) {
+        // Only reported where decorations were actually dropped, which is
+        // every Linux session except KDE on Wayland.
+        assert.equal(process.platform, "linux");
+        // `layout` may be null when GtkSettings is unavailable; the frontend
+        // falls back to the default arrangement rather than drawing nothing,
+        // so asserting a string here would be stricter than the contract.
+        if (decorations.layout !== null) {
+          assert.equal(typeof decorations.layout, "string");
+          assert.match(
+            decorations.layout,
+            /close|minimize|maximize/,
+            `layout must name a drawable control, got: ${decorations.layout}`,
+          );
+        }
+      } else {
+        // The platform still draws a titlebar; the app must not draw a second.
+        assert.equal(decorations.layout, null);
+      }
+
       const saved = await app.invoke("save_app_settings", {
         settings: {
           ...initial,
@@ -113,8 +137,12 @@ test("keyboard command palette and major navigation surfaces are operable throug
     assert.match(body, /Settings/i);
 
     // Exercise native WebDriver element marshalling and click, not just script execution.
+    // Scoped to the open dialog on purpose: on Linux the app draws its own
+    // titlebar, whose "Close window" control appears earlier in the DOM, and
+    // clicking that would exercise the window lifecycle instead of the palette.
     const close = await app.execute(
-      `return [...document.querySelectorAll("button")].find(
+      `const dialog = document.querySelector("[role='dialog']") ?? document;
+       return [...dialog.querySelectorAll("button")].find(
         (button) => /close/i.test(button.getAttribute("aria-label") || button.textContent || "")
       ) ?? null;`,
     );

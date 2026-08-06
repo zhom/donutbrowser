@@ -23,6 +23,16 @@ pub(crate) fn backend_error_with_detail(code: &str, detail: impl std::fmt::Displ
   serde_json::json!({ "code": code, "params": { "detail": detail.to_string() } }).to_string()
 }
 
+/// A VLESS URI Donut cannot use, carrying which part is unsupported so the UI
+/// can say so instead of implying a typo.
+pub(crate) fn vless_config_error(error: &crate::xray::XrayError) -> String {
+  serde_json::json!({
+    "code": "VLESS_CONFIG_INVALID",
+    "params": { "reason": error.reason_code(), "detail": error.to_string() }
+  })
+  .to_string()
+}
+
 fn e2e_automation_enabled() -> bool {
   #[cfg(feature = "e2e")]
   {
@@ -75,6 +85,7 @@ mod proxy_manager;
 pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
+mod remote_exit;
 mod remote_handoff;
 mod remote_session;
 mod settings_manager;
@@ -84,6 +95,7 @@ mod synchronizer;
 pub mod traffic_stats;
 mod wayfern_manager;
 mod wayfern_terms;
+mod window_decorations;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 pub mod cloud_auth;
 mod cloud_errors;
@@ -315,6 +327,16 @@ async fn create_stored_proxy(
   } else {
     Err("proxy_settings is required".to_string())
   }
+}
+
+/// Validate a VLESS URI without touching the network, so the proxy form can
+/// tell the user their setup is unsupported while they are still editing it
+/// rather than only after they try to save or launch.
+#[tauri::command]
+fn validate_vless_uri(uri: String) -> Result<(), String> {
+  crate::xray::parse_vless_uri(uri.trim())
+    .map(|_| ())
+    .map_err(|error| vless_config_error(&error))
 }
 
 #[tauri::command]
@@ -1447,7 +1469,7 @@ async fn save_cookie_bot_schedule(
   // Refused here rather than at 02:00: a profile that can never be warmed
   // should never reach a schedule row, an hour of quota or a leased host.
   let profile = cookie_bot_profile(&profile_id)?;
-  cookie_bot::bot_precondition(&profile)?;
+  cookie_bot::bot_precondition(&profile, &cookie_bot::exit_reachability(&profile))?;
   // The frontend sends the user's choices; the profile facts the server refuses
   // a run on are stamped here, from the profile itself, so a caller cannot
   // assert them.
@@ -1507,7 +1529,8 @@ async fn run_cookie_bot_now(
   profile_id: String,
   max_minutes: Option<u32>,
 ) -> Result<cookie_bot::CookieBotRunStarted, String> {
-  cookie_bot::bot_precondition(&cookie_bot_profile(&profile_id)?)?;
+  let profile = cookie_bot_profile(&profile_id)?;
+  cookie_bot::bot_precondition(&profile, &cookie_bot::exit_reachability(&profile))?;
   cookie_bot::run_now(&profile_id, max_minutes)
     .await
     .map_err(|e| cookie_bot_error("run start", e))
@@ -1769,7 +1792,12 @@ pub fn run_with_builder(
         .with_state_flags(
           tauri_plugin_window_state::StateFlags::all()
             & !tauri_plugin_window_state::StateFlags::VISIBLE
-            & !tauri_plugin_window_state::StateFlags::FULLSCREEN,
+            & !tauri_plugin_window_state::StateFlags::FULLSCREEN
+            // Whether the window is decorated is decided per-session by
+            // `window_decorations::use_client_side_decorations()`, not by what
+            // a previous run saved. Restoring it would put a real titlebar back
+            // on top of the one the app draws — or strip both.
+            & !tauri_plugin_window_state::StateFlags::DECORATIONS,
         )
         .build(),
     );
@@ -1809,8 +1837,20 @@ pub fn run_with_builder(
           None => win_builder,
       };
 
+      // The app draws its own titlebar. macOS keeps the native one and makes
+      // it transparent (below); Windows and Linux drop decorations entirely and
+      // render their own controls.
       #[cfg(target_os = "windows")]
       let win_builder = win_builder.decorations(false);
+
+      // Linux opts out on the one configuration where dropping decorations can
+      // make things worse rather than better — see `use_client_side_decorations`.
+      #[cfg(target_os = "linux")]
+      let win_builder = if window_decorations::use_client_side_decorations() {
+        win_builder.decorations(false)
+      } else {
+        win_builder
+      };
 
       #[allow(unused_variables)]
       let window = win_builder.build().unwrap();
@@ -1843,6 +1883,44 @@ pub fn run_with_builder(
           }
         });
       }
+
+      // Publish the desktop's titlebar button layout to the frontend. Runs
+      // here because `setup` is the GTK main thread, which `gtk::Settings`
+      // requires.
+      //
+      // The decorated state is logged alongside it: "my window has no titlebar"
+      // and "my window has two titlebars" are both reports that hinge on this
+      // one boolean, and it is otherwise invisible after the fact.
+      #[cfg(target_os = "linux")]
+      {
+        log::info!(
+          "Linux window decorations: server-side = {:?}",
+          window.is_decorated()
+        );
+
+        // tao makes the window visible before it clears the decorations, so it
+        // is realized while still framed and the frame extents come out of the
+        // size we asked for (a requested 880x500 arrives noticeably smaller).
+        //
+        // Only correct that on a first run. Once window-state has geometry
+        // saved, that geometry is the user's and has already been restored —
+        // re-applying the default here would move and resize their window on
+        // every launch, and the plugin would then persist the reset.
+        let has_saved_geometry = app
+          .path()
+          .app_config_dir()
+          .map(|dir| dir.join(".window-state.json").exists())
+          .unwrap_or(false);
+        if window_decorations::use_client_side_decorations() && !has_saved_geometry {
+          if let Err(e) = window.set_size(tauri::LogicalSize::new(880.0, 500.0)) {
+            log::warn!("Failed to re-apply the window size after dropping decorations: {e}");
+          }
+          if let Err(e) = window.center() {
+            log::warn!("Failed to re-center the window after dropping decorations: {e}");
+          }
+        }
+      }
+      window_decorations::init(app.handle());
 
       // Set transparent titlebar for macOS
       #[cfg(target_os = "macos")]
@@ -2679,6 +2757,8 @@ pub fn run_with_builder(
       fingerprint_consistency::match_profile_fingerprint_to_exit,
       launch_gate::get_profile_pre_launch_checks,
       launch_gate::ack_launch_gate,
+      window_decorations::get_window_decoration_layout,
+      validate_vless_uri,
       get_sync_settings,
       save_sync_settings,
       set_profile_sync_mode,
@@ -2775,6 +2855,14 @@ pub fn run_with_builder(
       get_cookie_bot_presets,
       get_remote_hours_quota,
       get_cookie_bot_usage,
+      // Defined in `cookie_bot.rs` rather than here because they carry no local
+      // precondition — there is no profile to look up and no `bot_precondition`
+      // to apply. Unregistered they are unreachable, and the saved-list tab
+      // fails at runtime with "command not found" rather than at build time.
+      cookie_bot::get_cookie_bot_user_templates,
+      cookie_bot::create_cookie_bot_user_template,
+      cookie_bot::update_cookie_bot_user_template,
+      cookie_bot::delete_cookie_bot_user_template,
       // Profile password commands
       set_profile_password,
       change_profile_password,

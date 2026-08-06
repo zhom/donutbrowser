@@ -92,7 +92,8 @@
     "window": {
       "minimize": "Réduire",
       "maximize": "Agrandir",
-      "restore": "Restaurer"
+      "restore": "Restaurer",
+      "close": "Fermer la fenêtre"
     },
     "commandPalette": {
       "title": "Palette de commandes",
@@ -468,7 +469,7 @@
       "ssCipherRequired": "Le chiffrement et le mot de passe sont requis pour Shadowsocks",
       "selectType": "Sélectionnez le type de proxy",
       "saveFailed": "Échec de la sauvegarde du proxy : {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "URI VLESS",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "Nécessite XTLS Vision et REALITY.",
@@ -1873,6 +1874,7 @@
     "remoteNoCapacity": "Aucune machine distante n'est libre pour le moment. Réessayez dans quelques minutes.",
     "remoteNotEntitled": "Votre forfait n'inclut pas l'exécution à distance.",
     "remoteInteractiveNotEntitled": "Votre forfait inclut des heures distantes uniquement pour le Cookie Bot, pas pour les sessions distantes interactives.",
+    "remoteRequiresRemoteExitNode": "Le proxy de ce profil ne fonctionne que sur cet ordinateur (par exemple 127.0.0.1 ou une adresse de réseau local). Les sessions distantes s'exécutent sur nos hôtes et ont donc besoin d'un proxy avec une adresse publique.",
     "remoteSessionRefused": "La machine distante a refusé cette session.",
     "remoteSessionNotFound": "Cette session distante n'existe plus.",
     "remoteSessionConflict": "Ce profil est déjà ouvert ailleurs.",
@@ -1893,6 +1895,7 @@
     "cookieBotUnknownPlatform": "Ce profil n'a aucun système d'exploitation enregistré, il ne peut donc pas être associé à une machine.",
     "cookieBotUnsupportedPlatform": "Cookie Bot ne peut pas exécuter de profils {{platform}}. Seuls les profils Windows et macOS sont pris en charge.",
     "cookieBotRequiresExitNode": "Associez d'abord un proxy ou un VPN. Sans cela, l'exécution proviendrait d'une adresse de centre de données, ce qui abîme l'identité du profil.",
+    "cookieBotRequiresRemoteExitNode": "Le proxy de ce profil ne fonctionne que sur cet ordinateur (par exemple 127.0.0.1 ou une adresse de réseau local). Cookie Bot s'exécute sur nos hôtes et a donc besoin d'un proxy avec une adresse publique.",
     "unknownCode": "Une erreur est survenue : {{code}}",
     "cookieBotTouchFingerprintUnsupported": "Ce profil déclare un appareil tactile, que le bot ne peut pas piloter. Utilisez une empreinte de bureau.",
     "profileRunningRemotely": "Ce profil s'exécute sur une machine distante. Arrêtez d'abord la session distante.",
@@ -1903,7 +1906,22 @@
     "fingerprintExitMismatch": "Le nœud de sortie du proxy ne correspond pas à l'empreinte de ce profil.",
     "launchConsentExpired": "Cette confirmation n'est plus valide. Relancez le profil.",
     "vpnWorkerStartFailed": "Impossible de démarrer la connexion VPN : {{detail}}",
-    "exitProbeFailed": "Impossible de joindre le nœud de sortie du proxy pour vérifier sa localisation."
+    "exitProbeFailed": "Impossible de joindre le nœud de sortie du proxy pour vérifier sa localisation.",
+    "vlessUnsupported": {
+      "security": "Ce serveur VLESS n'utilise pas REALITY. Donut ne prend en charge que VLESS avec REALITY.",
+      "flow": "Ce serveur VLESS n'utilise pas le flux XTLS Vision, requis par Donut.",
+      "transport": "Donut ne prend en charge que VLESS sur TCP simple — ce serveur utilise un autre transport (WebSocket ou gRPC, par exemple).",
+      "encryption": "Ce serveur VLESS utilise un chiffrement non pris en charge par Donut.",
+      "headerType": "Ce serveur VLESS utilise une obfuscation d'en-tête non prise en charge par Donut.",
+      "fingerprint": "Cette URI VLESS demande une empreinte TLS non prise en charge par Donut.",
+      "sni": "Il manque le SNI (sni) nécessaire à REALITY dans l'URI VLESS.",
+      "publicKey": "Il manque la clé publique REALITY (pbk) dans l'URI VLESS.",
+      "scheme": "Ce n'est pas un lien VLESS. Il doit commencer par vless://.",
+      "parameter": "L'URI VLESS contient une option non prise en charge par Donut.",
+      "malformed": "L'URI VLESS n'est pas valide."
+    },
+    "camoufoxRemoved": "Camoufox n'est plus pris en charge. Recréez ce profil avec Wayfern.",
+    "noE2ePasswordSet": "Aucun mot de passe de chiffrement de bout en bout n'est défini. Définissez-en un avant de synchroniser des données chiffrées."
   },
   "rail": {
     "profiles": "Profils",
@@ -2367,12 +2385,49 @@
       "confirmBulkButton_many": "Continuer avec {{count}} profils",
       "sitesRequired": "Ajoutez au moins un site.",
       "addSitesFirst": "Ajoutez d'abord un site",
-      "presetsMissing": "Préréglages de profondeur indisponibles"
+      "presetsMissing": "Préréglages de profondeur indisponibles",
+      "sourceOwn": "Ma propre liste",
+      "sourceCurated": "Sélection",
+      "sourceSaved": "Enregistrées",
+      "curatedEmpty": "Aucune liste de la sélection n'est disponible pour le moment.",
+      "curatedNote": "Une liste que nous tenons à jour. Chaque profil en tire son propre échantillon : deux profils ne parcourent donc jamais le même ensemble, ce qui empêche la liste elle-même de devenir une signature. Les adresses restent de notre côté.",
+      "savedEmpty": "Rien d'enregistré pour l'instant. Saisissez une liste dans Ma propre liste, puis enregistrez-la depuis là.",
+      "savedNote": "Les sites sont copiés dans la planification au moment de l'enregistrement : modifier une liste plus tard ne touche pas aux planifications existantes.",
+      "savedUnavailable": "Impossible de charger vos listes enregistrées.",
+      "saveAsList": "Enregistrer comme liste",
+      "listNamePlaceholder": "Nommez cette liste",
+      "listSaved": "Liste enregistrée",
+      "listRenamed": "Liste renommée",
+      "listDeleted": "Liste supprimée",
+      "listRename": "Renommer",
+      "listDeleteConfirm": "Supprimer ?",
+      "templateMissing": "Cette liste enregistrée n'existe plus. Choisissez-en une autre.",
+      "templateNameTaken": "Vous avez déjà une liste portant ce nom.",
+      "templateNameInvalid": "Donnez à la liste un nom de {{max}} caractères maximum.",
+      "calendarLabel": "Quand il s'exécute",
+      "daysLabel": "Jours de la semaine",
+      "addSlot": "Ajouter une heure",
+      "slotsFull": "{{max}} heures de départ au maximum.",
+      "removeSlot": "Retirer cette heure",
+      "pickListFirst": "Choisissez d'abord une liste",
+      "finishCalendarFirst": "Terminez d'abord la planification",
+      "duplicateSlot": "Deux lignes ont les mêmes jours et la même heure",
+      "listSites_one": "{{count}} site",
+      "listSites_other": "{{count}} sites",
+      "listSites_many": "{{count}} sites",
+      "summarySlots_one": "S'exécute {{count}} fois par semaine, jusqu'à {{minutes}} min à chaque fois.",
+      "summarySlots_other": "S'exécute {{count}} fois par semaine, jusqu'à {{minutes}} min à chaque fois.",
+      "summarySlots_many": "S'exécute {{count}} fois par semaine, jusqu'à {{minutes}} min à chaque fois.",
+      "templateNameInvalidNoMax": "Ce nom ne peut pas être utilisé pour une liste enregistrée."
     },
     "preset": {
       "light": "Légère",
       "balanced": "Standard",
       "deep": "Approfondie"
+    },
+    "template": {
+      "lowIntentPurchaser": "Acheteur à faible intention",
+      "lowIntentPurchaserHint": "Positionne le profil comme un acheteur sensible au prix : comparateurs, coupons, cashback et revente, en arrivant chez les marchands via des agrégateurs plutôt qu'en direct."
     },
     "preflight": {
       "ineligible_one": "{{count}} profil ne peut pas s'exécuter à distance",

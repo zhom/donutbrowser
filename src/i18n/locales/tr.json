@@ -92,7 +92,8 @@
     "window": {
       "minimize": "Küçült",
       "maximize": "Büyüt",
-      "restore": "Geri Yükle"
+      "restore": "Geri Yükle",
+      "close": "Pencereyi kapat"
     },
     "commandPalette": {
       "title": "Komut Paleti",
@@ -467,7 +468,7 @@
       "ssCipherRequired": "Shadowsocks için şifreleme algoritması ve parola zorunludur",
       "selectType": "Proxy türünü seçin",
       "saveFailed": "Proxy kaydedilemedi: {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "VLESS URI'si",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "XTLS Vision ve REALITY gerektirir.",
@@ -1866,6 +1867,7 @@
     "remoteNoCapacity": "Şu anda boş uzak makine yok. Birkaç dakika sonra tekrar deneyin.",
     "remoteNotEntitled": "Planınız uzaktan çalıştırmayı içermiyor.",
     "remoteInteractiveNotEntitled": "Planınızdaki uzak saatler yalnızca Cookie Bot için geçerlidir, elle kullanılan uzak oturumlar için değil.",
+    "remoteRequiresRemoteExitNode": "Bu profilin proxy'si yalnızca bu bilgisayarda çalışır (örneğin 127.0.0.1 veya yerel ağ adresi). Uzak oturumlar bizim sunucularımızda çalıştığı için genel bir adrese sahip bir proxy gerekir.",
     "remoteSessionRefused": "Uzak makine bu oturumu reddetti.",
     "remoteSessionNotFound": "Bu uzak oturum artık mevcut değil.",
     "remoteSessionConflict": "Bu profil başka bir yerde zaten açık.",
@@ -1886,6 +1888,7 @@
     "cookieBotUnknownPlatform": "Bu profilde kayıtlı bir işletim sistemi yok, bu yüzden bir makineyle eşleştirilemiyor.",
     "cookieBotUnsupportedPlatform": "Cookie Bot, {{platform}} profillerini çalıştıramaz. Yalnızca Windows ve macOS profilleri desteklenir.",
     "cookieBotRequiresExitNode": "Önce bir proxy veya VPN ekleyin. Aksi hâlde çalışma bir veri merkezi adresinden çıkar ve bu, profilin kimliğine zarar verir.",
+    "cookieBotRequiresRemoteExitNode": "Bu profilin proxy'si yalnızca bu bilgisayarda çalışır (örneğin 127.0.0.1 veya yerel ağ adresi). Cookie Bot bizim sunucularımızda çalıştığı için genel bir adrese sahip bir proxy gerekir.",
     "unknownCode": "Bir sorun oluştu: {{code}}",
     "cookieBotTouchFingerprintUnsupported": "Bu profil dokunmatik bir cihaz olduğunu bildiriyor ve bot bunu süremez. Masaüstü parmak izi kullanın.",
     "profileRunningRemotely": "Bu profil uzak bir makinede çalışıyor. Önce uzak oturumu durdurun.",
@@ -1896,7 +1899,22 @@
     "fingerprintExitMismatch": "Proxy çıkış düğümü bu profilin parmak iziyle eşleşmiyor.",
     "launchConsentExpired": "Bu onay artık geçerli değil. Yeniden başlatmayı deneyin.",
     "vpnWorkerStartFailed": "VPN bağlantısı başlatılamadı: {{detail}}",
-    "exitProbeFailed": "Konumunu denetlemek için proxy çıkış düğümüne ulaşılamadı."
+    "exitProbeFailed": "Konumunu denetlemek için proxy çıkış düğümüne ulaşılamadı.",
+    "vlessUnsupported": {
+      "security": "Bu VLESS sunucusu REALITY kullanmıyor. Donut yalnızca REALITY ile VLESS'i destekler.",
+      "flow": "Bu VLESS sunucusu, Donut'ın gerektirdiği XTLS Vision akışını kullanmıyor.",
+      "transport": "Donut yalnızca düz TCP üzerinden VLESS'i destekler — bu sunucu farklı bir taşıma (WebSocket veya gRPC gibi) kullanıyor.",
+      "encryption": "Bu VLESS sunucusu, Donut'ın desteklemediği bir şifreleme kullanıyor.",
+      "headerType": "Bu VLESS sunucusu, Donut'ın desteklemediği bir başlık gizlemesi kullanıyor.",
+      "fingerprint": "Bu VLESS URI'si, Donut'ın desteklemediği bir TLS parmak izi istiyor.",
+      "sni": "VLESS URI'sinde REALITY için gereken SNI (sni) eksik.",
+      "publicKey": "VLESS URI'sinde REALITY genel anahtarı (pbk) eksik.",
+      "scheme": "Bu bir VLESS bağlantısı değil. vless:// ile başlamalı.",
+      "parameter": "VLESS URI'si, Donut'ın desteklemediği bir seçenek içeriyor.",
+      "malformed": "VLESS URI'si geçersiz."
+    },
+    "camoufoxRemoved": "Camoufox artık desteklenmiyor. Bu profili Wayfern ile yeniden oluşturun.",
+    "noE2ePasswordSet": "Uçtan uca şifreleme parolası ayarlanmamış. Şifreli veriyi eşitlemeden önce bir parola belirleyin."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2342,12 +2360,47 @@
       "confirmBulkButton_other": "{{count}} profille devam et",
       "sitesRequired": "En az bir site ekleyin.",
       "addSitesFirst": "Önce bir site ekleyin",
-      "presetsMissing": "Derinlik ön ayarları kullanılamıyor"
+      "presetsMissing": "Derinlik ön ayarları kullanılamıyor",
+      "sourceOwn": "Kendi listem",
+      "sourceCurated": "Seçilmiş",
+      "sourceSaved": "Kayıtlı",
+      "curatedEmpty": "Şu anda kullanılabilir seçilmiş liste yok.",
+      "curatedNote": "Güncel tuttuğumuz seçilmiş bir liste. Her profil kendi örneklemini alır, bu yüzden iki profil aynı kümeyi gezmez — listenin kendisinin bir imzaya dönüşmesini engelleyen şey budur. Adresler bizim tarafımızda kalır.",
+      "savedEmpty": "Henüz kaydedilmiş bir şey yok. Kendi listem sekmesinde bir liste yazıp oradan kaydedin.",
+      "savedNote": "Siteler programı kaydettiğinizde programa kopyalanır; listeyi sonradan düzenlemeniz mevcut programları etkilemez.",
+      "savedUnavailable": "Kayıtlı listeleriniz yüklenemedi.",
+      "saveAsList": "Liste olarak kaydet",
+      "listNamePlaceholder": "Bu listeye bir ad verin",
+      "listSaved": "Liste kaydedildi",
+      "listRenamed": "Liste yeniden adlandırıldı",
+      "listDeleted": "Liste silindi",
+      "listRename": "Yeniden adlandır",
+      "listDeleteConfirm": "Silinsin mi?",
+      "templateMissing": "O kayıtlı liste artık yok. Başka birini seçin.",
+      "templateNameTaken": "Bu ada sahip bir listeniz zaten var.",
+      "templateNameInvalid": "Listeye en fazla {{max}} karakterlik bir ad verin.",
+      "calendarLabel": "Ne zaman çalışır",
+      "daysLabel": "Haftanın günleri",
+      "addSlot": "Saat ekle",
+      "slotsFull": "En fazla {{max}} başlangıç saati.",
+      "removeSlot": "Bu saati kaldır",
+      "pickListFirst": "Önce bir liste seçin",
+      "finishCalendarFirst": "Önce programı tamamlayın",
+      "duplicateSlot": "İki satırın günleri ve saati aynı",
+      "listSites_one": "{{count}} site",
+      "listSites_other": "{{count}} site",
+      "summarySlots_one": "Haftada {{count}} kez, her seferinde en fazla {{minutes}} dk çalışır.",
+      "summarySlots_other": "Haftada {{count}} kez, her seferinde en fazla {{minutes}} dk çalışır.",
+      "templateNameInvalidNoMax": "Bu ad kayıtlı bir liste için kullanılamaz."
     },
     "preset": {
       "light": "Hafif",
       "balanced": "Standart",
       "deep": "Derin"
+    },
+    "template": {
+      "lowIntentPurchaser": "Düşük niyetli alıcı",
+      "lowIntentPurchaserHint": "Profili fiyata duyarlı bir alıcı olarak konumlar: karşılaştırma, kupon, nakit iade ve ikinci el siteleri; mağazalara doğrudan değil toplayıcılar üzerinden ulaşır."
     },
     "preflight": {
       "ineligible_one": "{{count}} profil uzaktan çalıştırılamıyor",

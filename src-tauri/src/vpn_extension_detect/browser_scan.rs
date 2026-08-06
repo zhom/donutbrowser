@@ -22,6 +22,9 @@ const MAX_EXTENSION_DIRS: usize = 300;
 const MAX_MANIFEST_BYTES: u64 = 512 * 1024;
 /// Wall-clock ceiling for the whole scan. This runs on the launch path.
 const SCAN_DEADLINE: Duration = Duration::from_millis(750);
+/// Chromium preference files are larger than a manifest but still bounded; a
+/// pathological one must not be parsed while the user waits for a browser.
+const MAX_PREFERENCES_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Chromium profile directories to search inside a user-data dir.
 ///
@@ -69,6 +72,19 @@ fn read_json_file(path: &Path, max_bytes: Option<u64>) -> Option<serde_json::Val
   serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
 
+/// Chromium locale directory names are `[A-Za-z0-9_-]` (`en`, `en_GB`,
+/// `zh_CN`). Anything else in a manifest we did not write is untrusted input
+/// being joined into a filesystem path, so it is refused rather than sanitized
+/// — this runs on the launch path against extensions the user may have
+/// sideloaded.
+fn is_safe_locale_name(name: &str) -> bool {
+  !name.is_empty()
+    && name.len() <= 32
+    && name
+      .chars()
+      .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 fn resolve_dir_i18n(
   version_dir: &Path,
   manifest: &serde_json::Value,
@@ -76,6 +92,10 @@ fn resolve_dir_i18n(
 ) -> Option<String> {
   let key = message_placeholder_key(value)?;
   let default_locale = manifest.get("default_locale")?.as_str()?;
+  if !is_safe_locale_name(default_locale) {
+    log::warn!("Ignoring extension with a suspicious default_locale: {default_locale:?}");
+    return None;
+  }
   let messages = read_json_file(
     &version_dir
       .join("_locales")
@@ -105,8 +125,9 @@ struct PreferenceExtensions {
 fn preference_extensions(profile_dir: &Path) -> PreferenceExtensions {
   let mut out = PreferenceExtensions::default();
   for file in ["Secure Preferences", "Preferences"] {
-    // Preference files are legitimately large, so they skip the manifest cap.
-    let Some(prefs) = read_json_file(&profile_dir.join(file), None) else {
+    // Larger than a manifest, but still capped: this is parsed while the user
+    // waits for a browser to start.
+    let Some(prefs) = read_json_file(&profile_dir.join(file), Some(MAX_PREFERENCES_BYTES)) else {
       continue;
     };
     let Some(settings) = prefs
@@ -150,6 +171,9 @@ pub(super) fn scan_browser_extensions(
     // Read preferences first: unpacked extensions live outside Extensions/, so
     // a profile that has only sideloaded ones has no Extensions/ dir at all and
     // must not be skipped before they are considered.
+    if started.elapsed() > SCAN_DEADLINE {
+      return false;
+    }
     let prefs = preference_extensions(&profile_dir);
     let disabled = &prefs.disabled;
 
@@ -564,6 +588,41 @@ mod tests {
     let mut out = Vec::new();
     assert!(scan_browser_extensions(root, &mut out, Instant::now()));
     assert!(out.is_empty());
+  }
+
+  #[test]
+  fn a_traversing_default_locale_is_refused() {
+    // `default_locale` comes from a manifest we did not write. Joined naively
+    // it reads any file the user can read, on the launch path.
+    assert!(!is_safe_locale_name("../../../../etc"));
+    assert!(!is_safe_locale_name("..\\..\\windows"));
+    assert!(!is_safe_locale_name("/etc/passwd"));
+    assert!(!is_safe_locale_name(""));
+    assert!(is_safe_locale_name("en"));
+    assert!(is_safe_locale_name("en_GB"));
+    assert!(is_safe_locale_name("zh-CN"));
+  }
+
+  #[test]
+  fn a_localized_name_with_a_traversing_locale_is_not_resolved() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let version_dir = root
+      .join("Default")
+      .join("Extensions")
+      .join(CRX_ID)
+      .join("2.1.0_0");
+    write(
+      &version_dir.join("manifest.json"),
+      r#"{"name":"__MSG_appName__","version":"2.1.0","default_locale":"../../../../etc","permissions":["proxy"]}"#,
+    );
+
+    let mut out = Vec::new();
+    assert!(scan_browser_extensions(root, &mut out, Instant::now()));
+    // Still detected (the proxy permission is what matters), but the name
+    // falls back rather than the traversal being followed.
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].name, CRX_ID);
   }
 
   #[test]

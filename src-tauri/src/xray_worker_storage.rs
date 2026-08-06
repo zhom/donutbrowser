@@ -182,6 +182,39 @@ fn worker_is_tombstoned(id: &str) -> bool {
   xray_worker_tombstone_path(id).exists()
 }
 
+/// How long a tombstone has to outlive its worker.
+///
+/// It only has to survive long enough to beat a write already in flight from
+/// the process that owned that id. A day is many orders of magnitude more than
+/// that, and bounds a directory that otherwise gains a file per worker forever.
+const TOMBSTONE_TTL: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Drop tombstones old enough that nothing could still be racing them.
+fn prune_stale_tombstones() {
+  let Ok(entries) = fs::read_dir(crate::proxy_storage::get_storage_dir()) else {
+    return;
+  };
+  for entry in entries.flatten() {
+    let path = entry.path();
+    if path.extension().and_then(|e| e.to_str()) != Some("stopped") {
+      continue;
+    }
+    let aged_out = path
+      .metadata()
+      .and_then(|meta| meta.modified())
+      .map(|modified| {
+        modified
+          .elapsed()
+          .map(|age| age > TOMBSTONE_TTL)
+          .unwrap_or(false)
+      })
+      .unwrap_or(false);
+    if aged_out {
+      let _ = fs::remove_file(&path);
+    }
+  }
+}
+
 pub fn create_xray_worker_log(id: &str) -> std::io::Result<std::fs::File> {
   ensure_private_storage_dir()?;
   if worker_is_tombstoned(id) {
@@ -275,6 +308,8 @@ pub fn delete_xray_worker_config(id: &str) -> bool {
 }
 
 pub fn list_xray_worker_configs() -> Vec<XrayWorkerConfig> {
+  // Cheap, and this is the one call every sweep already makes.
+  prune_stale_tombstones();
   let storage_dir = crate::proxy_storage::get_storage_dir();
   let Ok(entries) = fs::read_dir(storage_dir) else {
     return Vec::new();

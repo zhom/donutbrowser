@@ -92,7 +92,8 @@
     "window": {
       "minimize": "最小化",
       "maximize": "最大化",
-      "restore": "元に戻す"
+      "restore": "元に戻す",
+      "close": "ウィンドウを閉じる"
     },
     "commandPalette": {
       "title": "コマンドパレット",
@@ -467,7 +468,7 @@
       "ssCipherRequired": "Shadowsocks には暗号とパスワードが必要です",
       "selectType": "プロキシの種類を選択",
       "saveFailed": "プロキシの保存に失敗しました: {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "VLESS URI",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "XTLS Vision と REALITY が必要です。",
@@ -1866,6 +1867,7 @@
     "remoteNoCapacity": "現在空いているリモートマシンがありません。数分後にもう一度お試しください。",
     "remoteNotEntitled": "ご利用のプランにはリモート実行が含まれていません。",
     "remoteInteractiveNotEntitled": "ご利用のプランのリモート時間は Cookie Bot 専用で、手動のリモートセッションには使えません。",
+    "remoteRequiresRemoteExitNode": "このプロファイルのプロキシはこのコンピューター上でのみ有効です（127.0.0.1 やローカルネットワークのアドレスなど）。リモートセッションは当社のホスト上で実行されるため、公開アドレスを持つプロキシが必要です。",
     "remoteSessionRefused": "リモートマシンがこのセッションを拒否しました。",
     "remoteSessionNotFound": "そのリモートセッションはすでに存在しません。",
     "remoteSessionConflict": "このプロファイルはすでに別の場所で開かれています。",
@@ -1886,6 +1888,7 @@
     "cookieBotUnknownPlatform": "このプロファイルには OS が記録されていないため、マシンを割り当てられません。",
     "cookieBotUnsupportedPlatform": "Cookie Bot は {{platform}} のプロファイルを実行できません。対応しているのは Windows と macOS のプロファイルのみです。",
     "cookieBotRequiresExitNode": "先にプロキシまたは VPN を設定してください。設定しないと通信がデータセンターのアドレスから出て、プロファイルの信頼性を損ないます。",
+    "cookieBotRequiresRemoteExitNode": "このプロファイルのプロキシはこのコンピューター上でのみ有効です（127.0.0.1 やローカルネットワークのアドレスなど）。Cookie Bot は当社のホスト上で実行されるため、公開アドレスを持つプロキシが必要です。",
     "unknownCode": "エラーが発生しました: {{code}}",
     "cookieBotTouchFingerprintUnsupported": "このプロファイルはタッチ端末を名乗っており、ボットは操作できません。デスクトップのフィンガープリントをお使いください。",
     "profileRunningRemotely": "このプロファイルはリモートマシンで実行中です。先にリモートセッションを停止してください。",
@@ -1896,7 +1899,22 @@
     "fingerprintExitMismatch": "プロキシの出口ノードがこのプロファイルのフィンガープリントと一致しません。",
     "launchConsentExpired": "この確認は無効になりました。もう一度起動してください。",
     "vpnWorkerStartFailed": "VPN接続を開始できませんでした: {{detail}}",
-    "exitProbeFailed": "プロキシの出口ノードに接続できず、所在地を確認できませんでした。"
+    "exitProbeFailed": "プロキシの出口ノードに接続できず、所在地を確認できませんでした。",
+    "vlessUnsupported": {
+      "security": "このVLESSサーバーはREALITYを使用していません。DonutはREALITY付きのVLESSのみに対応しています。",
+      "flow": "このVLESSサーバーは、Donutが必要とするXTLS Visionフローを使用していません。",
+      "transport": "Donutは素のTCP上のVLESSのみに対応しています。このサーバーは別のトランスポート（WebSocketやgRPCなど）を使用しています。",
+      "encryption": "このVLESSサーバーは、Donutが対応していない暗号化設定を使用しています。",
+      "headerType": "このVLESSサーバーは、Donutが対応していないヘッダー難読化を使用しています。",
+      "fingerprint": "このVLESS URIは、Donutが対応していないTLSフィンガープリントを要求しています。",
+      "sni": "VLESS URIに、REALITYに必要なSNI（sni）がありません。",
+      "publicKey": "VLESS URIに、REALITYの公開鍵（pbk）がありません。",
+      "scheme": "これはVLESSリンクではありません。vless:// で始まる必要があります。",
+      "parameter": "VLESS URIに、Donutが対応していないオプションが含まれています。",
+      "malformed": "VLESS URIが無効です。"
+    },
+    "camoufoxRemoved": "Camoufoxはサポートされなくなりました。Wayfernでこのプロファイルを作り直してください。",
+    "noE2ePasswordSet": "エンドツーエンド暗号化のパスワードが設定されていません。暗号化データを同期する前に設定してください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2342,12 +2360,47 @@
       "confirmBulkButton_other": "{{count}} 件のプロファイルで続行",
       "sitesRequired": "サイトを 1 件以上追加してください。",
       "addSitesFirst": "先にサイトを追加してください",
-      "presetsMissing": "深さのプリセットを利用できません"
+      "presetsMissing": "深さのプリセットを利用できません",
+      "sourceOwn": "自分のリスト",
+      "sourceCurated": "厳選リスト",
+      "sourceSaved": "保存済み",
+      "curatedEmpty": "現在利用できる厳選リストはありません。",
+      "curatedNote": "こちらで最新に保っている厳選リストです。プロファイルごとに異なるサンプルを抽出するため、同じ組み合わせを閲覧するプロファイルは 2 つとありません。これがリスト自体を特徴にさせない仕組みです。アドレスはサーバー側に留まります。",
+      "savedEmpty": "まだ保存されていません。「自分のリスト」でリストを入力し、そこから保存してください。",
+      "savedNote": "サイトは保存時にスケジュールへコピーされます。後からリストを編集しても既存のスケジュールは変わりません。",
+      "savedUnavailable": "保存済みのリストを読み込めませんでした。",
+      "saveAsList": "リストとして保存",
+      "listNamePlaceholder": "リスト名を入力",
+      "listSaved": "リストを保存しました",
+      "listRenamed": "リスト名を変更しました",
+      "listDeleted": "リストを削除しました",
+      "listRename": "名前を変更",
+      "listDeleteConfirm": "削除しますか？",
+      "templateMissing": "その保存済みリストは存在しません。別のものを選んでください。",
+      "templateNameTaken": "同じ名前のリストがすでにあります。",
+      "templateNameInvalid": "リスト名は {{max}} 文字以内にしてください。",
+      "calendarLabel": "実行するタイミング",
+      "daysLabel": "曜日",
+      "addSlot": "時刻を追加",
+      "slotsFull": "開始時刻は最大 {{max}} 件です。",
+      "removeSlot": "この時刻を削除",
+      "pickListFirst": "先にリストを選択",
+      "finishCalendarFirst": "先にスケジュールを完成させてください",
+      "duplicateSlot": "2 つの行の曜日と時刻が同じです",
+      "listSites_one": "{{count}} サイト",
+      "listSites_other": "{{count}} サイト",
+      "summarySlots_one": "週 {{count}} 回、1 回あたり最大 {{minutes}} 分実行します。",
+      "summarySlots_other": "週 {{count}} 回、1 回あたり最大 {{minutes}} 分実行します。",
+      "templateNameInvalidNoMax": "その名前は保存済みリストには使用できません。"
     },
     "preset": {
       "light": "軽め",
       "balanced": "標準",
       "deep": "深め"
+    },
+    "template": {
+      "lowIntentPurchaser": "低購買意欲の買い物客",
+      "lowIntentPurchaserHint": "価格に敏感な買い手としてプロファイルを位置づけます。比較・クーポン・キャッシュバック・リセールのサイトを巡り、直接ではなく集約サイト経由で小売サイトに到達します。"
     },
     "preflight": {
       "ineligible_one": "{{count}} 件のプロファイルはリモートで実行できません",

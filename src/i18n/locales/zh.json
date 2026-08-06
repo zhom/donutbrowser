@@ -92,7 +92,8 @@
     "window": {
       "minimize": "最小化",
       "maximize": "最大化",
-      "restore": "还原"
+      "restore": "还原",
+      "close": "关闭窗口"
     },
     "commandPalette": {
       "title": "命令面板",
@@ -467,7 +468,7 @@
       "ssCipherRequired": "Shadowsocks 需要密码学和密码",
       "selectType": "选择代理类型",
       "saveFailed": "保存代理失败: {{error}}",
-      "vlessType": "VLESS · Vision · REALITY",
+      "vlessType": "VLESS",
       "vlessUri": "VLESS URI",
       "vlessUriPlaceholder": "vless://…",
       "vlessUriHint": "需要 XTLS Vision 和 REALITY。",
@@ -1866,6 +1867,7 @@
     "remoteNoCapacity": "当前没有空闲的远程机器。请几分钟后再试。",
     "remoteNotEntitled": "你的套餐不包含远程运行。",
     "remoteInteractiveNotEntitled": "您的套餐中的远程时长仅供 Cookie Bot 使用，不能用于手动远程会话。",
+    "remoteRequiresRemoteExitNode": "此配置文件的代理仅在本机可用（例如 127.0.0.1 或局域网地址）。远程会话在我们的主机上运行，因此需要具有公网地址的代理。",
     "remoteSessionRefused": "远程机器拒绝了此会话。",
     "remoteSessionNotFound": "该远程会话已不存在。",
     "remoteSessionConflict": "此配置文件已在别处打开。",
@@ -1886,6 +1888,7 @@
     "cookieBotUnknownPlatform": "此配置文件没有记录操作系统，无法匹配到机器。",
     "cookieBotUnsupportedPlatform": "Cookie Bot 无法运行 {{platform}} 配置文件。仅支持 Windows 和 macOS 配置文件。",
     "cookieBotRequiresExitNode": "请先绑定代理或 VPN。否则运行会从数据中心地址发出，损害配置文件的身份。",
+    "cookieBotRequiresRemoteExitNode": "此配置文件的代理仅在本机可用（例如 127.0.0.1 或局域网地址）。Cookie Bot 在我们的主机上运行，因此需要具有公网地址的代理。",
     "unknownCode": "出现问题: {{code}}",
     "cookieBotTouchFingerprintUnsupported": "该配置文件声称是触摸设备，机器人无法操作。请使用桌面端指纹。",
     "profileRunningRemotely": "该配置文件正在远程计算机上运行。请先停止远程会话。",
@@ -1896,7 +1899,22 @@
     "fingerprintExitMismatch": "代理出口节点与此配置文件的指纹不匹配。",
     "launchConsentExpired": "该确认已失效。请重新启动。",
     "vpnWorkerStartFailed": "无法启动 VPN 连接：{{detail}}",
-    "exitProbeFailed": "无法连接代理出口节点以检查其位置。"
+    "exitProbeFailed": "无法连接代理出口节点以检查其位置。",
+    "vlessUnsupported": {
+      "security": "此 VLESS 服务器未使用 REALITY。Donut 仅支持搭配 REALITY 的 VLESS。",
+      "flow": "此 VLESS 服务器未使用 Donut 所需的 XTLS Vision 流控。",
+      "transport": "Donut 仅支持基于普通 TCP 的 VLESS —— 此服务器使用了其他传输方式（如 WebSocket 或 gRPC）。",
+      "encryption": "此 VLESS 服务器使用了 Donut 不支持的加密设置。",
+      "headerType": "此 VLESS 服务器使用了 Donut 不支持的头部混淆。",
+      "fingerprint": "此 VLESS URI 请求了 Donut 不支持的 TLS 指纹。",
+      "sni": "VLESS URI 缺少 REALITY 所需的 SNI（sni）。",
+      "publicKey": "VLESS URI 缺少 REALITY 公钥（pbk）。",
+      "scheme": "这不是 VLESS 链接，必须以 vless:// 开头。",
+      "parameter": "VLESS URI 含有 Donut 不支持的选项。",
+      "malformed": "VLESS URI 无效。"
+    },
+    "camoufoxRemoved": "Camoufox 已不再受支持。请使用 Wayfern 重新创建此配置文件。",
+    "noE2ePasswordSet": "尚未设置端到端加密密码。请先设置后再同步加密数据。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2342,12 +2360,47 @@
       "confirmBulkButton_other": "继续（{{count}} 个配置文件）",
       "sitesRequired": "请至少添加一个网站。",
       "addSitesFirst": "请先添加网站",
-      "presetsMissing": "深度预设不可用"
+      "presetsMissing": "深度预设不可用",
+      "sourceOwn": "我的列表",
+      "sourceCurated": "精选",
+      "sourceSaved": "已保存",
+      "curatedEmpty": "目前没有可用的精选列表。",
+      "curatedNote": "由我们持续维护的精选列表。每个配置文件都会从中抽取各自的样本，因此不会有两个配置文件浏览同一组网站——这正是让列表本身不会变成特征的原因。地址只保留在我们这边。",
+      "savedEmpty": "还没有保存任何内容。请在“我的列表”中输入列表，然后从那里保存。",
+      "savedNote": "保存计划时会把网站复制到计划中，因此以后编辑列表不会影响已有的计划。",
+      "savedUnavailable": "无法加载你保存的列表。",
+      "saveAsList": "保存为列表",
+      "listNamePlaceholder": "为该列表命名",
+      "listSaved": "已保存列表",
+      "listRenamed": "已重命名列表",
+      "listDeleted": "已删除列表",
+      "listRename": "重命名",
+      "listDeleteConfirm": "删除？",
+      "templateMissing": "该保存的列表已不存在。请另选一个。",
+      "templateNameTaken": "你已经有同名的列表。",
+      "templateNameInvalid": "列表名称不超过 {{max}} 个字符。",
+      "calendarLabel": "运行时间",
+      "daysLabel": "星期",
+      "addSlot": "添加时间",
+      "slotsFull": "最多 {{max}} 个开始时间。",
+      "removeSlot": "移除此时间",
+      "pickListFirst": "请先选择列表",
+      "finishCalendarFirst": "请先完成计划",
+      "duplicateSlot": "有两行的星期和时间相同",
+      "listSites_one": "{{count}} 个网站",
+      "listSites_other": "{{count}} 个网站",
+      "summarySlots_one": "每周运行 {{count}} 次，每次最多 {{minutes}} 分钟。",
+      "summarySlots_other": "每周运行 {{count}} 次，每次最多 {{minutes}} 分钟。",
+      "templateNameInvalidNoMax": "该名称不能用于已保存的列表。"
     },
     "preset": {
       "light": "轻度",
       "balanced": "标准",
       "deep": "深度"
+    },
+    "template": {
+      "lowIntentPurchaser": "低购买意向买家",
+      "lowIntentPurchaserHint": "把配置文件定位为对价格敏感的买家：比价、优惠券、返现和二手转卖网站，并通过聚合站点而非直接访问零售商。"
     },
     "preflight": {
       "ineligible_one": "{{count}} 个配置文件无法远程运行",
