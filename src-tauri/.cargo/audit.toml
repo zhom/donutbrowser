@@ -1,0 +1,34 @@
+# cargo-audit configuration.
+#
+# `cargo audit` reads Cargo.lock, which records optional dependencies even when
+# no enabled feature pulls them into the build. An advisory against such a
+# package fails CI while the vulnerable code is never compiled into the binary.
+# Entries here are for exactly that case and must each carry the evidence.
+#
+# Before adding an ignore, prove the crate is genuinely not built:
+#   cd src-tauri
+#   cargo tree -i <crate> --target all     # must print "nothing to print"
+#   cargo tree --target all | grep <crate> # must find nothing
+# If either finds it, the crate IS in the build and the advisory must be fixed,
+# not ignored.
+
+[advisories]
+ignore = [
+  # RUSTSEC-2026-0235 — rkyv: insufficient archive validation can cause
+  # out-of-bounds reads in archives containing Rc/Arc. Fixed in rkyv >= 0.8.17.
+  #
+  # Not reachable here. rkyv is an OPTIONAL dependency of rust_decimal, which
+  # arrives via tauri-plugin-log -> byte-unit -> rust_decimal. No enabled
+  # feature activates it, so it is present in Cargo.lock but absent from the
+  # build graph. Verified with the two commands above (both find nothing) and
+  # by there being no rkyv artifact in target/.
+  #
+  # There is no upgrade path: rust_decimal 1.42.1 is the newest release and
+  # still pins rkyv 0.7.x, so `cargo update` cannot reach 0.8.17.
+  #
+  # REMOVE THIS as soon as either becomes true:
+  #   - rust_decimal ships a release depending on rkyv >= 0.8.17, or
+  #   - `cargo tree -i rkyv --target all` starts printing a path, which would
+  #     mean the crate is now genuinely compiled and the advisory applies.
+  "RUSTSEC-2026-0235",
+]

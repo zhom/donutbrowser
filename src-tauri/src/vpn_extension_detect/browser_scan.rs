@@ -285,6 +285,23 @@ mod tests {
     fs::write(path, contents).unwrap();
   }
 
+  /// Build a Chromium `Preferences` blob for one extension.
+  ///
+  /// Serialized rather than string-interpolated on purpose: a Windows path is
+  /// `C:\Users\...`, and pasting it into a JSON string literal produces invalid
+  /// escape sequences, so the file silently fails to parse and every assertion
+  /// about it passes for the wrong reason.
+  fn preferences_json(crx_id: &str, state: i64, path: &Path) -> String {
+    serde_json::json!({
+      "extensions": {
+        "settings": {
+          crx_id: { "state": state, "path": path.to_string_lossy() }
+        }
+      }
+    })
+    .to_string()
+  }
+
   const VPN_MANIFEST: &str = r#"{"name":"Turbo VPN","version":"2.1.0","permissions":["proxy"]}"#;
   const CRX_ID: &str = "abcdefghijklmnopabcdefghijklmnop";
 
@@ -531,6 +548,22 @@ mod tests {
   }
 
   #[test]
+  fn preferences_json_escapes_windows_style_paths() {
+    // The Windows CI failure this guards: a raw `C:\Users\...` pasted into a
+    // JSON string literal is invalid (`\U` is not an escape), so Preferences
+    // failed to parse, `preference_extensions` returned nothing, and the
+    // unpacked extension silently vanished — on Linux the same test passed
+    // because POSIX paths contain no backslashes.
+    let json = preferences_json(CRX_ID, 1, Path::new(r"C:\Users\runner\ext\my-vpn"));
+    let parsed: serde_json::Value =
+      serde_json::from_str(&json).expect("Preferences must be valid JSON on every platform");
+    assert_eq!(
+      parsed["extensions"]["settings"][CRX_ID]["path"],
+      r"C:\Users\runner\ext\my-vpn"
+    );
+  }
+
+  #[test]
   fn scan_finds_an_unpacked_developer_mode_extension() {
     // Sideloading via "Load unpacked" is exactly how a VPN extension gets in
     // without the Web Store, and those files live outside Extensions/.
@@ -540,10 +573,7 @@ mod tests {
     write(&unpacked.join("manifest.json"), VPN_MANIFEST);
     write(
       &root.join("Default").join("Preferences"),
-      &format!(
-        r#"{{"extensions":{{"settings":{{"{CRX_ID}":{{"state":1,"path":"{}"}}}}}}}}"#,
-        unpacked.to_string_lossy()
-      ),
+      &preferences_json(CRX_ID, 1, &unpacked),
     );
 
     let mut out = Vec::new();
@@ -561,10 +591,7 @@ mod tests {
     write(&unpacked.join("manifest.json"), VPN_MANIFEST);
     write(
       &root.join("Default").join("Preferences"),
-      &format!(
-        r#"{{"extensions":{{"settings":{{"{CRX_ID}":{{"state":0,"path":"{}"}}}}}}}}"#,
-        unpacked.to_string_lossy()
-      ),
+      &preferences_json(CRX_ID, 0, &unpacked),
     );
 
     let mut out = Vec::new();
@@ -580,9 +607,7 @@ mod tests {
     let root = tmp.path();
     write(
       &root.join("Default").join("Preferences"),
-      &format!(
-        r#"{{"extensions":{{"settings":{{"{CRX_ID}":{{"state":1,"path":"{CRX_ID}/2.1.0_0"}}}}}}}}"#
-      ),
+      &preferences_json(CRX_ID, 1, Path::new(&format!("{CRX_ID}/2.1.0_0"))),
     );
 
     let mut out = Vec::new();
