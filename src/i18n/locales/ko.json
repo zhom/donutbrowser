@@ -2178,7 +2178,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot은 원격 머신에서 밤새 프로필을 예열해, 내 컴퓨터를 켜 두지 않아도 쿠키와 방문 기록이 유지됩니다. Pro 또는 Team 요금제가 필요합니다."
+      "hint": "Cookie Bot은 원격 머신에서 밤새 프로필을 예열해, 내 컴퓨터를 켜 두지 않아도 쿠키와 방문 기록이 유지됩니다. 유료 요금제가 필요합니다."
     },
     "empty": {
       "title": "등록된 프로필이 없습니다",
@@ -2428,7 +2428,7 @@
     },
     "actionBar": {
       "enrol": "Cookie Bot에 등록",
-      "proRequired": "Cookie Bot에는 Pro 또는 Team 요금제가 필요합니다",
+      "proRequired": "Cookie Bot에는 유료 요금제가 필요합니다",
       "noneEligible": "선택한 프로필 중 원격으로 예열할 수 있는 것이 없습니다"
     },
     "actions": {

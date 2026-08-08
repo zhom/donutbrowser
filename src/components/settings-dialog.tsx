@@ -232,16 +232,30 @@ export function SettingsDialog({
     [t],
   );
 
-  const applyCustomTheme = useCallback((vars: Record<string, string>) => {
-    withThemeTransition(() => {
-      applyThemeColors(vars);
-    });
-  }, []);
+  // `animate: false` on the restore paths. Opening Settings re-applies the
+  // theme already on screen, so a whole-document cross-fade to an identical
+  // palette animates nothing. Worse, the mount effect below did it twice in a
+  // row, and the second transition aborts the first mid-snapshot.
+  const applyCustomTheme = useCallback(
+    (vars: Record<string, string>, options?: { animate?: boolean }) => {
+      const apply = () => {
+        applyThemeColors(vars);
+      };
+      if (options?.animate === false) {
+        apply();
+        return;
+      }
+      withThemeTransition(apply);
+    },
+    [],
+  );
 
-  const clearCustomTheme = useCallback(() => {
-    withThemeTransition(() => {
+  const clearCustomTheme = useCallback((options?: { animate?: boolean }) => {
+    if (options?.animate === false) {
       clearThemeColors();
-    });
+      return;
+    }
+    withThemeTransition(clearThemeColors);
   }, []);
 
   const loadSettings = useCallback(async () => {
@@ -363,12 +377,24 @@ export function SettingsDialog({
     isMicrophoneAccessGranted,
   ]);
 
+  // The Linux implementation shells out to `which` plus two `xdg-mime query`
+  // calls, and `xdg-mime` is a shell script that forks further. Without this
+  // guard a slow desktop lets the poll below stack one unfinished call on top
+  // of another every few seconds, and each one occupies a worker of the same
+  // runtime every other Tauri command shares.
+  const defaultBrowserCheckInFlight = useRef(false);
   const checkDefaultBrowserStatus = useCallback(async () => {
+    if (defaultBrowserCheckInFlight.current) {
+      return;
+    }
+    defaultBrowserCheckInFlight.current = true;
     try {
       const isDefault = await invoke<boolean>("is_default_browser");
       setIsDefaultBrowser(isDefault);
     } catch (error) {
       console.error("Failed to check default browser status:", error);
+    } finally {
+      defaultBrowserCheckInFlight.current = false;
     }
   }, []);
 
@@ -565,11 +591,13 @@ export function SettingsDialog({
 
   const handleClose = useCallback(() => {
     // Restore original theme when closing without saving
+    // Only a revert the user can see is worth animating.
+    const changed = originalSettings.theme !== settings.theme;
     if (originalSettings.theme === "custom" && originalSettings.custom_theme) {
-      applyCustomTheme(originalSettings.custom_theme);
+      applyCustomTheme(originalSettings.custom_theme, { animate: changed });
     } else {
-      clearCustomTheme();
-      setTheme(originalSettings.theme);
+      clearCustomTheme({ animate: false });
+      setTheme(originalSettings.theme, { animate: changed });
     }
 
     // Reset custom theme state to original
@@ -589,16 +617,29 @@ export function SettingsDialog({
     clearCustomTheme,
     onClose,
     setTheme,
+    settings.theme,
   ]);
 
   // Only clear custom theme when switching away from custom, don't apply live
   // changes. Gated on the async settings load: before it resolves the state
   // still holds the "system" default, and clearing then wipes the user's
   // custom theme vars on every Settings visit (the theme-reverts-to-dark bug).
+  //
+  // This effect is both the restore-on-open and the live switch when the user
+  // picks a theme, so it animates only a real change: the first run after the
+  // settings load is re-applying the palette already on screen. Clearing the
+  // inline custom vars is never the animated half — switching to a stylesheet
+  // palette makes them invisible either way, and running two transitions
+  // back to back just aborts the first one mid-snapshot.
+  const appliedThemeRef = useRef<string | null>(null);
   useEffect(() => {
     if (hasLoadedSettings && settings.theme !== "custom") {
-      clearCustomTheme();
-      setTheme(settings.theme);
+      const previous = appliedThemeRef.current;
+      appliedThemeRef.current = settings.theme;
+      clearCustomTheme({ animate: false });
+      setTheme(settings.theme, {
+        animate: previous !== null && previous !== settings.theme,
+      });
     }
   }, [hasLoadedSettings, settings.theme, clearCustomTheme, setTheme]);
 
@@ -616,7 +657,7 @@ export function SettingsDialog({
         // stylesheet palette — strip any leftover inline custom vars so a
         // just-saved switch away from custom isn't reverted on unmount.
         clearThemeColors();
-        setTheme(s.theme);
+        setTheme(s.theme, { animate: false });
       }
     };
   }, [setTheme]);
@@ -634,12 +675,15 @@ export function SettingsDialog({
         loadPermissions();
       }
 
-      // Set up interval to check default browser status
+      // Re-check periodically so the badge follows a change the user made in
+      // their desktop settings. Ten seconds rather than two: on Linux each
+      // check is three subprocesses, and nobody flips their default browser
+      // often enough to notice the difference.
       const intervalId = setInterval(() => {
         checkDefaultBrowserStatus().catch((err: unknown) => {
           console.error(err);
         });
-      }, 2000);
+      }, 10000);
 
       // Cleanup interval on component unmount or dialog close
       return () => {

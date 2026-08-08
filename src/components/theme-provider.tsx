@@ -22,7 +22,9 @@ interface AppSettings {
 
 interface ThemeContextValue {
   theme: string;
-  setTheme: (theme: string) => void;
+  /// `animate: false` applies the theme without a view transition, for the
+  /// restore paths where nothing visually changes.
+  setTheme: (theme: string, options?: { animate?: boolean }) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -56,14 +58,26 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setThemeState] = useState("system");
 
-  const setTheme = useCallback((newTheme: string) => {
-    setThemeState(newTheme);
-    withThemeTransition(() => {
-      if (newTheme !== "custom") {
-        applyClassToHtml(newTheme);
+  // `animate: false` is for restoring the theme the app is already showing —
+  // opening or leaving Settings re-applies the current theme, and cross-fading
+  // the whole document to the palette already on screen animates nothing while
+  // still paying for a full-document snapshot.
+  const setTheme = useCallback(
+    (newTheme: string, options?: { animate?: boolean }) => {
+      setThemeState(newTheme);
+      const apply = () => {
+        if (newTheme !== "custom") {
+          applyClassToHtml(newTheme);
+        }
+      };
+      if (options?.animate === false) {
+        apply();
+        return;
       }
-    });
-  }, []);
+      withThemeTransition(apply);
+    },
+    [],
+  );
 
   // Load initial theme from Tauri settings
   useEffect(() => {

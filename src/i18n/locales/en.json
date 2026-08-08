@@ -2178,7 +2178,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot warms your profiles overnight on a remote machine, so they keep their cookies and their history without your computer being on. It needs a Pro or Team plan."
+      "hint": "Cookie Bot warms your profiles overnight on a remote machine, so they keep their cookies and their history without your computer being on. It needs a paid plan."
     },
     "empty": {
       "title": "No profiles are enrolled",
@@ -2428,7 +2428,7 @@
     },
     "actionBar": {
       "enrol": "Enrol in Cookie Bot",
-      "proRequired": "Cookie Bot requires a Pro or Team plan",
+      "proRequired": "Cookie Bot requires a paid plan",
       "noneEligible": "None of the selected profiles can be warmed remotely"
     },
     "actions": {

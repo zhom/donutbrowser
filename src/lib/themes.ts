@@ -1177,10 +1177,32 @@ export function clearThemeColors(): void {
 }
 
 /**
+ * WebKitGTK, which is the webview on Linux and nowhere else.
+ *
+ * Windows runs WebView2 (a Chromium user agent) and macOS runs WKWebView
+ * (`Macintosh`), so an `AppleWebKit` user agent claiming X11/Linux is
+ * WebKitGTK and only WebKitGTK.
+ */
+function isWebKitGtk(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  const ua = navigator.userAgent;
+  return /\b(?:X11|Linux)\b/.test(ua) && ua.includes("AppleWebKit");
+}
+
+/**
  * Run a theme mutation inside a View Transition so the whole UI cross-fades
  * (~200ms, tuned in globals.css) instead of hard-cutting between palettes.
- * Falls back to an instant switch when the API is unavailable or the user
- * prefers reduced motion.
+ * Falls back to an instant switch when the API is unavailable, the user
+ * prefers reduced motion, or the webview is WebKitGTK.
+ *
+ * A view transition asks the engine to snapshot the whole document into
+ * compositor layers and hold rendering until it can cross-fade them. That is
+ * the newest and least-exercised path in WebKitGTK, and it is reached from
+ * exactly one screen here, which is the screen a Linux user reported the app
+ * segfaulting on. The cross-fade is decoration; not taking that path on Linux
+ * costs nothing anyone will miss.
  */
 export function withThemeTransition(mutate: () => void): void {
   if (typeof document === "undefined") {
@@ -1193,7 +1215,11 @@ export function withThemeTransition(mutate: () => void): void {
   const doc = document as Document & {
     startViewTransition?: (callback: () => void) => unknown;
   };
-  if (reduced || typeof doc.startViewTransition !== "function") {
+  if (
+    reduced ||
+    isWebKitGtk() ||
+    typeof doc.startViewTransition !== "function"
+  ) {
     mutate();
     return;
   }

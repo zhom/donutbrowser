@@ -2178,7 +2178,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot はリモートマシンで夜間にプロファイルをウォームアップするため、お使いのコンピューターを起動していなくても Cookie と履歴が維持されます。Pro または Team プランが必要です。"
+      "hint": "Cookie Bot はリモートマシンで夜間にプロファイルをウォームアップするため、お使いのコンピューターを起動していなくても Cookie と履歴が維持されます。有料プランが必要です。"
     },
     "empty": {
       "title": "登録されたプロファイルはありません",
@@ -2428,7 +2428,7 @@
     },
     "actionBar": {
       "enrol": "Cookie Bot に登録",
-      "proRequired": "Cookie Bot には Pro または Team プランが必要です",
+      "proRequired": "Cookie Bot には有料プランが必要です",
       "noneEligible": "選択したプロファイルはいずれもリモートでウォームアップできません"
     },
     "actions": {

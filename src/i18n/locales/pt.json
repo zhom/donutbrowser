@@ -2185,7 +2185,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "O Cookie Bot aquece seus perfis durante a noite em uma máquina remota, para que mantenham os cookies e o histórico sem o seu computador ligado. Requer um plano Pro ou Team."
+      "hint": "O Cookie Bot aquece seus perfis durante a noite em uma máquina remota, para que mantenham os cookies e o histórico sem o seu computador ligado. Requer um plano pago."
     },
     "empty": {
       "title": "Nenhum perfil inscrito",
@@ -2456,7 +2456,7 @@
     },
     "actionBar": {
       "enrol": "Inscrever no Cookie Bot",
-      "proRequired": "O Cookie Bot requer um plano Pro ou Team",
+      "proRequired": "O Cookie Bot requer um plano pago",
       "noneEligible": "Nenhum dos perfis selecionados pode ser aquecido remotamente"
     },
     "actions": {

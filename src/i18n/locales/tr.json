@@ -2178,7 +2178,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot, profillerinizi gece boyunca uzak bir makinede ısıtır; böylece bilgisayarınız açık olmadan çerezlerini ve geçmişlerini korurlar. Pro veya Team planı gerekir."
+      "hint": "Cookie Bot, profillerinizi gece boyunca uzak bir makinede ısıtır; böylece bilgisayarınız açık olmadan çerezlerini ve geçmişlerini korurlar. Ücretli bir plan gerekir."
     },
     "empty": {
       "title": "Kayıtlı profil yok",
@@ -2428,7 +2428,7 @@
     },
     "actionBar": {
       "enrol": "Cookie Bot'a kaydet",
-      "proRequired": "Cookie Bot için Pro veya Team planı gerekir",
+      "proRequired": "Cookie Bot için ücretli bir plan gerekir",
       "noneEligible": "Seçili profillerin hiçbiri uzaktan ısıtılamaz"
     },
     "actions": {

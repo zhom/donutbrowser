@@ -18,8 +18,13 @@ impl DefaultBrowser {
     #[cfg(target_os = "windows")]
     return windows::is_default_browser();
 
+    // Linux answers this by running `xdg-mime`, a shell script that forks
+    // further. That is blocking work with no upper bound, and this command
+    // runs on the same async runtime as every other command, the REST API and
+    // the sync scheduler — so doing it inline occupies a worker for as long as
+    // the desktop takes to answer. The Settings page polls this on a timer.
     #[cfg(target_os = "linux")]
-    return linux::is_default_browser();
+    return blocking(linux::is_default_browser).await;
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     Err("Unsupported platform".to_string())
@@ -32,12 +37,25 @@ impl DefaultBrowser {
     #[cfg(target_os = "windows")]
     return windows::set_as_default_browser();
 
+    // Same reasoning, and this one additionally sleeps 500ms before verifying.
     #[cfg(target_os = "linux")]
-    return linux::set_as_default_browser();
+    return blocking(linux::set_as_default_browser).await;
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     Err("Unsupported platform".to_string())
   }
+}
+
+/// Run blocking work off the async runtime's worker threads.
+#[cfg(target_os = "linux")]
+async fn blocking<T, F>(work: F) -> Result<T, String>
+where
+  F: FnOnce() -> Result<T, String> + Send + 'static,
+  T: Send + 'static,
+{
+  tokio::task::spawn_blocking(work)
+    .await
+    .map_err(|e| format!("Default browser check did not run: {e}"))?
 }
 
 #[cfg(target_os = "macos")]

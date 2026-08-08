@@ -2185,7 +2185,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot chauffe vos profils la nuit sur une machine distante : ils conservent leurs cookies et leur historique sans que votre ordinateur soit allumé. Nécessite un forfait Pro ou Team."
+      "hint": "Cookie Bot chauffe vos profils la nuit sur une machine distante : ils conservent leurs cookies et leur historique sans que votre ordinateur soit allumé. Nécessite un forfait payant."
     },
     "empty": {
       "title": "Aucun profil inscrit",
@@ -2456,7 +2456,7 @@
     },
     "actionBar": {
       "enrol": "Inscrire à Cookie Bot",
-      "proRequired": "Cookie Bot nécessite un forfait Pro ou Team",
+      "proRequired": "Cookie Bot nécessite un forfait payant",
       "noneEligible": "Aucun des profils sélectionnés ne peut être chauffé à distance"
     },
     "actions": {

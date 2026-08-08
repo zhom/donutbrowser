@@ -2185,7 +2185,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot calienta tus perfiles por la noche en una máquina remota, así conservan sus cookies y su historial sin que tu ordenador esté encendido. Requiere un plan Pro o Team."
+      "hint": "Cookie Bot calienta tus perfiles por la noche en una máquina remota, así conservan sus cookies y su historial sin que tu ordenador esté encendido. Requiere un plan de pago."
     },
     "empty": {
       "title": "No hay perfiles inscritos",
@@ -2456,7 +2456,7 @@
     },
     "actionBar": {
       "enrol": "Inscribir en Cookie Bot",
-      "proRequired": "Cookie Bot requiere un plan Pro o Team",
+      "proRequired": "Cookie Bot requiere un plan de pago",
       "noneEligible": "Ninguno de los perfiles seleccionados se puede calentar en remoto"
     },
     "actions": {

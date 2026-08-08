@@ -2178,7 +2178,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot làm ấm hồ sơ của bạn qua đêm trên máy từ xa, giúp chúng giữ được cookie và lịch sử mà không cần bật máy tính của bạn. Cần gói Pro hoặc Team."
+      "hint": "Cookie Bot làm ấm hồ sơ của bạn qua đêm trên máy từ xa, giúp chúng giữ được cookie và lịch sử mà không cần bật máy tính của bạn. Cần gói trả phí."
     },
     "empty": {
       "title": "Chưa có hồ sơ nào được đăng ký",
@@ -2428,7 +2428,7 @@
     },
     "actionBar": {
       "enrol": "Đăng ký vào Cookie Bot",
-      "proRequired": "Cookie Bot cần gói Pro hoặc Team",
+      "proRequired": "Cookie Bot cần gói trả phí",
       "noneEligible": "Không hồ sơ nào đã chọn có thể làm ấm từ xa"
     },
     "actions": {

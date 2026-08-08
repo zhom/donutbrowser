@@ -2178,7 +2178,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot 在远程机器上通宵养号，无需开着你的电脑也能保住 Cookie 和历史记录。需要 Pro 或 Team 套餐。"
+      "hint": "Cookie Bot 在远程机器上通宵养号，无需开着你的电脑也能保住 Cookie 和历史记录。需要付费套餐。"
     },
     "empty": {
       "title": "尚未加入任何配置文件",
@@ -2428,7 +2428,7 @@
     },
     "actionBar": {
       "enrol": "加入 Cookie Bot",
-      "proRequired": "Cookie Bot 需要 Pro 或 Team 套餐",
+      "proRequired": "Cookie Bot 需要付费套餐",
       "noneEligible": "所选配置文件都无法远程养号"
     },
     "actions": {
