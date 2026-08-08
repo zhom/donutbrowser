@@ -121,6 +121,46 @@ function extractArchive(archive, destinationDir, windowsTarget) {
   };
 }
 
+/// Attempts for the archive download. A release asset fetch is a network call
+/// on every CI job, and a single transport error ("fetch failed") has taken
+/// whole builds down. Retrying is safe because the checksum below is verified
+/// on every attempt, so a truncated or substituted archive still cannot pass.
+const DOWNLOAD_ATTEMPTS = 3;
+
+async function downloadVerifiedArchive(url, archive, expectedSha256) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download Xray-core (${response.status} ${response.statusText})`,
+        );
+      }
+      writeFileSync(archive, Buffer.from(await response.arrayBuffer()));
+
+      const actual = sha256(archive);
+      if (actual !== expectedSha256) {
+        throw new Error(
+          `Xray-core checksum mismatch: expected ${expectedSha256}, got ${actual}`,
+        );
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < DOWNLOAD_ATTEMPTS) {
+        console.warn(
+          `Xray-core download attempt ${attempt} failed (${error.message}); retrying`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export async function downloadXray(target = requestedTarget()) {
   const asset = XRAY_ASSETS[target];
   if (!asset) {
@@ -157,20 +197,11 @@ export async function downloadXray(target = requestedTarget()) {
   const scratch = mkdtempSync(join(tmpdir(), "donut-xray-"));
   try {
     const archive = join(scratch, basename(asset.name));
-    const response = await fetch(xrayDownloadUrl(asset.name));
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download Xray-core (${response.status} ${response.statusText})`,
-      );
-    }
-    writeFileSync(archive, Buffer.from(await response.arrayBuffer()));
-
-    const actual = sha256(archive);
-    if (actual !== asset.sha256) {
-      throw new Error(
-        `Xray-core checksum mismatch: expected ${asset.sha256}, got ${actual}`,
-      );
-    }
+    await downloadVerifiedArchive(
+      xrayDownloadUrl(asset.name),
+      archive,
+      asset.sha256,
+    );
 
     const extracted = extractArchive(archive, scratch, windowsTarget);
     if (!existsSync(extracted.binary) || !existsSync(extracted.license)) {
