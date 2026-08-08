@@ -1,6 +1,71 @@
 # Changelog
 
 
+## v0.29.0 (2026-08-08)
+
+### Features
+
+- prevent launch with inconsistent geodata
+- cookie bot
+- remote sessions
+- xray support
+- mass import via gui, api, and mcp
+- add Turkish (tr) language support
+
+### Bug Fixes
+
+- properly handle x-amz-meta-updated-at
+- improve UI interactions and page consistency
+
+### Refactoring
+
+- cleanup
+- cleanup
+- improve proxy lifetime management
+- cleanup
+- remote cleanup
+- cleanup cloud sync
+- cleanup
+- harden tests
+- block windows app update if the browser is running
+- ui refresh
+
+### Documentation
+
+- contrib-readme-action has updated readme
+- contrib-readme-action has updated readme
+
+### Maintenance
+
+- ci(deps): bump the github-actions group with 3 updates (#538)
+- chore: linting
+- chore: linting
+- chore: linting
+- chore: ci
+- chore: upload sidecars to cdn
+- chore: linting
+- ci(deps): bump the github-actions group with 4 updates
+- chore: linting
+- chore: disable e2e in ci
+- chore: linting
+- chore: linting
+- chore: ai compliance
+- chore: linting
+- ci(deps): bump the github-actions group across 1 directory with 3 updates (#514)
+- chore: linting
+- chore: linting
+- chore: add cross-platform webdriver tests
+- ci(deps): bump the github-actions group with 2 updates
+- chore: update flake.nix for v0.28.2 [skip ci] (#501)
+
+### Other
+
+- deps(deps): bump next from 16.2.10 to 16.2.11 (#515)
+- refactors: animations cleanup
+- restore settings redirect
+- fix group create translation key
+
+
 ## v0.28.2 (2026-07-12)
 
 ### Features
