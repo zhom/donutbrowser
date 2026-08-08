@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use super::rules::{
-  classify, keyword_hit, lookup_message, manifest_str, message_placeholder_key, signal_labels,
-  signals_from_manifest, version_dir_sort_key, DetectedVpnExtension,
+  classify, lookup_message, manifest_str, message_placeholder_key, signal_labels,
+  signals_from_manifest, version_dir_sort_key, vpn_keyword_hit, DetectedVpnExtension,
 };
 
 /// Upper bound on extension directories walked per profile. A launch must not
@@ -262,8 +262,8 @@ fn detect_in_version_dir(crx_id: &str, version_dir: &Path) -> Option<DetectedVpn
   });
 
   let signals = signals_from_manifest(&manifest);
-  let keyword = keyword_hit(&name, description.as_deref());
-  let confidence = classify(&signals, keyword)?;
+  let keyword = vpn_keyword_hit(&name, description.as_deref());
+  let confidence = classify(Some(crx_id), &signals, keyword)?;
 
   Some(DetectedVpnExtension {
     key: format!("crx:{crx_id}"),
@@ -271,7 +271,8 @@ fn detect_in_version_dir(crx_id: &str, version_dir: &Path) -> Option<DetectedVpn
     version: manifest_str(&manifest, "version"),
     source: "browser".to_string(),
     confidence: confidence.to_string(),
-    signals: signal_labels(&signals, keyword),
+    proxy_control: signals.proxy_permission,
+    signals: signal_labels(Some(crx_id), &signals, keyword),
   })
 }
 
@@ -487,6 +488,50 @@ mod tests {
     let mut out = Vec::new();
     assert!(scan_browser_extensions(root, &mut out, Instant::now()));
     assert_eq!(out[0].name, CRX_ID, "never show a raw __MSG_ placeholder");
+  }
+
+  #[test]
+  fn scan_reports_a_proxy_holding_download_manager_as_a_capability() {
+    // End-to-end shape of the false positive that prompted the audit: the
+    // extension must still be surfaced (it really can change the proxy) but
+    // never as a VPN.
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(
+      &root
+        .join("Default")
+        .join("Extensions")
+        .join("ngpampappnmepgilojfohadhhmbhlaek")
+        .join("6.43.1_0")
+        .join("manifest.json"),
+      r#"{"name":"IDM Integration Module","version":"6.43.1","description":"Download files with Internet Download Manager","permissions":["downloads","storage","proxy","nativeMessaging"]}"#,
+    );
+
+    let mut out = Vec::new();
+    assert!(scan_browser_extensions(root, &mut out, Instant::now()));
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].confidence, "capability");
+    assert!(out[0].proxy_control);
+  }
+
+  #[test]
+  fn scan_confirms_a_known_vpn_whose_name_gives_nothing_away() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(
+      &root
+        .join("Default")
+        .join("Extensions")
+        .join("nlbejmccbhkncgokjcmghpfloaajcffj")
+        .join("10.0.0_0")
+        .join("manifest.json"),
+      r#"{"name":"Hotspot Shield","version":"10.0.0","permissions":["proxy"]}"#,
+    );
+
+    let mut out = Vec::new();
+    assert!(scan_browser_extensions(root, &mut out, Instant::now()));
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].confidence, "confirmed");
   }
 
   #[test]

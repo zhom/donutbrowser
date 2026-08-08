@@ -673,7 +673,22 @@ export interface ConsistencyResult {
   mismatches: string[];
 }
 
-/** A VPN/proxy extension found in a profile, which can reroute browser traffic. */
+/**
+ * How strongly an extension is believed to be a VPN or proxy tool.
+ * "capability" is not such a claim: it means only that the extension holds
+ * Chromium's `proxy` permission, which download managers do too.
+ */
+export type VpnExtensionConfidence = "confirmed" | "likely" | "capability";
+
+/** How much of a profile's extension set could be read. */
+export type ExtensionScanState =
+  | "scanned"
+  | "partial"
+  | "encrypted"
+  | "ephemeral"
+  | "missing";
+
+/** An extension found in a profile that could change where the browser connects. */
 export interface DetectedVpnExtension {
   /** Acknowledgement identity: `donut:<uuid>` or `crx:<id>`. */
   key: string;
@@ -681,15 +696,16 @@ export interface DetectedVpnExtension {
   version: string | null;
   /** "donut" (managed by Donut) or "browser" (installed in the profile). */
   source: string;
-  /** "confirmed" (holds the proxy permission) or "likely". */
-  confidence: string;
+  confidence: VpnExtensionConfidence;
+  /** Holds the `proxy` permission outright, so it can change the proxy today. */
+  proxy_control: boolean;
   signals: string[];
 }
 
 /** Local-only checks answered before a launch starts any worker. */
 export interface PreLaunchChecks {
   vpn_extensions: DetectedVpnExtension[];
-  scan_state: string;
+  scan_state: ExtensionScanState;
   consistency: ConsistencyResult;
   exit_probe_pending: boolean;
   exit_measurement_unreliable: boolean;

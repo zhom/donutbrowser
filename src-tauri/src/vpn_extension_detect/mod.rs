@@ -7,6 +7,11 @@
 //! except Donut cannot observe it from the outside — hence a launch-time
 //! warning rather than a measurement.
 //!
+//! That permission is a capability, not an identity. Chromium exposes no
+//! read-only variant of it, so a download manager replicating the browser's
+//! route for its own transfers declares exactly what a VPN hijacking it
+//! declares. The two are reported as different things — see `rules::classify`.
+//!
 //! Two sources, deliberately both: Donut-managed extensions live in the app's
 //! own store and are handed to Chromium via `--load-extension` from *outside*
 //! the profile directory, while extensions the user installed from the Web
@@ -17,7 +22,7 @@ mod rules;
 
 // `message_placeholder_key`/`lookup_message` are shared with
 // `extension_manager`, which resolves the same placeholders out of a zip.
-use rules::{classify, keyword_hit, manifest_str, signal_labels, signals_from_manifest};
+use rules::{classify, manifest_str, signal_labels, signals_from_manifest, vpn_keyword_hit};
 pub use rules::{lookup_message, message_placeholder_key, DetectedVpnExtension};
 
 use serde::{Deserialize, Serialize};
@@ -90,8 +95,11 @@ fn scan_donut_extensions(profile: &BrowserProfile, out: &mut Vec<DetectedVpnExte
     });
 
     let signals = signals_from_manifest(&manifest);
-    let keyword = keyword_hit(&name, description.as_deref());
-    let Some(confidence) = classify(&signals, keyword) else {
+    let keyword = vpn_keyword_hit(&name, description.as_deref());
+    // A Donut-managed extension is stored under Donut's own uuid, not the Web
+    // Store id the known-VPN list is keyed on, so it is classified on what its
+    // manifest says about itself.
+    let Some(confidence) = classify(None, &signals, keyword) else {
       continue;
     };
 
@@ -101,7 +109,8 @@ fn scan_donut_extensions(profile: &BrowserProfile, out: &mut Vec<DetectedVpnExte
       version: manifest_str(&manifest, "version").or_else(|| ext.version.clone()),
       source: "donut".to_string(),
       confidence: confidence.to_string(),
-      signals: signal_labels(&signals, keyword),
+      proxy_control: signals.proxy_permission,
+      signals: signal_labels(None, &signals, keyword),
     });
   }
 }
@@ -144,9 +153,8 @@ pub fn scan_profile(profile: &BrowserProfile) -> ExtensionScan {
 
   // Collapse only exact duplicates of the same extension. `key` is the real
   // identity (`donut:<uuid>` / `crx:<id>`); name+version is not, and two
-  // distinct extensions sharing a display name would silently fold into one —
-  // dropping a `confirmed` detection would then flip `has_confirmed()` and stop
-  // the gate treating its own exit measurement as unreliable.
+  // distinct extensions sharing a display name would silently fold into one,
+  // hiding a real detection behind an unrelated namesake.
   let mut seen = HashSet::new();
   extensions.retain(|e| seen.insert(e.key.clone()));
 
@@ -156,8 +164,13 @@ pub fn scan_profile(profile: &BrowserProfile) -> ExtensionScan {
   }
 }
 
-/// True when at least one detection is `confirmed` — the extension holds the
-/// `proxy` permission and can actually redirect the browser's traffic.
-pub fn has_confirmed(scan: &ExtensionScan) -> bool {
-  scan.extensions.iter().any(|e| e.confidence == "confirmed")
+/// True when at least one extension holds the `proxy` permission outright, so
+/// it can redirect the browser's traffic without asking for anything further.
+///
+/// Informational: it tells the user an exit measurement may describe a route
+/// the browser will not take. It deliberately does not relax the gate — a
+/// measurement that might be wrong is a reason for more scrutiny, not less,
+/// and this signal is true for every download manager on the machine.
+pub fn has_proxy_control(scan: &ExtensionScan) -> bool {
+  scan.extensions.iter().any(|e| e.proxy_control)
 }

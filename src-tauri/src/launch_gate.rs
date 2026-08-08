@@ -264,23 +264,16 @@ pub async fn enforce_fingerprint_gate(
     return Ok(());
   }
 
-  // Only now is the extension scan worth its disk walk. A confirmed
-  // proxy-permission extension can redirect the browser's traffic away from the
-  // upstream we just measured, so the measurement describes an exit the browser
-  // may not take. Report it, but do not hard-block on a number known to be
-  // unreliable.
-  let measurement_unreliable =
-    vpn_extension_detect::has_confirmed(&vpn_extension_detect::scan_profile(profile));
-
-  if matches!(gate, FingerprintGate::Advisory) || measurement_unreliable {
+  // Automation is the only caller allowed past a measured mismatch, because it
+  // has no dialog to answer. A proxy-capable extension in the profile does NOT
+  // earn the same pass: it makes the measurement less trustworthy, and a route
+  // that might be worse than measured is a reason for more scrutiny, not less.
+  // Waiving the block on it also meant any download manager holding Chromium's
+  // `proxy` permission silently disarmed the gate for good.
+  if matches!(gate, FingerprintGate::Advisory) {
     log::warn!(
-      "Fingerprint gate: {} launching with a {} exit mismatch ({})",
+      "Fingerprint gate: {} launching with a known exit mismatch ({})",
       profile.name,
-      if measurement_unreliable {
-        "unverifiable"
-      } else {
-        "known"
-      },
       result.mismatches.join(", ")
     );
     if let Err(e) = crate::events::emit("fingerprint-consistency-warning", &result) {
@@ -304,8 +297,9 @@ pub struct PreLaunchChecks {
   /// True when the enforcing gate will still probe during the launch, so the
   /// UI can say the check is not finished rather than implying it passed.
   pub exit_probe_pending: bool,
-  /// A confirmed proxy-permission extension is present, so any exit
-  /// measurement describes a route the browser may not take.
+  /// An extension holding the `proxy` permission is present, so any exit
+  /// measurement describes a route the browser may not take. Informational
+  /// only — it never relaxes the block.
   pub exit_measurement_unreliable: bool,
   /// Present only when a cached mismatch is already blocking, so "launch
   /// anyway" can proceed without a second round trip.
@@ -325,6 +319,10 @@ fn load_profile(profile_id: &str) -> Result<BrowserProfile, String> {
 pub async fn get_profile_pre_launch_checks(profile_id: String) -> Result<PreLaunchChecks, String> {
   let profile = load_profile(&profile_id)?;
 
+  // The setting suppresses the extension report entirely, which is safe
+  // precisely because nothing enforcing depends on it: the scan feeds the
+  // dialog's warning and the "measurement may be unreliable" note, never the
+  // decision to block.
   let scan = if extension_warning_disabled() {
     vpn_extension_detect::ExtensionScan {
       extensions: Vec::new(),
@@ -344,7 +342,7 @@ pub async fn get_profile_pre_launch_checks(profile_id: String) -> Result<PreLaun
     })
     .cloned()
     .collect();
-  let exit_measurement_unreliable = vpn_extension_detect::has_confirmed(&scan);
+  let exit_measurement_unreliable = vpn_extension_detect::has_proxy_control(&scan);
 
   let disabled = gate_disabled();
   let key = fingerprint_consistency::exit_cache_key(&profile);

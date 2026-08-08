@@ -409,9 +409,19 @@ export default function Home() {
   // a bulk run enqueues one per profile, and every waiter must settle or the
   // Promise.allSettled below it never resolves and the bulk spinner sticks.
   const gateQueueRef = useRef<
-    Array<{ req: GateRequest; resolve: (decision: GateDecision) => void }>
+    Array<{
+      id: number;
+      req: GateRequest;
+      /// The bulk run this request belongs to, or undefined for a single
+      /// launch. Carried per entry so a blanket "apply to the rest" can only
+      /// ever claim the run its own dialog came from.
+      runId: number | undefined;
+      resolve: (decision: GateDecision) => void;
+    }>
   >([]);
+  const gateRequestSeqRef = useRef(0);
   const [gateState, setGateState] = useState<{
+    id: number;
     req: GateRequest;
     remaining: number;
   } | null>(null);
@@ -993,19 +1003,15 @@ export default function Home() {
     [selectedGroupId, t],
   );
 
-  // Show the queue's head, and how many are waiting behind it.
-  // The backend gate downgrades to advisory rather than blocking when it
-  // cannot trust its own measurement (a confirmed VPN extension can reroute
-  // traffic away from the proxy it just probed), and for unattended launches.
-  // Without a listener that finding was emitted into the void.
+  // Unattended launches — REST and MCP automation — are the only ones the
+  // backend gate lets past a measured mismatch, because there is no dialog for
+  // them to answer. Without a listener that finding was emitted into the void.
   useEffect(() => {
     const unlisten = listen<ConsistencyResult>(
       "fingerprint-consistency-warning",
       (event) => {
         const { exit_timezone, fingerprint_timezone } = event.payload;
         showErrorToast(t("backendErrors.fingerprintExitMismatch"), {
-          // The cause differs by path (an unverifiable measurement vs an
-          // unattended launch), so state the measurement rather than guess.
           description:
             exit_timezone && fingerprint_timezone
               ? t("consistencyWarning.timezoneDetail", {
@@ -1024,11 +1030,12 @@ export default function Home() {
     };
   }, [t]);
 
+  // Show the queue's head, and how many are waiting behind it.
   const syncGateUi = useCallback(() => {
     const queue = gateQueueRef.current;
     setGateState(
       queue.length > 0
-        ? { req: queue[0].req, remaining: queue.length - 1 }
+        ? { id: queue[0].id, req: queue[0].req, remaining: queue.length - 1 }
         : null,
     );
   }, []);
@@ -1053,7 +1060,13 @@ export default function Home() {
         });
       }
       return new Promise<GateDecision>((resolve) => {
-        gateQueueRef.current.push({ req, resolve });
+        gateRequestSeqRef.current += 1;
+        gateQueueRef.current.push({
+          id: gateRequestSeqRef.current,
+          req,
+          runId,
+          resolve,
+        });
         syncGateUi();
       });
     },
@@ -1063,24 +1076,37 @@ export default function Home() {
   const settleGate = useCallback(
     (decision: GateDecision) => {
       const entry = gateQueueRef.current.shift();
-      entry?.resolve(decision);
+      if (!entry) {
+        return;
+      }
+      entry.resolve(decision);
       if (decision.applyToRemaining) {
-        const coversBlocking = entry?.req.findings.fingerprint !== null;
-        blanketGateDecisionRef.current = {
-          decision,
-          coversBlocking,
-          runId: bulkRunIdRef.current,
-        };
+        const coversBlocking = entry.req.findings.fingerprint !== null;
+        // Only a bulk run gets a standing blanket, and it claims the run the
+        // answered dialog belonged to — never whichever run happens to be in
+        // flight when the dialog is settled. Outside a run there is nothing to
+        // scope one to, and a session-wide blanket would silently answer
+        // unrelated launches later. The queue is still drained either way,
+        // which is what the checkbox actually promises.
+        if (entry.runId !== undefined) {
+          blanketGateDecisionRef.current = {
+            decision,
+            coversBlocking,
+            runId: entry.runId,
+          };
+        }
         // Drain the queue rather than leaving promises pending forever — but
         // only those the blanket actually covers. A hard block still deserves
-        // its own dialog even after the user blanket-approved a warning.
+        // its own dialog even after the user blanket-approved a warning, and a
+        // launch started outside this run was never part of the answer.
         const remaining = gateQueueRef.current.splice(0);
-        const kept = remaining.filter(
-          (queued) =>
-            !coversBlocking && queued.req.findings.fingerprint !== null,
-        );
+        const kept = [];
         for (const queued of remaining) {
-          if (kept.includes(queued)) {
+          const covered =
+            queued.runId === entry.runId &&
+            (coversBlocking || queued.req.findings.fingerprint === null);
+          if (!covered) {
+            kept.push(queued);
             continue;
           }
           queued.resolve({
@@ -1167,6 +1193,12 @@ export default function Home() {
       // verdict. No network, no worker started, so a profile whose exit is
       // already known blocks before the launch touches anything.
       let consentToken: string | null = null;
+      // Kept for the tier-2 dialog below: the extensions are the same ones,
+      // and a mismatch measured mid-launch is exactly when knowing that one of
+      // them can change the proxy matters most. Minus anything the user just
+      // acknowledged, so a box they ticked seconds ago is not shown again.
+      let localChecks: PreLaunchChecks | null = null;
+      let ackedExtensionKeys: string[] = [];
       try {
         // One-shot migration of the old per-profile "don't warn again" flag,
         // so a user who already dismissed this profile isn't hard-blocked by
@@ -1188,6 +1220,7 @@ export default function Home() {
           "get_profile_pre_launch_checks",
           { profileId: profile.id },
         );
+        localChecks = checks;
         const blocked =
           checks.consistency.checked && !checks.consistency.consistent;
         if (blocked || checks.vpn_extensions.length > 0) {
@@ -1208,6 +1241,7 @@ export default function Home() {
           if (!decision.proceed) {
             return { status: "cancelled" };
           }
+          ackedExtensionKeys = decision.ackExtensionKeys;
           consentToken = checks.consent_token;
         }
       } catch (err) {
@@ -1234,10 +1268,13 @@ export default function Home() {
             {
               profile,
               findings: {
-                vpnExtensions: [],
-                scanState: "scanned",
+                vpnExtensions: (localChecks?.vpn_extensions ?? []).filter(
+                  (ext) => !ackedExtensionKeys.includes(ext.key),
+                ),
+                scanState: localChecks?.scan_state ?? "scanned",
                 fingerprint: consistencyFromErrorParams(parsed.params),
-                measurementUnreliable: false,
+                measurementUnreliable:
+                  localChecks?.exit_measurement_unreliable ?? false,
                 probePending: false,
               },
             },
@@ -2186,6 +2223,7 @@ export default function Home() {
         isOpen={gateState !== null}
         profileName={gateState?.req.profile.name ?? ""}
         profileId={gateState?.req.profile.id ?? ""}
+        requestId={gateState?.id ?? 0}
         findings={gateState?.req.findings ?? null}
         remainingCount={gateState?.remaining ?? 0}
         onResult={settleGate}

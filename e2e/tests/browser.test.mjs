@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -270,6 +270,78 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       "a consent token is only minted when a cached mismatch is blocking",
     );
 
+    // Extension detection, against manifests written where Chromium puts
+    // them. The three cases are the whole point of the classifier: a real VPN
+    // is named as one, a known VPN with an unrevealing name is caught by its
+    // id, and a download manager holding the same `proxy` permission is
+    // reported as a capability and never as a VPN.
+    // `DONUTBROWSER_DATA_ROOT` puts the data dir at <dataRoot>/data, so this
+    // is app_dirs::profiles_dir() plus the layout Chromium itself uses.
+    const extensionsDir = path.join(
+      app.dataRoot,
+      "data",
+      "profiles",
+      profile.id,
+      "profile",
+      "Default",
+      "Extensions",
+    );
+    const seedExtension = async (id, version, manifest) => {
+      const dir = path.join(extensionsDir, id, `${version}_0`);
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        path.join(dir, "manifest.json"),
+        JSON.stringify(manifest),
+      );
+    };
+    const IDM_ID = "ngpampappnmepgilojfohadhhmbhlaek";
+    const HOTSPOT_SHIELD_ID = "nlbejmccbhkncgokjcmghpfloaajcffj";
+    const NAMED_VPN_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    await seedExtension(IDM_ID, "6.43.1", {
+      name: "IDM Integration Module",
+      version: "6.43.1",
+      description: "Download files with Internet Download Manager",
+      permissions: ["downloads", "storage", "proxy", "nativeMessaging"],
+    });
+    await seedExtension(HOTSPOT_SHIELD_ID, "10.0.0", {
+      name: "Hotspot Shield",
+      version: "10.0.0",
+      permissions: ["proxy"],
+    });
+    await seedExtension(NAMED_VPN_ID, "1.0.0", {
+      name: "Turbo VPN Free",
+      version: "1.0.0",
+      permissions: ["proxy"],
+    });
+
+    const withExtensions = await app.invoke("get_profile_pre_launch_checks", {
+      profileId: profile.id,
+    });
+    const detected = new Map(
+      withExtensions.vpn_extensions.map((item) => [item.key, item]),
+    );
+    assert.equal(detected.size, 3, "every seeded extension must be reported");
+    assert.equal(detected.get(`crx:${NAMED_VPN_ID}`).confidence, "confirmed");
+    assert.equal(
+      detected.get(`crx:${HOTSPOT_SHIELD_ID}`).confidence,
+      "confirmed",
+      "a known VPN id must be named even when its name gives nothing away",
+    );
+    assert.equal(
+      detected.get(`crx:${IDM_ID}`).confidence,
+      "capability",
+      "a download manager holding the proxy permission is not a VPN",
+    );
+    assert.ok(
+      detected.get(`crx:${IDM_ID}`).proxy_control,
+      "it does still hold the permission, which is why it is listed at all",
+    );
+    assert.equal(
+      withExtensions.exit_measurement_unreliable,
+      true,
+      "a proxy-capable extension makes the exit measurement a caveat",
+    );
+
     // Acknowledgements are per-profile and must be accepted for both kinds.
     await app.invoke("ack_launch_gate", {
       profileId: profile.id,
@@ -279,8 +351,16 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     await app.invoke("ack_launch_gate", {
       profileId: profile.id,
       ackFingerprint: true,
-      ackExtensionKeys: [],
+      ackExtensionKeys: [`crx:${IDM_ID}`],
     });
+    const afterAck = await app.invoke("get_profile_pre_launch_checks", {
+      profileId: profile.id,
+    });
+    assert.deepEqual(
+      afterAck.vpn_extensions.map((item) => item.key).sort(),
+      [`crx:${HOTSPOT_SHIELD_ID}`, `crx:${NAMED_VPN_ID}`].sort(),
+      "an acknowledged extension stops being reported, the others do not",
+    );
     assert.match(
       await app.invokeError("get_profile_pre_launch_checks", {
         profileId: "00000000-0000-0000-0000-000000000000",
