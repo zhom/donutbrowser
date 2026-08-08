@@ -1,6 +1,25 @@
 # Changelog
 
 
+## v0.29.1 (2026-08-08)
+
+### Bug Fixes
+
+- prevent settings page from crashing on some systems
+
+### Refactoring
+
+- update logic and locks around vpn extensions
+
+### Maintenance
+
+- chore: linting
+- chore: update pnpm
+- chore: switch to ai-inference v3 and fail workflows on 410
+- chore: version bump
+- chore: update flake.nix for v0.29.0 [skip ci] (#542)
+
+
 ## v0.29.0 (2026-08-08)
 
 ### Features
