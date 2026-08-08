@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: write
-  models: read
+  copilot-requests: write
 
 jobs:
   generate-release-notes:
@@ -79,17 +79,27 @@ jobs:
           echo "commits-file=commits.txt" >> $GITHUB_OUTPUT
           echo "changes-file=changes.txt" >> $GITHUB_OUTPUT
 
+      # The Copilot CLI is not preinstalled on GitHub-hosted runners, and
+      # ai-inference v3 shells out to it.
+      - name: Install Copilot CLI
+        if: steps.get-release.outputs.is-prerelease == 'false'
+        run: npm install -g @github/copilot
+
       - name: Generate release notes with AI
         id: generate-notes
         if: steps.get-release.outputs.is-prerelease == 'false'
-        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
+        uses: actions/ai-inference@2c43c91ae16266ca159d311430343c67a5ffa222 # v3
         with:
           prompt-file: .github/prompts/release-notes.prompt.yml
           input: |
             version: ${{ steps.get-previous-tag.outputs.current-tag }}
           file_input: |
             commits: ./commits.txt
-          max-tokens: 4096
+        env:
+          # The Copilot CLI reads its credential from the environment; the
+          # workflow token carries it under the `copilot-requests` permission
+          # granted above, so no PAT is needed.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update release with generated notes
         if: steps.get-release.outputs.is-prerelease == 'false'

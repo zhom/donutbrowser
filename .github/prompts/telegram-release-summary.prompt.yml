@@ -20,4 +20,9 @@ messages:
       {{commits}}
 
       Format: one short opening sentence, a blank line, then bullets starting with "- " (one per line). Nothing else.
-model: openai/gpt-4.1
+# `auto` lets the Copilot CLI pick. Deliberately not a pinned model id: it is
+# the only value valid on every Copilot plan (Free and Student get auto
+# selection only), and it cannot go stale the way `openai/gpt-4.1` did when
+# GitHub Models was retired on 2026-07-30 and took both of these workflows
+# down with it.
+model: auto

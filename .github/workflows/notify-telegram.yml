@@ -22,7 +22,7 @@ on:
 
 permissions:
   contents: read
-  models: read
+  copilot-requests: write
 
 jobs:
   notify:
@@ -123,17 +123,27 @@ jobs:
           echo "previous-tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
           echo "Collected $(wc -l < commits.txt) commits between ${PREV_TAG} and ${TAG}."
 
+      # The Copilot CLI is not preinstalled on GitHub-hosted runners, and
+      # ai-inference v3 shells out to it.
+      - name: Install Copilot CLI
+        if: steps.gate.outputs.skip != 'true'
+        run: npm install -g @github/copilot
+
       - name: Generate summary with AI
         id: ai
         if: steps.gate.outputs.skip != 'true'
-        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
+        uses: actions/ai-inference@2c43c91ae16266ca159d311430343c67a5ffa222 # v3
         with:
           prompt-file: .github/prompts/telegram-release-summary.prompt.yml
           input: |
             version: ${{ steps.tag.outputs.tag }}
           file_input: |
             commits: ./commits.txt
-          max-tokens: 1024
+        env:
+          # The Copilot CLI reads its credential from the environment; the
+          # workflow token carries it under the `copilot-requests` permission
+          # granted above, so no PAT is needed.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post release announcement to Telegram
         if: steps.gate.outputs.skip != 'true'

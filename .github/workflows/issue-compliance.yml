@@ -96,7 +96,8 @@ jobs:
             -d "$PAYLOAD" || echo "000")
 
           if [ "$STATUS" != "200" ]; then
-            echo "::warning::GitHub Models returned HTTP $STATUS; treating as compliant"
+            echo "::error::GitHub Models returned HTTP $STATUS; treating as compliant"
+            printf '%s\n' "inference call failed with HTTP $STATUS" >> /tmp/ai-degraded
             echo '{"is_compliant": true, "non_compliance_reasons": []}' > /tmp/result.json
             exit 0
           fi
@@ -107,7 +108,8 @@ jobs:
           # to a compliant result so a flaky model never closes a legitimate issue.
           sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
           if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
-            echo "::warning::Model returned non-JSON; treating as compliant"
+            echo "::error::Model returned non-JSON; treating as compliant"
+            printf '%s\n' "model returned output that was not JSON" >> /tmp/ai-degraded
             echo '{"is_compliant": true, "non_compliance_reasons": []}' > /tmp/result.json
           fi
           echo "Compliance response validated"
@@ -145,3 +147,16 @@ jobs:
         run: |
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
           gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason "not planned"
+
+      # The steps above deliberately degrade rather than block: an inference
+      # outage must never close a contributor's issue or flag their pull
+      # request. But a run that skipped the check it exists to perform has not
+      # succeeded, and reporting green hides that the automation is dead.
+      - name: Fail if the AI check did not actually run
+        if: always()
+        run: |
+          if [ -f /tmp/ai-degraded ]; then
+            echo "::error::This check degraded to a no-op and its result was not verified:"
+            sed 's/^/  - /' /tmp/ai-degraded
+            exit 1
+          fi

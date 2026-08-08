@@ -257,7 +257,8 @@ jobs:
           if [ "$STATUS" = "200" ]; then
             jq -r '.choices[0].message.content // empty' /tmp/triage-response.json > /tmp/triage-raw.txt || : > /tmp/triage-raw.txt
           else
-            echo "::warning::GitHub Models returned HTTP $STATUS for triage"
+            echo "::error::GitHub Models returned HTTP $STATUS for triage"
+            printf '%s\n' "triage inference call failed with HTTP $STATUS" >> /tmp/ai-degraded
             : > /tmp/triage-raw.txt
           fi
 
@@ -266,7 +267,8 @@ jobs:
 
           # Fall back to a safe classification when the response is not JSON.
           if ! jq -e . /tmp/triage.json >/dev/null 2>&1; then
-            echo "::warning::Triage returned non-JSON; using fallback classification"
+            echo "::error::Triage returned non-JSON; using fallback classification"
+            printf '%s\n' "triage returned output that was not JSON" >> /tmp/ai-degraded
             jq -n '{
               language: "en",
               classification: "bug-in-scope",
@@ -436,7 +438,8 @@ jobs:
             -d "$PAYLOAD" || echo "000")
 
           if [ "$STATUS" != "200" ]; then
-            echo "::warning::GitHub Models returned HTTP $STATUS; skipping the triage comment"
+            echo "::error::GitHub Models returned HTTP $STATUS; skipping the triage comment"
+            printf '%s\n' "composer inference call failed with HTTP $STATUS" >> /tmp/ai-degraded
             echo "has_comment=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -444,7 +447,8 @@ jobs:
           jq -r '.choices[0].message.content // empty' /tmp/compose-response.json > /tmp/ai-comment.txt || : > /tmp/ai-comment.txt
 
           if [ ! -s /tmp/ai-comment.txt ]; then
-            echo "::warning::Composer returned empty response; skipping the triage comment"
+            echo "::error::Composer returned empty response; skipping the triage comment"
+            printf '%s\n' "composer returned an empty response" >> /tmp/ai-degraded
             echo "has_comment=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -481,6 +485,20 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/ai-comment.txt
+
+
+      # The steps above deliberately degrade rather than block: an inference
+      # outage must never close a contributor's issue or flag their pull
+      # request. But a run that skipped the check it exists to perform has not
+      # succeeded, and reporting green hides that the automation is dead.
+      - name: Fail if the AI check did not actually run
+        if: always()
+        run: |
+          if [ -f /tmp/ai-degraded ]; then
+            echo "::error::This check degraded to a no-op and its result was not verified:"
+            sed 's/^/  - /' /tmp/ai-degraded
+            exit 1
+          fi
 
   analyze-pr:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
@@ -619,7 +637,8 @@ jobs:
             -d "$PAYLOAD" || echo "000")
 
           if [ "$STATUS" != "200" ]; then
-            echo "::warning::GitHub Models returned HTTP $STATUS; skipping the review comment"
+            echo "::error::GitHub Models returned HTTP $STATUS; skipping the review comment"
+            printf '%s\n' "PR review inference call failed with HTTP $STATUS" >> /tmp/ai-degraded
             echo "has_comment=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -627,7 +646,8 @@ jobs:
           jq -r '.choices[0].message.content // empty' /tmp/pr-response.json > /tmp/ai-comment.txt || : > /tmp/ai-comment.txt
 
           if [ ! -s /tmp/ai-comment.txt ]; then
-            echo "::warning::AI response was empty; skipping the review comment"
+            echo "::error::AI response was empty; skipping the review comment"
+            printf '%s\n' "PR review returned an empty response" >> /tmp/ai-degraded
             echo "has_comment=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -641,6 +661,20 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/ai-comment.txt
+
+
+      # The steps above deliberately degrade rather than block: an inference
+      # outage must never close a contributor's issue or flag their pull
+      # request. But a run that skipped the check it exists to perform has not
+      # succeeded, and reporting green hides that the automation is dead.
+      - name: Fail if the AI check did not actually run
+        if: always()
+        run: |
+          if [ -f /tmp/ai-degraded ]; then
+            echo "::error::This check degraded to a no-op and its result was not verified:"
+            sed 's/^/  - /' /tmp/ai-degraded
+            exit 1
+          fi
 
   opencode-command:
     if: |
