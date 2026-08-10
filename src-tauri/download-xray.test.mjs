@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
+  downloadVerifiedArchive,
   downloadXray,
   windowsExtractionInvocation,
   XRAY_ASSETS,
@@ -121,4 +126,59 @@ test("rejects an unsupported target before downloading", async () => {
     downloadXray("riscv64gc-unknown-linux-gnu"),
     /not packaged for Rust target/,
   );
+});
+
+// `constructor`, `__proto__` and friends answer a plain `XRAY_ASSETS[target]`
+// lookup, and `target` picks the path this script writes into src-tauri.
+test("rejects inherited object keys as targets", async () => {
+  for (const target of ["__proto__", "constructor", "toString"]) {
+    await assert.rejects(
+      downloadXray(target),
+      /not packaged for Rust target/,
+      target,
+    );
+  }
+});
+
+async function withStubbedFetch(body, run) {
+  const scratch = mkdtempSync(join(tmpdir(), "donut-xray-test-"));
+  const archive = join(scratch, "Xray-linux-64.zip");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(body);
+  try {
+    await run(archive);
+  } finally {
+    globalThis.fetch = realFetch;
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+test("writes the archive once the pinned digest matches", async () => {
+  const body = Buffer.from("xray archive bytes");
+  const digest = createHash("sha256").update(body).digest("hex");
+
+  await withStubbedFetch(body, async (archive) => {
+    await downloadVerifiedArchive(
+      "https://example.invalid/x.zip",
+      archive,
+      digest,
+    );
+    assert.deepEqual(readFileSync(archive), body);
+  });
+});
+
+// The bytes are hashed in memory and only then written, so a substituted or
+// truncated response never lands on disk for a later step to pick up.
+test("leaves nothing on disk when the payload fails its checksum", async () => {
+  await withStubbedFetch(Buffer.from("tampered"), async (archive) => {
+    await assert.rejects(
+      downloadVerifiedArchive(
+        "https://example.invalid/x.zip",
+        archive,
+        "0".repeat(64),
+      ),
+      /checksum mismatch/,
+    );
+    assert.equal(existsSync(archive), false);
+  });
 });
