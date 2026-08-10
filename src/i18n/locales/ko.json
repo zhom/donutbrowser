@@ -1467,7 +1467,28 @@
     "vpnOptional": "VPN (선택 사항)",
     "noVpn": "VPN 없음",
     "advancedOptions": "고급 옵션",
-    "configureFingerprint": "핑거프린트 구성 (선택 사항)"
+    "configureFingerprint": "핑거프린트 구성 (선택 사항)",
+    "reportCookies": "쿠키",
+    "reportPasswords": "비밀번호",
+    "reportAutofill": "결제 수단",
+    "reportExtensions": "확장 프로그램",
+    "reportHistory": "방문 기록",
+    "reportBookmarks": "북마크",
+    "reportLocalStorage": "사이트 데이터",
+    "reportNothingCarried": "읽을 수 있는 데이터가 이전되지 않았습니다",
+    "reportUnrecoverable": "복호화할 수 없음: {{count}}",
+    "closeSourceBrowserHint": "완전하게 복사하려면 원본 브라우저를 닫고 다시 시도하세요. 사이트 데이터가 불완전할 수 있음을 감수하고 지금 가져올 수도 있습니다.",
+    "importAnyway": "그래도 가져오기",
+    "warnings": {
+      "secretsNotMigrated": "쿠키와 비밀번호를 잠금 해제하지 못해 다시 로그인해야 합니다.",
+      "appBoundEncrypted": "Windows의 Chrome 127 이상은 쿠키를 브라우저 자체에 묶어 두므로 다른 앱에서는 이전할 수 없습니다.",
+      "storeTooOld": "이 브라우저가 열 수 없을 만큼 오래된 데이터베이스가 있어 건너뛰었습니다.",
+      "storeTooNew": "이 브라우저보다 최신 브라우저의 데이터베이스여서 건너뛰었습니다.",
+      "sourceBrowserRunning": "원본 브라우저가 실행 중이어서 사이트 데이터가 불완전할 수 있습니다.",
+      "securePreferencesReset": "홈페이지와 검색 엔진 같은 보호된 설정이 기본값으로 초기화되었습니다.",
+      "extensionsPartial": "일부 확장 프로그램은 원본 브라우저의 것이어서 이전되지 않았습니다.",
+      "storeUnreadable": "읽을 수 없는 데이터베이스가 있어 손상된 채로 복사하지 않고 건너뛰었습니다."
+    }
   },
   "syncTooltips": {
     "syncing": "동기화 중...",
@@ -1914,7 +1935,10 @@
       "malformed": "VLESS URI가 올바르지 않습니다."
     },
     "camoufoxRemoved": "Camoufox는 더 이상 지원되지 않습니다. Wayfern으로 이 프로필을 다시 만드세요.",
-    "noE2ePasswordSet": "종단 간 암호화 비밀번호가 설정되지 않았습니다. 암호화된 데이터를 동기화하기 전에 설정하세요."
+    "noE2ePasswordSet": "종단 간 암호화 비밀번호가 설정되지 않았습니다. 암호화된 데이터를 동기화하기 전에 설정하세요.",
+    "importSourceNotChromium": "이 폴더는 Chromium 브라우저 프로필이 아닙니다",
+    "importSourceNotChromiumNamed": "{{family}} 프로필은 가져올 수 없습니다. Chromium 기반 브라우저만 지원합니다",
+    "importSourceBrowserRunning": "{{browser}}을(를) 먼저 닫거나 그래도 가져오기를 선택하세요"
   },
   "rail": {
     "profiles": "프로필",

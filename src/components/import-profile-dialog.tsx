@@ -53,9 +53,87 @@ import type {
   ImportProfileItem,
   ProfileImportBatchResult,
   ProfileImportProgress,
+  ProfileImportReport,
   WayfernConfig,
 } from "@/types";
 import { RippleButton } from "./ui/ripple";
+
+/**
+ * What an import actually carried, and what it could not.
+ *
+ * The counts matter more than they look: an import that reports zero of
+ * everything is the exact symptom of the bug where copied data landed where
+ * the browser never reads it, and it used to be indistinguishable from success.
+ */
+function ImportReportSummary({ report }: { report: ProfileImportReport }) {
+  const { t } = useTranslation();
+
+  // Label-then-value rather than "{{count}} cookies": it keeps the row scannable
+  // and sidesteps needing correct plural forms in ten languages.
+  const carried = (
+    [
+      ["importProfile.reportCookies", report.cookies_migrated],
+      ["importProfile.reportPasswords", report.passwords_migrated],
+      ["importProfile.reportAutofill", report.payment_methods_migrated],
+      ["importProfile.reportExtensions", report.extensions_migrated],
+      ["importProfile.reportHistory", report.history_entries],
+      ["importProfile.reportBookmarks", report.bookmarks],
+      ["importProfile.reportLocalStorage", report.local_storage_origins],
+    ] as const
+  )
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => `${t(key)} ${count.toLocaleString()}`);
+
+  const unrecoverable =
+    report.cookies_unrecoverable +
+    report.passwords_unrecoverable +
+    report.payment_methods_unrecoverable;
+
+  return (
+    <div className="mt-0.5 space-y-0.5 pl-1 text-xs text-muted-foreground">
+      <p>
+        {carried.length > 0
+          ? carried.join(" · ")
+          : t("importProfile.reportNothingCarried")}
+      </p>
+      {unrecoverable > 0 && (
+        <p>
+          {t("importProfile.reportUnrecoverable", { count: unrecoverable })}
+        </p>
+      )}
+      {report.warnings.map((code) => (
+        <p key={code} className="text-warning-text">
+          {t(`importProfile.warnings.${code}`)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Fold a retry's results back into the batch it came from.
+ *
+ * A retry only resubmits the items that failed, so the previous batch is still
+ * authoritative for every other row. Replacing it wholesale would make the
+ * successful imports disappear from the summary.
+ */
+function mergeImportResults(
+  previous: ProfileImportBatchResult,
+  retry: ProfileImportBatchResult,
+): ProfileImportBatchResult {
+  const byPath = new Map(retry.results.map((item) => [item.source_path, item]));
+  const results = previous.results.map(
+    (item) => byPath.get(item.source_path) ?? item,
+  );
+  const count = (status: string) =>
+    results.filter((item) => item.status === status).length;
+  return {
+    imported_count: count("imported"),
+    skipped_count: count("skipped"),
+    failed_count: count("failed"),
+    results,
+  };
+}
 
 interface ImportProfileDialogProps {
   isOpen: boolean;
@@ -283,69 +361,99 @@ export function ImportProfileDialog({
     }
   };
 
-  const handleImport = useCallback(async () => {
-    if (selectedProfiles.length === 0) {
-      toast.error(t("importProfile.selectAtLeastOne"));
-      return;
-    }
-    if (
-      selectedProfiles.some((p) => !(profileNames[p.path] ?? p.name).trim())
-    ) {
-      toast.error(t("importProfile.emptyNames"));
-      return;
-    }
-
-    const items: ImportProfileItem[] = selectedProfiles.map((p, index) => ({
-      source_path: p.path,
-      browser_type: p.browser,
-      new_profile_name: (profileNames[p.path] ?? p.name).trim(),
-      proxy_id: proxyIdForIndex(index),
-      vpn_id: vpnAssignment === "none" ? null : vpnAssignment,
-    }));
-
-    setCurrentStep("importing");
-    setIsImporting(true);
-    setProgress(null);
-    setResult(null);
-    try {
-      const batchResult = await invoke<ProfileImportBatchResult>(
-        "import_browser_profiles",
-        {
-          items,
-          groupId: selectedGroupId === "none" ? null : selectedGroupId,
-          duplicateStrategy: duplicateStrategy,
-          wayfernConfig,
-        },
-      );
-      setResult(batchResult);
-      toast.success(
-        t("importProfile.resultsSummary", {
-          imported: batchResult.imported_count,
-          skipped: batchResult.skipped_count,
-          failed: batchResult.failed_count,
-        }),
-      );
-      if (batchResult.imported_count > 0 && !reducedMotion) {
-        fireSprinkleConfetti();
+  const handleImport = useCallback(
+    async (allowRunning = false, retryPaths?: ReadonlySet<string>) => {
+      if (selectedProfiles.length === 0) {
+        toast.error(t("importProfile.selectAtLeastOne"));
+        return;
       }
-    } catch (error) {
-      console.error("Failed to import profiles:", error);
-      toast.error(translateBackendError(t, error));
-      setCurrentStep("configure");
-    } finally {
-      setIsImporting(false);
-    }
-  }, [
-    selectedProfiles,
-    profileNames,
-    proxyIdForIndex,
-    vpnAssignment,
-    selectedGroupId,
-    duplicateStrategy,
-    wayfernConfig,
-    reducedMotion,
-    t,
-  ]);
+      if (
+        selectedProfiles.some((p) => !(profileNames[p.path] ?? p.name).trim())
+      ) {
+        toast.error(t("importProfile.emptyNames"));
+        return;
+      }
+
+      // Filter AFTER the map, so a retry keeps the proxy each profile was
+      // originally assigned by the index-based round-robin.
+      const items: ImportProfileItem[] = selectedProfiles
+        .map((p, index) => ({
+          source_path: p.path,
+          browser_type: p.browser,
+          new_profile_name: (profileNames[p.path] ?? p.name).trim(),
+          proxy_id: proxyIdForIndex(index),
+          vpn_id: vpnAssignment === "none" ? null : vpnAssignment,
+          allow_running: allowRunning,
+        }))
+        .filter((item) => !retryPaths || retryPaths.has(item.source_path));
+
+      if (items.length === 0) {
+        return;
+      }
+
+      setCurrentStep("importing");
+      setIsImporting(true);
+      setProgress(null);
+      // A retry covers only the failed subset, so the earlier results are still
+      // the truth for everything else and must not be thrown away.
+      const previous = retryPaths ? result : null;
+      setResult(null);
+      try {
+        const batchResult = await invoke<ProfileImportBatchResult>(
+          "import_browser_profiles",
+          {
+            items,
+            groupId: selectedGroupId === "none" ? null : selectedGroupId,
+            duplicateStrategy: duplicateStrategy,
+            wayfernConfig,
+          },
+        );
+        setResult(
+          previous ? mergeImportResults(previous, batchResult) : batchResult,
+        );
+        toast.success(
+          t("importProfile.resultsSummary", {
+            imported: batchResult.imported_count,
+            skipped: batchResult.skipped_count,
+            failed: batchResult.failed_count,
+          }),
+        );
+        if (batchResult.imported_count > 0 && !reducedMotion) {
+          fireSprinkleConfetti();
+        }
+      } catch (error) {
+        console.error("Failed to import profiles:", error);
+        toast.error(translateBackendError(t, error));
+        setCurrentStep("configure");
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [
+      selectedProfiles,
+      profileNames,
+      proxyIdForIndex,
+      vpnAssignment,
+      selectedGroupId,
+      duplicateStrategy,
+      wayfernConfig,
+      reducedMotion,
+      result,
+      t,
+    ],
+  );
+
+  // A source browser that is still running is the one failure the user can fix
+  // without starting over, so offer the override right where it happened.
+  const hasRunningBrowserFailure = useMemo(
+    () =>
+      (result?.results ?? []).some(
+        (item) =>
+          item.status === "failed" &&
+          item.error?.includes("IMPORT_SOURCE_BROWSER_RUNNING"),
+      ),
+    [result],
+  );
 
   const handleClose = () => {
     void cleanupExtractedDir(extractedDir);
@@ -840,38 +948,74 @@ export function ImportProfileDialog({
                     </h3>
                     <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
                       {result.results.map((item) => (
-                        <div
-                          key={item.source_path}
-                          className="flex items-center gap-2 p-1 text-sm"
-                        >
-                          <span
-                            className={cn(
-                              "shrink-0 text-xs font-medium",
-                              item.status === "imported" && "text-success-text",
-                              item.status === "skipped" &&
-                                "text-muted-foreground",
-                              item.status === "failed" &&
-                                "text-destructive-text",
-                            )}
-                          >
-                            {item.status === "imported" &&
-                              t("importProfile.statusImported")}
-                            {item.status === "skipped" &&
-                              t("importProfile.statusSkipped")}
-                            {item.status === "failed" &&
-                              t("importProfile.statusFailed")}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">
-                            {item.name || item.source_path}
-                          </span>
-                          {item.error && (
-                            <span className="min-w-0 flex-1 truncate text-xs text-destructive-text">
-                              {translateBackendError(t, new Error(item.error))}
+                        <div key={item.source_path} className="p-1 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "shrink-0 text-xs font-medium",
+                                item.status === "imported" &&
+                                  "text-success-text",
+                                item.status === "skipped" &&
+                                  "text-muted-foreground",
+                                item.status === "failed" &&
+                                  "text-destructive-text",
+                              )}
+                            >
+                              {item.status === "imported" &&
+                                t("importProfile.statusImported")}
+                              {item.status === "skipped" &&
+                                t("importProfile.statusSkipped")}
+                              {item.status === "failed" &&
+                                t("importProfile.statusFailed")}
                             </span>
+                            <span className="min-w-0 flex-1 truncate">
+                              {item.name || item.source_path}
+                            </span>
+                            {item.error && (
+                              <span className="min-w-0 flex-1 truncate text-xs text-destructive-text">
+                                {translateBackendError(
+                                  t,
+                                  new Error(item.error),
+                                )}
+                              </span>
+                            )}
+                          </div>
+                          {item.report && (
+                            <ImportReportSummary report={item.report} />
                           )}
                         </div>
                       ))}
                     </div>
+
+                    {hasRunningBrowserFailure && (
+                      <Alert>
+                        <AlertDescription className="space-y-2">
+                          <p>{t("importProfile.closeSourceBrowserHint")}</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              void handleImport(
+                                true,
+                                new Set(
+                                  result.results
+                                    .filter(
+                                      (item) =>
+                                        item.status === "failed" &&
+                                        item.error?.includes(
+                                          "IMPORT_SOURCE_BROWSER_RUNNING",
+                                        ),
+                                    )
+                                    .map((item) => item.source_path),
+                                ),
+                              );
+                            }}
+                          >
+                            {t("importProfile.importAnyway")}
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 )}
               </div>

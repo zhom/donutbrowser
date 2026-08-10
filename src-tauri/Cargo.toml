@@ -119,9 +119,15 @@ nix = { version = "0.31", features = ["signal", "process"] }
 # Reading the desktop's titlebar button layout for the in-app window controls.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# Reading the source browser's "<Brand> Safe Storage" secret during profile
+# import, so its cookies and passwords can be re-encrypted for Wayfern.
+secret-service = { version = "5", default-features = false, features = ["rt-tokio-crypto-rust"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+# Reading the source browser's "<Brand> Safe Storage" Keychain item during
+# profile import, so its cookies and passwords can be re-encrypted for Wayfern.
+security-framework = "3"
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }
 
@@ -138,6 +144,9 @@ windows = { version = "0.62", features = [
   "Win32_Storage_FileSystem",
   "Win32_System_Registry",
   "Win32_UI_Shell",
+  # CryptUnprotectData, for unwrapping the source browser's os_crypt key from
+  # `Local State` during profile import.
+  "Win32_Security_Cryptography",
 ] }
 
 [dev-dependencies]

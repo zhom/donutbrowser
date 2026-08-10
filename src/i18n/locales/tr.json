@@ -1467,7 +1467,28 @@
     "vpnOptional": "VPN (isteğe bağlı)",
     "noVpn": "VPN yok",
     "advancedOptions": "Gelişmiş seçenekler",
-    "configureFingerprint": "Parmak izini yapılandır (isteğe bağlı)"
+    "configureFingerprint": "Parmak izini yapılandır (isteğe bağlı)",
+    "reportCookies": "Çerezler",
+    "reportPasswords": "Parolalar",
+    "reportAutofill": "Ödeme yöntemleri",
+    "reportExtensions": "Uzantılar",
+    "reportHistory": "Geçmiş",
+    "reportBookmarks": "Yer imleri",
+    "reportLocalStorage": "Site verileri",
+    "reportNothingCarried": "Okunabilir hiçbir veri aktarılmadı",
+    "reportUnrecoverable": "Şifresi çözülemedi: {{count}}",
+    "closeSourceBrowserHint": "Tam bir kopya için kaynak tarayıcıyı kapatıp yeniden deneyin ya da site verilerinin eksik olabileceğini kabul ederek şimdi içe aktarın.",
+    "importAnyway": "Yine de içe aktar",
+    "warnings": {
+      "secretsNotMigrated": "Çerezlerin ve parolaların kilidi açılamadı, bu yüzden yeniden oturum açmanız gerekecek.",
+      "appBoundEncrypted": "Windows'ta Chrome 127+ çerezleri tarayıcının kendisine bağlar; başka hiçbir uygulama bunları taşıyamaz.",
+      "storeTooOld": "Bir veritabanı bu tarayıcının açamayacağı kadar eskiydi ve atlandı.",
+      "storeTooNew": "Bir veritabanı bundan daha yeni bir tarayıcıdan geldi ve atlandı.",
+      "sourceBrowserRunning": "Kaynak tarayıcı çalışıyordu, bu yüzden site verileri eksik olabilir.",
+      "securePreferencesReset": "Ana sayfa ve arama motoru gibi korumalı ayarlar varsayılana döndü.",
+      "extensionsPartial": "Bazı uzantılar kaynak tarayıcıya aitti ve aktarılmadı.",
+      "storeUnreadable": "Bir veritabanı okunamadı ve bozuk şekilde kopyalanmak yerine atlandı."
+    }
   },
   "syncTooltips": {
     "syncing": "Eşitleniyor...",
@@ -1914,7 +1935,10 @@
       "malformed": "VLESS URI'si geçersiz."
     },
     "camoufoxRemoved": "Camoufox artık desteklenmiyor. Bu profili Wayfern ile yeniden oluşturun.",
-    "noE2ePasswordSet": "Uçtan uca şifreleme parolası ayarlanmamış. Şifreli veriyi eşitlemeden önce bir parola belirleyin."
+    "noE2ePasswordSet": "Uçtan uca şifreleme parolası ayarlanmamış. Şifreli veriyi eşitlemeden önce bir parola belirleyin.",
+    "importSourceNotChromium": "Bu klasör bir Chromium tarayıcı profili değil",
+    "importSourceNotChromiumNamed": "{{family}} profilleri içe aktarılamaz; yalnızca Chromium tabanlı tarayıcılar desteklenir",
+    "importSourceBrowserRunning": "Önce {{browser}} uygulamasını kapatın veya yine de içe aktarmayı seçin"
   },
   "rail": {
     "profiles": "Profiller",

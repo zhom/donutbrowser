@@ -1856,7 +1856,15 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "num",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "num-bigint",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "num-complex",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -1869,6 +1877,10 @@
   },
   {
     "name": "num-integer",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "num-iter",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -2405,6 +2417,10 @@
   },
   {
     "name": "sealed",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "secret-service",
     "license": "Apache-2.0 OR MIT"
   },
   {

@@ -1467,7 +1467,28 @@
     "vpnOptional": "VPN(可选)",
     "noVpn": "不使用 VPN",
     "advancedOptions": "高级选项",
-    "configureFingerprint": "配置指纹(可选)"
+    "configureFingerprint": "配置指纹(可选)",
+    "reportCookies": "Cookie",
+    "reportPasswords": "密码",
+    "reportAutofill": "付款方式",
+    "reportExtensions": "扩展程序",
+    "reportHistory": "历史记录",
+    "reportBookmarks": "书签",
+    "reportLocalStorage": "网站数据",
+    "reportNothingCarried": "没有可读取的数据被迁移",
+    "reportUnrecoverable": "无法解密：{{count}}",
+    "closeSourceBrowserHint": "关闭源浏览器后重试可获得完整副本；也可以现在导入，但网站数据可能不完整。",
+    "importAnyway": "仍要导入",
+    "warnings": {
+      "secretsNotMigrated": "无法解锁 Cookie 和密码，你需要重新登录。",
+      "appBoundEncrypted": "Windows 上的 Chrome 127+ 会把 Cookie 绑定到浏览器本身，其他任何应用都无法迁移。",
+      "storeTooOld": "某个数据库过旧，此浏览器无法打开，已跳过。",
+      "storeTooNew": "某个数据库来自更新版本的浏览器，已跳过。",
+      "sourceBrowserRunning": "源浏览器正在运行，网站数据可能不完整。",
+      "securePreferencesReset": "主页、搜索引擎等受保护的设置已恢复为默认值。",
+      "extensionsPartial": "部分扩展属于源浏览器，未被迁移。",
+      "storeUnreadable": "某个数据库无法读取，已跳过而不是复制损坏的副本。"
+    }
   },
   "syncTooltips": {
     "syncing": "同步中...",
@@ -1914,7 +1935,10 @@
       "malformed": "VLESS URI 无效。"
     },
     "camoufoxRemoved": "Camoufox 已不再受支持。请使用 Wayfern 重新创建此配置文件。",
-    "noE2ePasswordSet": "尚未设置端到端加密密码。请先设置后再同步加密数据。"
+    "noE2ePasswordSet": "尚未设置端到端加密密码。请先设置后再同步加密数据。",
+    "importSourceNotChromium": "该文件夹不是 Chromium 浏览器配置文件",
+    "importSourceNotChromiumNamed": "无法导入 {{family}} 配置文件；仅支持基于 Chromium 的浏览器",
+    "importSourceBrowserRunning": "请先关闭 {{browser}}，或选择仍要导入"
   },
   "rail": {
     "profiles": "配置文件",

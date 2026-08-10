@@ -80,6 +80,7 @@ mod launch_gate_prefs;
 mod log_redaction;
 mod platform_browser;
 mod profile;
+mod profile_import;
 mod profile_importer;
 mod proxy_manager;
 pub mod proxy_runner;

@@ -721,12 +721,10 @@ impl WayfernManager {
       };
 
       if key_path.exists() {
-        let key_text = std::fs::read_to_string(&key_path).unwrap_or_default();
-        log::info!(
-          "Pre-launch: os_crypt_key present ({} bytes, content: '{}')",
-          key_text.len(),
-          key_text.trim()
-        );
+        // Length only. The contents are the profile's encryption key, and this
+        // log is the first thing a user attaches to a bug report.
+        let key_len = std::fs::metadata(&key_path).map(|m| m.len()).unwrap_or(0);
+        log::info!("Pre-launch: os_crypt_key present ({key_len} bytes)");
       } else {
         log::warn!("Pre-launch: os_crypt_key NOT FOUND");
       }

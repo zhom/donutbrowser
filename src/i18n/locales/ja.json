@@ -1467,7 +1467,28 @@
     "vpnOptional": "VPN(任意)",
     "noVpn": "VPNなし",
     "advancedOptions": "詳細オプション",
-    "configureFingerprint": "フィンガープリントを設定(任意)"
+    "configureFingerprint": "フィンガープリントを設定(任意)",
+    "reportCookies": "Cookie",
+    "reportPasswords": "パスワード",
+    "reportAutofill": "お支払い方法",
+    "reportExtensions": "拡張機能",
+    "reportHistory": "履歴",
+    "reportBookmarks": "ブックマーク",
+    "reportLocalStorage": "サイトデータ",
+    "reportNothingCarried": "読み取り可能なデータは引き継がれませんでした",
+    "reportUnrecoverable": "復号できませんでした: {{count}}",
+    "closeSourceBrowserHint": "完全にコピーするには、元のブラウザーを閉じてからもう一度お試しください。サイトデータが不完全になることを承知のうえで、このままインポートすることもできます。",
+    "importAnyway": "このままインポート",
+    "warnings": {
+      "secretsNotMigrated": "Cookie とパスワードのロックを解除できなかったため、再度サインインが必要です。",
+      "appBoundEncrypted": "Windows の Chrome 127 以降は Cookie をブラウザー自体に紐付けるため、他のアプリからは移行できません。",
+      "storeTooOld": "このブラウザーでは開けない古いデータベースがあったため、スキップしました。",
+      "storeTooNew": "このブラウザーより新しいブラウザーのデータベースだったため、スキップしました。",
+      "sourceBrowserRunning": "元のブラウザーが実行中だったため、サイトデータが不完全な可能性があります。",
+      "securePreferencesReset": "ホームページや検索エンジンなど、保護された設定は既定値に戻りました。",
+      "extensionsPartial": "一部の拡張機能は元のブラウザー付属のもので、引き継がれませんでした。",
+      "storeUnreadable": "読み取れないデータベースがあったため、破損したままコピーせずスキップしました。"
+    }
   },
   "syncTooltips": {
     "syncing": "同期中...",
@@ -1914,7 +1935,10 @@
       "malformed": "VLESS URIが無効です。"
     },
     "camoufoxRemoved": "Camoufoxはサポートされなくなりました。Wayfernでこのプロファイルを作り直してください。",
-    "noE2ePasswordSet": "エンドツーエンド暗号化のパスワードが設定されていません。暗号化データを同期する前に設定してください。"
+    "noE2ePasswordSet": "エンドツーエンド暗号化のパスワードが設定されていません。暗号化データを同期する前に設定してください。",
+    "importSourceNotChromium": "このフォルダーは Chromium ブラウザーのプロファイルではありません",
+    "importSourceNotChromiumNamed": "{{family}} のプロファイルはインポートできません。Chromium 系ブラウザーのみ対応しています",
+    "importSourceBrowserRunning": "先に {{browser}} を閉じるか、このままインポートを選択してください"
   },
   "rail": {
     "profiles": "プロファイル",

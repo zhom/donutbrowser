@@ -1471,7 +1471,28 @@
     "vpnOptional": "VPN (opcional)",
     "noVpn": "Sem VPN",
     "advancedOptions": "Opções avançadas",
-    "configureFingerprint": "Configurar impressão digital (opcional)"
+    "configureFingerprint": "Configurar impressão digital (opcional)",
+    "reportCookies": "Cookies",
+    "reportPasswords": "Senhas",
+    "reportAutofill": "Formas de pagamento",
+    "reportExtensions": "Extensões",
+    "reportHistory": "Histórico",
+    "reportBookmarks": "Favoritos",
+    "reportLocalStorage": "Dados de sites",
+    "reportNothingCarried": "Nenhum dado legível foi transferido",
+    "reportUnrecoverable": "Não foi possível descriptografar: {{count}}",
+    "closeSourceBrowserHint": "Feche o navegador de origem e tente de novo para obter uma cópia completa, ou importe agora aceitando que os dados de sites podem ficar incompletos.",
+    "importAnyway": "Importar mesmo assim",
+    "warnings": {
+      "secretsNotMigrated": "Não foi possível desbloquear cookies e senhas, então você precisará entrar novamente.",
+      "appBoundEncrypted": "O Chrome 127+ no Windows vincula os cookies ao próprio navegador; nenhum outro aplicativo consegue migrá-los.",
+      "storeTooOld": "Um banco de dados era antigo demais para este navegador e foi ignorado.",
+      "storeTooNew": "Um banco de dados veio de um navegador mais novo que este e foi ignorado.",
+      "sourceBrowserRunning": "O navegador de origem estava aberto, então os dados de sites podem estar incompletos.",
+      "securePreferencesReset": "Configurações protegidas, como página inicial e mecanismo de busca, voltaram ao padrão.",
+      "extensionsPartial": "Algumas extensões pertenciam ao navegador de origem e não foram transferidas.",
+      "storeUnreadable": "Não foi possível ler um banco de dados, que foi ignorado em vez de copiado danificado."
+    }
   },
   "syncTooltips": {
     "syncing": "Sincronizando...",
@@ -1921,7 +1942,10 @@
       "malformed": "A URI VLESS é inválida."
     },
     "camoufoxRemoved": "O Camoufox não é mais compatível. Recrie este perfil com o Wayfern.",
-    "noE2ePasswordSet": "Nenhuma senha de criptografia de ponta a ponta foi definida. Defina uma antes de sincronizar dados criptografados."
+    "noE2ePasswordSet": "Nenhuma senha de criptografia de ponta a ponta foi definida. Defina uma antes de sincronizar dados criptografados.",
+    "importSourceNotChromium": "Esta pasta não é um perfil de navegador Chromium",
+    "importSourceNotChromiumNamed": "Perfis do {{family}} não podem ser importados; apenas navegadores baseados em Chromium são compatíveis",
+    "importSourceBrowserRunning": "Feche o {{browser}} primeiro ou escolha importar mesmo assim"
   },
   "rail": {
     "profiles": "Perfis",

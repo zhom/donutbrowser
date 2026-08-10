@@ -9,6 +9,7 @@ use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
+use crate::profile_import::report::ProfileImportReport;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
 
@@ -28,6 +29,9 @@ pub struct DetectedProfile {
 #[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct ImportProfileItem {
   pub source_path: String,
+  /// The source browser family (`chromium`, `brave`, `edge`, …). Load-bearing:
+  /// it selects which Keychain / secret-service item holds the key that
+  /// unlocks the source's cookies and passwords.
   #[serde(default = "default_import_browser_type")]
   pub browser_type: String,
   pub new_profile_name: String,
@@ -35,6 +39,10 @@ pub struct ImportProfileItem {
   pub proxy_id: Option<String>,
   #[serde(default)]
   pub vpn_id: Option<String>,
+  /// Import even though the source browser is running. Databases are still
+  /// snapshotted consistently, but LevelDB site data may be mid-write.
+  #[serde(default)]
+  pub allow_running: Option<bool>,
 }
 
 fn default_import_browser_type() -> String {
@@ -61,6 +69,8 @@ pub struct ProfileImportItemResult {
   pub profile_id: Option<String>,
   /// Structured `{"code": …}` error string when status is "failed".
   pub error: Option<String>,
+  /// What actually came across. Present when status is "imported".
+  pub report: Option<ProfileImportReport>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
@@ -719,6 +729,7 @@ impl ProfileImporter {
           status: "failed".to_string(),
           profile_id: None,
           error: Some(serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" }).to_string()),
+          report: None,
         });
         continue;
       }
@@ -735,6 +746,7 @@ impl ProfileImporter {
               status: "skipped".to_string(),
               profile_id: None,
               error: None,
+              report: None,
             });
             continue;
           }
@@ -757,10 +769,11 @@ impl ProfileImporter {
           item.vpn_id.clone(),
           group_id.clone(),
           wayfern_config.clone(),
+          item.allow_running.unwrap_or(false),
         )
         .await
       {
-        Ok(profile) => {
+        Ok((profile, report)) => {
           imported_count += 1;
           completed += 1;
           emit_import_progress(total, completed, index, &final_name, "imported");
@@ -771,6 +784,7 @@ impl ProfileImporter {
             status: "imported".to_string(),
             profile_id: Some(profile.id.to_string()),
             error: None,
+            report: Some(report),
           });
         }
         Err(e) => {
@@ -785,6 +799,7 @@ impl ProfileImporter {
             status: "failed".to_string(),
             profile_id: None,
             error: Some(error_to_code_string(e)),
+            report: None,
           });
         }
       }
@@ -809,7 +824,8 @@ impl ProfileImporter {
     vpn_id: Option<String>,
     group_id: Option<String>,
     wayfern_config: Option<WayfernConfig>,
-  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    allow_running: bool,
+  ) -> Result<(BrowserProfile, ProfileImportReport), Box<dyn std::error::Error>> {
     let source_path = Path::new(source_path);
     if !source_path.exists() {
       return Err(
@@ -847,39 +863,54 @@ impl ProfileImporter {
     create_dir_all(&new_profile_uuid_dir)?;
     create_dir_all(&new_profile_data_dir)?;
 
-    // Profile dirs can be multiple GB — keep the copy off the async runtime.
-    let copy_source = source_path.to_path_buf();
-    let copy_dest = new_profile_data_dir.clone();
-    let copy_result = match tokio::task::spawn_blocking(move || {
-      Self::copy_directory_recursive(&copy_source, &copy_dest).map_err(|e| e.to_string())
+    // Profile dirs can be multiple GB and the migration hits SQLite and the
+    // OS keyring — keep all of it off the async runtime.
+    let migrate_source = source_path.to_path_buf();
+    let migrate_dest = new_profile_data_dir.clone();
+    let source_family = browser_type.to_string();
+    let migrate_result = match tokio::task::spawn_blocking(move || {
+      crate::profile_import::import_into(
+        &migrate_source,
+        &migrate_dest,
+        &source_family,
+        allow_running,
+      )
     })
     .await
     {
       Ok(r) => r,
       Err(e) => {
-        // The copy task died (panic, or runtime shutdown mid-import). Clean up
-        // like every other error path here, or the half-copied — possibly
-        // multi-GB — directory is orphaned with no metadata pointing at it, so
-        // nothing ever reclaims it.
+        // The task died (panic, or runtime shutdown mid-import). Clean up like
+        // every other error path here, or the half-copied — possibly multi-GB
+        // — directory is orphaned with no metadata pointing at it, so nothing
+        // ever reclaims it.
         let _ = fs::remove_dir_all(&new_profile_uuid_dir);
         return Err(
           serde_json::json!({
             "code": "INTERNAL_ERROR",
-            "params": { "detail": format!("Profile copy task failed: {e}") },
+            "params": { "detail": format!("Profile import task failed: {e}") },
           })
           .to_string()
           .into(),
         );
       }
     };
-    if let Err(e) = copy_result {
-      let _ = fs::remove_dir_all(&new_profile_uuid_dir);
-      return Err(
-        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e } })
-          .to_string()
-          .into(),
-      );
-    }
+    let report = match migrate_result {
+      Ok(report) => report,
+      Err(e) => {
+        let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+        // Structured codes (an unimportable source, a running browser) pass
+        // through so the frontend can translate them; anything else is
+        // internal.
+        return Err(if e.starts_with('{') {
+          e.into()
+        } else {
+          serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e } })
+            .to_string()
+            .into()
+        });
+      }
+    };
 
     let version = match self.get_default_version_for_browser(mapped) {
       Ok(version) => version,
@@ -1017,13 +1048,30 @@ impl ProfileImporter {
 
     self.profile_manager.save_profile(&profile)?;
 
-    log::info!(
-      "Successfully imported profile '{}' from '{}'",
-      new_profile_name,
-      source_path.display()
-    );
+    if report.is_empty_import() {
+      // Not an error — an empty source profile imports legitimately — but it is
+      // the exact symptom the old layout bug produced, so it is worth a loud
+      // line in the log rather than a silent success.
+      log::warn!(
+        "Imported profile '{}' from '{}' carried no readable data (warnings: {:?})",
+        new_profile_name,
+        source_path.display(),
+        report.warnings
+      );
+    } else {
+      log::info!(
+        "Imported profile '{}' from '{}': {} cookies, {} passwords, {} history entries ({} unrecoverable secrets, warnings: {:?})",
+        new_profile_name,
+        source_path.display(),
+        report.cookies_migrated,
+        report.passwords_migrated,
+        report.history_entries,
+        report.cookies_unrecoverable + report.passwords_unrecoverable,
+        report.warnings
+      );
+    }
 
-    Ok(profile)
+    Ok((profile, report))
   }
 
   fn get_default_version_for_browser(

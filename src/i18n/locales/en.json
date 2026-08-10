@@ -1467,7 +1467,28 @@
     "vpnOptional": "VPN (Optional)",
     "noVpn": "No VPN",
     "advancedOptions": "Advanced options",
-    "configureFingerprint": "Configure fingerprint (optional)"
+    "configureFingerprint": "Configure fingerprint (optional)",
+    "reportCookies": "Cookies",
+    "reportPasswords": "Passwords",
+    "reportAutofill": "Payment methods",
+    "reportExtensions": "Extensions",
+    "reportHistory": "History",
+    "reportBookmarks": "Bookmarks",
+    "reportLocalStorage": "Site data",
+    "reportNothingCarried": "No readable data was carried over",
+    "reportUnrecoverable": "Could not be decrypted: {{count}}",
+    "closeSourceBrowserHint": "Close the source browser and try again for a complete copy, or import now and accept that site data may be incomplete.",
+    "importAnyway": "Import anyway",
+    "warnings": {
+      "secretsNotMigrated": "Cookies and passwords could not be unlocked, so you will need to sign in again.",
+      "appBoundEncrypted": "Chrome 127+ on Windows locks cookies to the browser itself; those cookies cannot be migrated by any other app.",
+      "storeTooOld": "A database was too old for this browser to open and was skipped.",
+      "storeTooNew": "A database came from a newer browser than this one and was skipped.",
+      "sourceBrowserRunning": "The source browser was running, so site data may be incomplete.",
+      "securePreferencesReset": "Protected settings such as the homepage and search engine reset to defaults.",
+      "extensionsPartial": "Some extensions belonged to the source browser and were not carried over.",
+      "storeUnreadable": "A database could not be read and was skipped rather than copied damaged."
+    }
   },
   "syncTooltips": {
     "syncing": "Syncing...",
@@ -1914,7 +1935,10 @@
       "malformed": "The VLESS URI is invalid."
     },
     "camoufoxRemoved": "Camoufox is no longer supported. Recreate this profile with Wayfern.",
-    "noE2ePasswordSet": "No end-to-end encryption password is set. Set one before syncing encrypted data."
+    "noE2ePasswordSet": "No end-to-end encryption password is set. Set one before syncing encrypted data.",
+    "importSourceNotChromium": "This folder is not a Chromium browser profile",
+    "importSourceNotChromiumNamed": "{{family}} profiles cannot be imported; only Chromium-based browsers are supported",
+    "importSourceBrowserRunning": "Close {{browser}} first, or choose to import anyway"
   },
   "rail": {
     "profiles": "Profiles",

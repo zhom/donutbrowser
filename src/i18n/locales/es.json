@@ -1471,7 +1471,28 @@
     "vpnOptional": "VPN (opcional)",
     "noVpn": "Sin VPN",
     "advancedOptions": "Opciones avanzadas",
-    "configureFingerprint": "Configurar huella digital (opcional)"
+    "configureFingerprint": "Configurar huella digital (opcional)",
+    "reportCookies": "Cookies",
+    "reportPasswords": "Contraseñas",
+    "reportAutofill": "Métodos de pago",
+    "reportExtensions": "Extensiones",
+    "reportHistory": "Historial",
+    "reportBookmarks": "Marcadores",
+    "reportLocalStorage": "Datos de sitios",
+    "reportNothingCarried": "No se transfirió ningún dato legible",
+    "reportUnrecoverable": "No se pudo descifrar: {{count}}",
+    "closeSourceBrowserHint": "Cierra el navegador de origen y vuelve a intentarlo para obtener una copia completa, o importa ahora aceptando que los datos de sitios pueden quedar incompletos.",
+    "importAnyway": "Importar de todos modos",
+    "warnings": {
+      "secretsNotMigrated": "No se pudieron desbloquear las cookies ni las contraseñas, así que tendrás que iniciar sesión de nuevo.",
+      "appBoundEncrypted": "Chrome 127+ en Windows vincula las cookies al propio navegador; ninguna otra aplicación puede migrarlas.",
+      "storeTooOld": "Una base de datos era demasiado antigua para este navegador y se omitió.",
+      "storeTooNew": "Una base de datos procede de un navegador más reciente que este y se omitió.",
+      "sourceBrowserRunning": "El navegador de origen estaba en ejecución, por lo que los datos de sitios pueden estar incompletos.",
+      "securePreferencesReset": "Los ajustes protegidos, como la página de inicio y el buscador, volvieron a sus valores predeterminados.",
+      "extensionsPartial": "Algunas extensiones pertenecían al navegador de origen y no se transfirieron.",
+      "storeUnreadable": "No se pudo leer una base de datos y se omitió en lugar de copiarla dañada."
+    }
   },
   "syncTooltips": {
     "syncing": "Sincronizando...",
@@ -1921,7 +1942,10 @@
       "malformed": "La URI VLESS no es válida."
     },
     "camoufoxRemoved": "Camoufox ya no es compatible. Vuelve a crear este perfil con Wayfern.",
-    "noE2ePasswordSet": "No hay contraseña de cifrado de extremo a extremo. Establece una antes de sincronizar datos cifrados."
+    "noE2ePasswordSet": "No hay contraseña de cifrado de extremo a extremo. Establece una antes de sincronizar datos cifrados.",
+    "importSourceNotChromium": "Esta carpeta no es un perfil de navegador Chromium",
+    "importSourceNotChromiumNamed": "Los perfiles de {{family}} no se pueden importar; solo se admiten navegadores basados en Chromium",
+    "importSourceBrowserRunning": "Cierra {{browser}} primero o elige importar de todos modos"
   },
   "rail": {
     "profiles": "Perfiles",

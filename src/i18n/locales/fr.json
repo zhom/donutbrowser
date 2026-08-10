@@ -1471,7 +1471,28 @@
     "vpnOptional": "VPN (facultatif)",
     "noVpn": "Sans VPN",
     "advancedOptions": "Options avancées",
-    "configureFingerprint": "Configurer l'empreinte (facultatif)"
+    "configureFingerprint": "Configurer l'empreinte (facultatif)",
+    "reportCookies": "Cookies",
+    "reportPasswords": "Mots de passe",
+    "reportAutofill": "Moyens de paiement",
+    "reportExtensions": "Extensions",
+    "reportHistory": "Historique",
+    "reportBookmarks": "Favoris",
+    "reportLocalStorage": "Données de sites",
+    "reportNothingCarried": "Aucune donnée lisible n'a été transférée",
+    "reportUnrecoverable": "Déchiffrement impossible : {{count}}",
+    "closeSourceBrowserHint": "Fermez le navigateur source et réessayez pour obtenir une copie complète, ou importez maintenant en acceptant que les données de sites soient incomplètes.",
+    "importAnyway": "Importer quand même",
+    "warnings": {
+      "secretsNotMigrated": "Les cookies et les mots de passe n'ont pas pu être déverrouillés : vous devrez vous reconnecter.",
+      "appBoundEncrypted": "Chrome 127+ sous Windows lie les cookies au navigateur lui-même ; aucune autre application ne peut les migrer.",
+      "storeTooOld": "Une base de données était trop ancienne pour ce navigateur et a été ignorée.",
+      "storeTooNew": "Une base de données provient d'un navigateur plus récent que celui-ci et a été ignorée.",
+      "sourceBrowserRunning": "Le navigateur source était en cours d'exécution, les données de sites peuvent donc être incomplètes.",
+      "securePreferencesReset": "Les réglages protégés, comme la page d'accueil et le moteur de recherche, sont revenus aux valeurs par défaut.",
+      "extensionsPartial": "Certaines extensions appartenaient au navigateur source et n'ont pas été transférées.",
+      "storeUnreadable": "Une base de données n'a pas pu être lue et a été ignorée plutôt que copiée endommagée."
+    }
   },
   "syncTooltips": {
     "syncing": "Synchronisation...",
@@ -1921,7 +1942,10 @@
       "malformed": "L'URI VLESS n'est pas valide."
     },
     "camoufoxRemoved": "Camoufox n'est plus pris en charge. Recréez ce profil avec Wayfern.",
-    "noE2ePasswordSet": "Aucun mot de passe de chiffrement de bout en bout n'est défini. Définissez-en un avant de synchroniser des données chiffrées."
+    "noE2ePasswordSet": "Aucun mot de passe de chiffrement de bout en bout n'est défini. Définissez-en un avant de synchroniser des données chiffrées.",
+    "importSourceNotChromium": "Ce dossier n'est pas un profil de navigateur Chromium",
+    "importSourceNotChromiumNamed": "Les profils {{family}} ne peuvent pas être importés ; seuls les navigateurs basés sur Chromium sont pris en charge",
+    "importSourceBrowserRunning": "Fermez d'abord {{browser}}, ou choisissez d'importer quand même"
   },
   "rail": {
     "profiles": "Profils",

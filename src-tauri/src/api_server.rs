@@ -627,6 +627,7 @@ struct ImportProxiesResponse {
     crate::profile_importer::DuplicateStrategy,
     crate::profile_importer::ProfileImportItemResult,
     crate::profile_importer::ProfileImportBatchResult,
+    crate::profile_import::report::ProfileImportReport,
   )),
   tags(
     (name = "profiles", description = "Profile management endpoints"),
@@ -4445,12 +4446,28 @@ mod tests {
     }
 
     let import_item = schema_required(&spec, "ImportProfileItem");
-    for field in ["proxy_id", "vpn_id", "browser_type"] {
+    for field in ["proxy_id", "vpn_id", "browser_type", "allow_running"] {
       assert!(
         !import_item.iter().any(|f| f == field),
         "{field} must be optional on import items, required list: {import_item:?}"
       );
     }
+
+    // The per-item report only exists for items that actually imported.
+    let import_result = schema_required(&spec, "ProfileImportItemResult");
+    assert!(
+      !import_result.iter().any(|f| f == "report"),
+      "report must be optional on import results, required list: {import_result:?}"
+    );
+
+    // `ProfileImportItemResult` references it, so a missing registration would
+    // leave a dangling $ref in the served spec.
+    assert!(
+      spec
+        .pointer("/components/schemas/ProfileImportReport")
+        .is_some(),
+      "ProfileImportReport must be registered in ApiDoc components"
+    );
 
     // A remote launch with no URL just opens the browser; forcing generated
     // clients to send one would make the common case the awkward one.
@@ -4549,6 +4566,7 @@ mod tests {
     assert!(parsed.group_id.is_none());
     assert!(parsed.duplicate_strategy.is_none());
     assert_eq!(parsed.items[0].browser_type, "chromium");
+    assert_eq!(parsed.items[0].allow_running, None);
   }
 
   // The served /openapi.json comes from the hand-maintained ApiDoc `paths(...)`

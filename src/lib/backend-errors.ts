@@ -43,6 +43,8 @@ export type BackendErrorCode =
   | "UPDATE_PREPARATION_FAILED"
   | "PROFILE_NAME_EXISTS"
   | "IMPORT_SOURCE_NOT_FOUND"
+  | "IMPORT_SOURCE_NOT_CHROMIUM"
+  | "IMPORT_SOURCE_BROWSER_RUNNING"
   | "IMPORT_NO_ITEMS"
   | "BROWSER_NOT_DOWNLOADED"
   | "ARCHIVE_EXTRACTION_FAILED"
@@ -253,6 +255,16 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "IMPORT_SOURCE_NOT_FOUND":
       return t("backendErrors.importSourceNotFound");
+    case "IMPORT_SOURCE_NOT_CHROMIUM":
+      return parsed.params?.family
+        ? t("backendErrors.importSourceNotChromiumNamed", {
+            family: parsed.params.family,
+          })
+        : t("backendErrors.importSourceNotChromium");
+    case "IMPORT_SOURCE_BROWSER_RUNNING":
+      return t("backendErrors.importSourceBrowserRunning", {
+        browser: parsed.params?.browser ?? "",
+      });
     case "IMPORT_NO_ITEMS":
       return t("backendErrors.importNoItems");
     case "BROWSER_NOT_DOWNLOADED":

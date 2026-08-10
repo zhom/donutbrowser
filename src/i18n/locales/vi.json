@@ -1467,7 +1467,28 @@
     "vpnOptional": "VPN (tùy chọn)",
     "noVpn": "Không dùng VPN",
     "advancedOptions": "Tùy chọn nâng cao",
-    "configureFingerprint": "Cấu hình vân tay (tùy chọn)"
+    "configureFingerprint": "Cấu hình vân tay (tùy chọn)",
+    "reportCookies": "Cookie",
+    "reportPasswords": "Mật khẩu",
+    "reportAutofill": "Phương thức thanh toán",
+    "reportExtensions": "Tiện ích mở rộng",
+    "reportHistory": "Lịch sử",
+    "reportBookmarks": "Dấu trang",
+    "reportLocalStorage": "Dữ liệu trang web",
+    "reportNothingCarried": "Không có dữ liệu đọc được nào được chuyển sang",
+    "reportUnrecoverable": "Không giải mã được: {{count}}",
+    "closeSourceBrowserHint": "Hãy đóng trình duyệt nguồn rồi thử lại để có bản sao đầy đủ, hoặc nhập ngay và chấp nhận rằng dữ liệu trang web có thể chưa đầy đủ.",
+    "importAnyway": "Vẫn nhập",
+    "warnings": {
+      "secretsNotMigrated": "Không mở khóa được cookie và mật khẩu, nên bạn sẽ phải đăng nhập lại.",
+      "appBoundEncrypted": "Chrome 127 trở lên trên Windows gắn cookie với chính trình duyệt; không ứng dụng nào khác có thể chuyển được.",
+      "storeTooOld": "Một cơ sở dữ liệu quá cũ để trình duyệt này mở nên đã bị bỏ qua.",
+      "storeTooNew": "Một cơ sở dữ liệu đến từ trình duyệt mới hơn nên đã bị bỏ qua.",
+      "sourceBrowserRunning": "Trình duyệt nguồn đang chạy nên dữ liệu trang web có thể chưa đầy đủ.",
+      "securePreferencesReset": "Các cài đặt được bảo vệ như trang chủ và công cụ tìm kiếm đã trở về mặc định.",
+      "extensionsPartial": "Một số tiện ích thuộc về trình duyệt nguồn nên không được chuyển sang.",
+      "storeUnreadable": "Một cơ sở dữ liệu không đọc được nên đã bị bỏ qua thay vì sao chép hỏng."
+    }
   },
   "syncTooltips": {
     "syncing": "Đang đồng bộ...",
@@ -1914,7 +1935,10 @@
       "malformed": "URI VLESS không hợp lệ."
     },
     "camoufoxRemoved": "Camoufox không còn được hỗ trợ. Hãy tạo lại hồ sơ này bằng Wayfern.",
-    "noE2ePasswordSet": "Chưa đặt mật khẩu mã hóa đầu cuối. Hãy đặt trước khi đồng bộ dữ liệu đã mã hóa."
+    "noE2ePasswordSet": "Chưa đặt mật khẩu mã hóa đầu cuối. Hãy đặt trước khi đồng bộ dữ liệu đã mã hóa.",
+    "importSourceNotChromium": "Thư mục này không phải hồ sơ trình duyệt Chromium",
+    "importSourceNotChromiumNamed": "Không thể nhập hồ sơ {{family}}; chỉ hỗ trợ các trình duyệt nền Chromium",
+    "importSourceBrowserRunning": "Hãy đóng {{browser}} trước, hoặc chọn vẫn nhập"
   },
   "rail": {
     "profiles": "Profile",

@@ -540,6 +540,25 @@ impl BrowserRunner {
       let profiles_dir = self.profile_manager.get_profiles_dir();
       let profile_data_path =
         crate::ephemeral_dirs::get_effective_profile_path(&updated_profile, &profiles_dir);
+
+      // Profiles imported by builds before the layout fix have their content at
+      // the user-data-dir root instead of under `Default/`, so the browser has
+      // never seen a byte of it. Move it into place now, while the profile is
+      // provably not running. Secrets stay unreadable — the source key was
+      // never captured and cannot be recovered after the fact — but history,
+      // bookmarks, extensions and site data come back.
+      match crate::profile_import::repair_legacy_layout(&profile_data_path) {
+        Ok(true) => log::info!(
+          "Repaired legacy import layout for profile: {}",
+          updated_profile.name
+        ),
+        Ok(false) => {}
+        Err(e) => log::warn!(
+          "Could not repair legacy import layout for {}: {e}",
+          updated_profile.name
+        ),
+      }
+
       let profile_path_str = profile_data_path.to_string_lossy().to_string();
 
       // Install extensions if an extension group is assigned

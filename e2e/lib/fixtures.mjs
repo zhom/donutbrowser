@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 export const TEST_BROWSER_VERSION = "150.0.7871.100";
 
@@ -219,4 +220,102 @@ export function currentHostOs() {
     : os.platform() === "win32"
       ? "windows"
       : "linux";
+}
+
+/**
+ * Write a Chromium cookie store at schema version 24 with plaintext values.
+ *
+ * Plaintext is deliberate: it is what a store looks like when the source
+ * browser could not reach its keyring, and it lets the suite assert that
+ * import seals every row with the target profile's key. Chromium reads a row
+ * whose `encrypted_value` is empty, and drops any row where both columns are
+ * set, so "value cleared and encrypted_value populated" is the only shape that
+ * actually loads.
+ */
+export function writeChromiumCookies(dbPath, cookies) {
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE cookies(
+      creation_utc INTEGER NOT NULL,
+      host_key TEXT NOT NULL,
+      top_frame_site_key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      value TEXT NOT NULL,
+      encrypted_value BLOB NOT NULL DEFAULT '',
+      path TEXT NOT NULL,
+      expires_utc INTEGER NOT NULL,
+      is_secure INTEGER NOT NULL,
+      is_httponly INTEGER NOT NULL,
+      last_access_utc INTEGER NOT NULL,
+      has_expires INTEGER NOT NULL DEFAULT 1,
+      is_persistent INTEGER NOT NULL DEFAULT 1,
+      priority INTEGER NOT NULL DEFAULT 1,
+      samesite INTEGER NOT NULL DEFAULT -1,
+      source_scheme INTEGER NOT NULL DEFAULT 0,
+      source_port INTEGER NOT NULL DEFAULT -1,
+      last_update_utc INTEGER NOT NULL DEFAULT 0,
+      source_type INTEGER NOT NULL DEFAULT 0,
+      has_cross_site_ancestor INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX cookies_unique_index
+      ON cookies(host_key, top_frame_site_key, name, path);
+    CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
+    INSERT INTO meta VALUES('version', '24');
+    INSERT INTO meta VALUES('last_compatible_version', '24');
+  `);
+  const insert = db.prepare(
+    `INSERT INTO cookies(creation_utc, host_key, top_frame_site_key, name, value,
+       encrypted_value, path, expires_utc, is_secure, is_httponly, last_access_utc)
+     VALUES(?, ?, '', ?, ?, ?, '/', 0, 0, 0, 0)`,
+  );
+  // `encrypted` cookies are written the way Chromium's v23->v24 migration
+  // does: BindString into a BLOB column, which leaves the storage class as
+  // TEXT. Reading that as a strict blob returns empty and silently blanks the
+  // cookie, so the suite has to reproduce it rather than only binding blobs.
+  const insertAsText = db.prepare(
+    `INSERT INTO cookies(creation_utc, host_key, top_frame_site_key, name, value,
+       encrypted_value, path, expires_utc, is_secure, is_httponly, last_access_utc)
+     VALUES(?, ?, '', ?, '', CAST(? AS TEXT), '/', 0, 0, 0, 0)`,
+  );
+  let creation = 13000000000000000;
+  for (const cookie of cookies) {
+    if (cookie.encryptedValueText === undefined) {
+      insert.run(creation++, cookie.host, cookie.name, cookie.value, "");
+    } else {
+      insertAsText.run(
+        creation++,
+        cookie.host,
+        cookie.name,
+        cookie.encryptedValueText,
+      );
+    }
+  }
+  db.close();
+}
+
+/** Write a Chromium History database holding the given URLs. */
+export function writeChromiumHistory(dbPath, urls) {
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE urls(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      url LONGVARCHAR,
+      title LONGVARCHAR,
+      visit_count INTEGER DEFAULT 0 NOT NULL,
+      typed_count INTEGER DEFAULT 0 NOT NULL,
+      last_visit_time INTEGER NOT NULL,
+      hidden INTEGER DEFAULT 0 NOT NULL
+    );
+    CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
+    INSERT INTO meta VALUES('version', '69');
+    INSERT INTO meta VALUES('last_compatible_version', '16');
+  `);
+  const insert = db.prepare(
+    "INSERT INTO urls(url, title, visit_count, typed_count, last_visit_time, hidden) VALUES(?, ?, 1, 0, ?, 0)",
+  );
+  let visit = 13000000000000000;
+  for (const url of urls) {
+    insert.run(url, url, visit++);
+  }
+  db.close();
 }

@@ -746,6 +746,14 @@ impl McpServer {
                   "vpn_id": {
                     "type": "string",
                     "description": "Optional VPN UUID to assign to this profile"
+                  },
+                  "browser_type": {
+                    "type": "string",
+                    "description": "Source browser family (chromium, brave, edge, vivaldi, opera, arc, yandex, ...). Selects which OS keychain entry holds the key that unlocks the source's cookies and passwords, so an accurate value is what makes secrets survive the import"
+                  },
+                  "allow_running": {
+                    "type": "boolean",
+                    "description": "Import even though the source browser is running. Databases are still snapshotted consistently, but site data stored in LevelDB may be captured mid-write"
                   }
                 },
                 "required": ["source_path", "new_profile_name"]

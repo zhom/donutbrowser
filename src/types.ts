@@ -275,11 +275,44 @@ export interface DetectedProfile {
 
 export interface ImportProfileItem {
   source_path: string;
+  /**
+   * Source browser family. Selects which OS keychain entry holds the key that
+   * unlocks the source's cookies and passwords, so it decides whether secrets
+   * survive the import.
+   */
   browser_type?: string;
   new_profile_name: string;
   /** Mutually exclusive with `vpn_id`; the importer rejects setting both. */
   proxy_id?: string | null;
   vpn_id?: string | null;
+  /** Import even though the source browser is still running. */
+  allow_running?: boolean;
+}
+
+/** Stable warning codes; each maps to `importProfile.warnings.*`. */
+export type ProfileImportWarning =
+  | "secretsNotMigrated"
+  | "appBoundEncrypted"
+  | "storeTooOld"
+  | "storeTooNew"
+  | "sourceBrowserRunning"
+  | "securePreferencesReset"
+  | "extensionsPartial"
+  | "storeUnreadable";
+
+export interface ProfileImportReport {
+  cookies_migrated: number;
+  cookies_unrecoverable: number;
+  passwords_migrated: number;
+  passwords_unrecoverable: number;
+  payment_methods_migrated: number;
+  payment_methods_unrecoverable: number;
+  extensions_migrated: number;
+  history_entries: number;
+  bookmarks: number;
+  local_storage_origins: number;
+  bytes_copied: number;
+  warnings: ProfileImportWarning[];
 }
 
 export interface ProfileImportItemResult {
@@ -288,6 +321,8 @@ export interface ProfileImportItemResult {
   status: "imported" | "skipped" | "failed";
   profile_id: string | null;
   error: string | null;
+  /** What actually came across. Present when status is "imported". */
+  report?: ProfileImportReport | null;
 }
 
 export interface ProfileImportBatchResult {
