@@ -1,6 +1,21 @@
 # Changelog
 
 
+## v0.29.2 (2026-08-10)
+
+### Refactoring
+
+- cleanup sync
+- profile imports
+
+### Maintenance
+
+- chore: linting
+- chore: version bump
+- chore: linting
+- chore: update flake.nix for v0.29.1 [skip ci] (#546)
+
+
 ## v0.29.1 (2026-08-08)
 
 ### Bug Fixes
