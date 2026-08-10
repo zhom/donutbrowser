@@ -30,6 +30,10 @@ use std::path::Path;
 /// for the item that is actually there. That is what lets a single `chromium`
 /// family key cover both Google Chrome and vanilla Chromium, which share a
 /// detection entry but not a Keychain item.
+// Consulted by the Keychain and secret-service lookups. Windows resolves the
+// key through DPAPI against the profile's own Local State, so it never needs
+// to guess a brand.
+#[allow(dead_code)]
 fn brand_candidates(family: &str, source_path: &Path) -> Vec<&'static str> {
   let path = source_path.to_string_lossy();
   let mut brands: Vec<&'static str> = match family {
@@ -262,7 +266,9 @@ fn dpapi_unprotect(ciphertext: &[u8]) -> Result<Vec<u8>, String> {
   use windows::Win32::Foundation::LocalFree;
   use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
-  let mut input = CRYPT_INTEGER_BLOB {
+  // `pdatain` is `*const CRYPT_INTEGER_BLOB`: DPAPI only reads the input blob,
+  // so a shared reference is what the signature wants.
+  let input = CRYPT_INTEGER_BLOB {
     cbData: ciphertext.len() as u32,
     pbData: ciphertext.as_ptr() as *mut u8,
   };
@@ -271,7 +277,7 @@ fn dpapi_unprotect(ciphertext: &[u8]) -> Result<Vec<u8>, String> {
   // SAFETY: `input` points at a live slice for the duration of the call, and
   // `output` is freed via LocalFree exactly once below, as the API requires.
   unsafe {
-    CryptUnprotectData(&mut input, None, None, None, None, 0, &mut output)
+    CryptUnprotectData(&input, None, None, None, None, 0, &mut output)
       .map_err(|e| format!("CryptUnprotectData failed: {e}"))?;
 
     let plaintext = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();

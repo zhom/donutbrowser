@@ -464,15 +464,10 @@ async fn test_local_proxy_direct() -> Result<(), Box<dyn std::error::Error + Sen
   );
 
   // Verify proxy is listening
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", local_port)).await {
-    Ok(_) => {
-      println!("Proxy is listening on port {local_port}");
-    }
-    Err(e) => {
-      return Err(format!("Proxy port {local_port} is not listening: {e}").into());
-    }
+  if !wait_for_port_open(local_port, Duration::from_secs(10)).await {
+    return Err(format!("Proxy port {local_port} is not listening").into());
   }
+  println!("Proxy is listening on port {local_port}");
 
   // Test making an HTTP request through the proxy
   let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await?;
@@ -524,11 +519,10 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
   println!("First proxy started on port {}", proxy1_port);
 
   // Wait for first proxy to be ready
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", proxy1_port)).await {
-    Ok(_) => println!("First proxy is ready"),
-    Err(e) => return Err(format!("First proxy not ready: {e}").into()),
+  if !wait_for_port_open(proxy1_port, Duration::from_secs(10)).await {
+    return Err("First proxy not ready".into());
   }
+  println!("First proxy is ready");
 
   // Start second proxy chained to first proxy
   let output2 = TestUtils::execute_command(
@@ -565,11 +559,10 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
   );
 
   // Wait for second proxy to be ready
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", proxy2_port)).await {
-    Ok(_) => println!("Second proxy is ready"),
-    Err(e) => return Err(format!("Second proxy not ready: {e}").into()),
+  if !wait_for_port_open(proxy2_port, Duration::from_secs(10)).await {
+    return Err("Second proxy not ready".into());
   }
+  println!("Second proxy is ready");
 
   // Test making an HTTP request through the chained proxy
   let mut stream = TcpStream::connect(("127.0.0.1", proxy2_port)).await?;
@@ -669,16 +662,11 @@ async fn test_local_proxy_with_http_upstream(
   println!("Proxy started: id={}, port={}", proxy_id, local_port);
 
   // Verify proxy is listening
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", local_port)).await {
-    Ok(_) => {
-      println!("Proxy is listening on port {local_port}");
-    }
-    Err(e) => {
-      upstream_handle.abort();
-      return Err(format!("Proxy port {local_port} is not listening: {e}").into());
-    }
+  if !wait_for_port_open(local_port, Duration::from_secs(10)).await {
+    upstream_handle.abort();
+    return Err(format!("Proxy port {local_port} is not listening").into());
   }
+  println!("Proxy is listening on port {local_port}");
 
   // Cleanup
   tracker.cleanup_all().await;
@@ -955,11 +943,10 @@ async fn test_proxy_stop() -> Result<(), Box<dyn std::error::Error + Send + Sync
   let local_port = config["localPort"].as_u64().unwrap() as u16;
 
   // Verify proxy is running
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", local_port)).await {
-    Ok(_) => println!("Proxy is running"),
-    Err(_) => return Err("Proxy is not running".into()),
+  if !wait_for_port_open(local_port, Duration::from_secs(10)).await {
+    return Err("Proxy is not running".into());
   }
+  println!("Proxy is running");
 
   // Stop the proxy
   let stop_output =
@@ -969,14 +956,11 @@ async fn test_proxy_stop() -> Result<(), Box<dyn std::error::Error + Send + Sync
     return Err("Failed to stop proxy".into());
   }
 
-  // Wait a bit for the process to exit
-  sleep(Duration::from_millis(500)).await;
-
   // Verify proxy is stopped (connection should fail)
-  match TcpStream::connect(("127.0.0.1", local_port)).await {
-    Ok(_) => return Err("Proxy should be stopped but is still listening".into()),
-    Err(_) => println!("Proxy successfully stopped"),
+  if !wait_for_port_closed(local_port, Duration::from_secs(10)).await {
+    return Err("Proxy should be stopped but is still listening".into());
   }
+  println!("Proxy successfully stopped");
 
   Ok(())
 }
@@ -1783,6 +1767,39 @@ impl Drop for StubBrowser {
   fn drop(&mut self) {
     self.terminate();
   }
+}
+
+/// Wait for a port to start accepting connections.
+///
+/// `proxy start` returns once the worker is spawned, not once it has bound its
+/// listener, so a fixed sleep is a bet on how fast the runner is. Poll instead.
+async fn wait_for_port_open(port: u16, timeout: Duration) -> bool {
+  let deadline = std::time::Instant::now() + timeout;
+  while std::time::Instant::now() < deadline {
+    if TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
+      return true;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  false
+}
+
+/// Wait for a listening port to stop accepting connections.
+///
+/// `proxy stop` returns once the worker has been told to exit, not once it has
+/// actually gone, so the listener can outlive the command by however long the
+/// process takes to unwind. That gap is invisible on an idle laptop and lands
+/// squarely on a loaded CI runner, so poll to a deadline rather than sleeping a
+/// fixed amount and hoping. Returns false if it is still accepting at the end.
+async fn wait_for_port_closed(port: u16, timeout: Duration) -> bool {
+  let deadline = std::time::Instant::now() + timeout;
+  while std::time::Instant::now() < deadline {
+    if TcpStream::connect(("127.0.0.1", port)).await.is_err() {
+      return true;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  false
 }
 
 /// Wait for a worker to remove its own config, which it does immediately before

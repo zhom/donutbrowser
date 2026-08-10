@@ -27,6 +27,9 @@
 use aes::cipher::{block_padding::Pkcs7, BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
+// Windows stores the raw 32-byte key, so it neither encodes nor decodes
+// base64; only the mac/Linux password paths below need the trait in scope.
+#[cfg(not(target_os = "windows"))]
 use base64::Engine;
 use rand::RngExt;
 use ring::pbkdf2;
@@ -37,6 +40,8 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 
 /// Chromium's fixed PBKDF2 salt for every CBC-based os_crypt provider.
+// Only the CBC hosts derive a key; Windows uses the file's bytes directly.
+#[allow(dead_code)]
 pub const SALT: &[u8] = b"saltysalt";
 /// Chromium's fixed CBC IV: sixteen spaces.
 pub const CBC_IV: [u8; 16] = [b' '; 16];
@@ -74,6 +79,9 @@ pub const POSIX_ITERATIONS: u32 = 1;
 /// `password` is the raw bytes, never trimmed: Chromium passes the exact
 /// `ReadFileToString` result to the KDF, so normalising here would silently
 /// produce a different key and every decrypt would fail.
+// Called from the mac and Linux branches only: `DPAPIKeyProvider` takes the
+// 32 bytes on disk as the AES-256 key with no derivation step at all.
+#[allow(dead_code)]
 pub fn derive_key(password: &[u8], iterations: u32) -> [u8; 16] {
   let mut key = [0u8; 16];
   // ring rather than the `pbkdf2` crate: sha1 0.11 (digest 0.11) and
