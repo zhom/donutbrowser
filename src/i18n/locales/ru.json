@@ -637,6 +637,7 @@
       "connectionSuccess": "Подключение успешно!",
       "serverError": "Сервер вернул ошибку",
       "connectFailed": "Не удалось подключиться к серверу",
+      "storageEndpoint": "Хранилище: {{endpoint}}",
       "settingsSaved": "Настройки синхронизации сохранены",
       "saveFailed": "Не удалось сохранить настройки",
       "disconnected": "Синхронизация отключена",

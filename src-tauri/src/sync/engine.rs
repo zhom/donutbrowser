@@ -109,6 +109,37 @@ fn is_critical_file(path: &str) -> bool {
     .any(|pattern| path.contains(pattern))
 }
 
+/// How many failed paths to name before collapsing the rest into a count.
+const MAX_LISTED_FAILURES: usize = 10;
+
+/// Aggregate a batch of failed transfers into the message the user sees.
+///
+/// Whatever breaks a sync usually breaks every file the same way — one
+/// unreachable storage host, one rejected signature — so the per-file causes
+/// were dropped and only the paths survived into the message. That left users
+/// staring at a list of filenames with nothing to act on. Carry the first
+/// cause through, and stop pasting hundreds of paths into a toast.
+fn critical_failure_message(action: &str, failures: &[(String, String)]) -> String {
+  let listed: Vec<&str> = failures
+    .iter()
+    .take(MAX_LISTED_FAILURES)
+    .map(|(path, _)| path.as_str())
+    .collect();
+  let hidden = failures.len().saturating_sub(listed.len());
+  let files = if hidden > 0 {
+    format!("{} (and {} more)", listed.join(", "), hidden)
+  } else {
+    listed.join(", ")
+  };
+
+  match failures.first() {
+    Some((_, cause)) => format!(
+      "Critical files failed to {action}: {files}. Cause: {cause}. Sync aborted to prevent data loss."
+    ),
+    None => format!("Critical files failed to {action}: {files}. Sync aborted to prevent data loss."),
+  }
+}
+
 /// Validate that a manifest-supplied relative file path is safe to join onto a
 /// profile directory before writing/deleting. The manifest is remote-controlled
 /// (a self-hosted or compromised sync server, a MITM on a plaintext Regular-mode
@@ -1283,10 +1314,9 @@ impl SyncEngine {
     }
 
     if !critical_failures.is_empty() {
-      let file_list: Vec<&str> = critical_failures.iter().map(|(p, _)| p.as_str()).collect();
-      return Err(SyncError::IoError(format!(
-        "Critical files failed to upload: {}. Sync aborted to prevent data loss.",
-        file_list.join(", ")
+      return Err(SyncError::IoError(critical_failure_message(
+        "upload",
+        &critical_failures,
       )));
     }
 
@@ -1559,10 +1589,9 @@ impl SyncEngine {
     }
 
     if !critical_failures.is_empty() {
-      let file_list: Vec<&str> = critical_failures.iter().map(|(p, _)| p.as_str()).collect();
-      return Err(SyncError::IoError(format!(
-        "Critical files failed to download: {}. Sync aborted to prevent data loss.",
-        file_list.join(", ")
+      return Err(SyncError::IoError(critical_failure_message(
+        "download",
+        &critical_failures,
       )));
     }
 
@@ -4246,6 +4275,40 @@ pub async fn rollover_encryption_for_all_entities(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn test_critical_failure_message_carries_the_cause() {
+    // A self-hosted server that hands out unreachable presigned URLs fails
+    // every file with the same connect error. Naming only the files told the
+    // user nothing about why, which is what made this undiagnosable.
+    let failures = vec![
+      (
+        "Default/Cookies".to_string(),
+        "Failed to upload Default/Cookies after 3 retries: error sending request".to_string(),
+      ),
+      ("Local State".to_string(), "same".to_string()),
+    ];
+
+    let message = critical_failure_message("upload", &failures);
+    assert!(message.contains("Default/Cookies"));
+    assert!(message.contains("Local State"));
+    assert!(message.contains("Cause: Failed to upload Default/Cookies"));
+    assert!(message.contains("Sync aborted to prevent data loss."));
+  }
+
+  #[test]
+  fn test_critical_failure_message_collapses_long_lists() {
+    let failures: Vec<(String, String)> = (0..25)
+      .map(|i| (format!("file-{i}"), "connect error".to_string()))
+      .collect();
+
+    let message = critical_failure_message("download", &failures);
+    assert!(message.contains("file-0"));
+    assert!(message.contains(&format!("file-{}", MAX_LISTED_FAILURES - 1)));
+    assert!(!message.contains(&format!("file-{MAX_LISTED_FAILURES}")));
+    assert!(message.contains("(and 15 more)"));
+    assert!(message.contains("failed to download"));
+  }
 
   #[test]
   fn test_is_safe_manifest_path() {

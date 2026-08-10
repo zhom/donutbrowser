@@ -635,6 +635,7 @@
       "connectionSuccess": "Bağlantı başarılı!",
       "serverError": "Sunucu bir hatayla yanıt verdi",
       "connectFailed": "Sunucuya bağlanılamadı",
+      "storageEndpoint": "Depolama: {{endpoint}}",
       "settingsSaved": "Eşitleme ayarları kaydedildi",
       "saveFailed": "Ayarlar kaydedilemedi",
       "disconnected": "Eşitleme bağlantısı kesildi",

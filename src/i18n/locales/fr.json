@@ -636,6 +636,7 @@
       "connectionSuccess": "Connexion réussie !",
       "serverError": "Le serveur a répondu avec une erreur",
       "connectFailed": "Échec de la connexion au serveur",
+      "storageEndpoint": "Stockage : {{endpoint}}",
       "settingsSaved": "Paramètres de synchronisation enregistrés",
       "saveFailed": "Échec de l’enregistrement des paramètres",
       "disconnected": "Synchronisation déconnectée",

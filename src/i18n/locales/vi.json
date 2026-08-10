@@ -635,6 +635,7 @@
       "connectionSuccess": "Kết nối thành công!",
       "serverError": "Máy chủ trả về lỗi",
       "connectFailed": "Kết nối máy chủ thất bại",
+      "storageEndpoint": "Bộ nhớ: {{endpoint}}",
       "settingsSaved": "Đã lưu cài đặt đồng bộ",
       "saveFailed": "Lưu cài đặt thất bại",
       "disconnected": "Đã ngắt kết nối đồng bộ",

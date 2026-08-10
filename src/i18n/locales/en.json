@@ -635,6 +635,7 @@
       "connectionSuccess": "Connection successful!",
       "serverError": "Server responded with an error",
       "connectFailed": "Failed to connect to server",
+      "storageEndpoint": "Storage: {{endpoint}}",
       "settingsSaved": "Sync settings saved",
       "saveFailed": "Failed to save settings",
       "disconnected": "Sync disconnected",

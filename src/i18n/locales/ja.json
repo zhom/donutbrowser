@@ -635,6 +635,7 @@
       "connectionSuccess": "接続に成功しました!",
       "serverError": "サーバーがエラーで応答しました",
       "connectFailed": "サーバーへの接続に失敗しました",
+      "storageEndpoint": "ストレージ: {{endpoint}}",
       "settingsSaved": "同期設定を保存しました",
       "saveFailed": "設定の保存に失敗しました",
       "disconnected": "同期を切断しました",

@@ -82,6 +82,10 @@ function sanitizeMetadata(
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
   private s3Client: S3Client;
+  // Signs the URLs handed to clients. Same instance as `s3Client` unless
+  // `S3_PUBLIC_ENDPOINT` names a different, client-reachable address.
+  private presignClient: S3Client;
+  private publicEndpoint: string;
   private bucket: string;
   // Upper bound on presign batch array length (DoS guard).
   private static readonly MAX_BATCH_ITEMS = 1000;
@@ -112,15 +116,33 @@ export class SyncService implements OnModuleInit {
 
     this.bucket = requireEnv("S3_BUCKET");
 
+    const credentials = { accessKeyId, secretAccessKey };
     this.s3Client = new S3Client({
       endpoint,
       region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
+      credentials,
       forcePathStyle,
     });
+
+    // Presigned URLs are handed to a desktop client on another machine, so they
+    // must name a host that client can reach. `S3_ENDPOINT` is often reachable
+    // only from the server: the documented compose file points it at
+    // `http://minio:9000`, a Docker service name that resolves on the compose
+    // network and nowhere else. Signing is bound to the host, so the presign
+    // client is a second client pinned to the public address rather than a
+    // string rewrite of the signed URL.
+    const publicEndpoint =
+      this.configService.get<string>("S3_PUBLIC_ENDPOINT") || endpoint;
+    this.publicEndpoint = publicEndpoint;
+    this.presignClient =
+      publicEndpoint === endpoint
+        ? this.s3Client
+        : new S3Client({
+            endpoint: publicEndpoint,
+            region,
+            credentials,
+            forcePathStyle,
+          });
 
     this.backendInternalUrl = this.configService.get<string>(
       "BACKEND_INTERNAL_URL",
@@ -132,6 +154,51 @@ export class SyncService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureBucketExists();
+    this.warnIfPresignEndpointIsServerOnly();
+  }
+
+  /**
+   * The address clients are sent to for object transfers, for `/readyz` to
+   * report when a self-hoster is debugging a failing sync.
+   *
+   * Withheld in cloud mode: `/readyz` is unauthenticated, and a managed
+   * deployment should not publish its storage host to anyone who can reach the
+   * probe. Self-hosters own both ends, and the value is the whole point of the
+   * diagnostic there.
+   */
+  getDiagnosticStorageEndpoint(): string | undefined {
+    const isCloud = Boolean(
+      this.configService.get<string>("SYNC_JWT_PUBLIC_KEY"),
+    );
+    return isCloud ? undefined : this.publicEndpoint;
+  }
+
+  /**
+   * A single-label host (`minio`, `s3`) only resolves inside the container
+   * network, so every presigned URL built from it is unreachable for the
+   * desktop client even though the server's own S3 calls succeed. That failure
+   * shows up as healthy `/health` and `/readyz` with every file transfer
+   * failing at connect, which is near-impossible to diagnose from the client.
+   * Say it once at boot instead.
+   */
+  private warnIfPresignEndpointIsServerOnly(): void {
+    let host: string;
+    try {
+      host = new URL(this.publicEndpoint).hostname;
+    } catch {
+      return;
+    }
+
+    const isSingleLabel =
+      !host.includes(".") && !host.includes(":") && host !== "localhost";
+    if (!isSingleLabel) return;
+
+    this.logger.warn(
+      `Storage endpoint '${this.publicEndpoint}' uses the container-only host '${host}'. ` +
+        "Presigned URLs built from it cannot be reached by Donut Browser, so every " +
+        "transfer will fail while /health and /readyz stay green. Set S3_PUBLIC_ENDPOINT " +
+        "to an address your devices can reach (and publish that port).",
+    );
   }
 
   private async ensureBucketExists(): Promise<void> {
@@ -332,7 +399,7 @@ export class SyncService implements OnModuleInit {
     const metadataHeaders = new Set(
       Object.keys(metadata ?? {}).map((name) => `x-amz-meta-${name}`),
     );
-    const url = await getSignedUrl(this.s3Client, command, {
+    const url = await getSignedUrl(this.presignClient, command, {
       expiresIn,
       // The AWS presigner otherwise hoists user metadata into the query string.
       // The client echoes the response metadata as headers, so those headers
@@ -374,7 +441,7 @@ export class SyncService implements OnModuleInit {
       Key: key,
     });
 
-    const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+    const url = await getSignedUrl(this.presignClient, command, { expiresIn });
 
     return {
       url,
@@ -505,7 +572,9 @@ export class SyncService implements OnModuleInit {
           ContentType: item.contentType || "application/octet-stream",
         });
 
-        const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+        const url = await getSignedUrl(this.presignClient, command, {
+          expiresIn,
+        });
 
         return {
           key: item.key,
@@ -565,7 +634,9 @@ export class SyncService implements OnModuleInit {
           Key: key,
         });
 
-        const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+        const url = await getSignedUrl(this.presignClient, command, {
+          expiresIn,
+        });
 
         return {
           key: rawKey,

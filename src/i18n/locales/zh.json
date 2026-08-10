@@ -635,6 +635,7 @@
       "connectionSuccess": "连接成功!",
       "serverError": "服务器返回了错误",
       "connectFailed": "连接服务器失败",
+      "storageEndpoint": "存储: {{endpoint}}",
       "settingsSaved": "同步设置已保存",
       "saveFailed": "保存设置失败",
       "disconnected": "已断开同步",

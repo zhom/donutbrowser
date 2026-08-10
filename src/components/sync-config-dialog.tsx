@@ -80,18 +80,48 @@ export function SyncConfigDialog({
   const [connectionStatus, setConnectionStatus] = useState<
     "unknown" | "testing" | "connected" | "error"
   >("unknown");
+  const [storageEndpoint, setStorageEndpoint] = useState<string | null>(null);
   const hasConfig = Boolean(serverUrl && token);
 
-  const testConnection = useCallback(async (url: string) => {
-    setConnectionStatus("testing");
-    try {
-      const healthUrl = `${url.replace(/\/$/, "")}/health`;
-      const response = await fetch(healthUrl);
-      setConnectionStatus(response.ok ? "connected" : "error");
-    } catch {
-      setConnectionStatus("error");
+  // `/health` is a bare liveness probe: it answers ok on a server whose storage
+  // is unreachable or misconfigured, which is how a green "connected" could sit
+  // next to a sync where every single file failed. `/readyz` checks storage and
+  // reports the endpoint clients are handed in presigned URLs, so surface that
+  // too — when transfers fail, it is the value worth checking first.
+  const probeServer = useCallback(async (url: string) => {
+    const base = url.replace(/\/$/, "");
+    const response = await fetch(`${base}/readyz`);
+
+    // A server old enough to predate /readyz is still a working server, so
+    // fall back rather than reporting a healthy setup as broken.
+    if (response.status === 404) {
+      const health = await fetch(`${base}/health`);
+      return { ok: health.ok, storageEndpoint: undefined };
     }
+
+    if (!response.ok) {
+      return { ok: false as const, storageEndpoint: undefined };
+    }
+    const body = (await response.json()) as {
+      storageEndpoint?: string;
+    } | null;
+    return { ok: true as const, storageEndpoint: body?.storageEndpoint };
   }, []);
+
+  const testConnection = useCallback(
+    async (url: string) => {
+      setConnectionStatus("testing");
+      try {
+        const result = await probeServer(url);
+        setStorageEndpoint(result.storageEndpoint ?? null);
+        setConnectionStatus(result.ok ? "connected" : "error");
+      } catch {
+        setStorageEndpoint(null);
+        setConnectionStatus("error");
+      }
+    },
+    [probeServer],
+  );
 
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
@@ -142,9 +172,9 @@ export function SyncConfigDialog({
     setIsTesting(true);
     setConnectionStatus("testing");
     try {
-      const healthUrl = `${serverUrl.replace(/\/$/, "")}/health`;
-      const response = await fetch(healthUrl);
-      if (response.ok) {
+      const result = await probeServer(serverUrl);
+      setStorageEndpoint(result.storageEndpoint ?? null);
+      if (result.ok) {
         setConnectionStatus("connected");
         showSuccessToast(t("sync.config.connectionSuccess"));
       } else {
@@ -152,12 +182,13 @@ export function SyncConfigDialog({
         showErrorToast(t("sync.config.serverError"));
       }
     } catch {
+      setStorageEndpoint(null);
       setConnectionStatus("error");
       showErrorToast(t("sync.config.connectFailed"));
     } finally {
       setIsTesting(false);
     }
-  }, [serverUrl, t]);
+  }, [serverUrl, t, probeServer]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -440,9 +471,18 @@ export function SyncConfigDialog({
                     </div>
                   )}
                   {connectionStatus === "connected" && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <div className="size-2 rounded-full bg-success" />
-                      {t("sync.status.connected")}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="size-2 rounded-full bg-success" />
+                        {t("sync.status.connected")}
+                      </div>
+                      {storageEndpoint && (
+                        <span className="text-xs text-muted-foreground break-all">
+                          {t("sync.config.storageEndpoint", {
+                            endpoint: storageEndpoint,
+                          })}
+                        </span>
+                      )}
                     </div>
                   )}
                   {connectionStatus === "error" && (

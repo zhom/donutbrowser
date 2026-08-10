@@ -635,6 +635,7 @@
       "connectionSuccess": "연결 성공!",
       "serverError": "서버가 오류로 응답했습니다",
       "connectFailed": "서버에 연결하지 못했습니다",
+      "storageEndpoint": "스토리지: {{endpoint}}",
       "settingsSaved": "동기화 설정이 저장되었습니다",
       "saveFailed": "설정 저장 실패",
       "disconnected": "동기화 연결 끊김",

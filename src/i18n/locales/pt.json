@@ -636,6 +636,7 @@
       "connectionSuccess": "Conexão bem-sucedida!",
       "serverError": "O servidor respondeu com um erro",
       "connectFailed": "Falha ao conectar ao servidor",
+      "storageEndpoint": "Armazenamento: {{endpoint}}",
       "settingsSaved": "Configurações de sincronização salvas",
       "saveFailed": "Falha ao salvar as configurações",
       "disconnected": "Sincronização desconectada",
