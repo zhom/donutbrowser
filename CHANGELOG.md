@@ -1,6 +1,19 @@
 # Changelog
 
 
+## v0.29.3 (2026-08-12)
+
+### Refactoring
+
+- minor improvement
+
+### Maintenance
+
+- chore: update pnpm
+- chore: version bump
+- chore: update flake.nix for v0.29.2 [skip ci] (#552)
+
+
 ## v0.29.2 (2026-08-10)
 
 ### Refactoring
