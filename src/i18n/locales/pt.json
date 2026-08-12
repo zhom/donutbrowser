@@ -2162,7 +2162,7 @@
   },
   "wayfernBlocked": {
     "title": "Automação do navegador pausada",
-    "description": "Sua conta foi temporariamente restringida dos recursos Pro do navegador, geralmente por entrar em vários dispositivos ao mesmo tempo. Saia dos outros dispositivos e reinicie o perfil para restaurá-la."
+    "description": "A automação do navegador funciona em um dispositivo por vez e outro dispositivo com a sessão ativa está usando-a. Saia da conta nesse dispositivo e inicie o perfil novamente."
   },
   "wayfernConfigDialog": {
     "titleView": "Ver configurações de impressão digital - {{name}} ({{browser}})",

@@ -2155,7 +2155,7 @@
   },
   "wayfernBlocked": {
     "title": "Tự động hóa trình duyệt đã tạm dừng",
-    "description": "Tài khoản của bạn tạm thời bị hạn chế các tính năng Pro của trình duyệt, thường do đăng nhập trên nhiều thiết bị cùng lúc. Hãy đăng xuất khỏi các thiết bị khác rồi khởi chạy lại profile để khôi phục."
+    "description": "Tự động hóa trình duyệt chỉ chạy trên một thiết bị tại một thời điểm và một thiết bị khác đang đăng nhập hiện đang sử dụng nó. Hãy đăng xuất trên thiết bị đó, rồi khởi chạy lại cấu hình."
   },
   "wayfernConfigDialog": {
     "titleView": "Xem cài đặt vân tay - {{name}} ({{browser}})",

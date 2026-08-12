@@ -883,9 +883,12 @@ impl WayfernManager {
     args.push(format!("--wayfern-profile-color={profile_color}"));
 
     let mut wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+    // Waiting is only meaningful for a plan a token can actually be minted for.
+    // On "any active plan" this stalled every Solo launch by the full three
+    // seconds waiting for a token the backend will never issue to them.
     if wayfern_token.is_none()
       && crate::cloud_auth::CLOUD_AUTH
-        .has_active_paid_subscription()
+        .is_entitled_to_wayfern_token()
         .await
     {
       // Brief wait for the background token fetch — when the API is healthy

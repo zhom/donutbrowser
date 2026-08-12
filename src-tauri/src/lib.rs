@@ -2622,10 +2622,8 @@ pub fn run_with_builder(
             cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
           };
           let wayfern_fut = async {
-            if cloud_auth::CLOUD_AUTH.has_active_paid_subscription().await {
-              if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
-                log::warn!("Failed to request wayfern token on startup: {e}");
-              }
+            if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
+              log::warn!("Failed to request wayfern token on startup: {e}");
             }
           };
           tokio::join!(sync_token_fut, proxy_fut, wayfern_fut);

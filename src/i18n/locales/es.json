@@ -2162,7 +2162,7 @@
   },
   "wayfernBlocked": {
     "title": "Automatización del navegador en pausa",
-    "description": "Tu cuenta fue restringida temporalmente de las funciones Pro del navegador, normalmente por iniciar sesión en varios dispositivos a la vez. Cierra sesión en los demás dispositivos y vuelve a iniciar el perfil para restaurarla."
+    "description": "La automatización del navegador funciona en un solo dispositivo a la vez y otro dispositivo con la sesión abierta la está usando. Cierra la sesión allí y vuelve a iniciar el perfil."
   },
   "wayfernConfigDialog": {
     "titleView": "Ver configuración de huella - {{name}} ({{browser}})",

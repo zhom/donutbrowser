@@ -2155,7 +2155,7 @@
   },
   "wayfernBlocked": {
     "title": "Browser automation paused",
-    "description": "Your account was temporarily restricted from Pro browser features, usually from signing in on multiple devices at once. Sign out of other devices, then relaunch the profile to restore it."
+    "description": "Browser automation runs on one device at a time, and another signed-in device is currently using it. Sign out there, then relaunch the profile."
   },
   "wayfernConfigDialog": {
     "titleView": "View Fingerprint Settings - {{name}} ({{browser}})",

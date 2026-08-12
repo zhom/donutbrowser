@@ -2162,7 +2162,7 @@
   },
   "wayfernBlocked": {
     "title": "Automatisation du navigateur en pause",
-    "description": "Votre compte a été temporairement privé des fonctionnalités Pro du navigateur, généralement à cause d'une connexion sur plusieurs appareils à la fois. Déconnectez-vous des autres appareils, puis relancez le profil pour la rétablir."
+    "description": "L'automatisation du navigateur fonctionne sur un seul appareil à la fois, et un autre appareil connecté l'utilise actuellement. Déconnectez-vous sur cet appareil, puis relancez le profil."
   },
   "wayfernConfigDialog": {
     "titleView": "Voir les paramètres d'empreinte - {{name}} ({{browser}})",

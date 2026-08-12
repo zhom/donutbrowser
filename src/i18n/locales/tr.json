@@ -2155,7 +2155,7 @@
   },
   "wayfernBlocked": {
     "title": "Tarayıcı otomasyonu duraklatıldı",
-    "description": "Hesabınız, genellikle aynı anda birden fazla cihazda oturum açmaktan kaynaklanan bir nedenle Pro tarayıcı özelliklerinden geçici olarak kısıtlandı. Diğer cihazlardaki oturumları kapatın, ardından geri yüklemek için profili yeniden başlatın."
+    "description": "Tarayıcı otomasyonu aynı anda yalnızca tek bir cihazda çalışır ve şu anda oturum açmış başka bir cihaz tarafından kullanılıyor. O cihazdan çıkış yapın, ardından profili yeniden başlatın."
   },
   "wayfernConfigDialog": {
     "titleView": "Parmak İzi Ayarlarını Görüntüle - {{name}} ({{browser}})",
