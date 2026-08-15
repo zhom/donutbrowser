@@ -693,7 +693,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@65cf14df16c191f3e9684f0d9a8bae69103ced6d #v1.18.14
+        uses: anomalyco/opencode/github@02546dfc2e4515a4f90aaf9ceb3890df2ac2b479 #v1.18.17
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
