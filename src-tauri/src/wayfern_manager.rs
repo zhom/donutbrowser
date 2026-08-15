@@ -657,9 +657,13 @@ impl WayfernManager {
     let fingerprint_json = serde_json::to_string(&fingerprint)
       .map_err(|e| format!("Failed to serialize fingerprint: {e}"))?;
 
+    // Report the platform the engine actually produced alongside the one that
+    // was asked for. Logging only the request made this line useless for
+    // diagnosing a fingerprint that came back as something else.
     log::info!(
-      "Generated Wayfern fingerprint for OS: {}, fields: {:?}",
+      "Generated Wayfern fingerprint for requested OS: {}, produced platform: {:?}, fields: {:?}",
       os,
+      fingerprint.get("platform").and_then(|p| p.as_str()),
       fingerprint
         .as_object()
         .map(|o| o.keys().collect::<Vec<_>>())

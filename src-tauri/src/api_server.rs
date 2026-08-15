@@ -56,6 +56,12 @@ pub struct ApiProfile {
   /// Such a profile cannot be launched locally, and must only ever run on a
   /// remote host of its own OS — Chromium profile state is OS-specific.
   pub is_cross_os: bool,
+  /// The fingerprint operating system set at creation via `wayfern_config.os`
+  /// (`"windows"`, `"macos"`, `"linux"`, `"android"` or `"ios"`), or `null`
+  /// when the fingerprint was generated for the host. This is what the browser
+  /// reports to sites; `host_os` is the machine the profile was created on and
+  /// is a different thing.
+  pub fingerprint_os: Option<String>,
 }
 
 impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
@@ -83,6 +89,7 @@ impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
       cloud_sync_enabled: profile.is_sync_enabled(),
       host_os: profile.resolved_os().map(|os| os.to_string()),
       is_cross_os: profile.is_cross_os(),
+      fingerprint_os: profile.wayfern_config.as_ref().and_then(|c| c.os.clone()),
     }
   }
 }
@@ -1228,15 +1235,19 @@ async fn get_profile(
 ///   locally (this endpoint does not download new versions); 400 if none is.
 /// - Omitting the matching `wayfern_config`, or passing an
 ///   empty object `{}`, generates a fresh fingerprint automatically.
+/// - `wayfern_config.os` picks the fingerprint OS (`"windows"`, `"macos"`,
+///   `"linux"`, `"android"`, `"ios"`). Omit it to match the host. Any other
+///   OS is cross-OS spoofing and needs an active Pro plan; 402 otherwise.
+///   A `wayfern_config` that fails to parse is a 400, never a silent default.
 #[utoipa::path(
   post,
   path = "/v1/profiles",
   request_body = CreateProfileRequest,
   responses(
     (status = 200, description = "Profile created successfully", body = ApiProfileResponse),
-    (status = 400, description = "Invalid browser, or no downloaded version available"),
+    (status = 400, description = "Invalid browser, invalid wayfern_config, or no downloaded version available"),
     (status = 401, description = "Unauthorized"),
-    (status = 402, description = "Selected proxy requires payment"),
+    (status = 402, description = "Selected proxy requires payment, or a cross-OS fingerprint requires Pro"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -1292,12 +1303,32 @@ async fn create_profile(
     }
   };
 
-  // Parse wayfern config if provided
-  let wayfern_config = if let Some(config) = &request.wayfern_config {
-    serde_json::from_value(config.clone()).ok()
-  } else {
-    None
+  // Parse wayfern config if provided. A malformed config is a 400, never a
+  // silent fallback: swallowing it here produced a host-OS profile from a
+  // request that explicitly asked for another OS, with a 200 and no diagnostic.
+  let wayfern_config: Option<crate::wayfern_manager::WayfernConfig> = match &request.wayfern_config
+  {
+    Some(config) => Some(serde_json::from_value(config.clone()).map_err(|e| {
+      (
+        StatusCode::BAD_REQUEST,
+        format!("Invalid wayfern_config: {e}"),
+      )
+    })?),
+    None => None,
   };
+
+  // Cross-OS fingerprints are a paid capability. The Tauri command, the
+  // importer and MCP each check this; REST did not, so the restriction was
+  // bypassable through this endpoint alone.
+  if !crate::cloud_auth::CLOUD_AUTH
+    .is_fingerprint_os_allowed(wayfern_config.as_ref().and_then(|c| c.os.as_deref()))
+    .await
+  {
+    return Err((
+      StatusCode::PAYMENT_REQUIRED,
+      serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string(),
+    ));
+  }
 
   // Reject a dead/unreachable proxy or VPN before creating the profile. A 402
   // (expired proxy subscription) maps to 402; anything else is a 400.
@@ -3769,10 +3800,19 @@ async fn import_profiles_api(
   State(state): State<ApiServerState>,
   Json(request): Json<ImportProfilesRequest>,
 ) -> Result<Json<crate::profile_importer::ProfileImportBatchResult>, (StatusCode, String)> {
-  let wayfern_config: Option<crate::wayfern_manager::WayfernConfig> = request
-    .wayfern_config
-    .as_ref()
-    .and_then(|config| serde_json::from_value(config.clone()).ok());
+  // A malformed config is a 400. Dropping it silently also dropped the `os`
+  // it carried, which made `is_fingerprint_os_allowed(None)` return true and
+  // bypassed the Pro gate below while generating host-OS fingerprints.
+  let wayfern_config: Option<crate::wayfern_manager::WayfernConfig> =
+    match request.wayfern_config.as_ref() {
+      Some(config) => Some(serde_json::from_value(config.clone()).map_err(|e| {
+        (
+          StatusCode::BAD_REQUEST,
+          format!("Invalid wayfern_config: {e}"),
+        )
+      })?),
+      None => None,
+    };
 
   // The Pro gate for fingerprint OS spoofing lives inside import_profiles, so
   // every surface inherits it; manager_error_response maps the code to 402.
@@ -4146,6 +4186,55 @@ mod tests {
     assert_eq!(parsed.browser, "wayfern");
     assert!(parsed.version.is_none());
     assert!(parsed.wayfern_config.is_none());
+  }
+
+  #[test]
+  fn wayfern_config_os_survives_the_untyped_request_field() {
+    // `wayfern_config` arrives as an untyped Value and is only turned into a
+    // WayfernConfig inside the handler. That second hop is where an `os` used
+    // to be lost, so assert it round-trips.
+    let json = r#"{"name": "p", "browser": "wayfern", "wayfern_config": {"os": "android"}}"#;
+    let parsed: CreateProfileRequest = serde_json::from_str(json).expect("body must parse");
+    let config: crate::wayfern_manager::WayfernConfig =
+      serde_json::from_value(parsed.wayfern_config.expect("config present"))
+        .expect("a well-formed config must parse");
+    assert_eq!(config.os.as_deref(), Some("android"));
+  }
+
+  #[test]
+  fn malformed_wayfern_config_is_an_error_not_a_default() {
+    // `fingerprint` is a JSON-encoded string, so passing an object fails to
+    // parse. The handler must surface that as a 400: previously `.ok()` threw
+    // the whole config away, dropping the caller's `os` with it and returning
+    // a host-OS profile with 200 and no diagnostic.
+    let json = r#"{"os": "android", "fingerprint": {"platform": "Linux armv81"}}"#;
+    let value: serde_json::Value = serde_json::from_str(json).expect("value parses");
+    let parsed = serde_json::from_value::<crate::wayfern_manager::WayfernConfig>(value);
+    assert!(
+      parsed.is_err(),
+      "an object fingerprint must not silently deserialize"
+    );
+  }
+
+  #[test]
+  fn api_profile_exposes_the_fingerprint_os_separately_from_host_os() {
+    // host_os is the machine; fingerprint_os is what the browser reports. A
+    // cross-OS profile has to be distinguishable through the API alone.
+    let spec = ApiDoc::openapi();
+    let spec = serde_json::to_value(&spec).expect("spec serializes");
+    let props = &spec["components"]["schemas"]["ApiProfile"]["properties"];
+    assert!(
+      props.get("fingerprint_os").is_some(),
+      "ApiProfile must publish fingerprint_os"
+    );
+    let required = spec["components"]["schemas"]["ApiProfile"]["required"]
+      .as_array()
+      .cloned()
+      .unwrap_or_default();
+    assert!(
+      !required.iter().any(|r| r == "fingerprint_os"),
+      "fingerprint_os is nullable and must stay optional"
+    );
   }
 
   #[test]

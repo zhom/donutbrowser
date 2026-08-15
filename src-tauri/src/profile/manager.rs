@@ -2,7 +2,7 @@ use crate::browser::{create_browser, BrowserType};
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
-use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
+use crate::profile::types::{get_host_os, is_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
 use std::fs::{self, create_dir_all};
@@ -384,11 +384,23 @@ impl ProfileManager {
           };
 
           // Backfill host_os from browser config for profiles created before
-          // the field existed (or synced without it).
-          if profile.host_os.is_none() {
-            let inferred_os = profile.resolved_os().map(str::to_string);
-            if let Some(os) = inferred_os {
-              profile.host_os = Some(os);
+          // the field existed (or synced without it), and repair any profile
+          // already stamped with a fingerprint-only OS.
+          //
+          // Only a real host OS may be stored here. The fallback in
+          // `resolved_os` reads `wayfern_config.os`, which is a fingerprint OS
+          // and may be "android"/"ios". Persisting that made `is_cross_os`
+          // permanently true and locked the profile out of every local launch,
+          // with no way to undo it from the UI. Leaving `host_os` as None keeps
+          // the profile launchable, which is what it was before the field.
+          let needs_repair = profile.host_os.as_deref().is_some_and(|os| !is_host_os(os));
+          if profile.host_os.is_none() || needs_repair {
+            let inferred_os = profile
+              .resolved_os()
+              .filter(|os| is_host_os(os))
+              .map(str::to_string);
+            if inferred_os != profile.host_os {
+              profile.host_os = inferred_os;
               if let Ok(json) = serde_json::to_string_pretty(&profile) {
                 let _ = atomic_write(&metadata_file, json.as_bytes());
               }
@@ -1924,7 +1936,7 @@ pub async fn create_browser_profile_new(
     .is_fingerprint_os_allowed(fingerprint_os)
     .await
   {
-    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
   }
 
   // A dead/unreachable proxy or VPN (or a 402 from an expired proxy
@@ -1968,7 +1980,7 @@ pub async fn update_wayfern_config(
     .is_fingerprint_os_allowed(config.os.as_deref())
     .await
   {
-    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
   }
 
   let profile_manager = ProfileManager::instance();

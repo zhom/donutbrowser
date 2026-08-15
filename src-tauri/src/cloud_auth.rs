@@ -1138,6 +1138,11 @@ impl CloudAuthManager {
   /// is nothing to fetch and nothing wrong.
   pub async fn request_wayfern_token(&self) -> Result<(), String> {
     if !self.is_entitled_to_wayfern_token().await {
+      // Ok(()) here means callers log nothing, so a session that declined to
+      // mint left no trace at all and looked identical to one that succeeded.
+      log::info!(
+        "Skipping wayfern token request: the cached plan does not include browser automation"
+      );
       self.clear_wayfern_token().await;
       return Ok(());
     }
@@ -1273,9 +1278,11 @@ impl CloudAuthManager {
         }
       }
 
-      // Refresh profile data periodically
+      // Refresh profile data periodically. A failure here leaves the cached
+      // plan stale, which silently gates paid features, so it belongs at warn
+      // rather than debug where the shipped log level hides it.
       if let Err(e) = CLOUD_AUTH.fetch_profile().await {
-        log::debug!("Failed to refresh cloud profile: {e}");
+        log::warn!("Failed to refresh cloud profile: {e}");
       }
 
       // Reconnect profile lock manager if needed
@@ -1291,7 +1298,14 @@ impl CloudAuthManager {
       // Refresh wayfern token every 10 hours (60 iterations of 10-minute loop).
       // request_wayfern_token owns the entitlement check and clears the cached
       // token when the plan doesn't include automation.
-      if wayfern_refresh_counter >= 60 {
+      //
+      // Also mint one as soon as the plan starts granting it. `fetch_profile`
+      // above picks up an upgrade within ten minutes, but nothing watched that
+      // transition, so a session that signed in before upgrading stayed
+      // tokenless for up to ten hours while reporting the feature as unlocked.
+      let missing_entitled_token = CLOUD_AUTH.is_entitled_to_wayfern_token().await
+        && CLOUD_AUTH.get_wayfern_token().await.is_none();
+      if wayfern_refresh_counter >= 60 || missing_entitled_token {
         wayfern_refresh_counter = 0;
         if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
           log::warn!("Failed to refresh wayfern token: {e}");
@@ -1411,6 +1425,20 @@ pub async fn cloud_get_user() -> Result<Option<CloudAuthState>, String> {
 pub async fn cloud_refresh_profile() -> Result<CloudUser, String> {
   let mut user = CLOUD_AUTH.fetch_profile().await?;
   user.entitlements = Some(user.entitlements());
+
+  // Minting the token is what actually unlocks cross-OS fingerprints, and it
+  // only happened at login, at startup and once every 10 hours. An account
+  // that upgraded after its last sign-in therefore refreshed into the correct
+  // entitlements while still holding no token, and "Refresh" did not fix it.
+  // Only mint when one is genuinely missing, so this stays a no-op afterwards.
+  if CLOUD_AUTH.is_entitled_to_wayfern_token().await
+    && CLOUD_AUTH.get_wayfern_token().await.is_none()
+  {
+    if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
+      log::warn!("Refresh could not obtain a wayfern token: {e}");
+    }
+  }
+
   Ok(user)
 }
 
