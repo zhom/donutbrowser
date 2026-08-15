@@ -1,6 +1,23 @@
 # Changelog
 
 
+## v0.29.4 (2026-08-15)
+
+### Refactoring
+
+- cleanup
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.29.3 [skip ci] (#556)
+
+### Maintenance
+
+- chore: version bump
+- ci(deps): bump the github-actions group with 4 updates (#559)
+- chore: update flake.nix for v0.29.3 [skip ci] (#557)
+
+
 ## v0.29.3 (2026-08-12)
 
 ### Refactoring
