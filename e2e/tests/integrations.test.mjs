@@ -567,8 +567,24 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
     );
     assert.equal(assigned.response.status, 200, JSON.stringify(assigned.value));
     assert.equal(assigned.value.profile.id, launchProfile.id);
-    // `ApiProfile` carries no `extension_group_id`, so the assignment can only
-    // be read back through the surface the launcher itself resolves.
+    // A caller that can set the assignment must be able to read it back without
+    // dropping to the desktop app.
+    assert.equal(
+      assigned.value.profile.extension_group_id,
+      launchGroupId,
+      "the update response must echo the assignment it just made",
+    );
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/profiles/${launchProfile.id}`, {
+          token: saved.api_token,
+        })
+      ).value.profile.extension_group_id,
+      launchGroupId,
+      "a fresh GET must report the assignment",
+    );
+    // Also read it back through the surface the launcher itself resolves, so
+    // the REST field and the launch path cannot drift apart.
     const assignedGroup = () =>
       app.invoke("get_extension_group_for_profile", {
         profileId: launchProfile.id,
@@ -610,6 +626,15 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
       200,
     );
     assert.equal(await assignedGroup(), null);
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/profiles/${launchProfile.id}`, {
+          token: saved.api_token,
+        })
+      ).value.profile.extension_group_id,
+      null,
+      "clearing the assignment must be visible over REST too",
+    );
     assert.equal(
       (
         await jsonRequest(`${base}/v1/extension-groups/${launchGroupId}`, {
