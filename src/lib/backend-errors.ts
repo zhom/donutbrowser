@@ -28,6 +28,15 @@ export type BackendErrorCode =
   | "VPN_NOT_FOUND"
   | "EXTENSION_NOT_FOUND"
   | "EXTENSION_GROUP_NOT_FOUND"
+  | "EXTENSION_UNSUPPORTED_FILE_TYPE"
+  | "EXTENSION_DIR_NOT_FOUND"
+  | "EXTENSION_NOT_A_DIRECTORY"
+  | "EXTENSION_MANIFEST_MISSING"
+  | "EXTENSION_MANIFEST_INVALID"
+  | "EXTENSION_DIR_TOO_LARGE"
+  | "EXTENSION_PATH_HAS_COMMA"
+  | "EXTENSION_LINK_REQUIRES_DIRECTORY"
+  | "EXTENSION_LINKED_CANNOT_SYNC"
   | "CANNOT_MODIFY_CLOUD_MANAGED_PROXY"
   | "SYNC_LOCKED_BY_PROFILE"
   | "SYNC_NOT_CONFIGURED"
@@ -219,6 +228,24 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.extensionNotFound");
     case "EXTENSION_GROUP_NOT_FOUND":
       return t("backendErrors.extensionGroupNotFound");
+    case "EXTENSION_UNSUPPORTED_FILE_TYPE":
+      return t("backendErrors.extensionUnsupportedFileType");
+    case "EXTENSION_DIR_NOT_FOUND":
+      return t("backendErrors.extensionDirNotFound");
+    case "EXTENSION_NOT_A_DIRECTORY":
+      return t("backendErrors.extensionNotADirectory");
+    case "EXTENSION_MANIFEST_MISSING":
+      return t("backendErrors.extensionManifestMissing");
+    case "EXTENSION_MANIFEST_INVALID":
+      return t("backendErrors.extensionManifestInvalid");
+    case "EXTENSION_DIR_TOO_LARGE":
+      return t("backendErrors.extensionDirTooLarge");
+    case "EXTENSION_PATH_HAS_COMMA":
+      return t("backendErrors.extensionPathHasComma");
+    case "EXTENSION_LINK_REQUIRES_DIRECTORY":
+      return t("backendErrors.extensionLinkRequiresDirectory");
+    case "EXTENSION_LINKED_CANNOT_SYNC":
+      return t("backendErrors.extensionLinkedCannotSync");
     case "CANNOT_MODIFY_CLOUD_MANAGED_PROXY":
       return t("backendErrors.cannotModifyCloudManagedProxy");
     case "SYNC_LOCKED_BY_PROFILE":

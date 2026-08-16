@@ -3,6 +3,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { withApp } from "../lib/app.mjs";
+import {
+  extensionZipBase64,
+  LOCALIZED_EXTENSION_MESSAGES,
+  localizedExtensionZipBase64,
+  OVERSIZED_EXTENSION_NAME,
+  oversizedExtensionZipBase64,
+  writeUnpackedExtension,
+} from "../lib/fixtures.mjs";
 
 const VLESS_URI =
   "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@127.0.0.1:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.example.com&fp=chrome&pbk=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&sid=0123456789abcdef&spx=%2F&type=tcp&headerType=none#MCP";
@@ -92,6 +100,27 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
       "/v1/browsers/{browser}/versions",
     ]) {
       assert.ok(paths.includes(required), `OpenAPI is missing ${required}`);
+    }
+    // The served spec comes from the hand-maintained ApiDoc derive, not from
+    // the router, so an extension route can answer requests while being absent
+    // from the contract an agent generates its client from.
+    for (const [route, methods] of [
+      ["/v1/extensions", ["get", "post"]],
+      ["/v1/extensions/{id}", ["get", "put", "delete"]],
+      ["/v1/extension-groups", ["get", "post"]],
+      ["/v1/extension-groups/{id}", ["get", "put", "delete"]],
+      [
+        "/v1/extension-groups/{id}/extensions/{extension_id}",
+        ["post", "delete"],
+      ],
+    ]) {
+      assert.ok(paths.includes(route), `OpenAPI is missing ${route}`);
+      for (const method of methods) {
+        assert.ok(
+          openapi.value.paths[route][method],
+          `OpenAPI is missing ${method.toUpperCase()} ${route}`,
+        );
+      }
     }
 
     const unauthorized = await jsonRequest(`${base}/v1/profiles`);
@@ -196,6 +225,428 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
     });
     assert.equal(imported.response.status, 200);
     assert.equal(imported.value.imported_count, 1);
+
+    // Extensions arrive either as an inline payload or as a path the app can
+    // read, and the folder form is the whole point: it is how an agent reaches
+    // the "load unpacked" flow that the desktop offers through a file picker.
+    const archiveExtension = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: {
+        name: "REST Archive Extension",
+        file_name: "fixture.zip",
+        file_data_base64: extensionZipBase64(),
+      },
+    });
+    assert.equal(
+      archiveExtension.response.status,
+      201,
+      JSON.stringify(archiveExtension.value),
+    );
+    assert.equal(archiveExtension.value.name, "Donut E2E Fixture");
+    assert.equal(archiveExtension.value.source_kind, "archive");
+    assert.equal(archiveExtension.value.linked_path, null);
+
+    const unpackedDir = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "rest-unpacked-extension"),
+      { name: "Donut REST Unpacked", version: "1.2.0" },
+    );
+    const folderExtension = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { name: "REST Folder Extension", source_path: unpackedDir },
+    });
+    assert.equal(
+      folderExtension.response.status,
+      201,
+      JSON.stringify(folderExtension.value),
+    );
+    assert.equal(folderExtension.value.name, "Donut REST Unpacked");
+    assert.equal(folderExtension.value.version, "1.2.0");
+    assert.equal(folderExtension.value.source_kind, "unpacked");
+    assert.equal(folderExtension.value.linked_path, null);
+
+    // Two sources in one request have no defined winner, so the request is
+    // refused rather than silently resolved.
+    const ambiguousSource = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: {
+        name: "REST Ambiguous Extension",
+        file_name: "fixture.zip",
+        file_data_base64: extensionZipBase64(),
+        source_path: unpackedDir,
+      },
+    });
+    assert.equal(ambiguousSource.response.status, 400);
+    assert.match(
+      JSON.stringify(ambiguousSource.value),
+      /EXTENSION_SOURCE_REQUIRED/,
+    );
+    const sourcelessExtension = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { name: "REST Sourceless Extension" },
+    });
+    assert.equal(sourcelessExtension.response.status, 400);
+    assert.match(
+      JSON.stringify(sourcelessExtension.value),
+      /EXTENSION_SOURCE_REQUIRED/,
+    );
+    // An archive has no folder to keep loading from, so linking one is refused
+    // rather than quietly stored as a copy.
+    const linkedArchive = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: {
+        name: "REST Linked Archive",
+        file_name: "fixture.zip",
+        file_data_base64: extensionZipBase64(),
+        link: true,
+      },
+    });
+    assert.equal(linkedArchive.response.status, 400);
+    assert.match(
+      JSON.stringify(linkedArchive.value),
+      /EXTENSION_LINK_REQUIRES_DIRECTORY/,
+    );
+
+    const extensionId = folderExtension.value.id;
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/extensions/${extensionId}`, {
+          token: saved.api_token,
+        })
+      ).value.id,
+      extensionId,
+    );
+    const renamedExtension = await jsonRequest(
+      `${base}/v1/extensions/${extensionId}`,
+      {
+        method: "PUT",
+        token: saved.api_token,
+        body: { name: "REST Renamed Extension" },
+      },
+    );
+    assert.equal(
+      renamedExtension.response.status,
+      200,
+      JSON.stringify(renamedExtension.value),
+    );
+    assert.equal(renamedExtension.value.name, "REST Renamed Extension");
+    assert.equal(
+      (await jsonRequest(`${base}/v1/extensions`, { token: saved.api_token }))
+        .value.length,
+      2,
+    );
+
+    // Axum's default body limit is 2 MiB, which plenty of real `.crx` files
+    // exceed: every one of them was refused before the handler ran until the
+    // extension payload routes got a limit of their own. The fixture below is
+    // stored rather than deflated, so the body genuinely stays over the
+    // default and a 201 can only come from the raised limit.
+    const oversizedBody = {
+      name: "REST Oversized Extension",
+      file_name: "oversized.zip",
+      file_data_base64: oversizedExtensionZipBase64(),
+    };
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(oversizedBody)) > 2 * 1024 * 1024,
+      "the oversized fixture must exceed the default body limit it tests",
+    );
+    const oversized = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: oversizedBody,
+    });
+    assert.equal(
+      oversized.response.status,
+      201,
+      JSON.stringify(oversized.value),
+    );
+    // Read out of the archive that arrived, so the payload landed whole rather
+    // than merely being accepted.
+    assert.equal(oversized.value.name, OVERSIZED_EXTENSION_NAME);
+    assert.equal(oversized.value.version, "1.0.0");
+    assert.equal(oversized.value.file_type, "zip");
+
+    // The raised limit is scoped to the two paths that carry a payload. A
+    // group name is never megabytes long, so a route that accepted one would
+    // mean the layer had been attached to the whole router.
+    const oversizedGroupBody = { name: "G".repeat(3 * 1024 * 1024) };
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(oversizedGroupBody)) > 2 * 1024 * 1024,
+    );
+    const oversizedGroup = await jsonRequest(`${base}/v1/extension-groups`, {
+      method: "POST",
+      token: saved.api_token,
+      body: oversizedGroupBody,
+    });
+    assert.equal(
+      oversizedGroup.response.status,
+      413,
+      JSON.stringify(oversizedGroup.value),
+    );
+    assert.deepEqual(
+      (
+        await jsonRequest(`${base}/v1/extension-groups`, {
+          token: saved.api_token,
+        })
+      ).value,
+      [],
+      "the refused group request must not have stored anything",
+    );
+
+    // Chrome Web Store extensions overwhelmingly localize their manifest: the
+    // name a user recognizes sits in `_locales/<default_locale>/messages.json`
+    // and the manifest holds `__MSG_extName__`. Storing the manifest verbatim
+    // is what puts a raw placeholder in the extension list.
+    const localized = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: {
+        name: "REST Localized Extension",
+        file_name: "localized.zip",
+        file_data_base64: localizedExtensionZipBase64(),
+      },
+    });
+    assert.equal(
+      localized.response.status,
+      201,
+      JSON.stringify(localized.value),
+    );
+    assert.equal(localized.value.name, LOCALIZED_EXTENSION_MESSAGES.extName);
+    assert.equal(
+      localized.value.description,
+      LOCALIZED_EXTENSION_MESSAGES.extDescription,
+    );
+    assert.equal(
+      localized.value.author,
+      LOCALIZED_EXTENSION_MESSAGES.extAuthor,
+    );
+    assert.doesNotMatch(JSON.stringify(localized.value), /__MSG_/);
+    // The resolved strings have to be what was persisted, not something the
+    // create response computed on its way out.
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/extensions/${localized.value.id}`, {
+          token: saved.api_token,
+        })
+      ).value.name,
+      LOCALIZED_EXTENSION_MESSAGES.extName,
+    );
+
+    // A placeholder the locale file cannot resolve falls back to the name the
+    // caller sent. What it must never do is store `__MSG_extName__` itself.
+    const unresolved = await jsonRequest(`${base}/v1/extensions`, {
+      method: "POST",
+      token: saved.api_token,
+      body: {
+        name: "REST Unresolved Placeholder",
+        file_name: "unresolved.zip",
+        file_data_base64: localizedExtensionZipBase64({ messages: {} }),
+      },
+    });
+    assert.equal(
+      unresolved.response.status,
+      201,
+      JSON.stringify(unresolved.value),
+    );
+    assert.equal(unresolved.value.name, "REST Unresolved Placeholder");
+    assert.equal(unresolved.value.description, null);
+    assert.equal(unresolved.value.author, null);
+    assert.doesNotMatch(JSON.stringify(unresolved.value), /__MSG_/);
+
+    const extensionGroup = await jsonRequest(`${base}/v1/extension-groups`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { name: "REST Extension Group" },
+    });
+    assert.equal(
+      extensionGroup.response.status,
+      201,
+      JSON.stringify(extensionGroup.value),
+    );
+    assert.equal(extensionGroup.value.name, "REST Extension Group");
+    assert.deepEqual(extensionGroup.value.extension_ids, []);
+    const extensionGroupId = extensionGroup.value.id;
+    const renamedExtensionGroup = await jsonRequest(
+      `${base}/v1/extension-groups/${extensionGroupId}`,
+      {
+        method: "PUT",
+        token: saved.api_token,
+        body: { name: "REST Extension Group Updated" },
+      },
+    );
+    assert.equal(
+      renamedExtensionGroup.response.status,
+      200,
+      JSON.stringify(renamedExtensionGroup.value),
+    );
+    assert.equal(
+      renamedExtensionGroup.value.name,
+      "REST Extension Group Updated",
+    );
+
+    const membershipUrl = `${base}/v1/extension-groups/${extensionGroupId}/extensions/${extensionId}`;
+    const joined = await jsonRequest(membershipUrl, {
+      method: "POST",
+      token: saved.api_token,
+    });
+    assert.equal(joined.response.status, 200, JSON.stringify(joined.value));
+    assert.deepEqual(joined.value.extension_ids, [extensionId]);
+    assert.deepEqual(
+      (
+        await jsonRequest(`${base}/v1/extension-groups/${extensionGroupId}`, {
+          token: saved.api_token,
+        })
+      ).value.extension_ids,
+      [extensionId],
+    );
+    const left = await jsonRequest(membershipUrl, {
+      method: "DELETE",
+      token: saved.api_token,
+    });
+    assert.equal(left.response.status, 200, JSON.stringify(left.value));
+    assert.deepEqual(left.value.extension_ids, []);
+    assert.deepEqual(
+      (
+        await jsonRequest(`${base}/v1/extension-groups/${extensionGroupId}`, {
+          token: saved.api_token,
+        })
+      ).value.extension_ids,
+      [],
+    );
+
+    // The whole path an automation client takes: an extension, a group holding
+    // it, and a profile that will load that group the next time it launches.
+    // Each piece already had coverage; the sequence did not, and it is the
+    // sequence that has to work for extensions to be usable over REST at all.
+    const launchProfile = await app.invoke("create_browser_profile_new", {
+      name: "REST Extension Profile",
+      browserStr: "wayfern",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+      proxyId: null,
+      vpnId: null,
+      // A stored fingerprint keeps this suite off the real browser; the
+      // browser suite covers generation.
+      wayfernConfig: { fingerprint: "{}" },
+      groupId: null,
+      ephemeral: false,
+      dnsBlocklist: null,
+      launchHook: null,
+    });
+    const launchGroup = await jsonRequest(`${base}/v1/extension-groups`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { name: "REST Launch Extension Group" },
+    });
+    assert.equal(
+      launchGroup.response.status,
+      201,
+      JSON.stringify(launchGroup.value),
+    );
+    const launchGroupId = launchGroup.value.id;
+    assert.deepEqual(
+      (
+        await jsonRequest(
+          `${base}/v1/extension-groups/${launchGroupId}/extensions/${archiveExtension.value.id}`,
+          { method: "POST", token: saved.api_token },
+        )
+      ).value.extension_ids,
+      [archiveExtension.value.id],
+    );
+    const assigned = await jsonRequest(
+      `${base}/v1/profiles/${launchProfile.id}`,
+      {
+        method: "PUT",
+        token: saved.api_token,
+        body: { extension_group_id: launchGroupId },
+      },
+    );
+    assert.equal(assigned.response.status, 200, JSON.stringify(assigned.value));
+    assert.equal(assigned.value.profile.id, launchProfile.id);
+    // `ApiProfile` carries no `extension_group_id`, so the assignment can only
+    // be read back through the surface the launcher itself resolves.
+    const assignedGroup = () =>
+      app.invoke("get_extension_group_for_profile", {
+        profileId: launchProfile.id,
+      });
+    assert.equal((await assignedGroup()).id, launchGroupId);
+    assert.deepEqual((await assignedGroup()).extension_ids, [
+      archiveExtension.value.id,
+    ]);
+
+    // A group that does not exist used to be stored anyway and fail at launch,
+    // far from the request that caused it.
+    const missingExtensionGroup = await jsonRequest(
+      `${base}/v1/profiles/${launchProfile.id}`,
+      {
+        method: "PUT",
+        token: saved.api_token,
+        body: { extension_group_id: "00000000-0000-0000-0000-0000000000ee" },
+      },
+    );
+    assert.equal(
+      missingExtensionGroup.response.status,
+      404,
+      JSON.stringify(missingExtensionGroup.value),
+    );
+    assert.equal(
+      (await assignedGroup()).id,
+      launchGroupId,
+      "a refused assignment must leave the previous one in place",
+    );
+
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/profiles/${launchProfile.id}`, {
+          method: "PUT",
+          token: saved.api_token,
+          body: { extension_group_id: "" },
+        })
+      ).response.status,
+      200,
+    );
+    assert.equal(await assignedGroup(), null);
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/extension-groups/${launchGroupId}`, {
+          method: "DELETE",
+          token: saved.api_token,
+        })
+      ).response.status,
+      204,
+    );
+    await app.invoke("delete_profile", { profileId: launchProfile.id });
+
+    for (const id of [
+      extensionId,
+      archiveExtension.value.id,
+      oversized.value.id,
+      localized.value.id,
+      unresolved.value.id,
+    ]) {
+      assert.equal(
+        (
+          await jsonRequest(`${base}/v1/extensions/${id}`, {
+            method: "DELETE",
+            token: saved.api_token,
+          })
+        ).response.status,
+        204,
+      );
+    }
+    assert.equal(
+      (
+        await jsonRequest(`${base}/v1/extension-groups/${extensionGroupId}`, {
+          method: "DELETE",
+          token: saved.api_token,
+        })
+      ).response.status,
+      204,
+    );
 
     const missing = await jsonRequest(`${base}/v1/groups/missing`, {
       token: saved.api_token,
@@ -323,6 +774,13 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
       "run_profile_remote",
       "get_remote_session",
       "stop_remote_session",
+      // Extension management is only usable from an agent if importing and
+      // grouping are reachable, not just listing and deleting.
+      "add_extension",
+      "update_extension",
+      "add_extension_to_group",
+      "remove_extension_from_group",
+      "update_extension_group",
     ]) {
       assert.ok(names.includes(name), `MCP is missing ${name}`);
     }
@@ -413,6 +871,101 @@ test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated a
       VLESS_URI,
     );
     await app.invoke("delete_stored_proxy", { proxyId: vlessProxy.id });
+
+    let toolCallId = 7;
+    const callTool = (name, args) =>
+      jsonRequest(`${base}/mcp/${config.token}`, {
+        method: "POST",
+        headers: mcpHeaders,
+        body: {
+          jsonrpc: "2.0",
+          id: toolCallId++,
+          method: "tools/call",
+          params: { name, arguments: args },
+        },
+      });
+
+    const unpackedDir = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "mcp-unpacked-extension"),
+      { name: "Donut MCP Unpacked", version: "1.0.0" },
+    );
+    const addedExtension = await callTool("add_extension", {
+      path: unpackedDir,
+      name: "MCP Folder Extension",
+    });
+    assert.equal(addedExtension.response.status, 200);
+    const subscriptionGated = /subscription/i.test(
+      addedExtension.value.error?.message ?? "",
+    );
+    // The e2e build overrides the paid-plan gate whenever a Wayfern test token
+    // is present, so with one in the environment a gated answer means the
+    // override stopped working and everything below it silently stopped
+    // running.
+    assert.ok(
+      !subscriptionGated || !process.env.WAYFERN_TEST_TOKEN,
+      `the e2e paid-plan override did not apply: ${addedExtension.value.error?.message}`,
+    );
+    if (subscriptionGated) {
+      // Every extension tool is gated on an active paid plan and this session
+      // is signed out, so the call path is unreachable here. The tool list
+      // above still proves the tools are published.
+      console.warn(
+        "Skipping the MCP extension tool calls: this session has no paid entitlement",
+      );
+    } else {
+      assert.equal(addedExtension.value.error, undefined);
+      const stored = (await app.invoke("list_extensions")).find(
+        (item) => item.name === "Donut MCP Unpacked",
+      );
+      assert.ok(stored, "the MCP import must produce a stored extension");
+      assert.equal(stored.source_kind, "unpacked");
+      assert.equal(stored.linked_path, null);
+
+      const renamedExtension = await callTool("update_extension", {
+        extension_id: stored.id,
+        name: "MCP Renamed Extension",
+      });
+      assert.equal(renamedExtension.value.error, undefined);
+      assert.equal(
+        (await app.invoke("list_extensions")).find(
+          (item) => item.id === stored.id,
+        ).name,
+        "MCP Renamed Extension",
+      );
+
+      const extensionGroup = await app.invoke("create_extension_group", {
+        name: "MCP Extension Group",
+      });
+      const joined = await callTool("add_extension_to_group", {
+        group_id: extensionGroup.id,
+        extension_id: stored.id,
+      });
+      assert.equal(joined.value.error, undefined);
+      const readGroup = async () =>
+        (await app.invoke("list_extension_groups")).find(
+          (item) => item.id === extensionGroup.id,
+        );
+      assert.deepEqual((await readGroup()).extension_ids, [stored.id]);
+
+      const renamedGroup = await callTool("update_extension_group", {
+        group_id: extensionGroup.id,
+        name: "MCP Extension Group Updated",
+      });
+      assert.equal(renamedGroup.value.error, undefined);
+      assert.equal((await readGroup()).name, "MCP Extension Group Updated");
+
+      const removed = await callTool("remove_extension_from_group", {
+        group_id: extensionGroup.id,
+        extension_id: stored.id,
+      });
+      assert.equal(removed.value.error, undefined);
+      assert.deepEqual((await readGroup()).extension_ids, []);
+
+      await app.invoke("delete_extension", { extensionId: stored.id });
+      await app.invoke("delete_extension_group", {
+        groupId: extensionGroup.id,
+      });
+    }
 
     const agents = await app.invoke("list_mcp_agents");
     assert.ok(agents.some((agent) => agent.id === "cursor"));

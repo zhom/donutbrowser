@@ -804,6 +804,13 @@ impl CloudAuthManager {
   /// Account is in a paid/active state. Used for the "any active plan" gates
   /// (sync token); per-feature access uses the capability helpers.
   pub async fn has_active_paid_subscription(&self) -> bool {
+    #[cfg(feature = "e2e")]
+    if crate::e2e_automation_enabled()
+      && std::env::var_os("WAYFERN_TEST_TOKEN").is_some_and(|token| !token.is_empty())
+    {
+      return true;
+    }
+
     self.entitlements().await.map(|e| e.active).unwrap_or(false)
   }
 

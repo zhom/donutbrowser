@@ -1,15 +1,23 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { withApp } from "../lib/app.mjs";
 import {
+  extensionIconPngBase64,
   extensionZipBase64,
   wireGuardFixture,
   writeChromiumCookies,
   writeChromiumHistory,
+  writeUnpackedExtension,
 } from "../lib/fixtures.mjs";
 
 async function createProfile(app, name = "Entity Profile") {
@@ -554,6 +562,104 @@ test("extensions, extension groups, VPN storage, DNS rules, and event-backed ass
     });
     await app.invoke("delete_extension_group", { groupId: extensionGroup.id });
     await app.invoke("delete_extension", { extensionId: extension.id });
+
+    // Folder imports, the "Load unpacked" flow. Copying packs the folder into
+    // the store; linking loads it from where the user keeps it, which only
+    // exists on this machine and therefore never syncs.
+    const unpackedDir = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "unpacked-extension"),
+    );
+    const copied = await app.invoke("add_unpacked_extension", {
+      name: "Overridden By The Manifest",
+      path: unpackedDir,
+      link: false,
+    });
+    assert.equal(copied.source_kind, "unpacked");
+    assert.equal(copied.linked_path, null);
+    assert.equal(copied.file_type, "zip");
+    assert.equal(copied.file_name, "unpacked-extension.zip");
+    assert.equal(copied.name, "Donut E2E Unpacked");
+    assert.equal(copied.version, "1.0.0");
+    // The folder declares icons, so packing it must carry one through into the
+    // store rather than dropping it the way the icon-less ZIP fixture does.
+    assert.equal(
+      await app.invoke("get_extension_icon", { extensionId: copied.id }),
+      `data:image/png;base64,${extensionIconPngBase64()}`,
+    );
+
+    const linked = await app.invoke("add_unpacked_extension", {
+      name: "Linked Fixture",
+      path: unpackedDir,
+      link: true,
+    });
+    assert.equal(linked.source_kind, "unpacked");
+    assert.equal(linked.file_type, "unpacked");
+    assert.equal(linked.linked_path, await realpath(unpackedDir));
+    assert.equal(
+      linked.sync_enabled,
+      false,
+      "a linked extension has no payload to upload, so it must never be synced",
+    );
+
+    const repackedDir = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "unpacked-extension-v2"),
+      { name: "Donut E2E Unpacked v2", version: "2.0.0" },
+    );
+    const repacked = await app.invoke("update_extension_from_path", {
+      extensionId: copied.id,
+      name: "Repacked Fixture Extension",
+      path: repackedDir,
+      link: false,
+    });
+    assert.equal(repacked.name, "Repacked Fixture Extension");
+    assert.equal(repacked.version, "2.0.0");
+    assert.equal(repacked.file_name, "unpacked-extension-v2.zip");
+    assert.deepEqual(
+      await readdir(
+        path.join(app.dataRoot, "data", "extensions", copied.id, "file"),
+      ),
+      ["unpacked-extension-v2.zip"],
+      "re-importing replaces the stored payload instead of stacking a second one",
+    );
+
+    // Re-importing a linked extension as a copy ends the link, which is what
+    // makes it portable again. With no explicit name the manifest names it.
+    const unlinked = await app.invoke("update_extension_from_path", {
+      extensionId: linked.id,
+      name: null,
+      path: repackedDir,
+      link: false,
+    });
+    assert.equal(unlinked.linked_path, null);
+    assert.equal(unlinked.source_kind, "unpacked");
+    assert.equal(unlinked.name, "Donut E2E Unpacked v2");
+
+    assert.match(
+      await app.invokeError("add_unpacked_extension", {
+        name: "Not An Extension",
+        path: app.root,
+        link: false,
+      }),
+      /EXTENSION_MANIFEST_MISSING/,
+    );
+    assert.match(
+      await app.invokeError("update_extension_from_path", {
+        extensionId: unlinked.id,
+        name: null,
+        path: path.join(app.root, "fixtures", "absent"),
+        link: false,
+      }),
+      /EXTENSION_DIR_NOT_FOUND/,
+    );
+
+    for (const id of [copied.id, unlinked.id]) {
+      await app.invoke("delete_extension", { extensionId: id });
+    }
+    assert.deepEqual(await app.invoke("list_extensions"), []);
+    assert.ok(
+      existsSync(path.join(unpackedDir, "manifest.json")),
+      "importing a folder must never move or consume the user's copy of it",
+    );
 
     const vpn = await app.invoke("create_vpn_config_manual", {
       name: "E2E WireGuard",

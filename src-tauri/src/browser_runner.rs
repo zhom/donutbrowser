@@ -1328,6 +1328,13 @@ impl BrowserRunner {
         crate::profile::clear_on_close::clear_profile_browsing_data(profile).await;
       }
 
+      // The browser held these open for the life of the process; nothing reads
+      // them once it has exited, and they are plaintext extension code sitting
+      // on real disk even for an ephemeral profile.
+      crate::extension_manager::ExtensionManager::cleanup_unpacked_for_profile(
+        &profile.id.to_string(),
+      );
+
       log::info!(
         "Wayfern process cleanup completed for profile: {} (ID: {})",
         profile.name,

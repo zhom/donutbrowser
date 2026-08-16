@@ -1308,6 +1308,33 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "add_extension".to_string(),
+        description: "Add a managed browser extension from a path on the machine running Donut: a .crx or .zip archive file, or an unpacked extension folder holding a top-level manifest.json. With link set to true, which only applies to a folder, the folder is loaded in place instead of being copied into Donut, so edits to it apply on the next browser start and the extension is machine-local and never synced. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "description": "Path on the machine running Donut to a .crx/.zip file or to an unpacked extension folder" },
+            "name": { "type": "string", "description": "Display name, used only when the manifest carries no name of its own" },
+            "link": { "type": "boolean", "description": "Folders only: load the folder in place instead of copying it into Donut. Linked extensions never sync. Defaults to false." }
+          },
+          "required": ["path"]
+        }),
+      },
+      McpTool {
+        name: "update_extension".to_string(),
+        description: "Rename a managed extension and/or replace its payload from a path on the machine running Donut: a .crx or .zip archive file, or an unpacked extension folder holding a top-level manifest.json. With link set to true, which only applies to a folder, the folder is loaded in place instead of being copied into Donut, so the extension becomes machine-local and never syncs. At least one of name or path must be given. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "extension_id": { "type": "string", "description": "The extension ID to update" },
+            "name": { "type": "string", "description": "New display name" },
+            "path": { "type": "string", "description": "Path on the machine running Donut to the .crx/.zip file or unpacked extension folder to replace the payload with" },
+            "link": { "type": "boolean", "description": "Folders only: load the folder in place instead of copying it into Donut. Linked extensions never sync. Defaults to false." }
+          },
+          "required": ["extension_id"]
+        }),
+      },
+      McpTool {
         name: "create_extension_group".to_string(),
         description: "Create a new extension group. Requires Pro subscription.".to_string(),
         input_schema: serde_json::json!({
@@ -1316,6 +1343,47 @@ impl McpServer {
             "name": { "type": "string", "description": "Name for the extension group" }
           },
           "required": ["name"]
+        }),
+      },
+      McpTool {
+        name: "update_extension_group".to_string(),
+        description: "Rename an extension group and/or replace its membership with an exact list of extension IDs. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string", "description": "The extension group ID to update" },
+            "name": { "type": "string", "description": "New name for the extension group" },
+            "extension_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "The complete set of extension IDs the group should contain, replacing the current membership"
+            }
+          },
+          "required": ["group_id"]
+        }),
+      },
+      McpTool {
+        name: "add_extension_to_group".to_string(),
+        description: "Add an extension to an extension group. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string", "description": "The extension group ID" },
+            "extension_id": { "type": "string", "description": "The extension ID to add to the group" }
+          },
+          "required": ["group_id", "extension_id"]
+        }),
+      },
+      McpTool {
+        name: "remove_extension_from_group".to_string(),
+        description: "Remove an extension from an extension group. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string", "description": "The extension group ID" },
+            "extension_id": { "type": "string", "description": "The extension ID to remove from the group" }
+          },
+          "required": ["group_id", "extension_id"]
         }),
       },
       McpTool {
@@ -2215,7 +2283,12 @@ impl McpServer {
       // Extension management
       "list_extensions" => self.handle_list_extensions().await,
       "list_extension_groups" => self.handle_list_extension_groups().await,
+      "add_extension" => self.handle_add_extension(arguments).await,
+      "update_extension" => self.handle_update_extension(arguments).await,
       "create_extension_group" => self.handle_create_extension_group(arguments).await,
+      "update_extension_group" => self.handle_update_extension_group(arguments).await,
+      "add_extension_to_group" => self.handle_add_extension_to_group(arguments).await,
+      "remove_extension_from_group" => self.handle_remove_extension_from_group(arguments).await,
       "delete_extension" => self.handle_delete_extension_mcp(arguments).await,
       "delete_extension_group" => self.handle_delete_extension_group_mcp(arguments).await,
       "assign_extension_group_to_profile" => {
@@ -4402,6 +4475,88 @@ impl McpServer {
     Ok(serde_json::to_value(groups).unwrap())
   }
 
+  async fn handle_add_extension(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let path = arguments
+      .get("path")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: path".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .unwrap_or_default()
+      .to_string();
+    let link = arguments
+      .get("link")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let extension = mgr
+      .add_extension_from_path(name, std::path::Path::new(path), link)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to add extension: {e}"),
+      })?;
+    Ok(serde_json::to_value(extension).unwrap())
+  }
+
+  async fn handle_update_extension(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: extension_id".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .map(str::to_string);
+    let path = arguments.get("path").and_then(|v| v.as_str());
+    if name.is_none() && path.is_none() {
+      return Err(McpError {
+        code: -32602,
+        message: "Provide at least one of: name, path".to_string(),
+      });
+    }
+    let link = arguments
+      .get("link")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let extension = match path {
+      Some(path) => {
+        mgr.update_extension_from_path(extension_id, name, std::path::Path::new(path), link)
+      }
+      None => mgr.update_extension(extension_id, name, None, None),
+    }
+    .map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to update extension: {e}"),
+    })?;
+    Ok(serde_json::to_value(extension).unwrap())
+  }
+
   async fn handle_create_extension_group(
     &self,
     arguments: &serde_json::Value,
@@ -4425,6 +4580,106 @@ impl McpServer {
       message: format!("Failed to create extension group: {e}"),
     })?;
     Ok(serde_json::to_value(group).unwrap())
+  }
+
+  async fn handle_update_extension_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: group_id".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .map(str::to_string);
+    let extension_ids = arguments
+      .get("extension_ids")
+      .and_then(|v| v.as_array())
+      .map(|ids| {
+        ids
+          .iter()
+          .filter_map(|id| id.as_str().map(str::to_string))
+          .collect::<Vec<String>>()
+      });
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let group = mgr
+      .update_group(group_id, name, extension_ids)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to update extension group: {e}"),
+      })?;
+    Ok(serde_json::to_value(group).unwrap())
+  }
+
+  async fn handle_add_extension_to_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let (group_id, extension_id) = Self::group_and_extension_ids(arguments)?;
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let group = mgr
+      .add_extension_to_group(group_id, extension_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to add extension to group: {e}"),
+      })?;
+    Ok(serde_json::to_value(group).unwrap())
+  }
+
+  async fn handle_remove_extension_from_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let (group_id, extension_id) = Self::group_and_extension_ids(arguments)?;
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let group = mgr
+      .remove_extension_from_group(group_id, extension_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to remove extension from group: {e}"),
+      })?;
+    Ok(serde_json::to_value(group).unwrap())
+  }
+
+  fn group_and_extension_ids(arguments: &serde_json::Value) -> Result<(&str, &str), McpError> {
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: group_id".to_string(),
+      })?;
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: extension_id".to_string(),
+      })?;
+    Ok((group_id, extension_id))
   }
 
   async fn handle_delete_extension_mcp(
@@ -6035,9 +6290,9 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have at least 54 tools (34 + 7 browser interaction + 13 remote
+    // Should have at least 59 tools (39 + 7 browser interaction + 13 remote
     // fleet and cookie-bot tools)
-    assert!(tools.len() >= 54);
+    assert!(tools.len() >= 59);
 
     // Names are the contract an MCP client is written against, so a duplicate
     // silently shadows one of the two in dispatch and the tool that loses is
@@ -6092,7 +6347,12 @@ mod tests {
     // Extension tools
     assert!(tool_names.contains(&"list_extensions"));
     assert!(tool_names.contains(&"list_extension_groups"));
+    assert!(tool_names.contains(&"add_extension"));
+    assert!(tool_names.contains(&"update_extension"));
     assert!(tool_names.contains(&"create_extension_group"));
+    assert!(tool_names.contains(&"update_extension_group"));
+    assert!(tool_names.contains(&"add_extension_to_group"));
+    assert!(tool_names.contains(&"remove_extension_from_group"));
     assert!(tool_names.contains(&"delete_extension"));
     assert!(tool_names.contains(&"delete_extension_group"));
     assert!(tool_names.contains(&"assign_extension_group_to_profile"));

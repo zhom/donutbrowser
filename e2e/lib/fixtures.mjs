@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
   chmod,
@@ -13,6 +14,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { crc32 } from "node:zlib";
 
 export const TEST_BROWSER_VERSION = "150.0.7871.100";
 
@@ -212,6 +214,211 @@ export function extensionZipBase64() {
   // A deterministic Manifest V3 ZIP containing only manifest.json. Generated
   // once and kept inline so the suite has no archiver dependency.
   return "UEsDBBQAAAAAAE8K9Fxo1IfNawAAAGsAAAANAAAAbWFuaWZlc3QuanNvbnsibWFuaWZlc3RfdmVyc2lvbiI6MywibmFtZSI6IkRvbnV0IEUyRSBGaXh0dXJlIiwidmVyc2lvbiI6IjEuMC4wIiwiZGVzY3JpcHRpb24iOiJJc29sYXRlZCB0ZXN0IGV4dGVuc2lvbiJ9UEsBAhQDFAAAAAAATwr0XGjUh81rAAAAawAAAA0AAAAAAAAAAAAAAIABAAAAAG1hbmlmZXN0Lmpzb25QSwUGAAAAAAEAAQA7AAAAlgAAAAAA";
+}
+
+// 1980-01-01 00:00, the earliest timestamp the ZIP format can carry. Fixed so
+// two calls with the same entries produce byte-identical archives.
+const DOS_TIME = 0;
+const DOS_DATE = 0x0021;
+
+/**
+ * Build a ZIP archive from `entries` (`{ name, data }`) with every member
+ * stored, not deflated.
+ *
+ * Stored is what the inline fixture above already is, and it is load-bearing
+ * for the oversized fixture below: the assertion is about a request body that
+ * has to stay over the limit under test, so nothing in the archive may shrink
+ * the padding back under it.
+ */
+export function buildStoredZip(entries) {
+  const locals = [];
+  const central = [];
+  let offset = 0;
+
+  for (const { name, data } of entries) {
+    const nameBytes = Buffer.from(name, "utf8");
+    const body = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const checksum = crc32(body);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(DOS_TIME, 10);
+    local.writeUInt16LE(DOS_DATE, 12);
+    local.writeUInt32LE(checksum, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(body.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    locals.push(local, nameBytes, body);
+
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(20, 4);
+    entry.writeUInt16LE(20, 6);
+    entry.writeUInt16LE(DOS_TIME, 12);
+    entry.writeUInt16LE(DOS_DATE, 14);
+    entry.writeUInt32LE(checksum, 16);
+    entry.writeUInt32LE(body.length, 20);
+    entry.writeUInt32LE(body.length, 24);
+    entry.writeUInt16LE(nameBytes.length, 28);
+    entry.writeUInt32LE(offset, 42);
+    central.push(entry, nameBytes);
+
+    offset += local.length + nameBytes.length + body.length;
+  }
+
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+
+  return Buffer.concat([...locals, directory, end]);
+}
+
+export const OVERSIZED_EXTENSION_NAME = "Donut E2E Oversized Fixture";
+
+/**
+ * A valid Manifest V3 ZIP padded past the 2 MiB body limit axum applies by
+ * default, so the raised limit on the extension routes is the only reason a
+ * request carrying it can succeed.
+ *
+ * The padding is random bytes, and the archive stores rather than deflates
+ * them, so neither the fixture nor the transport can quietly shrink the body
+ * back under the limit and turn the assertion into a tautology.
+ */
+export function oversizedExtensionZipBase64(paddingBytes = 3 * 1024 * 1024) {
+  return buildStoredZip([
+    {
+      name: "manifest.json",
+      data: `${JSON.stringify(
+        {
+          manifest_version: 3,
+          name: OVERSIZED_EXTENSION_NAME,
+          version: "1.0.0",
+          description: "Isolated oversized test extension",
+        },
+        null,
+        2,
+      )}\n`,
+    },
+    { name: "payload.bin", data: randomBytes(paddingBytes) },
+  ]).toString("base64");
+}
+
+// What `_locales/<default_locale>/messages.json` resolves the manifest's
+// placeholders to. Deliberately free of the `__MSG_` marker so a test can
+// assert the stored record carries no placeholder anywhere.
+export const LOCALIZED_EXTENSION_MESSAGES = {
+  extName: "Donut E2E Localized Blocker",
+  extDescription: "Resolved from the default locale, not the manifest",
+  extAuthor: "Donut E2E Localization",
+};
+
+/**
+ * A Manifest V3 ZIP shaped the way Chrome Web Store extensions actually ship:
+ * `name`, `description` and `author` are `__MSG_key__` placeholders and the
+ * real strings live in `_locales/<default_locale>/messages.json`. uBlock Origin
+ * Lite is exactly this, which is why an importer that stores the manifest
+ * verbatim shows users `__MSG_extName__`.
+ *
+ * Pass `messages: {}` for a locale file that resolves none of the placeholders,
+ * or `messages: null` to omit the locale file entirely.
+ */
+export function localizedExtensionZipBase64({
+  defaultLocale = "en",
+  messages = LOCALIZED_EXTENSION_MESSAGES,
+} = {}) {
+  const entries = [
+    {
+      name: "manifest.json",
+      data: `${JSON.stringify(
+        {
+          manifest_version: 3,
+          name: "__MSG_extName__",
+          version: "2.4.0",
+          description: "__MSG_extDescription__",
+          author: "__MSG_extAuthor__",
+          default_locale: defaultLocale,
+        },
+        null,
+        2,
+      )}\n`,
+    },
+  ];
+  if (messages) {
+    entries.push({
+      name: `_locales/${defaultLocale}/messages.json`,
+      data: `${JSON.stringify(
+        Object.fromEntries(
+          Object.entries(messages).map(([key, message]) => [key, { message }]),
+        ),
+        null,
+        2,
+      )}\n`,
+    });
+  }
+  return buildStoredZip(entries).toString("base64");
+}
+
+// A 1x1 PNG, inline for the same reason the ZIP above is: no encoder
+// dependency, and the exact bytes are what the icon assertions compare.
+const EXTENSION_ICON_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+export function extensionIconPngBase64() {
+  return EXTENSION_ICON_PNG_BASE64;
+}
+
+/**
+ * Write a real unpacked Manifest V3 extension at `directory` and return its
+ * absolute path.
+ *
+ * Unlike the ZIP fixture this one declares `icons` and ships the file they
+ * point at, so importing the folder exercises icon extraction for both import
+ * modes: linking reads the icon straight out of the folder, copying reads it
+ * back out of the ZIP the importer builds. The background service worker is
+ * what makes a loaded copy observable over CDP, which registers a
+ * `chrome-extension://<id>/background.js` target.
+ */
+export async function writeUnpackedExtension(
+  directory,
+  { name = "Donut E2E Unpacked", version = "1.0.0" } = {},
+) {
+  const absolute = path.resolve(directory);
+  await mkdir(path.join(absolute, "icons"), { recursive: true });
+  await writeFile(
+    path.join(absolute, "manifest.json"),
+    `${JSON.stringify(
+      {
+        manifest_version: 3,
+        name,
+        version,
+        description: "Isolated unpacked test extension",
+        icons: { 16: "icons/icon-16.png", 48: "icons/icon-48.png" },
+        background: { service_worker: "background.js" },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(absolute, "background.js"),
+    [
+      "globalThis.__donutE2eExtension = chrome.runtime.id;",
+      "chrome.runtime.onInstalled.addListener(() => {",
+      "  console.log('donut e2e extension installed');",
+      "});",
+      "",
+    ].join("\n"),
+  );
+  const icon = Buffer.from(EXTENSION_ICON_PNG_BASE64, "base64");
+  for (const size of [16, 48]) {
+    await writeFile(path.join(absolute, "icons", `icon-${size}.png`), icon);
+  }
+  return absolute;
 }
 
 export function currentHostOs() {

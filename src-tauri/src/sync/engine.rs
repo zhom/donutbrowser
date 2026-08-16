@@ -2084,6 +2084,13 @@ impl SyncEngine {
       manager.get_extension(ext_id).ok()
     };
 
+    // A linked extension is an absolute path on this machine with no payload in
+    // the store. Uploading it would publish metadata another device could never
+    // resolve, so it stays local whatever queued this run.
+    if local_ext.as_ref().is_some_and(|e| e.is_linked()) {
+      return Ok(());
+    }
+
     let remote_key = format!("extensions/{}.json", ext_id);
     let stat = self.client.stat(&remote_key).await?;
 
@@ -3251,7 +3258,9 @@ pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> 
       manager
         .get_extension(ext_id)
         .ok()
-        .map(|e| e.sync_enabled)
+        // A linked extension has no binary to hand the other device, only a
+        // path that means nothing there, so the cascade must not pick it up.
+        .map(|e| e.sync_enabled || e.is_linked())
         .unwrap_or(true)
     };
     if !already_synced {
@@ -3983,7 +3992,9 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
         .map_err(|e| format!("Failed to list extensions: {e}"))?
     };
     for ext in &exts {
-      if !ext.sync_enabled {
+      // Linked extensions are machine-local by definition and are skipped
+      // rather than reported as a failure on every sync setup.
+      if !ext.sync_enabled && !ext.is_linked() {
         if let Err(e) = set_extension_sync_enabled(app_handle.clone(), ext.id.clone(), true).await {
           log::warn!("Failed to enable sync for extension {}: {e}", ext.id);
         }
@@ -4029,6 +4040,11 @@ pub async fn set_extension_sync_enabled(
   };
 
   if enabled {
+    // A linked extension is a path on this machine and nothing else; there is
+    // no payload to upload and the path would be meaningless on another device.
+    if ext.is_linked() {
+      return Err(serde_json::json!({ "code": "EXTENSION_LINKED_CANNOT_SYNC" }).to_string());
+    }
     ensure_sync_configured(&app_handle).await?;
   }
 

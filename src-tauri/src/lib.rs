@@ -188,9 +188,10 @@ use profile_importer::{
 };
 
 use extension_manager::{
-  add_extension, add_extension_to_group, assign_extension_group_to_profile, create_extension_group,
-  delete_extension, delete_extension_group, get_extension_group_for_profile, get_extension_icon,
-  list_extension_groups, list_extensions, remove_extension_from_group, update_extension,
+  add_extension, add_extension_to_group, add_unpacked_extension, assign_extension_group_to_profile,
+  create_extension_group, delete_extension, delete_extension_group,
+  get_extension_group_for_profile, get_extension_icon, list_extension_groups, list_extensions,
+  remove_extension_from_group, update_extension, update_extension_from_path,
   update_extension_group,
 };
 
@@ -2750,7 +2751,9 @@ pub fn run_with_builder(
       list_extensions,
       get_extension_icon,
       add_extension,
+      add_unpacked_extension,
       update_extension,
+      update_extension_from_path,
       delete_extension,
       list_extension_groups,
       create_extension_group,

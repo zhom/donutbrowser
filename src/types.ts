@@ -62,6 +62,11 @@ export interface Extension {
   description?: string;
   author?: string;
   homepage_url?: string;
+  /** How the payload was imported: a `.crx`/`.zip` archive, or a folder. */
+  source_kind: "archive" | "unpacked";
+  /** Absolute folder the extension is loaded from in place. Set means nothing
+   * was copied into Donut, so the extension is machine-local and never syncs. */
+  linked_path?: string;
 }
 
 export interface ExtensionGroup {

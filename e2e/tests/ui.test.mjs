@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import Color from "color";
+import en from "../../src/i18n/locales/en.json" with { type: "json" };
 import { getDerivedThemeColors, THEMES } from "../../src/lib/themes.ts";
 import { withApp } from "../lib/app.mjs";
+import {
+  extensionZipBase64,
+  writeUnpackedExtension,
+} from "../lib/fixtures.mjs";
 
 const THEME_VARIABLES = [
   "--background",
@@ -87,6 +94,21 @@ function themeVariablesEqual(actual, expected) {
 async function applyThemeForContrastAudit(app, theme) {
   await app.execute(
     `
+      // This audit reads settled colour tokens, not the animation between
+      // them. Tab triggers carry "transition-colors duration-150" and start
+      // from --muted-foreground, so a computed style sampled mid-transition
+      // returns an intermediate colour and the assertion fails on whichever
+      // theme the machine happened to be slow on. Kill transitions for the
+      // duration of the audit rather than racing them with a fixed sleep.
+      let freeze = document.getElementById("donut-e2e-freeze-transitions");
+      if (!freeze) {
+        freeze = document.createElement("style");
+        freeze.id = "donut-e2e-freeze-transitions";
+        freeze.textContent =
+          "*, *::before, *::after { transition: none !important; animation: none !important; }";
+        document.head.appendChild(freeze);
+      }
+
       const [colors, derived, mode] = arguments;
       const root = document.documentElement;
       root.classList.remove("light", "dark");
@@ -97,7 +119,11 @@ async function applyThemeForContrastAudit(app, theme) {
     `,
     [theme.colors, getDerivedThemeColors(theme.colors), theme.mode],
   );
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  // One frame is enough once transitions are off; the value cannot drift after
+  // style recalculation.
+  await app.execute(
+    `return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))));`,
+  );
 }
 
 async function animatedTabContrastSnapshot(app) {
@@ -1011,5 +1037,439 @@ test("a light custom preset keeps light component behavior after restart", async
         JSON.stringify(await themeSnapshot(app)) === JSON.stringify(selected),
       { description: "Ayu Light preset after restart" },
     );
+  });
+});
+
+const EXTENSION_STRINGS = en.extensions;
+
+/**
+ * Answer the native directory picker from inside the webview.
+ *
+ * "Load unpacked" calls `open({ directory: true })` from
+ * `@tauri-apps/plugin-dialog`, which puts an OS window on screen that no
+ * WebDriver can reach. The call leaves the page as the `plugin:dialog|open` IPC
+ * command, but Tauri locks its own entry points down: `invoke`, `ipc` and
+ * `postMessage` are all installed with
+ * `Object.defineProperty(window.__TAURI_INTERNALS__, name, { value })`, so they
+ * are non-writable and cannot be wrapped. The seam underneath them is the
+ * transport, which POSTs the command through `fetch` to
+ * `ipc://localhost/<command>`. Answering that one request with the shape Tauri
+ * expects (`Tauri-Response: ok` plus a JSON body) resolves the picker with a
+ * folder and needs no test-only hook in the production component. Every other
+ * command still reaches the real backend.
+ */
+async function stubFolderPicker(app, folder) {
+  await app.execute(
+    `const folder = arguments[0];
+     if (!window.__donutOriginalFetch) {
+       window.__donutOriginalFetch = window.fetch;
+     }
+     window.__donutFolderPickerCalls = [];
+     window.fetch = function (input, init) {
+       const url = String(
+         typeof input === "string" ? input : (input && input.url) || "",
+       );
+       let command = "";
+       try {
+         command = decodeURIComponent(url.split("/").pop() || "");
+       } catch (_error) {
+         command = "";
+       }
+       if (command === "plugin:dialog|open") {
+         let payload = null;
+         try {
+           payload = JSON.parse((init && init.body) || "null");
+         } catch (_error) {
+           payload = null;
+         }
+         window.__donutFolderPickerCalls.push(payload);
+         return Promise.resolve(
+           new Response(JSON.stringify(folder), {
+             status: 200,
+             headers: {
+               "content-type": "application/json",
+               "Tauri-Response": "ok",
+             },
+           }),
+         );
+       }
+       return window.__donutOriginalFetch.apply(window, arguments);
+     };
+     return true;`,
+    [folder],
+  );
+}
+
+/** Restores the real transport and returns what the picker was asked for. */
+async function restoreFolderPicker(app) {
+  return app.execute(
+    `const calls = window.__donutFolderPickerCalls ?? [];
+     if (window.__donutOriginalFetch) {
+       window.fetch = window.__donutOriginalFetch;
+       delete window.__donutOriginalFetch;
+     }
+     delete window.__donutFolderPickerCalls;
+     return calls;`,
+  );
+}
+
+async function openExtensionsPage(app) {
+  await app.clickSelector('[aria-label="Extensions"]');
+  await app.waitFor(
+    () =>
+      app.execute(`return Boolean(document.querySelector(arguments[0]));`, [
+        `[aria-label="${EXTENSION_STRINGS.loadUnpacked}"]`,
+      ]),
+    { description: "extension management page" },
+  );
+}
+
+async function stageUnpackedFolder(app, folder) {
+  await stubFolderPicker(app, folder);
+  await app.clickSelector(`[aria-label="${EXTENSION_STRINGS.loadUnpacked}"]`);
+  await app.waitFor(
+    () =>
+      app.execute(
+        `return Boolean(document.querySelector("#ext-link-folder"));`,
+      ),
+    {
+      description:
+        "staged folder import form (the intercepted directory picker has to resolve)",
+    },
+  );
+}
+
+async function uploadArchiveThroughUi(app, archivePath, typedName) {
+  // The real control is a hidden file input a button clicks for the user;
+  // WebDriver can only type a path into an input it can see.
+  await app.execute(`
+    const input = document.querySelector("#ext-file-input");
+    input.classList.remove("hidden");
+    input.style.position = "fixed";
+    input.style.left = "12px";
+    input.style.bottom = "12px";
+  `);
+  const input = await app.session.findCss("#ext-file-input");
+  await app.session.sendKeys(input, archivePath);
+  await app.waitForText(path.basename(archivePath));
+  await app.execute(`
+    const input = document.querySelector("#ext-file-input");
+    input.classList.add("hidden");
+    input.removeAttribute("style");
+  `);
+  await app.fillSelector(
+    `input[placeholder="${EXTENSION_STRINGS.namePlaceholder}"]`,
+    typedName,
+  );
+  await app.clickText(en.common.buttons.add, { roles: ["button"] });
+}
+
+/** The link checkbox plus the copy that is supposed to explain it. */
+async function linkCheckboxState(app, id) {
+  return app.execute(
+    `const checkbox = document.querySelector("#" + arguments[0]);
+     const label = document.querySelector('label[for="' + arguments[0] + '"]');
+     const help = label?.parentElement?.querySelector("p");
+     return checkbox
+       ? {
+           checked: checkbox.getAttribute("data-state") === "checked",
+           label: (label?.innerText ?? "").trim(),
+           help: (help?.innerText ?? "").trim(),
+         }
+       : null;`,
+    [id],
+  );
+}
+
+function extensionRowScript(body) {
+  return `const wanted = arguments[0];
+     const row = [...document.querySelectorAll("tbody tr")].find((candidate) => {
+       const cells = [...candidate.querySelectorAll("td")];
+       return cells.length >= 7 && (cells[2].innerText || "").trim() === wanted;
+     });
+     ${body}`;
+}
+
+async function extensionRow(app, name) {
+  return app.execute(
+    extensionRowScript(`if (!row) return null;
+     const cells = [...row.querySelectorAll("td")];
+     const sync = row.querySelector('[data-slot="animated-switch"]');
+     return {
+       name: (cells[2].innerText || "").trim(),
+       source: (cells[4].innerText || "").trim(),
+       syncChecked: sync ? sync.getAttribute("data-state") === "checked" : null,
+       syncDisabled: sync ? sync.disabled === true : null,
+     };`),
+    [name],
+  );
+}
+
+async function extensionEditButton(app, name) {
+  return app.execute(
+    extensionRowScript(
+      `return row ? row.querySelector("td:last-child button") : null;`,
+    ),
+    [name],
+  );
+}
+
+async function dialogText(app, title) {
+  return app.execute(
+    `const wanted = arguments[0];
+     const dialog = [...document.querySelectorAll("[role='dialog']")]
+       .reverse()
+       .find((node) =>
+         [...node.querySelectorAll("[data-slot='dialog-title']")].some(
+           (heading) => (heading.textContent || "").trim() === wanted,
+         ),
+       );
+     return dialog ? (dialog.innerText || "").trim() : null;`,
+    [title],
+  );
+}
+
+async function toastTexts(app) {
+  return app.execute(
+    `return [...document.querySelectorAll("[data-sonner-toast]")]
+       .map((toast) => (toast.innerText || "").trim())
+       .filter(Boolean);`,
+  );
+}
+
+test("an uploaded archive and a loaded folder both import, each under its own source", async () => {
+  await withApp("ui-extension-import-sources", async (app) => {
+    const archivePath = path.join(app.root, "ui-archive-extension.zip");
+    await writeFile(archivePath, Buffer.from(extensionZipBase64(), "base64"));
+    const folder = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "ui-copied-extension"),
+      { name: "Donut UI Copied Folder" },
+    );
+
+    await openExtensionsPage(app);
+    await uploadArchiveThroughUi(
+      app,
+      archivePath,
+      "Overridden By The Manifest",
+    );
+    await app.waitForText("Donut E2E Fixture");
+
+    await stageUnpackedFolder(app, folder);
+    assert.ok(await app.visibleTextIncludes(EXTENSION_STRINGS.selectedFolder));
+    assert.ok(
+      await app.visibleTextIncludes(folder),
+      "the staged import has to name the folder it is about to read",
+    );
+    const staged = await linkCheckboxState(app, "ext-link-folder");
+    assert.equal(staged?.checked, false, "linking a folder has to be opt-in");
+    assert.equal(staged.help, EXTENSION_STRINGS.linkFolderOff);
+    await app.clickText(en.common.buttons.add, { roles: ["button"] });
+    await app.waitForText("Donut UI Copied Folder");
+
+    const pickerCalls = await restoreFolderPicker(app);
+    assert.equal(pickerCalls.length, 1, "Load unpacked has to open the picker");
+    assert.equal(pickerCalls[0].options.directory, true);
+    assert.equal(pickerCalls[0].options.multiple, false);
+    assert.equal(
+      pickerCalls[0].options.title,
+      EXTENSION_STRINGS.selectFolderTitle,
+    );
+
+    assert.notEqual(
+      EXTENSION_STRINGS.source.archive,
+      EXTENSION_STRINGS.source.unpacked,
+    );
+    assert.equal(
+      (await extensionRow(app, "Donut E2E Fixture"))?.source,
+      EXTENSION_STRINGS.source.archive,
+    );
+    assert.equal(
+      (await extensionRow(app, "Donut UI Copied Folder"))?.source,
+      EXTENSION_STRINGS.source.unpacked,
+    );
+
+    const extensions = await app.invoke("list_extensions");
+    assert.equal(extensions.length, 2);
+    const copied = extensions.find(
+      (extension) => extension.name === "Donut UI Copied Folder",
+    );
+    assert.equal(copied.source_kind, "unpacked");
+    assert.equal(
+      copied.linked_path,
+      null,
+      "an unlinked folder import is copied into the store, not pointed at",
+    );
+    assert.equal(copied.file_type, "zip");
+    const archive = extensions.find(
+      (extension) => extension.name === "Donut E2E Fixture",
+    );
+    assert.equal(archive.source_kind, "archive");
+    assert.equal(archive.linked_path, null);
+  });
+});
+
+test("linking a folder says what it costs, records the path, and locks that row's sync off", async () => {
+  await withApp("ui-extension-linked-folder", async (app) => {
+    await app.invoke("add_extension", {
+      name: "Copied Neighbour",
+      fileName: "ui-neighbour-extension.zip",
+      fileData: [...Buffer.from(extensionZipBase64(), "base64")],
+    });
+    const folder = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "ui-linked-extension"),
+      { name: "Donut UI Linked Folder" },
+    );
+
+    await openExtensionsPage(app);
+    await app.waitForText("Donut E2E Fixture");
+    await stageUnpackedFolder(app, folder);
+
+    const off = await linkCheckboxState(app, "ext-link-folder");
+    assert.equal(off?.checked, false);
+    assert.equal(off.label, EXTENSION_STRINGS.linkFolder);
+    assert.equal(off.help, EXTENSION_STRINGS.linkFolderOff);
+
+    await app.clickSelector("#ext-link-folder");
+    const on = await app.waitFor(
+      async () => {
+        const state = await linkCheckboxState(app, "ext-link-folder");
+        return state?.checked ? state : false;
+      },
+      { description: "link checkbox to turn on" },
+    );
+    assert.equal(on.help, EXTENSION_STRINGS.linkFolderOn);
+    assert.notEqual(
+      on.help,
+      off.help,
+      "the checkbox has to say what turning it on changes",
+    );
+
+    await app.clickText(en.common.buttons.add, { roles: ["button"] });
+    await app.waitForText("Donut UI Linked Folder");
+    assert.equal((await restoreFolderPicker(app)).length, 1);
+
+    const linkedRow = await extensionRow(app, "Donut UI Linked Folder");
+    assert.equal(linkedRow?.source, EXTENSION_STRINGS.source.linked);
+    assert.equal(linkedRow.syncChecked, false);
+    assert.equal(linkedRow.syncDisabled, true);
+    assert.equal(
+      (await extensionRow(app, "Donut E2E Fixture"))?.syncDisabled,
+      false,
+      "only the linked row loses its sync control",
+    );
+
+    const linked = (await app.invoke("list_extensions")).find(
+      (extension) => extension.name === "Donut UI Linked Folder",
+    );
+    assert.equal(linked.linked_path, await realpath(folder));
+    assert.equal(linked.file_type, "unpacked");
+    assert.equal(linked.sync_enabled, false);
+  });
+});
+
+test("the edit dialog replaces an extension's payload from a folder", async () => {
+  await withApp("ui-extension-replace-from-folder", async (app) => {
+    const original = await app.invoke("add_extension", {
+      name: "Replaced Later",
+      fileName: "ui-original-extension.zip",
+      fileData: [...Buffer.from(extensionZipBase64(), "base64")],
+    });
+    assert.equal(original.version, "1.0.0");
+    const folder = await writeUnpackedExtension(
+      path.join(app.root, "fixtures", "ui-replacement-extension"),
+      { name: "Donut UI Replacement", version: "3.1.4" },
+    );
+
+    await openExtensionsPage(app);
+    await app.waitForText("Donut E2E Fixture");
+    const editButton = await extensionEditButton(app, "Donut E2E Fixture");
+    assert.ok(editButton, "the extension row's edit control was not visible");
+    await app.clickElement(editButton, "extension edit button");
+    const beforeReplace = await app.waitFor(
+      () => dialogText(app, EXTENSION_STRINGS.editExtension),
+      { description: "extension edit dialog" },
+    );
+    assert.ok(beforeReplace.includes(EXTENSION_STRINGS.source.label));
+    assert.ok(beforeReplace.includes(EXTENSION_STRINGS.source.archive));
+
+    await stubFolderPicker(app, folder);
+    await app.clickTextIn('[role="dialog"]', EXTENSION_STRINGS.selectFolder, {
+      roles: ["button"],
+    });
+    await app.waitFor(
+      async () =>
+        (await dialogText(app, EXTENSION_STRINGS.editExtension))?.includes(
+          folder,
+        ),
+      { description: "chosen replacement folder" },
+    );
+    const replaceLink = await linkCheckboxState(app, "ext-edit-link-folder");
+    assert.equal(replaceLink?.checked, false);
+    assert.equal(replaceLink.help, EXTENSION_STRINGS.linkFolderOff);
+
+    await app.clickTextIn('[role="dialog"]', en.common.buttons.save, {
+      roles: ["button"],
+    });
+    await app.waitFor(
+      async () =>
+        (await toastTexts(app)).some((text) =>
+          text.includes(EXTENSION_STRINGS.updateSuccess),
+        ),
+      { description: "extension update confirmation" },
+    );
+    assert.equal((await restoreFolderPicker(app)).length, 1);
+
+    const extensions = await app.invoke("list_extensions");
+    assert.equal(
+      extensions.length,
+      1,
+      "replacing a payload must not add a second extension",
+    );
+    const [updated] = extensions;
+    assert.equal(updated.id, original.id);
+    assert.equal(updated.source_kind, "unpacked");
+    assert.equal(updated.linked_path, null);
+    assert.equal(updated.file_name, "ui-replacement-extension.zip");
+    assert.equal(updated.version, "3.1.4");
+    // The dialog's own name field stays authoritative, so the row keeps its
+    // name while the payload underneath it is swapped.
+    assert.equal(updated.name, "Donut E2E Fixture");
+
+    await app.waitFor(
+      async () =>
+        (await extensionRow(app, "Donut E2E Fixture"))?.source ===
+        EXTENSION_STRINGS.source.unpacked,
+      { description: "replaced row to report its new source" },
+    );
+  });
+});
+
+test("a folder with no manifest fails with the translated reason, not a raw code", async () => {
+  await withApp("ui-extension-manifest-missing", async (app) => {
+    const folder = path.join(app.root, "fixtures", "ui-not-an-extension");
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, "readme.txt"), "no manifest here\n");
+
+    await openExtensionsPage(app);
+    await stageUnpackedFolder(app, folder);
+    await app.clickText(en.common.buttons.add, { roles: ["button"] });
+
+    const expected = en.backendErrors.extensionManifestMissing;
+    await app.waitFor(
+      async () =>
+        (await toastTexts(app)).some((text) => text.includes(expected)),
+      { description: "translated manifest-missing toast" },
+    );
+    const toasts = await toastTexts(app);
+    assert.ok(
+      toasts.every((text) => !text.includes("EXTENSION_MANIFEST_MISSING")),
+      `a raw backend code reached the user: ${JSON.stringify(toasts)}`,
+    );
+    assert.ok(
+      toasts.every((text) => !text.includes(EXTENSION_STRINGS.uploadFailed)),
+      "the generic fallback would hide which folder problem this was",
+    );
+    assert.deepEqual(await app.invoke("list_extensions"), []);
+    assert.equal((await restoreFolderPicker(app)).length, 1);
   });
 });

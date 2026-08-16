@@ -11,6 +11,7 @@ import {
   defaultWayfernPath,
   inspectWayfern,
   prepareWayfern,
+  writeUnpackedExtension,
 } from "../lib/fixtures.mjs";
 
 const fixtureUrl = process.env.DONUT_E2E_FIXTURE_URL;
@@ -703,6 +704,185 @@ test("a proxy worker dies with its browser, with and without the app running", a
           process.kill(pid, "SIGKILL");
         } catch {
           // Already gone.
+        }
+      }
+    }
+    await app.close();
+  }
+});
+
+// Two things nothing else covers. First, that an assigned extension group
+// actually reaches Wayfern: a loaded MV3 extension registers a
+// `chrome-extension://<id>/background.js` service-worker target, so CDP can see
+// it from outside. Second, that staging is per profile. It used to be one
+// shared `extensions/unpacked` directory wiped on every launch, and because
+// Chromium records the absolute staging path and reads those files lazily for
+// the life of the process instead of copying them into the profile, launching a
+// second profile broke the extension in every browser already running.
+test("an assigned extension group reaches Wayfern and each profile stages its own copy", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const localWayfernPath = defaultWayfernPath(
+    process.env.DONUT_E2E_PROJECT_ROOT,
+  );
+  const localWayfernVersion = existsSync(localWayfernPath)
+    ? inspectWayfern(localWayfernPath).version
+    : null;
+  const app = appFromEnvironment("browser-extensions", {
+    seedVersionCache: localWayfernVersion ?? false,
+    wayfernTermsAccepted: false,
+  });
+  const launched = [];
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    if (!(await app.invoke("check_wayfern_terms_accepted"))) {
+      await app.invoke("accept_wayfern_terms");
+    }
+
+    const extension = await app.invoke("add_unpacked_extension", {
+      name: "Donut Launch Fixture",
+      path: await writeUnpackedExtension(
+        path.join(app.root, "fixtures", "loaded-extension"),
+        { name: "Donut Launch Fixture", version: "1.0.0" },
+      ),
+      link: false,
+    });
+    const group = await app.invoke("create_extension_group", {
+      name: "Launch Extensions",
+    });
+    await app.invoke("add_extension_to_group", {
+      groupId: group.id,
+      extensionId: extension.id,
+    });
+
+    const settings = await app.invoke("get_app_settings");
+    const saved = await app.invoke("save_app_settings", {
+      settings: {
+        ...settings,
+        api_enabled: true,
+        api_port: 0,
+        api_token: null,
+        onboarding_completed: true,
+      },
+    });
+    const base = `http://127.0.0.1:${await app.invoke("start_api_server", { port: 0 })}`;
+
+    const stagedManifest = (profileId) =>
+      path.join(
+        app.dataRoot,
+        "data",
+        "extensions",
+        "unpacked",
+        profileId,
+        extension.id,
+        "manifest.json",
+      );
+    const extensionWorkers = async (debuggingPort) => {
+      const targets = await fetch(
+        `http://127.0.0.1:${debuggingPort}/json`,
+      ).then((response) => response.json());
+      return targets.filter(
+        (target) =>
+          target.type === "service_worker" &&
+          String(target.url).startsWith("chrome-extension://"),
+      );
+    };
+    const launchWithExtension = async (name) => {
+      const profile = await createRealProfile(app, prepared.version, name);
+      assert.equal(
+        (
+          await app.invoke("assign_extension_group_to_profile", {
+            profileId: profile.id,
+            extensionGroupId: group.id,
+          })
+        ).extension_group_id,
+        group.id,
+      );
+      const run = await request(`${base}/v1/profiles/${profile.id}/run`, {
+        method: "POST",
+        token: saved.api_token,
+        body: { url: `${fixtureUrl}/extension-launch`, headless: true },
+      });
+      assert.equal(run.response.status, 200, JSON.stringify(run.value));
+      const record = {
+        profile,
+        debuggingPort: run.value.remote_debugging_port,
+      };
+      launched.push(record);
+      const workers = await app.waitFor(
+        async () => {
+          const found = await extensionWorkers(record.debuggingPort);
+          return found.length > 0 ? found : null;
+        },
+        {
+          timeoutMs: 60_000,
+          description: `the extension's service worker in ${name}`,
+        },
+      );
+      assert.match(
+        workers[0].url,
+        /^chrome-extension:\/\/\w+\/background\.js$/,
+      );
+      return record;
+    };
+
+    const first = await launchWithExtension("Extension Launch One");
+    assert.ok(
+      existsSync(stagedManifest(first.profile.id)),
+      "the first profile must stage the extension under its own id",
+    );
+    if (process.platform !== "win32") {
+      // The staged path is what Chromium was handed, and it is per profile.
+      const running = (await app.invoke("list_browser_profiles")).find(
+        (item) => item.id === first.profile.id,
+      );
+      const command = execFileSync(
+        "ps",
+        ["-ww", "-o", "command=", "-p", String(running.process_id)],
+        { encoding: "utf8" },
+      );
+      assert.ok(
+        command.includes(
+          `--load-extension=${path.dirname(stagedManifest(first.profile.id))}`,
+        ),
+        "Wayfern must be pointed at this profile's own staged copy",
+      );
+    }
+    await launchWithExtension("Extension Launch Two");
+
+    // The regression itself: the second launch must not have taken the first
+    // profile's files with it. The staged manifest is what its running browser
+    // is still reading from.
+    for (const { profile } of launched) {
+      assert.ok(
+        existsSync(stagedManifest(profile.id)),
+        `${profile.name} lost its staged extension to another profile's launch`,
+      );
+    }
+
+    for (const { profile } of launched) {
+      const running = (await app.invoke("list_browser_profiles")).find(
+        (item) => item.id === profile.id,
+      );
+      await app.invoke("kill_browser_profile", { profile: running });
+      await waitForProcessExit(app, running.process_id);
+    }
+    await app.invoke("stop_api_server");
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    if (app.session) {
+      const running = await app.invoke("list_browser_profiles").catch(() => []);
+      for (const { profile } of launched) {
+        const record = running.find((item) => item.id === profile.id);
+        if (record?.process_id && processExists(record.process_id)) {
+          await app
+            .invoke("kill_browser_profile", { profile: record })
+            .catch(() => {});
         }
       }
     }
