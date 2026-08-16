@@ -1,6 +1,24 @@
 # Changelog
 
 
+## v0.29.5 (2026-08-16)
+
+### Features
+
+- extension export via api
+
+### Refactoring
+
+- better proxy clipboard autofill
+- improve ephemeral ux
+- store logs and window state inside portable build
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.29.4 [skip ci] (#561)
+
+
 ## v0.29.4 (2026-08-15)
 
 ### Refactoring
