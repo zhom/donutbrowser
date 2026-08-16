@@ -1715,8 +1715,9 @@ pub fn run_with_builder(
 
   let log_file_name = app_dirs::app_name();
 
-  // Honor DONUTBROWSER_DATA_ROOT: when set, logs go to <root>/logs instead of
-  // the platform default app log dir, so all on-disk state lives under one root.
+  // Honor DONUTBROWSER_DATA_ROOT and portable mode: logs go to <root>/logs or
+  // <exe dir>/logs instead of the platform default app log dir, so all on-disk
+  // state lives under one root rather than leaking onto the host machine.
   let file_log_target = match app_dirs::log_dir_override() {
     Some(path) => Target::new(TargetKind::Folder {
       path,
@@ -1789,9 +1790,23 @@ pub fn run_with_builder(
     // (the green button zooms instead) — the maximized flag captures the
     // "filled screen" state, including green-button zoom on macOS.
     .plugin(
-      tauri_plugin_window_state::Builder::default()
-        .with_state_flags(
-          tauri_plugin_window_state::StateFlags::all()
+      {
+        let mut window_state = tauri_plugin_window_state::Builder::default();
+        // Keep window geometry with the rest of the relocated state instead of
+        // the host's app-config dir. The plugin only lets us name the file, so
+        // the name is an absolute path; see `window_state_path_override`.
+        if let Some(path) = app_dirs::window_state_path_override() {
+          if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+              log::warn!("Failed to create the window-state directory: {e}");
+            }
+          }
+          window_state = window_state.with_filename(path.to_string_lossy().into_owned());
+        }
+        window_state
+      }
+      .with_state_flags(
+        tauri_plugin_window_state::StateFlags::all()
             & !tauri_plugin_window_state::StateFlags::VISIBLE
             & !tauri_plugin_window_state::StateFlags::FULLSCREEN
             // Whether the window is decorated is decided per-session by
@@ -1799,8 +1814,8 @@ pub fn run_with_builder(
             // a previous run saved. Restoring it would put a real titlebar back
             // on top of the one the app draws — or strip both.
             & !tauri_plugin_window_state::StateFlags::DECORATIONS,
-        )
-        .build(),
+      )
+      .build(),
     );
 
   builder.setup(|app| {
@@ -1907,10 +1922,11 @@ pub fn run_with_builder(
         // saved, that geometry is the user's and has already been restored —
         // re-applying the default here would move and resize their window on
         // every launch, and the plugin would then persist the reset.
-        let has_saved_geometry = app
-          .path()
-          .app_config_dir()
-          .map(|dir| dir.join(".window-state.json").exists())
+        // Must resolve through the same helper the plugin was configured with:
+        // probing the platform default while the plugin writes elsewhere would
+        // read "first run" on every launch and reset the user's window.
+        let has_saved_geometry = app_dirs::window_state_path(app.handle())
+          .map(|path| path.exists())
           .unwrap_or(false);
         if window_decorations::use_client_side_decorations() && !has_saved_geometry {
           if let Err(e) = window.set_size(tauri::LogicalSize::new(880.0, 500.0)) {

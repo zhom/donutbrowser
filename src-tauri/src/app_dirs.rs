@@ -37,10 +37,66 @@ fn data_root() -> Option<PathBuf> {
     .map(PathBuf::from)
 }
 
-/// Log directory when `DONUTBROWSER_DATA_ROOT` is set (`<root>/logs`); `None`
-/// otherwise, in which case the platform default app log dir is used.
+/// Where logs go when something other than the platform default applies:
+/// `<root>/logs` for `DONUTBROWSER_DATA_ROOT`, else `<exe dir>/logs` in
+/// portable mode. `None` means the platform default app log dir.
+///
+/// Portable belongs here for the same reason `data_dir` and `cache_dir` honour
+/// it: a portable install is expected to keep its state beside the executable.
+/// Logs were the one thing still written to the host machine, which quietly
+/// defeated that.
 pub fn log_dir_override() -> Option<PathBuf> {
-  data_root().map(|root| root.join("logs"))
+  log_dir_for(data_root(), portable_dir())
+}
+
+/// Split out from `log_dir_override` so the precedence is testable without a
+/// real `.portable` marker sitting next to the test binary.
+fn log_dir_for(root: Option<PathBuf>, portable: Option<&PathBuf>) -> Option<PathBuf> {
+  if let Some(root) = root {
+    return Some(root.join("logs"));
+  }
+  portable.map(|dir| dir.join("logs"))
+}
+
+/// File name `tauri-plugin-window-state` persists geometry under.
+pub const WINDOW_STATE_FILENAME: &str = ".window-state.json";
+
+/// True when app state has been moved off the platform default location, by
+/// portable mode or by either directory override.
+fn state_is_relocated() -> bool {
+  std::env::var_os("DONUTBROWSER_DATA_DIR").is_some_and(|v| !v.is_empty())
+    || data_root().is_some()
+    || portable_dir().is_some()
+}
+
+/// Absolute path the window-state file should live at, or `None` to leave the
+/// plugin on its platform default.
+///
+/// `tauri-plugin-window-state` resolves its file as
+/// `app_config_dir().join(filename)` and exposes no way to change the
+/// directory, so the only lever is the file name. Handing it an ABSOLUTE path
+/// works because `Path::join` discards the base when the argument is absolute,
+/// which lands the file with the rest of our relocated state instead of on the
+/// host machine. If a future plugin version sanitises the name to a bare file
+/// component this silently reverts to the default directory, which is why the
+/// first-run probe in `lib.rs` reads this same function rather than assuming.
+pub fn window_state_path_override() -> Option<PathBuf> {
+  state_is_relocated().then(|| data_dir().join(WINDOW_STATE_FILENAME))
+}
+
+/// Where the window-state file actually is, override or not. Used for the
+/// first-run probe, which must agree with whatever the plugin was configured
+/// with or portable installs re-apply the default geometry on every launch.
+pub fn window_state_path<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> Option<PathBuf> {
+  if let Some(path) = window_state_path_override() {
+    return Some(path);
+  }
+  use tauri::Manager;
+  handle
+    .path()
+    .app_config_dir()
+    .ok()
+    .map(|dir| dir.join(WINDOW_STATE_FILENAME))
 }
 
 pub fn app_name() -> &'static str {
@@ -262,19 +318,99 @@ mod tests {
   #[test]
   fn test_data_dir_returns_path() {
     let dir = data_dir();
-    assert!(
-      dir.to_string_lossy().contains(app_name()),
-      "data_dir should contain app_name"
-    );
+    // Portable mode deliberately drops the app_name segment: state lives at
+    // <exe dir>/data. The assertion only holds for the platform-default path.
+    if is_portable() {
+      assert!(dir.ends_with("data"));
+    } else {
+      assert!(
+        dir.to_string_lossy().contains(app_name()),
+        "data_dir should contain app_name"
+      );
+    }
   }
 
   #[test]
   fn test_cache_dir_returns_path() {
     let dir = cache_dir();
-    assert!(
-      dir.to_string_lossy().contains(app_name()),
-      "cache_dir should contain app_name"
+    if is_portable() {
+      assert!(dir.ends_with("cache"));
+    } else {
+      assert!(
+        dir.to_string_lossy().contains(app_name()),
+        "cache_dir should contain app_name"
+      );
+    }
+  }
+
+  #[test]
+  fn log_dir_follows_portable_mode_and_data_root() {
+    let root = PathBuf::from("/tmp/donut-root");
+    let portable = PathBuf::from("/tmp/donut-portable");
+
+    // Neither: the platform default app log dir is used.
+    assert_eq!(log_dir_for(None, None), None);
+
+    // Portable alone keeps logs beside the executable rather than on the host.
+    assert_eq!(
+      log_dir_for(None, Some(&portable)),
+      Some(portable.join("logs"))
     );
+
+    // DONUTBROWSER_DATA_ROOT wins over portable, matching data_dir/cache_dir.
+    assert_eq!(
+      log_dir_for(Some(root.clone()), Some(&portable)),
+      Some(root.join("logs"))
+    );
+    assert_eq!(
+      log_dir_for(Some(root.clone()), None),
+      Some(root.join("logs"))
+    );
+  }
+
+  #[test]
+  fn absolute_filename_escapes_the_plugin_base_dir() {
+    // The whole window-state redirect rests on this std behaviour: joining an
+    // absolute path discards the base. tauri-plugin-window-state does
+    // `app_config_dir().join(filename)`, so an absolute "filename" relocates
+    // the file. If this ever stops holding, the redirect silently stops too.
+    let base = PathBuf::from("/Users/someone/Library/Application Support/com.donutbrowser");
+    let absolute = PathBuf::from("/Volumes/Stick/Donut/data").join(WINDOW_STATE_FILENAME);
+    assert_eq!(base.join(&absolute), absolute);
+    assert!(!base.join(&absolute).starts_with(&base));
+  }
+
+  #[test]
+  fn window_state_stays_at_the_platform_default_for_a_normal_install() {
+    // A normal install must not be relocated: moving it would drop the window
+    // geometry every existing user already has.
+    if !state_is_relocated() {
+      assert_eq!(window_state_path_override(), None);
+    }
+  }
+
+  #[test]
+  fn window_state_follows_a_relocated_data_dir() {
+    let tmp = PathBuf::from("/tmp/donut-relocated");
+    let _guard = set_test_data_dir(tmp.clone());
+    // data_dir is overridden, so the file tracks it rather than app_config_dir.
+    assert_eq!(
+      data_dir().join(WINDOW_STATE_FILENAME),
+      tmp.join(".window-state.json")
+    );
+  }
+
+  #[test]
+  fn portable_keeps_data_cache_and_logs_under_one_root() {
+    // The three state directories must agree on where portable state lives, so
+    // a portable install leaves nothing behind on the host.
+    let portable = PathBuf::from("/tmp/donut-portable");
+    assert_eq!(
+      log_dir_for(None, Some(&portable)),
+      Some(portable.join("logs"))
+    );
+    assert!(portable.join("data").starts_with(&portable));
+    assert!(portable.join("cache").starts_with(&portable));
   }
 
   #[test]
