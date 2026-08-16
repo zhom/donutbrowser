@@ -111,8 +111,8 @@ Donut Browser is built by the people who use it, and plenty of the most useful h
 
 <a href="https://gitdebt.com/zhom/donutbrowser?ref=readme">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.gif?theme=dark" />
-    <img alt="Cumulative GitHub stars for zhom/donutbrowser over time" src="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.gif?theme=light" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.svg?theme=dark&animate=1" />
+    <img alt="Cumulative GitHub stars for zhom/donutbrowser over time" src="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.svg?theme=light&animate=1" />
   </picture>
 </a>
 
