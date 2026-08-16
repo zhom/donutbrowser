@@ -29,6 +29,7 @@ import {
   LuSettings,
   LuShield,
   LuShieldCheck,
+  LuTimer,
   LuTrash2,
   LuUpload,
   LuUsers,
@@ -735,6 +736,13 @@ function ProfileInfoLayout({
     [visibleActions],
   );
 
+  // An ephemeral profile is discarded when the browser closes, so it has
+  // nowhere to keep cookies, extensions or a synced copy. The sections were
+  // hidden outright, which left no way to discover that and read as the app
+  // being broken or the plan lacking the feature. Keep them listed and explain.
+  const isEphemeral = profile.ephemeral === true;
+  const isWayfernProfile = profile.browser === "wayfern";
+
   const deleteAction = findAction("delete");
   const fingerprintAction = findAction("fingerprint");
   const cookiesManageAction = findAction("cookiesManage");
@@ -814,20 +822,20 @@ function ProfileInfoLayout({
         cookieCount !== null && cookieCount > 0
           ? cookieCount.toLocaleString()
           : undefined,
-      hidden: !cookiesAction,
+      hidden: !cookiesAction && !(isEphemeral && isWayfernProfile),
     },
     {
       id: "extensions",
       icon: <LuPuzzle className="size-3.5" />,
       label: t("profileInfo.sections.extensions"),
       badge: extensionGroupName ?? undefined,
-      hidden: !extensionAction,
+      hidden: !extensionAction && !isEphemeral,
     },
     {
       id: "sync",
       icon: <LuRefreshCw className="size-3.5" />,
       label: t("profileInfo.sections.sync"),
-      hidden: !syncAction,
+      hidden: !syncAction && !isEphemeral,
     },
     {
       id: "automation",
@@ -1073,34 +1081,55 @@ function ProfileInfoLayout({
             />
           )}
 
-          {section === "cookies" && (
-            <CookiesSectionInline
-              profile={profile}
-              isRunning={isRunning}
-              isDisabled={isDisabled}
-              onCopyCookies={cookiesCopyAction?.onClick}
-              onImportCookies={cookiesManageAction?.onClick}
-              t={t}
-            />
-          )}
+          {section === "cookies" &&
+            (isEphemeral ? (
+              <EphemeralSectionNotice
+                title={t("profileInfo.sections.cookies")}
+                description={t("profileInfo.ephemeral.cookiesUnavailable")}
+                t={t}
+              />
+            ) : (
+              <CookiesSectionInline
+                profile={profile}
+                isRunning={isRunning}
+                isDisabled={isDisabled}
+                onCopyCookies={cookiesCopyAction?.onClick}
+                onImportCookies={cookiesManageAction?.onClick}
+                t={t}
+              />
+            ))}
 
-          {section === "extensions" && (
-            <ExtensionsSectionInline
-              profile={profile}
-              isDisabled={isDisabled}
-              t={t}
-            />
-          )}
+          {section === "extensions" &&
+            (isEphemeral ? (
+              <EphemeralSectionNotice
+                title={t("profileInfo.sections.extensions")}
+                description={t("profileInfo.ephemeral.extensionsUnavailable")}
+                t={t}
+              />
+            ) : (
+              <ExtensionsSectionInline
+                profile={profile}
+                isDisabled={isDisabled}
+                t={t}
+              />
+            ))}
 
-          {section === "sync" && (
-            <SyncSectionInline
-              profile={profile}
-              syncMode={syncMode}
-              syncStatus={syncStatus}
-              isDisabled={isDisabled}
-              t={t}
-            />
-          )}
+          {section === "sync" &&
+            (isEphemeral ? (
+              <EphemeralSectionNotice
+                title={t("profileInfo.sections.sync")}
+                description={t("profileInfo.ephemeral.syncUnavailable")}
+                t={t}
+              />
+            ) : (
+              <SyncSectionInline
+                profile={profile}
+                syncMode={syncMode}
+                syncStatus={syncStatus}
+                isDisabled={isDisabled}
+                t={t}
+              />
+            ))}
 
           {section === "automation" && (
             <LaunchHookEditor profile={profile} t={t} />
@@ -1503,6 +1532,31 @@ function NetworkSectionInline({
       </div>
 
       {error && <p className="text-xs text-destructive-text">{error}</p>}
+    </div>
+  );
+}
+
+/// Explains why a section has nothing to offer on an ephemeral profile.
+/// Mirrors the locked-fingerprint empty state so the two read as one pattern.
+function EphemeralSectionNotice({
+  title,
+  description,
+  t,
+}: {
+  title: string;
+  description: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
+      <LuTimer className="size-4 shrink-0 text-muted-foreground" />
+      <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      <p className="max-w-[48ch] text-sm text-pretty text-muted-foreground">
+        {description}
+      </p>
+      <p className="max-w-[48ch] text-xs text-pretty text-muted-foreground">
+        {t("profileInfo.ephemeral.hint")}
+      </p>
     </div>
   );
 }

@@ -70,6 +70,7 @@ mod ephemeral_dirs;
 mod extension_manager;
 mod extraction;
 mod fingerprint_consistency;
+mod fs_secure;
 mod geoip_downloader;
 mod geolocation;
 mod group_manager;

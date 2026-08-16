@@ -1230,6 +1230,12 @@
       "syncing": "Syncing",
       "synced": "Synced",
       "error": "Error"
+    },
+    "ephemeral": {
+      "cookiesUnavailable": "Ephemeral profiles are discarded when the browser closes, so there are no cookies to manage here.",
+      "extensionsUnavailable": "Ephemeral profiles are discarded when the browser closes, so extension groups cannot be assigned to them.",
+      "syncUnavailable": "Ephemeral profiles are discarded when the browser closes, so there is nothing to sync to the cloud.",
+      "hint": "Create a regular profile if you need this to persist."
     }
   },
   "extensions": {
@@ -2203,7 +2209,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot warms your profiles overnight on a remote machine, so they keep their cookies and their history without your computer being on. It needs a paid plan."
+      "hint": "Cookie Bot warms your profiles overnight on a remote machine, so they keep their cookies and their history without your computer being on."
     },
     "empty": {
       "title": "No profiles are enrolled",

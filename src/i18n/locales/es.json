@@ -1233,6 +1233,12 @@
       "syncing": "Sincronizando",
       "synced": "Sincronizado",
       "error": "Error"
+    },
+    "ephemeral": {
+      "cookiesUnavailable": "Los perfiles efímeros se descartan al cerrar el navegador, así que aquí no hay cookies que gestionar.",
+      "extensionsUnavailable": "Los perfiles efímeros se descartan al cerrar el navegador, así que no se les pueden asignar grupos de extensiones.",
+      "syncUnavailable": "Los perfiles efímeros se descartan al cerrar el navegador, así que no hay nada que sincronizar con la nube.",
+      "hint": "Crea un perfil normal si necesitas que esto se conserve."
     }
   },
   "extensions": {
@@ -2210,7 +2216,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot calienta tus perfiles por la noche en una máquina remota, así conservan sus cookies y su historial sin que tu ordenador esté encendido. Requiere un plan de pago."
+      "hint": "Cookie Bot calienta tus perfiles por la noche en una máquina remota, así conservan sus cookies y su historial sin que tu ordenador esté encendido."
     },
     "empty": {
       "title": "No hay perfiles inscritos",

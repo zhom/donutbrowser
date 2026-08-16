@@ -1230,6 +1230,12 @@
       "syncing": "Eşitleniyor",
       "synced": "Eşitlendi",
       "error": "Hata"
+    },
+    "ephemeral": {
+      "cookiesUnavailable": "Geçici profiller tarayıcı kapandığında silinir, bu yüzden burada yönetilecek çerez yoktur.",
+      "extensionsUnavailable": "Geçici profiller tarayıcı kapandığında silinir, bu yüzden onlara uzantı grubu atanamaz.",
+      "syncUnavailable": "Geçici profiller tarayıcı kapandığında silinir, bu yüzden buluta eşitlenecek bir şey yoktur.",
+      "hint": "Bunun kalıcı olmasını istiyorsanız normal bir profil oluşturun."
     }
   },
   "extensions": {
@@ -2203,7 +2209,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot, profillerinizi gece boyunca uzak bir makinede ısıtır; böylece bilgisayarınız açık olmadan çerezlerini ve geçmişlerini korurlar. Ücretli bir plan gerekir."
+      "hint": "Cookie Bot, profillerinizi gece boyunca uzak bir makinede ısıtır; böylece bilgisayarınız açık olmadan çerezlerini ve geçmişlerini korurlar."
     },
     "empty": {
       "title": "Kayıtlı profil yok",

@@ -495,6 +495,18 @@ impl ProfileManager {
     // so nothing else would ever clean them up.
     crate::launch_gate_prefs::forget_profile(profile_id);
 
+    // Deleting the profile never touched its ephemeral directory, so a
+    // decrypted or in-memory copy outlived the profile it belonged to with
+    // nothing left that knew to reap it. The running-browser guard above only
+    // rejects a live process_id, and the keep-decrypted path deliberately
+    // clears process_id while leaving the plaintext tree populated. No-ops
+    // when the profile has no ephemeral directory.
+    crate::ephemeral_dirs::remove_ephemeral_dir(profile_id);
+
+    // Per-domain traffic history lives outside the profile directory, so it
+    // survives the delete otherwise. It is already zero-overwritten on removal.
+    crate::traffic_stats::delete_traffic_stats(profile_id);
+
     // Remember sync mode before deleting local files
     let was_sync_enabled = profile.is_sync_enabled();
 
@@ -1558,7 +1570,11 @@ impl ProfileManager {
       None => {
         // No running instance found, clear process ID if set
         if profile.ephemeral {
-          crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+          let id = profile.id.to_string();
+          crate::ephemeral_dirs::remove_ephemeral_dir(&id);
+          // Destination history is kept outside the profile dir, so erasing
+          // the profile alone still left the session's domains on disk.
+          crate::traffic_stats::delete_traffic_stats(&id);
         }
 
         let profiles_dir = self.get_profiles_dir();

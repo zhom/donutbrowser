@@ -1230,6 +1230,12 @@
       "syncing": "Đang đồng bộ",
       "synced": "Đã đồng bộ",
       "error": "Lỗi"
+    },
+    "ephemeral": {
+      "cookiesUnavailable": "Hồ sơ tạm thời bị xoá khi đóng trình duyệt, nên ở đây không có cookie nào để quản lý.",
+      "extensionsUnavailable": "Hồ sơ tạm thời bị xoá khi đóng trình duyệt, nên không thể gán nhóm tiện ích mở rộng cho chúng.",
+      "syncUnavailable": "Hồ sơ tạm thời bị xoá khi đóng trình duyệt, nên không có gì để đồng bộ lên đám mây.",
+      "hint": "Hãy tạo hồ sơ thường nếu bạn cần giữ lại dữ liệu này."
     }
   },
   "extensions": {
@@ -2203,7 +2209,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot làm ấm hồ sơ của bạn qua đêm trên máy từ xa, giúp chúng giữ được cookie và lịch sử mà không cần bật máy tính của bạn. Cần gói trả phí."
+      "hint": "Cookie Bot làm ấm hồ sơ của bạn qua đêm trên máy từ xa, giúp chúng giữ được cookie và lịch sử mà không cần bật máy tính của bạn."
     },
     "empty": {
       "title": "Chưa có hồ sơ nào được đăng ký",

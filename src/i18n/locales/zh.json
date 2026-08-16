@@ -1230,6 +1230,12 @@
       "syncing": "同步中",
       "synced": "已同步",
       "error": "错误"
+    },
+    "ephemeral": {
+      "cookiesUnavailable": "临时配置在浏览器关闭时会被丢弃，因此这里没有可管理的 Cookie。",
+      "extensionsUnavailable": "临时配置在浏览器关闭时会被丢弃，因此无法为其分配扩展分组。",
+      "syncUnavailable": "临时配置在浏览器关闭时会被丢弃，因此没有可同步到云端的内容。",
+      "hint": "如果需要保留这些数据，请创建普通配置。"
     }
   },
   "extensions": {
@@ -2203,7 +2209,7 @@
     },
     "locked": {
       "title": "Cookie Bot",
-      "hint": "Cookie Bot 在远程机器上通宵养号，无需开着你的电脑也能保住 Cookie 和历史记录。需要付费套餐。"
+      "hint": "Cookie Bot 在远程机器上通宵养号，无需开着你的电脑也能保住 Cookie 和历史记录。"
     },
     "empty": {
       "title": "尚未加入任何配置文件",

@@ -530,38 +530,10 @@ pub fn delete_traffic_stats(id: &str) -> bool {
   removed
 }
 
-/// Best-effort secure erase: overwrite the file's bytes with zeros and flush
-/// before unlinking, so the traffic history isn't trivially recoverable from
-/// the freed blocks. On copy-on-write / SSD storage the OS may still retain
-/// old blocks — this is a best-effort mitigation, not a guarantee.
-fn secure_remove_file(path: &std::path::Path) -> std::io::Result<()> {
-  use std::io::Write;
-  if let Ok(meta) = fs::metadata(path) {
-    let len = meta.len();
-    if len > 0 {
-      if let Ok(mut f) = fs::OpenOptions::new().write(true).open(path) {
-        let zeros = vec![0u8; 8192];
-        let mut remaining = len;
-        // The overwrite is best-effort and must never gate the unlink: a write
-        // failure part-way (ENOSPC on a copy-on-write volume, EIO) would
-        // otherwise leave the file both un-wiped and un-deleted, which is
-        // strictly worse than the plain remove this replaced — and the caller
-        // reports success either way, so the history would silently survive a
-        // clear.
-        while remaining > 0 {
-          let chunk = remaining.min(zeros.len() as u64) as usize;
-          if f.write_all(&zeros[..chunk]).is_err() {
-            break;
-          }
-          remaining -= chunk as u64;
-        }
-        let _ = f.flush();
-        let _ = f.sync_all();
-      }
-    }
-  }
-  fs::remove_file(path)
-}
+/// Best-effort secure erase. Shared with the ephemeral-profile teardown, which
+/// needs exactly the same "zero then unlink, never let the overwrite gate the
+/// unlink" behaviour; see `crate::fs_secure` for the caveats.
+use crate::fs_secure::secure_remove_file;
 
 /// Clear all traffic stats (used when clearing cache), securely erasing each
 /// file first.

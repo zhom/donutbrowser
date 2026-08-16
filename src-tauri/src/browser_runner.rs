@@ -1316,7 +1316,12 @@ impl BrowserRunner {
         // disk instead of the previous snapshot.
         crate::profile::password::complete_after_quit_and_wait(profile).await;
       } else if profile.ephemeral {
-        crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+        let id = profile.id.to_string();
+        crate::ephemeral_dirs::remove_ephemeral_dir(&id);
+        // The per-domain traffic tracker writes to the cache dir on real disk
+        // regardless of where the profile itself lives, so an "in memory only"
+        // session still left a full record of everywhere it connected.
+        crate::traffic_stats::delete_traffic_stats(&id);
       } else if profile.clear_on_close {
         // Awaited for the same reason as re-encryption above: a queued sync
         // must see the cleared dir, not the pre-clear snapshot.
