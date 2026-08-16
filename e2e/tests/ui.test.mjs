@@ -556,6 +556,88 @@ test("VLESS proxy form keeps the share URI as one clear, validated input", async
   });
 });
 
+test("pasting a proxy string into the form fills every field", async () => {
+  await withApp("ui-proxy-form-paste", async (app) => {
+    // Dispatched rather than typed: the point is that the paste is spread
+    // across the form instead of landing whole in the field it was dropped on,
+    // and only a real ClipboardEvent carries the text the handler reads.
+    const paste = (selector, text) =>
+      app.execute(
+        `const field = document.querySelector(arguments[0]);
+         const data = new DataTransfer();
+         data.setData("text/plain", arguments[1]);
+         field.focus();
+         return field.dispatchEvent(
+           new ClipboardEvent("paste", {
+             bubbles: true,
+             cancelable: true,
+             clipboardData: data,
+           }),
+         );`,
+        [selector, text],
+      );
+    const fieldValues = () =>
+      app.execute(
+        `return ["#proxy-name", "#proxy-host", "#proxy-port", "#proxy-username", "#proxy-password"]
+           .map((selector) => document.querySelector(selector)?.value ?? null);`,
+      );
+
+    await app.clickSelector('[aria-label="Network"]');
+    await app.waitForText("New proxy");
+    await app.clickSelector('[aria-label="New proxy"]');
+    await app.waitForText("Add Proxy");
+
+    await paste("#proxy-host", "socks5://carol:s3cret@1.2.3.4:1080");
+    await app.waitFor(async () => (await fieldValues())[1] === "1.2.3.4", {
+      description: "host filled from the pasted proxy",
+    });
+    assert.deepEqual(await fieldValues(), [
+      "1.2.3.4:1080",
+      "1.2.3.4",
+      "1080",
+      "carol",
+      "s3cret",
+    ]);
+    assert.equal(
+      await app.execute(
+        `return document.querySelector("#proxy-type")?.textContent?.trim();`,
+      ),
+      "SOCKS5",
+    );
+
+    // No scheme in the line, so the type falls back to HTTP.
+    await paste("#proxy-name", "5.6.7.8:8080:dave:hunter2");
+    await app.waitFor(async () => (await fieldValues())[1] === "5.6.7.8", {
+      description: "scheme-less proxy string parsed",
+    });
+    assert.deepEqual((await fieldValues()).slice(1), [
+      "5.6.7.8",
+      "8080",
+      "dave",
+      "hunter2",
+    ]);
+    assert.equal(
+      await app.execute(
+        `return document.querySelector("#proxy-type")?.textContent?.trim();`,
+      ),
+      "HTTP",
+    );
+
+    // A bare hostname is not a proxy string, so the form is left alone and the
+    // browser's own paste stands.
+    await paste("#proxy-host", "proxy.example.com");
+    // Settle the parse round-trip, so "nothing changed" isn't just "nothing
+    // has come back yet".
+    await app.invoke("get_stored_proxies");
+    assert.deepEqual((await fieldValues()).slice(1), [
+      "5.6.7.8",
+      "8080",
+      "dave",
+      "hunter2",
+    ]);
+  });
+});
+
 test("About exposes a searchable, responsive third-party license inventory", async () => {
   await withApp("ui-about-licenses", async (app) => {
     await app.clickSelector('[aria-label="More"]');

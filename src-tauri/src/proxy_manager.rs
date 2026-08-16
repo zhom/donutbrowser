@@ -1375,56 +1375,55 @@ impl ProxyManager {
         }
       }
       // 4 parts: could be host:port:user:pass OR user:pass:host:port
-      4 => {
-        // Try to detect which format
-        let port_at_1 = parts[1].parse::<u16>().is_ok();
-        let port_at_3 = parts[3].parse::<u16>().is_ok();
-
-        match (port_at_1, port_at_3) {
-          // host:port:user:pass
-          (true, false) => {
-            let port = parts[1].parse::<u16>().unwrap();
-            ProxyParseResult::Parsed(ParsedProxyLine {
-              proxy_type: "http".to_string(),
-              host: parts[0].to_string(),
-              port,
-              username: Some(parts[2].to_string()),
-              password: Some(parts[3].to_string()),
-              vless_uri: None,
-              original_line: line.to_string(),
-            })
-          }
-          // user:pass:host:port
-          (false, true) => {
-            let port = parts[3].parse::<u16>().unwrap();
-            ProxyParseResult::Parsed(ParsedProxyLine {
-              proxy_type: "http".to_string(),
-              host: parts[2].to_string(),
-              port,
-              username: Some(parts[0].to_string()),
-              password: Some(parts[1].to_string()),
-              vless_uri: None,
-              original_line: line.to_string(),
-            })
-          }
-          // Both could be ports - ambiguous
-          (true, true) => ProxyParseResult::Ambiguous {
-            line: line.to_string(),
-            possible_formats: vec![
-              "host:port:username:password".to_string(),
-              "username:password:host:port".to_string(),
-            ],
-          },
-          // Neither is a valid port
-          (false, false) => ProxyParseResult::Invalid {
-            line: line.to_string(),
-            reason: "No valid port number found".to_string(),
-          },
-        }
-      }
+      4 => Self::parse_colon_separated_quad(&parts, "http", line),
       _ => ProxyParseResult::Invalid {
         line: line.to_string(),
         reason: format!("Unexpected format with {} parts", parts.len()),
+      },
+    }
+  }
+
+  // Resolve a four-part colon-separated body, which is either
+  // host:port:username:password or username:password:host:port. The port
+  // position tells the two apart; when both positions parse as a port the
+  // caller has to ask the user.
+  fn parse_colon_separated_quad(parts: &[&str], proxy_type: &str, line: &str) -> ProxyParseResult {
+    let port_at_1 = parts[1].parse::<u16>().ok();
+    let port_at_3 = parts[3].parse::<u16>().ok();
+
+    match (port_at_1, port_at_3) {
+      // host:port:user:pass
+      (Some(port), None) => ProxyParseResult::Parsed(ParsedProxyLine {
+        proxy_type: proxy_type.to_string(),
+        host: parts[0].to_string(),
+        port,
+        username: Some(parts[2].to_string()),
+        password: Some(parts[3].to_string()),
+        vless_uri: None,
+        original_line: line.to_string(),
+      }),
+      // user:pass:host:port
+      (None, Some(port)) => ProxyParseResult::Parsed(ParsedProxyLine {
+        proxy_type: proxy_type.to_string(),
+        host: parts[2].to_string(),
+        port,
+        username: Some(parts[0].to_string()),
+        password: Some(parts[1].to_string()),
+        vless_uri: None,
+        original_line: line.to_string(),
+      }),
+      // Both could be ports - ambiguous
+      (Some(_), Some(_)) => ProxyParseResult::Ambiguous {
+        line: line.to_string(),
+        possible_formats: vec![
+          "host:port:username:password".to_string(),
+          "username:password:host:port".to_string(),
+        ],
+      },
+      // Neither is a valid port
+      (None, None) => ProxyParseResult::Invalid {
+        line: line.to_string(),
+        reason: "No valid port number found".to_string(),
       },
     }
   }
@@ -1500,6 +1499,15 @@ impl ProxyManager {
         }
       }
     } else {
+      // Vendors also hand out the colon-separated body behind a scheme, as in
+      // socks5://host:port:user:pass, so try that before plain host:port. An
+      // IPv6 literal splits into four too ("[", "", "1]", "8080" for [::1]:8080),
+      // so require every field to be populated before reading it that way.
+      let parts: Vec<&str> = rest.split(':').collect();
+      if parts.len() == 4 && parts.iter().all(|part| !part.is_empty()) {
+        return Some(Self::parse_colon_separated_quad(&parts, protocol, line));
+      }
+
       // No auth, just host:port
       if let Some(colon_pos) = rest.rfind(':') {
         let host = &rest[..colon_pos];
@@ -3874,6 +3882,57 @@ mod tests {
         assert_eq!(p.port, 1080);
       }
       _ => panic!("Expected Parsed"),
+    }
+
+    // Scheme in front of the colon-separated body
+    let results = ProxyManager::parse_txt_proxies("socks5://1.2.3.4:1080:admin:secret\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "socks5");
+        assert_eq!(p.host, "1.2.3.4");
+        assert_eq!(p.port, 1080);
+        assert_eq!(p.username.as_deref(), Some("admin"));
+        assert_eq!(p.password.as_deref(), Some("secret"));
+      }
+      _ => panic!("Expected Parsed"),
+    }
+
+    // Same, with the credentials in front
+    let results = ProxyManager::parse_txt_proxies("https://admin:secret:proxy.com:8443\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "https");
+        assert_eq!(p.host, "proxy.com");
+        assert_eq!(p.port, 8443);
+        assert_eq!(p.username.as_deref(), Some("admin"));
+        assert_eq!(p.password.as_deref(), Some("secret"));
+      }
+      _ => panic!("Expected Parsed"),
+    }
+
+    // An IPv6 literal splits into four parts as well, and must not be read as
+    // the colon-separated form
+    let results = ProxyManager::parse_txt_proxies("http://[::1]:8080\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.host, "[::1]");
+        assert_eq!(p.port, 8080);
+        assert!(p.username.is_none());
+      }
+      _ => panic!("Expected Parsed"),
+    }
+
+    // A scheme-prefixed body that is ambiguous stays ambiguous
+    let results = ProxyManager::parse_txt_proxies("socks5://1234:5678:9012:3456\n");
+    match &results[0] {
+      ProxyParseResult::Ambiguous {
+        line,
+        possible_formats,
+      } => {
+        assert_eq!(line, "socks5://1234:5678:9012:3456");
+        assert_eq!(possible_formats.len(), 2);
+      }
+      _ => panic!("Expected Ambiguous"),
     }
 
     // Ambiguous: both positions could be ports

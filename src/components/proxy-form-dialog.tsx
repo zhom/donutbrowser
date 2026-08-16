@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { translateBackendError } from "@/lib/backend-errors";
-import type { StoredProxy } from "@/types";
+import { pickParsedProxy } from "@/lib/proxy-string";
+import type { ProxyParseResult, StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface ProxyFormData {
@@ -202,6 +203,48 @@ export function ProxyFormDialog({
     }
   }, [isSubmitting, onClose]);
 
+  // Proxies are copied around as one string — `socks5://user:pass@host:1080`,
+  // `host:1080:user:pass`, and a dozen variants of both — so a paste into any
+  // one field is almost never meant for that field alone. Hand the clipboard to
+  // the same Rust parser the import dialog uses and spread the result across
+  // the form. The default paste is left alone until the answer comes back, so a
+  // string that isn't a proxy (a hostname, a port) lands where it was dropped.
+  const handleProxyPaste = useCallback(
+    (event: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const content = event.clipboardData.getData("text").trim();
+      if (!content) {
+        return;
+      }
+
+      // Captured before the browser applies the paste, so a proxy string
+      // dropped into the empty name field names the proxy after its endpoint
+      // instead of keeping the raw line.
+      const nameBeforePaste = form.name.trim();
+
+      void invoke<ProxyParseResult[]>("parse_txt_proxies", { content })
+        .then((results) => {
+          const parsed = pickParsedProxy(results);
+          if (!parsed) {
+            return;
+          }
+          setForm((previous) => ({
+            ...previous,
+            name: nameBeforePaste || `${parsed.host}:${parsed.port}`,
+            proxy_type: parsed.proxy_type,
+            host: parsed.host,
+            port: parsed.port,
+            username: parsed.username ?? "",
+            password: parsed.password ?? "",
+            vless_uri: parsed.vless_uri ?? "",
+          }));
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to parse pasted proxy:", error);
+        });
+    },
+    [form.name],
+  );
+
   const isVless = form.proxy_type === "vless";
   const vlessEndpoint = isVless ? parseVlessEndpoint(form.vless_uri) : null;
 
@@ -259,6 +302,7 @@ export function ProxyFormDialog({
               onChange={(e) => {
                 setForm({ ...form, name: e.target.value });
               }}
+              onPaste={handleProxyPaste}
               placeholder={t("proxies.form.namePlaceholder")}
               disabled={isSubmitting}
             />
@@ -303,6 +347,7 @@ export function ProxyFormDialog({
                 onChange={(e) => {
                   setForm({ ...form, vless_uri: e.target.value });
                 }}
+                onPaste={handleProxyPaste}
                 placeholder={t("proxies.form.vlessUriPlaceholder")}
                 disabled={isSubmitting}
                 aria-invalid={hasInvalidVlessUri}
@@ -337,6 +382,7 @@ export function ProxyFormDialog({
                     onChange={(e) => {
                       setForm({ ...form, host: e.target.value });
                     }}
+                    onPaste={handleProxyPaste}
                     placeholder={t("proxies.form.hostPlaceholder")}
                     disabled={isSubmitting}
                   />
@@ -354,6 +400,7 @@ export function ProxyFormDialog({
                         port: Number.parseInt(e.target.value, 10) || 0,
                       });
                     }}
+                    onPaste={handleProxyPaste}
                     placeholder={t("proxies.form.portPlaceholder")}
                     min="1"
                     max="65535"

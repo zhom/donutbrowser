@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StepTransition } from "@/components/ui/step-transition";
 import { getCurrentOS } from "@/lib/browser-utils";
+import { resolveAmbiguousProxyLine } from "@/lib/proxy-string";
 import type {
   ParsedProxyLine,
   ProxyImportResult,
@@ -265,31 +266,12 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   );
 
   const handleResolveAmbiguous = useCallback(() => {
-    // Convert ambiguous proxies to parsed based on selected format
-    const resolved: ParsedProxyLine[] = ambiguousProxies
-      .filter((p) => p.selectedFormat)
-      .map((p) => {
-        const parts = p.line.split(":");
-        if (p.selectedFormat === "host:port:username:password") {
-          return {
-            proxy_type: "http",
-            host: parts[0],
-            port: Number.parseInt(parts[1], 10),
-            username: parts[2],
-            password: parts[3],
-            original_line: p.line,
-          };
-        }
-        // username:password:host:port
-        return {
-          proxy_type: "http",
-          host: parts[2],
-          port: Number.parseInt(parts[3], 10),
-          username: parts[0],
-          password: parts[1],
-          original_line: p.line,
-        };
-      });
+    const resolved = ambiguousProxies.flatMap((p) => {
+      const parsed = p.selectedFormat
+        ? resolveAmbiguousProxyLine(p.line, p.selectedFormat)
+        : null;
+      return parsed ? [parsed] : [];
+    });
 
     setParsedProxies((prev) => [...prev, ...resolved]);
     setStep("preview");
