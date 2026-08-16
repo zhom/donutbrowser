@@ -109,103 +109,21 @@ Donut Browser is built by the people who use it, and plenty of the most useful h
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=zhom%2Fdonutbrowser&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=zhom/donutbrowser&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=zhom/donutbrowser&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=zhom/donutbrowser&type=date&legend=top-left" />
- </picture>
+<a href="https://gitdebt.com/zhom/donutbrowser?ref=readme">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.gif?theme=dark" />
+    <img alt="Cumulative GitHub stars for zhom/donutbrowser over time" src="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.gif?theme=light" />
+  </picture>
 </a>
 
 ## Contributors
 
-<!-- readme: collaborators,contributors -start -->
-<table>
-	<tbody>
-		<tr>
-            <td align="center">
-                <a href="https://github.com/zhom">
-                    <img src="https://avatars.githubusercontent.com/u/2717306?v=4" width="100;" alt="zhom"/>
-                    <br />
-                    <sub><b>zhom</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/kalinichaa">
-                    <img src="https://avatars.githubusercontent.com/u/81773493?v=4" width="100;" alt="kalinichaa"/>
-                    <br />
-                    <sub><b>Alexander Kalinich</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/xenos1337">
-                    <img src="https://avatars.githubusercontent.com/u/66328734?v=4" width="100;" alt="xenos1337"/>
-                    <br />
-                    <sub><b>xenos</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/webees">
-                    <img src="https://avatars.githubusercontent.com/u/5155291?v=4" width="100;" alt="webees"/>
-                    <br />
-                    <sub><b>JockLee</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/yb403">
-                    <img src="https://avatars.githubusercontent.com/u/87396571?v=4" width="100;" alt="yb403"/>
-                    <br />
-                    <sub><b>yb403</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/huy97">
-                    <img src="https://avatars.githubusercontent.com/u/30153437?v=4" width="100;" alt="huy97"/>
-                    <br />
-                    <sub><b>Huy Le</b></sub>
-                </a>
-            </td>
-		</tr>
-		<tr>
-            <td align="center">
-                <a href="https://github.com/drunkod">
-                    <img src="https://avatars.githubusercontent.com/u/9677471?v=4" width="100;" alt="drunkod"/>
-                    <br />
-                    <sub><b>drunkod</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/JorySeverijnse">
-                    <img src="https://avatars.githubusercontent.com/u/117462355?v=4" width="100;" alt="JorySeverijnse"/>
-                    <br />
-                    <sub><b>Jory Severijnse</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/ThiagoMafra-Integrare">
-                    <img src="https://avatars.githubusercontent.com/u/222241596?v=4" width="100;" alt="ThiagoMafra-Integrare"/>
-                    <br />
-                    <sub><b>Thiago Mafra</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/mchnkkc">
-                    <img src="https://avatars.githubusercontent.com/u/251900355?v=4" width="100;" alt="mchnkkc"/>
-                    <br />
-                    <sub><b>mchnkkc</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/liasica">
-                    <img src="https://avatars.githubusercontent.com/u/671431?v=4" width="100;" alt="liasica"/>
-                    <br />
-                    <sub><b>liasica</b></sub>
-                </a>
-            </td>
-		</tr>
-	<tbody>
-</table>
-<!-- readme: collaborators,contributors -end -->
+<a href="https://gitdebt.com/zhom/donutbrowser?ref=readme">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/zhom/donutbrowser/stats/contributors.svg?theme=dark" />
+    <img alt="Everyone who has landed commits in zhom/donutbrowser, ranked by commit count" src="https://api.gitdebt.com/api/repos/zhom/donutbrowser/stats/contributors.svg?theme=light" />
+  </picture>
+</a>
 
 ## Contact
 
