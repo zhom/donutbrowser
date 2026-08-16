@@ -589,7 +589,13 @@ pub async fn run_command_awaiting_load(
     let text = match tokio::time::timeout(remaining, connection.next_text()).await {
       Ok(Some(Ok(text))) => text,
       Ok(Some(Err(e))) => {
-        failure = Some(e);
+        // A dropped connection cannot unsay a command the browser already
+        // answered: the navigation was accepted, and the command's result is
+        // the best answer available even if the load event never arrived.
+        // Only when nothing was answered yet is the lost socket a failure.
+        if command_result.is_none() {
+          failure = Some(e);
+        }
         break;
       }
       // The peer hung up, or the wait expired. Either way whatever the command
@@ -1114,6 +1120,15 @@ mod tests {
     Cooperative,
     /// Hang up the way a session that is not yet up does.
     RefuseAsNotDrivable,
+    /// Answer the navigation, then drop the socket before the load event,
+    /// the way a relay does when the browser it bridges dies mid-navigation.
+    DropAfterNavigateReply,
+    /// Drop the socket without answering the navigation.
+    DropBeforeNavigateReply,
+    /// Answer the navigation with a CDP error object.
+    AnswerNavigateWithError,
+    /// Answer commands but never emit the load event, so the wait expires.
+    NeverLoadEvent,
   }
 
   /// The CDP session id the fake relay hands out for a flat attach.
@@ -1185,18 +1200,32 @@ mod tests {
         };
         log.received.push(request.clone());
 
+        let method = request.get("method").and_then(Value::as_str).unwrap_or("");
+
+        // A reply dropped mid-flight must not look like the command answered.
+        if behaviour == RelayBehaviour::DropBeforeNavigateReply && method == "Page.navigate" {
+          break;
+        }
+
         let id = request.get("id").cloned().unwrap_or(Value::Null);
-        let reply = match request.get("method").and_then(Value::as_str) {
-          Some("Target.getTargets") => serde_json::json!({
+        let reply = match method {
+          "Target.getTargets" => serde_json::json!({
             "id": id,
             "result": { "targetInfos": [
               { "targetId": "page-1", "type": "page", "url": "https://example.com/" }
             ]}
           }),
-          Some("Target.attachToTarget") => serde_json::json!({
+          "Target.attachToTarget" => serde_json::json!({
             "id": id,
             "result": { "sessionId": FAKE_CDP_SESSION }
           }),
+          "Page.navigate" if behaviour == RelayBehaviour::AnswerNavigateWithError => {
+            serde_json::json!({
+              "id": id,
+              "sessionId": request.get("sessionId").cloned().unwrap_or(Value::Null),
+              "error": { "code": -32000, "message": "fake navigation error" }
+            })
+          }
           // Everything else is handed straight back, so the test can assert on
           // the exact frame the client put on the wire.
           _ => serde_json::json!({
@@ -1213,10 +1242,17 @@ mod tests {
           break;
         }
 
+        // The browser died mid-navigation: drop the socket without a close
+        // frame, the way a relay does when the VM it bridges goes away. The
+        // command's reply is already in the client's hands.
+        if behaviour == RelayBehaviour::DropAfterNavigateReply && method == "Page.navigate" {
+          break;
+        }
+
         // A real browser follows a navigation with the load event, flattened
         // onto the same socket. Emitting it here is what proves the wait
         // actually terminates on the event rather than on its timeout.
-        if request.get("method").and_then(Value::as_str) == Some("Page.navigate") {
+        if behaviour != RelayBehaviour::NeverLoadEvent && method == "Page.navigate" {
           let loaded = serde_json::json!({
             "method": "Page.loadEventFired",
             "sessionId": request.get("sessionId").cloned().unwrap_or(Value::Null),
@@ -1376,5 +1412,77 @@ mod tests {
       .collect();
     assert_eq!(methods, vec!["Runtime.evaluate"]);
     assert!(log.received[0].get("sessionId").is_none());
+  }
+
+  #[tokio::test]
+  async fn a_navigation_result_survives_a_connection_dropped_before_the_load_event() {
+    // The race this fix targets: a fast navigation can kill the connection
+    // between the command reply and the load event. The browser already
+    // accepted the navigation, so the reply is the answer — losing the socket
+    // afterwards must not turn the answered command into a failure.
+    let (ws_url, server) = fake_relay(RelayBehaviour::DropAfterNavigateReply).await;
+    let target = CdpTarget::Local { ws_url };
+
+    navigate(&target, "https://example.com", 30)
+      .await
+      .expect("an answered navigation must survive a dropped connection");
+
+    let _log = server.await.expect("the fake relay must finish");
+  }
+
+  #[tokio::test]
+  async fn a_connection_dropped_before_the_reply_is_still_reported_as_a_failure() {
+    // The flip side of the race: if the socket dies before the command
+    // answered, there is nothing to prefer — the navigation may never have
+    // happened, so the call must still fail.
+    let (ws_url, server) = fake_relay(RelayBehaviour::DropBeforeNavigateReply).await;
+    let target = CdpTarget::Local { ws_url };
+
+    let error = navigate(&target, "https://example.com", 30)
+      .await
+      .expect_err("a navigation that never answered must not look like a success");
+    assert!(
+      matches!(error, CdpError::Transport(_)),
+      "expected Transport, got {error:?}"
+    );
+
+    let _log = server.await.expect("the fake relay must finish");
+  }
+
+  #[tokio::test]
+  async fn a_navigation_error_from_the_browser_is_still_reported() {
+    // A CDP error object is the browser saying no — that answer must not be
+    // swallowed by the load wait.
+    let (ws_url, server) = fake_relay(RelayBehaviour::AnswerNavigateWithError).await;
+    let target = CdpTarget::Local { ws_url };
+
+    let error = navigate(&target, "https://example.com", 30)
+      .await
+      .expect_err("a CDP error reply must surface as a failure");
+    assert!(
+      matches!(error, CdpError::Protocol(_)),
+      "expected Protocol, got {error:?}"
+    );
+
+    let _log = server.await.expect("the fake relay must finish");
+  }
+
+  #[tokio::test]
+  async fn a_navigation_without_a_load_event_returns_the_command_result() {
+    // When nothing navigates there is no load event; the wait expires and the
+    // command's own result is the answer, not a failure.
+    let (ws_url, server) = fake_relay(RelayBehaviour::NeverLoadEvent).await;
+    let target = CdpTarget::Local { ws_url };
+
+    let started = std::time::Instant::now();
+    navigate(&target, "https://example.com", 1)
+      .await
+      .expect("an answered command with no load event must still resolve");
+    assert!(
+      started.elapsed() >= Duration::from_secs(1),
+      "the wait must run to its deadline when no load event arrives"
+    );
+
+    let _log = server.await.expect("the fake relay must finish");
   }
 }
