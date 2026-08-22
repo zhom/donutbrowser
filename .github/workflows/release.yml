@@ -20,7 +20,7 @@ jobs:
   security-scan:
     if: github.repository == 'zhom/donutbrowser'
     name: Security Vulnerability Scan
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8deb546fdb875b9996d27d4950be7312dac076a1" # v2.5.0
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@6e4298ebc4db23e847df9b2e2de2939d6f066c67" # v2.5.1
     with:
       scan-args: |-
         -r
@@ -115,7 +115,7 @@ jobs:
           cache: "pnpm"
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 #master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 #master
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
