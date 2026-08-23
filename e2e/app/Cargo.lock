@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "donutbrowser"
-version = "0.29.4"
+version = "0.29.6"
 dependencies = [
  "aes 0.9.1",
  "aes-gcm 0.11.0",
@@ -2889,9 +2889,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.15"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cb093c84e8bd9b188d4c4a8cb6579fc016968d14c99882163cd3ff402a4f155"
+checksum = "839c0e8a181239723652be9062bb56ca5bf5f64011f73b623f6f4fc59086a228"
 dependencies = [
  "atomic-waker",
  "bytes",
