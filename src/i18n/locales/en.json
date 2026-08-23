@@ -994,6 +994,7 @@
     "autoLocationDescription": "Automatically configure location information based on proxy configuration or your connection if no proxy provided",
     "editingDisabledRunning": "Fingerprint editing is disabled because the profile is currently running. Stop the profile to make changes.",
     "editingDisabledRandomized": "Fingerprint editing is disabled because random fingerprint generation is enabled. Disable the option above to manually edit the fingerprint configuration.",
+    "derivedFromIdentity": "Derived from this profile's identity and not editable.",
     "advancedWarning": "Warning: Only edit these parameters if you know what you're doing. Incorrect values may break websites, make them detect you, and lead to hard-to-debug bugs.",
     "basicWarning": "Warning: Only edit these parameters if you know what you're doing.",
     "automatic": "Automatic",
@@ -1977,7 +1978,11 @@
     "noE2ePasswordSet": "No end-to-end encryption password is set. Set one before syncing encrypted data.",
     "importSourceNotChromium": "This folder is not a Chromium browser profile",
     "importSourceNotChromiumNamed": "{{family}} profiles cannot be imported; only Chromium-based browsers are supported",
-    "importSourceBrowserRunning": "Close {{browser}} first, or choose to import anyway"
+    "importSourceBrowserRunning": "Close {{browser}} first, or choose to import anyway",
+    "wayfernFingerprintApplyFailed": "Could not apply this profile's fingerprint, so the browser was not started. {{detail}}",
+    "wayfernFingerprintGenerationFailed": "Could not create a fingerprint for this profile. {{detail}}",
+    "wayfernGenerationLimitReached": "The fingerprint generation limit for this account has been reached. New fingerprints are unavailable for up to 24 hours. This limit applies to this computer, not to one profile.",
+    "wayfernCrossOsRequiresPlan": "This profile claims {{detail}}, which needs a paid plan and an active sign-in. Sign in or switch the profile to your own operating system."
   },
   "rail": {
     "profiles": "Profiles",

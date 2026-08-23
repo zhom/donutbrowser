@@ -128,6 +128,21 @@ export type BackendErrorCode =
   | "COOKIE_BOT_REQUIRES_PROXY"
   | "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED"
   | "FINGERPRINT_EXIT_MISMATCH"
+  // The launch refuses instead of opening a window on an unmanaged device: a
+  // silent fallback would leave the user browsing a random fingerprint while
+  // the UI reported success, which is the worst failure an anti-detect product
+  // can have. `detail` carries the underlying browser error for support.
+  | "WAYFERN_FINGERPRINT_APPLY_FAILED"
+  | "WAYFERN_FINGERPRINT_GENERATION_FAILED"
+  // Its own code rather than a generation failure: the browser's quota block is
+  // account-wide and lasts 24 hours, so "try again" is wrong advice, and a user
+  // whose every profile refuses at once has to be told this is one limit and
+  // not a broken install.
+  | "WAYFERN_GENERATION_LIMIT_REACHED"
+  // A cross-OS claim needs a signed plan token, so an expired or offline
+  // session cannot apply one. Distinct from the generic apply failure because
+  // signing in again is the fix; `detail` names the claimed OS.
+  | "WAYFERN_CROSS_OS_REQUIRES_PLAN"
   | "LAUNCH_CONSENT_EXPIRED"
   | "VPN_WORKER_START_FAILED"
   | "EXIT_PROBE_FAILED"
@@ -472,6 +487,20 @@ export function translateBackendError(t: TFunction, err: unknown): string {
     // room for one sentence.
     case "FINGERPRINT_EXIT_MISMATCH":
       return t("backendErrors.fingerprintExitMismatch");
+    case "WAYFERN_FINGERPRINT_APPLY_FAILED":
+      return t("backendErrors.wayfernFingerprintApplyFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "WAYFERN_FINGERPRINT_GENERATION_FAILED":
+      return t("backendErrors.wayfernFingerprintGenerationFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "WAYFERN_GENERATION_LIMIT_REACHED":
+      return t("backendErrors.wayfernGenerationLimitReached");
+    case "WAYFERN_CROSS_OS_REQUIRES_PLAN":
+      return t("backendErrors.wayfernCrossOsRequiresPlan", {
+        detail: parsed.params?.detail ?? "",
+      });
     case "LAUNCH_CONSENT_EXPIRED":
       return t("backendErrors.launchConsentExpired");
     case "VPN_WORKER_START_FAILED":

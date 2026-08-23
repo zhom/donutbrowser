@@ -988,7 +988,11 @@ impl ProfileImporter {
         {
           // geo_proxy_signature is intentionally left unset here: the first
           // launch's signature-mismatch refresh verifies the location either way.
-          Ok((fp, _geolocation_applied)) => config.fingerprint = Some(fp),
+          Ok(generated) => {
+            config.fingerprint = Some(generated.fingerprint);
+            config.identity_id = generated.identity_id;
+            config.identity_baseline = generated.identity_baseline;
+          }
           Err(e) => {
             let _ = fs::remove_dir_all(&new_profile_uuid_dir);
             return Err(

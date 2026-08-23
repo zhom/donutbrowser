@@ -223,9 +223,14 @@ impl ProfileManager {
           .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
-          Ok((generated_fingerprint, geo_applied)) => {
-            config.fingerprint = Some(generated_fingerprint);
-            geolocation_applied = geo_applied;
+          Ok(generated) => {
+            config.fingerprint = Some(generated.fingerprint);
+            // Set together with the fingerprint they describe. A profile that
+            // stored one without the other would either lose reproducibility or
+            // diff its whole device into overrides on the next launch.
+            config.identity_id = generated.identity_id;
+            config.identity_baseline = generated.identity_baseline;
+            geolocation_applied = generated.geolocation_applied;
             log::info!("Successfully generated fingerprint for Wayfern profile: {name}");
           }
           Err(e) => {
@@ -626,6 +631,36 @@ impl ProfileManager {
 
     if !browser.is_version_downloaded(version, &binaries_dir) {
       return Err(format!("Browser version {version} is not downloaded").into());
+    }
+
+    // A move back to a version without the identity API cannot carry an
+    // identity-backed device with it, and leaving it in place is worse than
+    // dropping it: the older browser would splice it onto a freshly drawn
+    // device and persist the result, which then fails on every later launch.
+    // Clearing `fingerprint` makes the next launch generate a fresh one;
+    // `geo_proxy_signature` goes with it because it certifies location fields
+    // of a fingerprint that no longer exists.
+    //
+    // Do NOT refuse the version change: `consolidate_browser_versions` only
+    // reaches this direction once the newer binary is already gone from disk,
+    // so refusing would strand the profile pointing at a missing executable.
+    // Every other direction falls through untouched.
+    let target_speaks_identity_api = crate::wayfern_manager::supports_identity_api(version);
+    if let Some(cfg) = profile
+      .wayfern_config
+      .as_mut()
+      .filter(|c| c.identity_id.is_some() && !target_speaks_identity_api)
+    {
+      cfg.identity_id = None;
+      cfg.identity_baseline = None;
+      cfg.fingerprint = None;
+      cfg.geo_proxy_signature = None;
+      log::warn!(
+        "Profile '{}' moved from Wayfern {} to {}. Its stored fingerprint cannot be used there, so it was cleared and a fresh one will be generated on the next launch.",
+        profile.name,
+        profile.version,
+        version
+      );
     }
 
     // Update version
@@ -1101,6 +1136,11 @@ impl ProfileManager {
     // isolation between a clone and its source.
     if let Some(cfg) = new_profile.wayfern_config.as_mut() {
       cfg.fingerprint = None;
+      // The identity is a stronger link than the payload: the same UUID rebuilds
+      // the SAME device on any version, so a clone that kept it would stay
+      // byte-identical to its source forever, not just until the next upgrade.
+      cfg.identity_id = None;
+      cfg.identity_baseline = None;
     }
 
     self.save_profile(&new_profile)?;
@@ -1116,7 +1156,7 @@ impl ProfileManager {
     &self,
     app_handle: tauri::AppHandle,
     profile_id: &str,
-    config: WayfernConfig,
+    mut config: WayfernConfig,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by ID
     let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
@@ -1146,6 +1186,18 @@ impl ProfileManager {
       return Err(
         "Cannot update Wayfern configuration while browser is running. Please stop the browser first.".into(),
       );
+    }
+
+    // The identity is internal state, so a caller that edits the fingerprint
+    // through the API or MCP will not send it back. Dropping it would silently
+    // re-mint the device on the next launch and throw the edit away with it,
+    // which is the opposite of what an override is for. Carry it forward unless
+    // the caller either supplied its own or cleared the fingerprint outright.
+    if config.identity_id.is_none() && config.fingerprint.is_some() {
+      if let Some(stored) = profile.wayfern_config.as_ref() {
+        config.identity_id = stored.identity_id.clone();
+        config.identity_baseline = stored.identity_baseline.clone();
+      }
     }
 
     // Update the Wayfern configuration

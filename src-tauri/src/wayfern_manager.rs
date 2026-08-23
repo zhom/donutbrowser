@@ -45,6 +45,89 @@ pub struct WayfernConfig {
   /// location can be refreshed instead of showing stale data.
   #[serde(default)]
   pub geo_proxy_signature: Option<String>,
+  /// Identity handle for this profile, when it has one. `None` means the
+  /// profile stores a whole fingerprint payload instead.
+  #[serde(default)]
+  pub identity_id: Option<String>,
+  /// The fingerprint as first received for `identity_id`, before geolocation
+  /// and before any user edit. Diffed against `fingerprint` on launch to
+  /// recover the user's own edits.
+  #[serde(default)]
+  pub identity_baseline: Option<String>,
+}
+
+/// First Wayfern version that ships `createIdentity`/`setIdentity`/
+/// `getIdentity`. Those commands are ADDITIVE: `setFingerprint`,
+/// `getFingerprint` and `refreshFingerprint` are all still declared in the 151
+/// protocol and still implemented, so this constant means "the identity API is
+/// available here", never "the legacy commands are gone". A profile that
+/// stores a whole device payload keeps being applied with `setFingerprint` on
+/// 151, which is the only command that reproduces such a payload exactly.
+///
+/// Written as a full version rather than a major so it can be pinned to an
+/// exact build if the identity commands land part-way through the 151 line;
+/// missing components compare as zero, so `"151"` means "any 151 or newer".
+const IDENTITY_API_MIN_VERSION: &str = "151";
+
+/// Whether `version` speaks the identity API.
+///
+/// `version` must be `BrowserProfile::version`, which is the field
+/// `BrowserRunner::get_browser_executable_path` resolves the binary from, so it
+/// is by construction the version that will actually launch. Read it at the
+/// point of use and never cache it: `auto_updater` rewrites it when the browser
+/// stops (`browser_runner.rs`, the pending-update block), so a value captured
+/// before that point can describe a binary that is no longer on disk.
+///
+/// An unparsable version reads as 0.0.0.0 and therefore takes the legacy path,
+/// which is the safe direction: the legacy commands exist on every Wayfern that
+/// ever shipped, while `createIdentity` on an older build is an unknown method.
+pub fn supports_identity_api(version: &str) -> bool {
+  crate::api_client::compare_versions(version, IDENTITY_API_MIN_VERSION) != std::cmp::Ordering::Less
+}
+
+/// Fingerprint fields the browser takes as dedicated parameters rather than as
+/// overrides. They describe the exit IP, so they travel through their own
+/// channel instead of being duplicated into `overrides`.
+const GEO_PARAM_KEYS: [&str; 4] = ["timezone", "language", "latitude", "longitude"];
+
+/// Location fields `apply_geolocation` also writes locally, so the stored
+/// fingerprint is complete before any browser runs. A value donut synthesised
+/// itself is filtered out of the override diff; only a value the user actually
+/// edited travels.
+const GEO_DERIVED_KEYS: [&str; 2] = ["timezoneOffset", "languages"];
+
+/// Fields the browser refuses in `overrides`. It rejects the entire call when
+/// one appears, so they must never diff into the override set — that would be a
+/// permanent, every-launch failure rather than a one-off.
+const DERIVED_PROVENANCE_KEYS: [&str; 3] =
+  ["webglProfileId", "mediaProfile", "deviceProfileApplied"];
+
+/// Location fields donutbrowser owns end to end (`apply_geolocation` writes all
+/// of them). Any of these the browser does not echo back after an identity is
+/// applied is refilled from the stored fingerprint, so what donut persists
+/// always carries the location the launch gate reads.
+const LOCALE_CARRY_OVER_KEYS: [&str; 7] = [
+  "timezone",
+  "timezoneOffset",
+  "language",
+  "languages",
+  "latitude",
+  "longitude",
+  "accuracy",
+];
+
+/// A freshly generated device, plus its identity handle when the browser
+/// supports identities.
+pub struct GeneratedFingerprint {
+  /// The fingerprint JSON to store in `WayfernConfig::fingerprint`. Both paths
+  /// produce a flat camelCase object, so everything that reads the stored
+  /// fingerprint keeps working either way.
+  pub fingerprint: String,
+  pub identity_id: Option<String>,
+  pub identity_baseline: Option<String>,
+  /// Whether fresh geolocation was resolved and applied. Callers must only
+  /// stamp `geo_proxy_signature` when this is true.
+  pub geolocation_applied: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,12 +140,16 @@ pub struct WayfernLaunchResult {
   pub profilePath: Option<String>,
   pub url: Option<String>,
   pub cdp_port: Option<u16>,
-  /// The fingerprint Wayfern actually applied, echoed back by
-  /// Wayfern.setFingerprint. It may be UPGRADED from the stored fingerprint
-  /// (e.g. when the stored one targets an older browser version). Internal
-  /// only — the caller persists it to the profile; never sent to the frontend.
+  /// The fingerprint the browser echoed back after applying it. It may differ
+  /// from what was sent, so it is this value that gets persisted. Internal
+  /// only — never sent to the frontend.
   #[serde(default, skip_serializing)]
   pub used_fingerprint: Option<String>,
+  /// The refreshed baseline to persist alongside `used_fingerprint`. Keeping
+  /// it in step is what stops an unedited field from being mistaken for a user
+  /// edit on the next launch. Internal only.
+  #[serde(default, skip_serializing)]
+  pub used_identity_baseline: Option<String>,
 }
 
 struct WayfernInstance {
@@ -149,9 +236,9 @@ impl WayfernManager {
   }
 
   /// Derive the on-screen window size Chromium should open at, from the stored
-  /// fingerprint. `Wayfern.setFingerprint` only spoofs what the page *reports*
-  /// for `windowOuterWidth`/`screenWidth`/etc.; it does not move or resize the
-  /// real top-level window. Without `--window-size` the OS window keeps
+  /// fingerprint. Applying a device over CDP only spoofs what the page
+  /// *reports* for `windowOuterWidth`/`screenWidth`/etc.; it does not move or
+  /// resize the real top-level window. Without `--window-size` the OS window keeps
   /// Chromium's default, so the visible window contradicts the reported
   /// dimensions — a detectable mismatch. We pass `--window-size` so the actual
   /// window matches the fingerprint.
@@ -186,6 +273,265 @@ impl WayfernManager {
     pair("windowOuterWidth", "windowOuterHeight")
       .or_else(|| pair("screenAvailWidth", "screenAvailHeight"))
       .or_else(|| pair("screenWidth", "screenHeight"))
+  }
+
+  /// Parse a stored fingerprint JSON into its object, tolerating the legacy
+  /// `{ "fingerprint": {...} }` wrapper some old profiles carry.
+  fn fingerprint_object(
+    fingerprint_json: &str,
+  ) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let parsed: serde_json::Value = serde_json::from_str(fingerprint_json).ok()?;
+    let fp = parsed.get("fingerprint").unwrap_or(&parsed);
+    fp.as_object().cloned()
+  }
+
+  /// The user's edits, recovered as the difference between the fingerprint the
+  /// profile stores and the view the browser derived from the identity.
+  ///
+  /// The fingerprint form writes the whole edited object back over
+  /// `WayfernConfig::fingerprint`, so the edits are not recorded anywhere on
+  /// their own; the baseline is what makes them recoverable. Everything absent
+  /// from the diff is supplied by the identity.
+  ///
+  /// Three exclusions, each for its own reason:
+  ///
+  /// - `GEO_PARAM_KEYS`, because `setIdentity` takes them as dedicated
+  ///   parameters; sending them twice invites the two copies to disagree.
+  /// - `DERIVED_PROVENANCE_KEYS`, because the browser rejects the whole call
+  ///   when one appears. A stored payload carrying them would otherwise diff
+  ///   every one into the override set and fail on every launch.
+  /// - a `GEO_DERIVED_KEYS` value donut synthesised itself, because the
+  ///   baseline is snapshotted BEFORE geolocation runs, so those two keys
+  ///   always differ and would otherwise be pinned as user overrides for the
+  ///   life of the profile. A value that is NOT what donut would have written
+  ///   is a genuine edit and still travels.
+  fn identity_overrides(
+    current: &serde_json::Map<String, serde_json::Value>,
+    baseline: &serde_json::Map<String, serde_json::Value>,
+  ) -> serde_json::Map<String, serde_json::Value> {
+    let synthesised = Self::donut_synthesised_geo_fields(current);
+    let mut overrides = serde_json::Map::new();
+    for (key, value) in current {
+      if GEO_PARAM_KEYS.contains(&key.as_str()) || DERIVED_PROVENANCE_KEYS.contains(&key.as_str()) {
+        continue;
+      }
+      if GEO_DERIVED_KEYS.contains(&key.as_str()) && synthesised.get(key) == Some(value) {
+        continue;
+      }
+      if baseline.get(key) != Some(value) {
+        overrides.insert(key.clone(), value.clone());
+      }
+    }
+    overrides
+  }
+
+  /// What `apply_geolocation` would write into `GEO_DERIVED_KEYS` for the
+  /// `timezone`/`language` this fingerprint already carries.
+  ///
+  /// Built by calling the same helpers the writer calls, so the two cannot
+  /// compute a different answer for the same input. A key is absent when what
+  /// it is derived from is missing or unparsable, which leaves the value
+  /// looking like an edit — the conservative direction, since it only means an
+  /// override travels that did not have to.
+  fn donut_synthesised_geo_fields(
+    fingerprint: &serde_json::Map<String, serde_json::Value>,
+  ) -> serde_json::Map<String, serde_json::Value> {
+    let mut derived = serde_json::Map::new();
+    if let Some(minutes) = fingerprint
+      .get("timezone")
+      .and_then(|v| v.as_str())
+      .and_then(Self::timezone_offset_minutes)
+    {
+      derived.insert("timezoneOffset".to_string(), json!(minutes));
+    }
+    if let Some(locale) = fingerprint.get("language").and_then(|v| v.as_str()) {
+      derived.insert(
+        "languages".to_string(),
+        json!([locale, Self::base_language(locale)]),
+      );
+    }
+    derived
+  }
+
+  /// The offset of `timezone` from UTC in minutes, in the sign convention
+  /// `Date.prototype.getTimezoneOffset` uses (positive west of UTC), or `None`
+  /// when the IANA name does not parse.
+  ///
+  /// It reads the offset AT THE CURRENT INSTANT, so a zone that observes DST
+  /// answers differently either side of a transition. That is what a browser
+  /// reports too, and it is why `apply_geolocation` and `identity_overrides`
+  /// share this one implementation instead of each computing their own.
+  fn timezone_offset_minutes(timezone: &str) -> Option<i32> {
+    use chrono::Offset;
+    let tz = timezone.parse::<chrono_tz::Tz>().ok()?;
+    let offset_seconds = chrono::Utc::now()
+      .with_timezone(&tz)
+      .offset()
+      .fix()
+      .local_minus_utc();
+    Some(-(offset_seconds / 60))
+  }
+
+  /// The bare language subtag of a BCP 47 tag (`de-DE` -> `de`), which is the
+  /// second entry of the `languages` ladder donut builds. `Locale::language` is
+  /// itself the first `-`-separated part of the tag, so this reproduces it.
+  fn base_language(locale: &str) -> &str {
+    locale.split('-').next().unwrap_or(locale)
+  }
+
+  /// The baseline to persist after a successful `setIdentity`.
+  ///
+  /// For every key the user did NOT override, adopt whatever the browser just
+  /// derived, so a value that changes on a newer browser flows through instead
+  /// of reading as a user edit forever. For overridden keys the applied view
+  /// holds the override rather than the derived value, so the previous baseline
+  /// is kept as the diff reference.
+  fn refreshed_identity_baseline(
+    applied: &serde_json::Map<String, serde_json::Value>,
+    previous_baseline: &serde_json::Map<String, serde_json::Value>,
+    overrides: &serde_json::Map<String, serde_json::Value>,
+  ) -> serde_json::Map<String, serde_json::Value> {
+    let mut baseline = applied.clone();
+    for key in overrides.keys() {
+      match previous_baseline.get(key) {
+        Some(previous) => {
+          baseline.insert(key.clone(), previous.clone());
+        }
+        // The user added a field the baseline never carried, so there is
+        // nothing to fall back to and the key must stay absent from the
+        // baseline or the edit would diff away on the next launch.
+        None => {
+          baseline.remove(key);
+        }
+      }
+    }
+    baseline
+  }
+
+  /// The `setIdentity` geolocation parameters carried by a stored fingerprint.
+  fn geo_params(
+    fingerprint: &serde_json::Map<String, serde_json::Value>,
+  ) -> serde_json::Map<String, serde_json::Value> {
+    let mut params = serde_json::Map::new();
+    for key in GEO_PARAM_KEYS {
+      if let Some(value) = fingerprint.get(key) {
+        if !value.is_null() {
+          params.insert(key.to_string(), value.clone());
+        }
+      }
+    }
+    params
+  }
+
+  /// Fill in any location field the applied device does not already carry.
+  ///
+  /// `setIdentity` takes the location as its own parameters rather than inside
+  /// the identity, so the view it echoes back may omit part of it — and donut's
+  /// stored fingerprint must always carry the whole block, because the launch
+  /// gate reads it before any browser is running and a stored device with no
+  /// timezone turns the exit-vs-fingerprint check into a no-op.
+  ///
+  /// Only ABSENT fields are filled. Anything the browser did send back is its
+  /// own and is kept: it re-roots the `languages` ladder onto the exit's
+  /// language, which is a better answer than the two-entry list donut computes.
+  fn carry_over_locale(
+    from: &serde_json::Map<String, serde_json::Value>,
+    into: &mut serde_json::Value,
+  ) {
+    let Some(target) = into.as_object_mut() else {
+      return;
+    };
+    for key in LOCALE_CARRY_OVER_KEYS {
+      if target.get(key).is_some_and(|v| !v.is_null()) {
+        continue;
+      }
+      if let Some(value) = from.get(key) {
+        target.insert(key.to_string(), value.clone());
+      }
+    }
+  }
+
+  /// One of Wayfern's five `operatingSystem` names, or `None` for anything
+  /// else. Unknown names are not guessed at: the caller treats `None` as "donut
+  /// does not know what this profile claims" and lets the browser decide.
+  fn normalize_os_name(name: &str) -> Option<&'static str> {
+    match name.trim().to_ascii_lowercase().as_str() {
+      "windows" => Some("windows"),
+      "macos" => Some("macos"),
+      "linux" => Some("linux"),
+      "android" => Some("android"),
+      "ios" => Some("ios"),
+      _ => None,
+    }
+  }
+
+  /// The OS a `navigator.platform` value describes.
+  ///
+  /// Mirrors `WayfernHandler::IsCrossOSFromPlatform`, including the order of
+  /// the tests: `Linux armv8l` and `aarch64` must read as android before the
+  /// plain `Linux` test can claim them.
+  fn os_from_platform(platform: &str) -> Option<&'static str> {
+    if platform.contains("Win") {
+      Some("windows")
+    } else if platform.contains("Mac") {
+      Some("macos")
+    } else if platform.contains("iPhone") || platform.contains("iPad") {
+      Some("ios")
+    } else if platform.contains("Android")
+      || platform.contains("Linux armv")
+      || platform.contains("aarch64")
+    {
+      Some("android")
+    } else if platform.contains("Linux") {
+      Some("linux")
+    } else {
+      None
+    }
+  }
+
+  /// The OS this profile claims, or `None` when nothing on it says so.
+  ///
+  /// `WayfernConfig::os` is authoritative because it is what generation was
+  /// asked for; the stored fingerprint's `platform` is the fallback for
+  /// profiles minted before that field existed. Deliberately conservative — an
+  /// unrecognised value on either yields `None` rather than a guess, because
+  /// the only caller uses this to REFUSE a launch.
+  fn claimed_operating_system(
+    config: &WayfernConfig,
+    stored: Option<&serde_json::Map<String, serde_json::Value>>,
+  ) -> Option<&'static str> {
+    if let Some(os) = config.os.as_deref().and_then(Self::normalize_os_name) {
+      return Some(os);
+    }
+    stored
+      .and_then(|fp| fp.get("platform"))
+      .and_then(|v| v.as_str())
+      .and_then(Self::os_from_platform)
+  }
+
+  /// Translate a refused apply into a code the frontend can explain.
+  ///
+  /// CDP carries a message, not a machine-readable code, so matching the text
+  /// is the only channel the browser has. The literals are the ones
+  /// `WayfernHandler` emits from its cross-OS gate and its quota branch; if one
+  /// is ever reworded this degrades to the generic code, which still carries
+  /// the raw text for support, rather than breaking.
+  fn apply_failure_error(detail: &str, claimed_os: Option<&str>) -> String {
+    if detail.contains("Cross-OS fingerprinting requires") {
+      return crate::backend_error_with_detail(
+        "WAYFERN_CROSS_OS_REQUIRES_PLAN",
+        claimed_os.unwrap_or("another operating system"),
+      );
+    }
+    // BOTH refusal texts - this maps failures from either release. 151 emits
+    // "Fingerprint generation limit reached for this account."; the shipped 150
+    // browser emits "Too many profiles are being created." A 150 user would
+    // otherwise fall through to the generic apply-failed message and lose the
+    // one piece of information that makes the failure actionable.
+    if detail.contains("generation limit reached") || detail.contains("Too many profiles") {
+      return crate::backend_error("WAYFERN_GENERATION_LIMIT_REACHED");
+    }
+    crate::backend_error_with_detail("WAYFERN_FINGERPRINT_APPLY_FAILED", detail)
   }
 
   async fn wait_for_cdp_ready(
@@ -343,12 +689,10 @@ impl WayfernManager {
       Ok(geo) => {
         if let Some(obj) = fingerprint.as_object_mut() {
           obj.insert("timezone".to_string(), json!(geo.timezone));
-          // Calculate timezone offset from IANA timezone name
-          if let Ok(tz) = geo.timezone.parse::<chrono_tz::Tz>() {
-            use chrono::Offset;
-            let now = chrono::Utc::now().with_timezone(&tz);
-            let offset_seconds = now.offset().fix().local_minus_utc();
-            let offset_minutes = -(offset_seconds / 60);
+          // Both derived fields go through the same helpers `identity_overrides`
+          // uses to recognise them, so a value written here can never look like
+          // a user edit to the override diff.
+          if let Some(offset_minutes) = Self::timezone_offset_minutes(&geo.timezone) {
             obj.insert("timezoneOffset".to_string(), json!(offset_minutes));
           }
           obj.insert("latitude".to_string(), json!(geo.latitude));
@@ -357,7 +701,7 @@ impl WayfernManager {
           obj.insert("language".to_string(), json!(&locale_str));
           obj.insert(
             "languages".to_string(),
-            json!([&locale_str, &geo.locale.language]),
+            json!([&locale_str, Self::base_language(&locale_str)]),
           );
         }
         log::info!(
@@ -427,19 +771,26 @@ impl WayfernManager {
         .unwrap_or(false)
   }
 
-  /// Generate a fingerprint for `config`, returning the fingerprint JSON and
-  /// whether fresh geolocation was applied to it. Callers must only stamp
-  /// `geo_proxy_signature` when geolocation succeeded: the base fingerprint
-  /// comes from a headless Wayfern launched without a proxy, so on failure it
-  /// silently carries the HOST timezone/locale — stamping the signature then
-  /// would tell the launch-time refresh the location is already correct for
-  /// this proxy and permanently disable the one path that can repair it.
+  /// Generate a device for `config` on a headless Wayfern.
+  ///
+  /// On a browser that ships the identity API this mints an identity and
+  /// returns its handle alongside the fingerprint; on older browsers it returns
+  /// the fingerprint alone. Which path runs is decided by `profile.version`,
+  /// the same field the executable path is resolved from, so the generated
+  /// device always matches the binary that ran.
+  ///
+  /// Callers must only stamp `geo_proxy_signature` when
+  /// `geolocation_applied` is true: the device comes from a headless Wayfern
+  /// launched without a proxy, so on failure it silently carries the HOST
+  /// timezone/locale — stamping the signature then would tell the launch-time
+  /// refresh the location is already correct for this proxy and permanently
+  /// disable the one path that can repair it.
   pub async fn generate_fingerprint_config(
     &self,
     _app_handle: &AppHandle,
     profile: &BrowserProfile,
     config: &WayfernConfig,
-  ) -> Result<(String, bool), Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<GeneratedFingerprint, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
       .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
@@ -552,47 +903,72 @@ impl WayfernManager {
       }
     };
 
-    let os = config
-      .os
-      .as_deref()
-      .unwrap_or(if cfg!(target_os = "macos") {
-        "macos"
-      } else if cfg!(target_os = "linux") {
-        "linux"
-      } else {
-        "windows"
-      });
+    let host_os = crate::profile::types::get_host_os();
+    let os = config.os.as_deref().unwrap_or(&host_os);
 
     // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
     let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-    let mut refresh_params = json!({ "operatingSystem": os });
+    let mut generate_params = json!({ "operatingSystem": os });
     if let Some(ref token) = wayfern_token {
-      refresh_params
+      generate_params
         .as_object_mut()
         .unwrap()
         .insert("wayfernToken".to_string(), json!(token));
     }
 
-    let refresh_result = self
-      .send_cdp_command(&ws_url, "Wayfern.refreshFingerprint", refresh_params)
-      .await;
+    let use_identity_api = supports_identity_api(&profile.version);
 
-    if let Err(e) = refresh_result {
-      cleanup().await;
-      return Err(format!("Failed to refresh fingerprint: {e}").into());
-    }
+    // No geolocation override is passed here. Donut resolves the exit's
+    // location itself, below, through the profile's own proxy — the browser's
+    // C++ geo service cannot, because an authenticated upstream answers its
+    // SimpleURLLoader requests with HTTP 407.
+    let generate_result = if use_identity_api {
+      self
+        .send_cdp_command(&ws_url, "Wayfern.createIdentity", generate_params)
+        .await
+    } else {
+      match self
+        .send_cdp_command(&ws_url, "Wayfern.refreshFingerprint", generate_params)
+        .await
+      {
+        // The legacy pair is two commands: refresh mints the device, get reads
+        // it back. Only the identity API returns the device from one call.
+        Ok(_) => {
+          self
+            .send_cdp_command(&ws_url, "Wayfern.getFingerprint", json!({}))
+            .await
+        }
+        Err(e) => Err(e),
+      }
+    };
 
-    let get_result = self
-      .send_cdp_command(&ws_url, "Wayfern.getFingerprint", json!({}))
-      .await;
-
-    let (fingerprint, geolocation_applied) = match get_result {
+    let (fingerprint, identity_id, identity_baseline, geolocation_applied) = match generate_result {
       Ok(result) => {
-        // Wayfern.getFingerprint returns { fingerprint: {...} }
-        // We need to extract just the fingerprint object
-        let fp = result.get("fingerprint").cloned().unwrap_or(result);
+        // createIdentity returns { identityId, identity }; getFingerprint
+        // returns { fingerprint: {...} }. A bare object is tolerated so a
+        // response-shape change does not lose the device outright; an identity
+        // response missing identityId is rejected below instead, because a view
+        // with no UUID behind it is not reproducible.
+        let identity_id = result
+          .get("identityId")
+          .and_then(|v| v.as_str())
+          .map(str::to_string);
+        let fp = result
+          .get("identity")
+          .or_else(|| result.get("fingerprint"))
+          .cloned()
+          .unwrap_or(result);
         // Normalize the fingerprint: convert JSON string fields to proper types
         let mut normalized = Self::normalize_fingerprint(fp);
+
+        // Snapshot the derived view BEFORE geolocation is applied, so the
+        // location fields donut writes below are not mistaken for user edits
+        // when the overrides are recovered on launch.
+        let identity_baseline = if use_identity_api {
+          serde_json::to_string(&normalized).ok()
+        } else {
+          None
+        };
 
         // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
         // when a proxy splits a handshake reply across TCP segments, so a
@@ -644,11 +1020,21 @@ impl WayfernManager {
           let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
         }
 
-        (normalized, geolocation_applied)
+        (
+          normalized,
+          identity_id,
+          identity_baseline,
+          geolocation_applied,
+        )
       }
       Err(e) => {
         cleanup().await;
-        return Err(format!("Failed to get fingerprint: {e}").into());
+        let what = if use_identity_api {
+          "create identity"
+        } else {
+          "get fingerprint"
+        };
+        return Err(format!("Failed to {what}: {e}").into());
       }
     };
 
@@ -681,7 +1067,19 @@ impl WayfernManager {
       );
     }
 
-    Ok((fingerprint_json, geolocation_applied))
+    if use_identity_api && identity_id.is_none() {
+      // Without the handle the stored fingerprint is not reproducible, which
+      // would leave a profile that silently changes device on every launch.
+      // The headless browser is already torn down by the `cleanup()` above.
+      return Err("Wayfern.createIdentity returned no identityId".into());
+    }
+
+    Ok(GeneratedFingerprint {
+      fingerprint: fingerprint_json,
+      identity_id,
+      identity_baseline,
+      geolocation_applied,
+    })
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -915,6 +1313,44 @@ impl WayfernManager {
         );
       }
     }
+
+    // A cross-OS claim is authorized from the `wayfernToken` PARAMETER of
+    // setIdentity/setFingerprint. The browser's gate does not consult the
+    // WAYFERN_TOKEN env var this launch also sets, so with no token in hand the
+    // apply is refused and the window would sit there running the HOST device
+    // under a macOS or Android profile. Refuse before spawning rather than
+    // opening a window we are about to kill.
+    //
+    // "Cross-OS" is the browser's own test (`WayfernHandler::IsCrossOS` against
+    // `GetHostOperatingSystem`), so `android` and `ios` count on every desktop.
+    //
+    // Not a 151 regression: setFingerprint on 150 has the identical
+    // parameter-only gate. What changed is that the refusal is no longer
+    // swallowed as a log line (see the apply loop below).
+    //
+    // Deliberately conservative — this only pre-empts when the claim is
+    // certain. An unrecognised `os`, a platform that maps to nothing, and a
+    // profile with no stored device all fall through and let the browser
+    // decide, so a mistake here can only ever cost the clearer error message.
+    if wayfern_token.is_none() {
+      let stored_device = config
+        .fingerprint
+        .as_deref()
+        .and_then(Self::fingerprint_object);
+      if let Some(claimed) = Self::claimed_operating_system(config, stored_device.as_ref()) {
+        let host_os = crate::profile::types::get_host_os();
+        if claimed != host_os.as_str() {
+          log::error!(
+            "Refusing to launch profile {}: it claims {claimed} on a {host_os} host and no Wayfern token is available",
+            profile.name
+          );
+          return Err(
+            crate::backend_error_with_detail("WAYFERN_CROSS_OS_REQUIRES_PLAN", claimed).into(),
+          );
+        }
+      }
+    }
+
     if let Some(proxy) = proxy_url {
       // Map the local proxy scheme to the matching PAC directive. SOCKS5 lets
       // Chromium route UDP (QUIC/WebRTC) and resolve DNS through the proxy;
@@ -971,6 +1407,7 @@ impl WayfernManager {
 
     // Apply fingerprint if configured
     let mut used_fingerprint: Option<String> = None;
+    let mut used_identity_baseline: Option<String> = None;
     if let Some(fingerprint_json) = &config.fingerprint {
       log::info!(
         "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
@@ -1035,33 +1472,139 @@ impl WayfernManager {
 
       // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
       let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-      let mut fingerprint_params = fingerprint_for_cdp.clone();
-      if let Some(ref token) = wayfern_token {
-        if let Some(obj) = fingerprint_params.as_object_mut() {
-          obj.insert("wayfernToken".to_string(), json!(token));
-        }
-      }
+
+      // The device as donut holds it: the diff source for the overrides below,
+      // and the fallback for any location field the echo does not return.
+      let stored = fingerprint_for_cdp.as_object().cloned().unwrap_or_default();
+
+      // Which command applies this profile's device. It is a property of the
+      // PROFILE, not of the browser version, so a profile that stores a whole
+      // payload keeps being applied with the payload command.
+      //
+      // `webglProfileId` is the discriminator: only a whole-payload profile
+      // carries it, and the browser refuses it as an override. Sending it would
+      // fail the call on every launch.
+      let apply_by_identity = supports_identity_api(&profile.version)
+        && config.identity_id.is_some()
+        && stored.get("webglProfileId").is_none();
+
+      // On the identity path only the user's own edits are sent; everything
+      // else comes from the identity itself.
+      let (apply_method, apply_params, previous_baseline, overrides) =
+        match config.identity_id.as_deref().filter(|_| apply_by_identity) {
+          Some(identity_id) => {
+            let previous_baseline = config
+              .identity_baseline
+              .as_deref()
+              .and_then(Self::fingerprint_object)
+              .unwrap_or_default();
+            let overrides = Self::identity_overrides(&stored, &previous_baseline);
+
+            let mut params = serde_json::Map::new();
+            params.insert("identityId".to_string(), json!(identity_id));
+            if !overrides.is_empty() {
+              params.insert(
+                "overrides".to_string(),
+                serde_json::Value::Object(overrides.clone()),
+              );
+            }
+            // Location is a property of the exit, not of the identity, so it
+            // travels in setIdentity's own parameters rather than as an override.
+            params.extend(Self::geo_params(&stored));
+            if let Some(ref token) = wayfern_token {
+              params.insert("wayfernToken".to_string(), json!(token));
+            }
+
+            log::info!(
+              "Applying Wayfern identity {} with {} override(s): {:?}",
+              identity_id,
+              overrides.len(),
+              overrides.keys().collect::<Vec<_>>()
+            );
+
+            (
+              "Wayfern.setIdentity",
+              serde_json::Value::Object(params),
+              previous_baseline,
+              overrides,
+            )
+          }
+          None => {
+            let mut params = fingerprint_for_cdp.clone();
+            if let Some(ref token) = wayfern_token {
+              if let Some(obj) = params.as_object_mut() {
+                obj.insert("wayfernToken".to_string(), json!(token));
+              }
+            }
+            (
+              "Wayfern.setFingerprint",
+              params,
+              serde_json::Map::new(),
+              serde_json::Map::new(),
+            )
+          }
+        };
+
+      // An apply that never lands is the worst outcome this launch has: the
+      // window opens on an unmanaged device while every surface in the app
+      // still shows the profile's stored one. Track it so the launch can fail
+      // instead of reporting success.
+      let mut applied_ok = false;
+      let mut last_apply_error: Option<String> = None;
 
       for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
           log::info!("Applying fingerprint to page target");
           match self
-            .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint_params.clone())
+            .send_cdp_command(ws_url, apply_method, apply_params.clone())
             .await
           {
             Ok(result) => {
+              // The device is on the target. Whether the ECHO parses is a
+              // separate question — it only decides what we persist.
+              applied_ok = true;
               log::info!("Successfully applied fingerprint to page target");
-              // Wayfern.setFingerprint echoes back the fingerprint it actually
-              // used, which may be UPGRADED from what we sent (e.g. when the
-              // stored fingerprint targets an older browser version). Capture
-              // it once, from the first target that succeeds, so the caller can
-              // persist the upgraded value to the profile.
+              // Both commands echo back the device the browser actually used,
+              // which may differ from what we sent. Capture it once, from the
+              // first target that succeeds, so the caller can persist it.
               if used_fingerprint.is_none() {
-                // getFingerprint/setFingerprint wrap the object as
-                // { fingerprint: {...} }; tolerate a bare object too.
-                let fp = result.get("fingerprint").cloned().unwrap_or(result);
-                if fp.is_object() {
-                  match serde_json::to_string(&Self::normalize_fingerprint(fp)) {
+                // setIdentity wraps the object as { identity: {...} },
+                // setFingerprint as { fingerprint: {...} }; tolerate a bare
+                // object too.
+                let applied = result
+                  .get("identity")
+                  .or_else(|| result.get("fingerprint"))
+                  .cloned()
+                  .unwrap_or(result);
+                if let Some(applied_obj) = applied.as_object() {
+                  if apply_by_identity {
+                    // The baseline is "what the browser derived", so it is
+                    // computed from the untouched response. Move it forward for
+                    // everything the user did not override: leaving it behind
+                    // would make the next launch read a re-derived value as a
+                    // user edit and pin it.
+                    let baseline = Self::refreshed_identity_baseline(
+                      applied_obj,
+                      &previous_baseline,
+                      &overrides,
+                    );
+                    match serde_json::to_string(&baseline) {
+                      Ok(s) => used_identity_baseline = Some(s),
+                      Err(e) => log::warn!("Failed to serialize identity baseline: {e}"),
+                    }
+                  }
+
+                  let mut persisted = applied;
+                  if apply_by_identity {
+                    // The location travelled as setIdentity parameters rather
+                    // than inside the identity, so make sure it survives into
+                    // what we store. The launch gate and the pre-launch window
+                    // sizing both read the stored fingerprint before any
+                    // browser is running, and a stored device with no timezone
+                    // silently turns the exit-vs-fingerprint check into a no-op.
+                    Self::carry_over_locale(&stored, &mut persisted);
+                  }
+                  match serde_json::to_string(&Self::normalize_fingerprint(persisted)) {
                     Ok(s) => used_fingerprint = Some(s),
                     Err(e) => {
                       log::warn!("Failed to serialize used fingerprint: {e}")
@@ -1070,9 +1613,35 @@ impl WayfernManager {
                 }
               }
             }
-            Err(e) => log::error!("Failed to apply fingerprint to target: {e}"),
+            Err(e) => {
+              log::error!("Failed to apply fingerprint to target: {e}");
+              last_apply_error = Some(e.to_string());
+            }
           }
         }
+      }
+
+      if !applied_ok {
+        // Includes `page_targets` being empty: there was no target to send to,
+        // so the device was never applied either. Kill the browser rather than
+        // leave a window running a device the user did not choose and the app
+        // does not know about.
+        let detail = last_apply_error
+          .unwrap_or_else(|| "the browser exposed no page target to apply it to".to_string());
+        log::error!(
+          "Killing Wayfern (pid {process_id:?}) for profile {}: the fingerprint was never applied: {detail}",
+          profile.name
+        );
+        if let Some(pid) = process_id {
+          kill_browser_process(pid);
+        }
+        return Err(
+          Self::apply_failure_error(
+            &detail,
+            Self::claimed_operating_system(config, Some(&stored)),
+          )
+          .into(),
+        );
       }
     } else {
       log::warn!("No fingerprint found in config, browser will use default fingerprint");
@@ -1135,6 +1704,7 @@ impl WayfernManager {
       url: url.map(|s| s.to_string()),
       cdp_port: Some(port),
       used_fingerprint,
+      used_identity_baseline,
     })
   }
 
@@ -1147,21 +1717,7 @@ impl WayfernManager {
     if let Some(instance) = inner.instances.remove(id) {
       log::info!("Cleaning up Wayfern instance {}", instance.id);
       if let Some(pid) = instance.process_id {
-        #[cfg(unix)]
-        {
-          use nix::sys::signal::{kill, Signal};
-          use nix::unistd::Pid;
-          let _ = kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
-        }
-        #[cfg(windows)]
-        {
-          use std::os::windows::process::CommandExt;
-          const CREATE_NO_WINDOW: u32 = 0x08000000;
-          let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output();
-        }
+        kill_browser_process(pid);
         log::info!("Stopped Wayfern instance {id} (PID: {pid})");
       }
     }
@@ -1277,6 +1833,7 @@ impl WayfernManager {
               url: instance.url.clone(),
               cdp_port: instance.cdp_port,
               used_fingerprint: None,
+              used_identity_baseline: None,
             });
           } else {
             log::info!(
@@ -1320,6 +1877,7 @@ impl WayfernManager {
         url: None,
         cdp_port,
         used_fingerprint: None,
+        used_identity_baseline: None,
       });
     }
 
@@ -1453,6 +2011,30 @@ impl WayfernManager {
   }
 }
 
+/// Terminate a browser process by pid.
+///
+/// Shared with the launch path, which cannot go through `stop_wayfern`: an
+/// instance is only registered in `inner.instances` at the very end of
+/// `launch_wayfern`, so a launch that aborts part-way has a live process and no
+/// id to stop it by.
+fn kill_browser_process(pid: u32) {
+  #[cfg(unix)]
+  {
+    use nix::sys::signal::{kill, Signal};
+    use nix::unistd::Pid;
+    let _ = kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+  }
+  #[cfg(windows)]
+  {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let _ = std::process::Command::new("taskkill")
+      .args(["/PID", &pid.to_string(), "/F"])
+      .creation_flags(CREATE_NO_WINDOW)
+      .output();
+  }
+}
+
 lazy_static::lazy_static! {
   static ref WAYFERN_MANAGER: WayfernManager = WayfernManager::new();
 }
@@ -1526,6 +2108,253 @@ mod tests {
     ));
     assert!(!WayfernManager::is_remote_socks_url("socks5://"));
     assert!(!WayfernManager::is_remote_socks_url("not a url"));
+  }
+
+  fn obj(json: &str) -> serde_json::Map<String, serde_json::Value> {
+    serde_json::from_str(json).expect("test fixture must be an object")
+  }
+
+  #[test]
+  fn identity_api_switch_follows_the_chromium_major() {
+    // The profile version is the full Chromium version string.
+    assert!(!supports_identity_api("150.0.7801.12"));
+    assert!(supports_identity_api("151.0.7922.71"));
+    assert!(supports_identity_api("152.0.1.0"));
+    // A version we cannot parse must not be assumed to have the identity API:
+    // calling createIdentity on a 150 binary is an unknown-command error,
+    // whereas the legacy pair still exists on every version that ever shipped.
+    assert!(!supports_identity_api(""));
+    assert!(!supports_identity_api("not a version"));
+  }
+
+  #[test]
+  fn overrides_are_only_what_differs_from_the_derived_view() {
+    let baseline = obj(r#"{"hardwareConcurrency": 8, "deviceMemory": 8, "platform": "Win32"}"#);
+    let current = obj(r#"{"hardwareConcurrency": 16, "deviceMemory": 8, "platform": "Win32"}"#);
+
+    let overrides = WayfernManager::identity_overrides(&current, &baseline);
+    assert_eq!(overrides.len(), 1);
+    assert_eq!(overrides.get("hardwareConcurrency"), Some(&json!(16)));
+  }
+
+  #[test]
+  fn overrides_exclude_geolocation_and_include_added_keys() {
+    let baseline = obj(r#"{"timezone": "America/New_York", "platform": "Win32"}"#);
+    // Location is rewritten by donut on every geolocation refresh, and
+    // setIdentity takes it as its own parameter, so it must never be sent twice.
+    let current = obj(
+      r#"{"timezone": "Europe/Berlin", "language": "de-DE", "platform": "Win32", "doNotTrack": "1"}"#,
+    );
+
+    let overrides = WayfernManager::identity_overrides(&current, &baseline);
+    assert_eq!(overrides.len(), 1);
+    assert_eq!(overrides.get("doNotTrack"), Some(&json!("1")));
+
+    let geo = WayfernManager::geo_params(&current);
+    assert_eq!(geo.get("timezone"), Some(&json!("Europe/Berlin")));
+    assert_eq!(geo.get("language"), Some(&json!("de-DE")));
+    assert!(geo.get("platform").is_none());
+  }
+
+  #[test]
+  fn baseline_adopts_rederived_values_but_keeps_overridden_ones() {
+    // The same identity on a newer browser derives 12 cores where it used to
+    // derive 8, while the user has pinned deviceMemory to 32.
+    let previous = obj(r#"{"hardwareConcurrency": 8, "deviceMemory": 8}"#);
+    let overrides = obj(r#"{"deviceMemory": 32}"#);
+    let applied = obj(r#"{"hardwareConcurrency": 12, "deviceMemory": 32}"#);
+
+    let refreshed = WayfernManager::refreshed_identity_baseline(&applied, &previous, &overrides);
+
+    // Re-derived: adopted, so the next launch does not mistake it for an edit.
+    assert_eq!(refreshed.get("hardwareConcurrency"), Some(&json!(12)));
+    // Overridden: the applied view holds the override, so the derived value is
+    // kept as the diff reference and the override survives.
+    assert_eq!(refreshed.get("deviceMemory"), Some(&json!(8)));
+
+    let next_overrides = WayfernManager::identity_overrides(&applied, &refreshed);
+    assert_eq!(next_overrides.len(), 1);
+    assert_eq!(next_overrides.get("deviceMemory"), Some(&json!(32)));
+  }
+
+  #[test]
+  fn baseline_keeps_a_user_added_key_out_so_the_override_survives() {
+    // The user set a field the derivation never produces. There is no derived
+    // value to fall back to, so the key must stay absent from the baseline.
+    let previous = obj(r#"{"platform": "Win32"}"#);
+    let overrides = obj(r#"{"doNotTrack": "1"}"#);
+    let applied = obj(r#"{"platform": "Win32", "doNotTrack": "1"}"#);
+
+    let refreshed = WayfernManager::refreshed_identity_baseline(&applied, &previous, &overrides);
+    assert!(refreshed.get("doNotTrack").is_none());
+
+    let next_overrides = WayfernManager::identity_overrides(&applied, &refreshed);
+    assert_eq!(next_overrides.get("doNotTrack"), Some(&json!("1")));
+  }
+
+  #[test]
+  fn the_launch_echo_only_fills_location_the_browser_left_out() {
+    // setIdentity carries the location in its own parameters, so the applied
+    // view may not echo all of it back. The stored fingerprint has to keep it:
+    // the launch gate reads `timezone` before any browser is running, and a
+    // stored device without one turns that check into a no-op.
+    let stored = obj(
+      r#"{"timezone": "Europe/Berlin", "timezoneOffset": -60,
+                         "language": "de-DE", "languages": ["de-DE", "de"]}"#,
+    );
+    // The browser returned its own, richer `languages` ladder and dropped the
+    // rest.
+    let mut applied = json!({"languages": ["de-DE", "de", "en-US", "en"]});
+
+    WayfernManager::carry_over_locale(&stored, &mut applied);
+    let applied = applied.as_object().unwrap();
+
+    assert_eq!(applied.get("timezone"), Some(&json!("Europe/Berlin")));
+    assert_eq!(applied.get("timezoneOffset"), Some(&json!(-60)));
+    assert_eq!(applied.get("language"), Some(&json!("de-DE")));
+    // What the browser DID return wins: it re-roots the ladder onto the exit's
+    // language, which is a better answer than the two-entry list donut builds.
+    assert_eq!(
+      applied.get("languages"),
+      Some(&json!(["de-DE", "de", "en-US", "en"]))
+    );
+  }
+
+  #[test]
+  fn overrides_drop_the_geo_fields_donut_synthesised_itself() {
+    // The baseline is snapshotted BEFORE geolocation runs, so it never carries
+    // these two. Without the filter they diff into the override set on the
+    // first launch and stay pinned there for the life of the profile, which
+    // permanently replaces the browser's realistic ladder with donut's.
+    let baseline = obj(
+      r#"{"platform": "Win32", "timezoneOffset": 0,
+          "languages": ["de-DE", "de", "en-US", "en"]}"#,
+    );
+    // Built through the same helper the writer uses so the fixture cannot go
+    // stale when Berlin changes its DST offset.
+    let offset = WayfernManager::timezone_offset_minutes("Europe/Berlin").expect("known zone");
+    let mut current = obj(
+      r#"{"platform": "Win32", "timezone": "Europe/Berlin",
+          "language": "de-DE", "languages": ["de-DE", "de"]}"#,
+    );
+    current.insert("timezoneOffset".to_string(), json!(offset));
+
+    let overrides = WayfernManager::identity_overrides(&current, &baseline);
+    assert!(overrides.is_empty(), "unexpected overrides: {overrides:?}");
+  }
+
+  #[test]
+  fn a_user_edited_language_ladder_still_travels_as_an_override() {
+    // Anything that is NOT what donut would have written is a real edit, so no
+    // editing capability is lost by the filter above.
+    let baseline = obj(r#"{"platform": "Win32", "languages": ["de-DE", "de"]}"#);
+    let current = obj(
+      r#"{"platform": "Win32", "timezone": "Europe/Berlin", "language": "de-DE",
+          "languages": ["de-DE", "de", "en-US", "en"]}"#,
+    );
+
+    let overrides = WayfernManager::identity_overrides(&current, &baseline);
+    assert_eq!(
+      overrides.get("languages"),
+      Some(&json!(["de-DE", "de", "en-US", "en"]))
+    );
+  }
+
+  #[test]
+  fn derived_provenance_never_travels_as_an_override() {
+    // setIdentity rejects the whole call when one of these appears, so a stored
+    // payload carrying them would fail on every launch rather than once.
+    let baseline = obj(r#"{"platform": "Win32"}"#);
+    let current = obj(
+      r#"{"platform": "Win32", "webglProfileId": "webgl-abc",
+          "mediaProfile": "media-abc", "deviceProfileApplied": true,
+          "doNotTrack": "1"}"#,
+    );
+
+    let overrides = WayfernManager::identity_overrides(&current, &baseline);
+    assert_eq!(overrides.len(), 1);
+    assert_eq!(overrides.get("doNotTrack"), Some(&json!("1")));
+  }
+
+  #[test]
+  fn the_claimed_os_comes_from_the_config_then_the_stored_platform() {
+    let stored = obj(r#"{"platform": "MacIntel"}"#);
+
+    // An explicit claim wins.
+    let config = WayfernConfig {
+      os: Some("android".to_string()),
+      ..Default::default()
+    };
+    assert_eq!(
+      WayfernManager::claimed_operating_system(&config, Some(&stored)),
+      Some("android")
+    );
+
+    // Profiles minted before `os` existed fall back to the stored device.
+    let config = WayfernConfig::default();
+    assert_eq!(
+      WayfernManager::claimed_operating_system(&config, Some(&stored)),
+      Some("macos")
+    );
+
+    // Nothing to read, and an unrecognised claim, both stay unknown so the
+    // launch is never refused on a guess.
+    assert_eq!(
+      WayfernManager::claimed_operating_system(&WayfernConfig::default(), None),
+      None
+    );
+    let config = WayfernConfig {
+      os: Some("freebsd".to_string()),
+      ..Default::default()
+    };
+    assert_eq!(
+      WayfernManager::claimed_operating_system(&config, None),
+      None
+    );
+  }
+
+  #[test]
+  fn platform_strings_map_the_way_the_browser_maps_them() {
+    // Mirrors WayfernHandler::IsCrossOSFromPlatform, including armv8l/aarch64
+    // reading as android rather than linux.
+    assert_eq!(WayfernManager::os_from_platform("Win32"), Some("windows"));
+    assert_eq!(WayfernManager::os_from_platform("MacIntel"), Some("macos"));
+    assert_eq!(WayfernManager::os_from_platform("iPhone"), Some("ios"));
+    assert_eq!(
+      WayfernManager::os_from_platform("Linux armv8l"),
+      Some("android")
+    );
+    assert_eq!(
+      WayfernManager::os_from_platform("Linux aarch64"),
+      Some("android")
+    );
+    assert_eq!(
+      WayfernManager::os_from_platform("Linux x86_64"),
+      Some("linux")
+    );
+    assert_eq!(WayfernManager::os_from_platform("Nintendo"), None);
+  }
+
+  #[test]
+  fn a_refused_apply_is_translated_to_a_code_the_frontend_knows() {
+    // The exact literals WayfernHandler emits.
+    let cross_os = WayfernManager::apply_failure_error(
+      "CDP error: Cross-OS fingerprinting requires a paid plan. Provide a wayfernToken parameter.",
+      Some("macos"),
+    );
+    assert!(cross_os.contains("WAYFERN_CROSS_OS_REQUIRES_PLAN"));
+    assert!(cross_os.contains("macos"));
+
+    let quota = WayfernManager::apply_failure_error(
+      "CDP error: Fingerprint generation limit reached for this account.",
+      None,
+    );
+    assert!(quota.contains("WAYFERN_GENERATION_LIMIT_REACHED"));
+
+    // Anything else keeps the raw text for support, under the generic code.
+    let other = WayfernManager::apply_failure_error("CDP error: No response received", None);
+    assert!(other.contains("WAYFERN_FINGERPRINT_APPLY_FAILED"));
+    assert!(other.contains("No response received"));
   }
 
   #[test]

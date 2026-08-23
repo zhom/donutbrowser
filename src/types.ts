@@ -395,6 +395,8 @@ export interface WayfernConfig {
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
   os?: WayfernOS; // Operating system for fingerprint generation
   geo_proxy_signature?: string; // Internal: routing the fingerprint's location was computed for
+  identity_id?: string; // Internal: UUID the device is derived from on browsers with the identity API
+  identity_baseline?: string; // Internal: derived fingerprint before edits, diffed to recover overrides
 }
 
 // Wayfern fingerprint config - matches the C++ FingerprintData structure

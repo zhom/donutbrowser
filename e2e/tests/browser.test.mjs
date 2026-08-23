@@ -217,10 +217,25 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       version: prepared.version,
       configJson: JSON.stringify({ geoip: false }),
     });
-    const fingerprint = JSON.parse(sample);
+    const fingerprint = JSON.parse(sample.fingerprint);
     assert.ok(
       Object.keys(fingerprint).length >= 10,
       "Wayfern returned an incomplete fingerprint",
+    );
+    // A browser with the identity API must hand back the UUID the device was
+    // derived from, plus the pre-edit baseline the launch path diffs against.
+    // Without both, the profile stores a device it cannot reproduce.
+    const identityCapable =
+      Number.parseInt(prepared.version.split(".")[0], 10) >= 151;
+    assert.equal(
+      typeof sample.identity_id === "string",
+      identityCapable,
+      "identity_id must be present exactly on browsers with the identity API",
+    );
+    assert.equal(
+      typeof sample.identity_baseline === "string",
+      identityCapable,
+      "identity_baseline must be present exactly on browsers with the identity API",
     );
 
     const profile = await createRealProfile(
@@ -231,6 +246,13 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     assert.ok(profile.wayfern_config.fingerprint);
     assert.ok(
       Object.keys(JSON.parse(profile.wayfern_config.fingerprint)).length >= 10,
+    );
+    // Profile creation stores the identity alongside the device it derived, or
+    // the launch path would treat the profile as un-migrated and replace it.
+    assert.equal(
+      typeof profile.wayfern_config.identity_id === "string",
+      identityCapable,
+      "a created profile must carry the identity its device came from",
     );
     assert.equal(await app.invoke("check_missing_geoip_database"), true);
     assert.equal(await app.invoke("is_geoip_database_available"), false);
@@ -245,6 +267,25 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       profileId: profile.id,
       exitIp: "8.8.8.8",
     });
+    // The identity is internal state that neither call above sends back.
+    // Losing it would silently re-mint the device on the next launch and throw
+    // the user's edits away with it, so both paths must carry it forward
+    // unchanged.
+    if (identityCapable) {
+      const stored = (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      );
+      assert.equal(
+        stored.wayfern_config.identity_id,
+        profile.wayfern_config.identity_id,
+        "the identity must survive update_wayfern_config and an exit re-match",
+      );
+      assert.equal(
+        stored.wayfern_config.identity_baseline,
+        profile.wayfern_config.identity_baseline,
+        "the baseline must survive with the identity it describes",
+      );
+    }
     // Pre-launch gate: local-only checks that must answer without starting a
     // proxy, an Xray worker or the browser.
     const checks = await app.invoke("get_profile_pre_launch_checks", {

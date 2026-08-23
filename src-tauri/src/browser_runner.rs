@@ -458,38 +458,91 @@ impl BrowserRunner {
         wayfern_config.proxy
       );
 
-      // Check if we need to generate a new fingerprint on every launch
+      // Check if we need to generate a device for this launch.
+      //
+      // Two cases share the block: the user asked for a fresh device on every
+      // launch, or the profile stores none at all. The second is how a clone
+      // arrives here — cloning clears the fingerprint and the identity so the
+      // clone gets an independent device instead of the browser's default —
+      // and it also covers any profile that reached disk without one, which
+      // used to launch on whatever device the browser drew for itself.
+      //
+      // A profile that ALREADY stores a device keeps it across a browser
+      // upgrade: nothing here mints a replacement, and its stored payload is
+      // what the launch applies. The one thing that does replace a stored
+      // device is the user asking for it - `randomize_fingerprint_on_launch`,
+      // tested immediately below - which is a deliberate per-profile setting
+      // and not a consequence of the version.
       let mut updated_profile = profile.clone();
-      if wayfern_config.randomize_fingerprint_on_launch == Some(true) {
-        log::info!(
-          "Generating random fingerprint for Wayfern profile: {}",
-          profile.name
-        );
+      let randomize_requested = wayfern_config.randomize_fingerprint_on_launch == Some(true);
+      let needs_device = wayfern_config.fingerprint.is_none();
+      if randomize_requested || needs_device {
+        if needs_device && !randomize_requested {
+          log::info!(
+            "No stored device for Wayfern profile {}; generating one",
+            profile.name
+          );
+        } else {
+          log::info!(
+            "Generating random fingerprint for Wayfern profile: {}",
+            profile.name
+          );
+        }
 
         // Create a config copy without the existing fingerprint to force generation of a new one
         let mut config_for_generation = wayfern_config.clone();
         config_for_generation.fingerprint = None;
 
-        // Generate a new fingerprint
-        let (new_fingerprint, geolocation_applied) = self
+        // A failed generation fails the launch on purpose: continuing would
+        // start the browser on whatever device it drew for itself, unmanaged
+        // and unrecorded, while the UI still reports a successful launch. For
+        // an anti-detect product a silently wrong device is worse than no
+        // launch at all, because nothing tells the user to stop using it.
+        //
+        // Structured rather than prose, because the most common failure is the
+        // browser refusing a generation once the account's hourly quota is
+        // spent. That has to reach the user as an explanation; a raw CDP string
+        // is not one, and the frontend only translates a coded error.
+        let generated = self
           .wayfern_manager
           .generate_fingerprint_config(&app_handle, profile, &config_for_generation)
           .await
-          .map_err(|e| format!("Failed to generate random fingerprint: {e}"))?;
+          .map_err(|e| {
+            let detail = e.to_string();
+            // BOTH refusal texts, because this path serves BOTH releases. 151
+            // says "Fingerprint generation limit reached for this account.";
+            // the shipped 150 browser says "Too many profiles are being
+            // created." Matching only the 151 wording leaves a quota-blocked
+            // 150 user staring at a raw CDP string, which is the exact defect
+            // this mapping exists to remove.
+            if detail.contains("generation limit reached") || detail.contains("Too many profiles") {
+              crate::backend_error_with_detail("WAYFERN_GENERATION_LIMIT_REACHED", detail)
+            } else {
+              crate::backend_error_with_detail("WAYFERN_FINGERPRINT_GENERATION_FAILED", detail)
+            }
+          })?;
+
+        let geolocation_applied = generated.geolocation_applied;
 
         log::info!(
-          "New fingerprint generated, length: {} chars",
-          new_fingerprint.len()
+          "New fingerprint generated, length: {} chars, identity: {:?}",
+          generated.fingerprint.len(),
+          generated.identity_id
         );
 
         // Update the config with the new fingerprint for launching
-        wayfern_config.fingerprint = Some(new_fingerprint.clone());
+        wayfern_config.fingerprint = Some(generated.fingerprint.clone());
+        wayfern_config.identity_id = generated.identity_id.clone();
+        wayfern_config.identity_baseline = generated.identity_baseline.clone();
 
         // Save the updated fingerprint to the profile so it persists.
         let mut updated_wayfern_config = updated_profile.wayfern_config.clone().unwrap_or_default();
-        updated_wayfern_config.fingerprint = Some(new_fingerprint);
+        updated_wayfern_config.fingerprint = Some(generated.fingerprint);
+        updated_wayfern_config.identity_id = generated.identity_id;
+        updated_wayfern_config.identity_baseline = generated.identity_baseline;
         // Preserve the randomize flag so it persists across launches
-        updated_wayfern_config.randomize_fingerprint_on_launch = Some(true);
+        updated_wayfern_config.randomize_fingerprint_on_launch =
+          wayfern_config.randomize_fingerprint_on_launch;
         // Preserve the OS setting so it's used for future fingerprint generation
         if wayfern_config.os.is_some() {
           updated_wayfern_config.os = wayfern_config.os.clone();
@@ -601,7 +654,11 @@ impl BrowserRunner {
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          format!("Failed to launch Wayfern: {e}").into()
+          // A refused apply reports itself as a structured error so the dialog
+          // can name the cause. Prefixing it would put English in front of the
+          // JSON the frontend parses, and the whole thing would reach the user
+          // as raw machine output.
+          crate::wrap_backend_error(e, "Failed to launch Wayfern").into()
         })?;
 
       // Get the process ID from launch result
@@ -653,20 +710,27 @@ impl BrowserRunner {
         guard.worker_id = None;
       }
 
-      // Wayfern.setFingerprint echoes back the fingerprint the browser actually
-      // applied, which may be UPGRADED from the stored one (e.g. when the
-      // stored fingerprint targets an older browser version). Persist it so the
-      // next launch starts from the upgraded value — saved below via
+      // The apply command echoes back the device the browser actually used,
+      // which may differ from the stored one. Persist it so the next launch
+      // starts from that value — saved below via
       // save_process_info(&updated_profile).
       if let Some(used_fp) = wayfern_result.used_fingerprint.clone() {
         let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
-        if cfg.fingerprint.as_deref() != Some(used_fp.as_str()) {
+        let baseline_changed = wayfern_result.used_identity_baseline.is_some()
+          && cfg.identity_baseline != wayfern_result.used_identity_baseline;
+        if cfg.fingerprint.as_deref() != Some(used_fp.as_str()) || baseline_changed {
           log::info!(
-            "Persisting upgraded fingerprint from Wayfern.setFingerprint for profile: {} (len {})",
+            "Persisting applied fingerprint echoed by Wayfern for profile: {} (len {})",
             profile.name,
             used_fp.len()
           );
           cfg.fingerprint = Some(used_fp);
+          // The baseline must move with the fingerprint it was computed
+          // against, or the next launch diffs the two apart and invents
+          // overrides the user never asked for.
+          if let Some(baseline) = wayfern_result.used_identity_baseline.clone() {
+            cfg.identity_baseline = Some(baseline);
+          }
           updated_profile.wayfern_config = Some(cfg);
         }
       }

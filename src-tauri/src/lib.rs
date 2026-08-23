@@ -1263,13 +1263,27 @@ async fn list_active_vpn_connections() -> Result<Vec<vpn::VpnStatus>, String> {
   )
 }
 
+/// What the fingerprint form gets back from `generate_sample_fingerprint`.
+///
+/// The identity fields are `None` on a browser without the identity API. They
+/// have to travel with the fingerprint rather than be re-derived later: the
+/// form writes all three into the profile's Wayfern config in one edit, and a
+/// fingerprint stored without its identity is one the launch path would throw
+/// away and mint again.
+#[derive(serde::Serialize)]
+struct SampleFingerprint {
+  fingerprint: String,
+  identity_id: Option<String>,
+  identity_baseline: Option<String>,
+}
+
 #[tauri::command]
 async fn generate_sample_fingerprint(
   app_handle: tauri::AppHandle,
   browser: String,
   version: String,
   config_json: String,
-) -> Result<String, String> {
+) -> Result<SampleFingerprint, String> {
   let temp_profile = crate::profile::BrowserProfile {
     id: uuid::Uuid::new_v4(),
     name: "temp_fingerprint_gen".to_string(),
@@ -1309,7 +1323,11 @@ async fn generate_sample_fingerprint(
     manager
       .generate_fingerprint_config(&app_handle, &temp_profile, &config)
       .await
-      .map(|(fingerprint, _geolocation_applied)| fingerprint)
+      .map(|generated| SampleFingerprint {
+        fingerprint: generated.fingerprint,
+        identity_id: generated.identity_id,
+        identity_baseline: generated.identity_baseline,
+      })
       .map_err(|e| format!("Failed to generate fingerprint: {e}"))
   } else {
     Err(format!(

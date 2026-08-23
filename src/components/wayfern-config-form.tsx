@@ -41,6 +41,14 @@ const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
   return config.randomize_fingerprint_on_launch === true;
 };
 
+/** What `generate_sample_fingerprint` returns. Identity fields are null on a
+ * browser version that predates the Wayfern identity API. */
+interface GeneratedFingerprint {
+  fingerprint: string;
+  identity_id: string | null;
+  identity_baseline: string | null;
+}
+
 const getCurrentOS = (): WayfernOS => {
   if (typeof navigator === "undefined") return "linux";
   const platform = navigator.platform.toLowerCase();
@@ -83,12 +91,23 @@ export function WayfernConfigForm({
     setIsGeneratingFingerprint(true);
     try {
       const configJson = JSON.stringify(config);
-      const result = await invoke<string>("generate_sample_fingerprint", {
-        browser: profileBrowser ?? "wayfern",
-        version: profileVersion,
-        configJson,
-      });
-      onConfigChange("fingerprint", result);
+      const result = await invoke<GeneratedFingerprint>(
+        "generate_sample_fingerprint",
+        {
+          browser: profileBrowser ?? "wayfern",
+          version: profileVersion,
+          configJson,
+        },
+      );
+      onConfigChange("fingerprint", result.fingerprint);
+      // The identity travels with the fingerprint it produced. Storing one
+      // without the other leaves a device the launch path cannot reproduce, so
+      // it would be discarded and re-minted on the next launch.
+      onConfigChange("identity_id", result.identity_id ?? undefined);
+      onConfigChange(
+        "identity_baseline",
+        result.identity_baseline ?? undefined,
+      );
     } catch (error) {
       console.error("Failed to generate fingerprint:", error);
     } finally {
@@ -170,6 +189,12 @@ export function WayfernConfigForm({
   };
 
   const isEditingDisabled = isFingerprintEditingDisabled(config) || readOnly;
+
+  /** For an identity-backed profile these fields have no stored value to show,
+   * and editing them by hand produces an inconsistent device. Hidden rather
+   * than rendered blank-and-disabled, because a blank box reads as data loss
+   * whereas their absence is the truth. */
+  const isIdentityDerived = config.identity_id != null;
 
   const renderAdvancedForm = () => (
     <div className="space-y-6">
@@ -894,21 +919,23 @@ export function WayfernConfigForm({
           </div>
 
           {/* WebGL Parameters (JSON) */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.webglParametersJson")}</Label>
-            <Textarea
-              value={fingerprintConfig.webglParameters ?? ""}
-              onChange={(e) => {
-                updateFingerprintConfig(
-                  "webglParameters",
-                  e.target.value || undefined,
-                );
-              }}
-              placeholder='{"7936": "Intel", "7937": "Intel(R) HD Graphics"}'
-              className="font-mono text-sm"
-              rows={4}
-            />
-          </div>
+          {!isIdentityDerived && (
+            <div className="space-y-3">
+              <Label>{t("fingerprint.webglParametersJson")}</Label>
+              <Textarea
+                value={fingerprintConfig.webglParameters ?? ""}
+                onChange={(e) => {
+                  updateFingerprintConfig(
+                    "webglParameters",
+                    e.target.value || undefined,
+                  );
+                }}
+                placeholder='{"7936": "Intel", "7937": "Intel(R) HD Graphics"}'
+                className="font-mono text-sm"
+                rows={4}
+              />
+            </div>
+          )}
 
           {/* Canvas Noise Seed */}
           <div className="space-y-3">
@@ -1040,37 +1067,49 @@ export function WayfernConfigForm({
           {/* Vendor Info */}
           <div className="space-y-3">
             <Label>{t("fingerprint.vendorInfo")}</Label>
-            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="vendor">{t("fingerprint.vendor")}</Label>
-                <Input
-                  id="vendor"
-                  value={fingerprintConfig.vendor ?? ""}
-                  onChange={(e) => {
-                    updateFingerprintConfig(
-                      "vendor",
-                      e.target.value || undefined,
-                    );
-                  }}
-                  placeholder={t("common.placeholders.example", {
-                    value: "Google Inc.",
-                  })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="vendor-sub">{t("fingerprint.vendorSub")}</Label>
-                <Input
-                  id="vendor-sub"
-                  value={fingerprintConfig.vendorSub ?? ""}
-                  onChange={(e) => {
-                    updateFingerprintConfig(
-                      "vendorSub",
-                      e.target.value || undefined,
-                    );
-                  }}
-                  placeholder=""
-                />
-              </div>
+            <div
+              className={
+                isIdentityDerived
+                  ? "grid grid-cols-1 gap-4"
+                  : "grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3"
+              }
+            >
+              {!isIdentityDerived && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="vendor">{t("fingerprint.vendor")}</Label>
+                    <Input
+                      id="vendor"
+                      value={fingerprintConfig.vendor ?? ""}
+                      onChange={(e) => {
+                        updateFingerprintConfig(
+                          "vendor",
+                          e.target.value || undefined,
+                        );
+                      }}
+                      placeholder={t("common.placeholders.example", {
+                        value: "Google Inc.",
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="vendor-sub">
+                      {t("fingerprint.vendorSub")}
+                    </Label>
+                    <Input
+                      id="vendor-sub"
+                      value={fingerprintConfig.vendorSub ?? ""}
+                      onChange={(e) => {
+                        updateFingerprintConfig(
+                          "vendorSub",
+                          e.target.value || undefined,
+                        );
+                      }}
+                      placeholder=""
+                    />
+                  </div>
+                </>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="product-sub">
                   {t("fingerprint.productSub")}
