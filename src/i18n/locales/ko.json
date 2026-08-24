@@ -1889,6 +1889,8 @@
     "camoufoxImportDeprecated": "이 유형의 프로필 가져오기는 더 이상 지원되지 않습니다. 대신 Wayfern을 사용하세요.",
     "updateChecksumsUnavailable": "업데이트 {{version}}의 체크섬 파일을 가져올 수 없어 검증하지 못했습니다. 업데이트가 설치되지 않았으며 나중에 다시 시도됩니다.",
     "updateChecksumMismatch": "다운로드한 업데이트 파일 {{file}}이(가) 체크섬 검증에 실패하여 삭제되었습니다. 다시 시도해 주세요.",
+    "browserChecksumUnavailable": "{{browser}} {{version}}의 체크섬 파일을 가져올 수 없어 검증하지 못했습니다. 다운로드가 중단되었으며 나중에 다시 시도됩니다.",
+    "browserChecksumMismatch": "다운로드한 {{browser}} {{version}} 아카이브가 체크섬 검증에 실패하여 삭제되었습니다. 다시 시도해 주세요.",
     "nameCannotBeEmpty": "이름은 비워둘 수 없습니다",
     "wayfernVersionNotAvailable": "Wayfern 버전 {{requested}}은(는) 다운로드할 수 없습니다. 현재 버전은 {{current}}입니다.",
     "profileNameExists": "\"{{name}}\" 이름의 프로필이 이미 있습니다",

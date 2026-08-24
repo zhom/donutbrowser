@@ -48,6 +48,8 @@ export type BackendErrorCode =
   | "PROXY_SIDECAR_VERSION_MISMATCH"
   | "UPDATE_CHECKSUMS_UNAVAILABLE"
   | "UPDATE_CHECKSUM_MISMATCH"
+  | "BROWSER_CHECKSUM_UNAVAILABLE"
+  | "BROWSER_CHECKSUM_MISMATCH"
   | "UPDATE_PROFILES_RUNNING"
   | "UPDATE_PREPARATION_FAILED"
   | "PROFILE_NAME_EXISTS"
@@ -286,6 +288,16 @@ export function translateBackendError(t: TFunction, err: unknown): string {
     case "UPDATE_CHECKSUM_MISMATCH":
       return t("backendErrors.updateChecksumMismatch", {
         file: parsed.params?.file ?? "",
+      });
+    case "BROWSER_CHECKSUM_UNAVAILABLE":
+      return t("backendErrors.browserChecksumUnavailable", {
+        browser: parsed.params?.browser ?? "",
+        version: parsed.params?.version ?? "",
+      });
+    case "BROWSER_CHECKSUM_MISMATCH":
+      return t("backendErrors.browserChecksumMismatch", {
+        browser: parsed.params?.browser ?? "",
+        version: parsed.params?.version ?? "",
       });
     case "UPDATE_PROFILES_RUNNING":
       return t("backendErrors.updateProfilesRunning");

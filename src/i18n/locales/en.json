@@ -1890,6 +1890,8 @@
     "camoufoxImportDeprecated": "Importing this profile type is no longer supported. Please use Wayfern instead.",
     "updateChecksumsUnavailable": "The update {{version}} could not be verified because its checksum file could not be retrieved. The update was not installed; it will be retried later.",
     "updateChecksumMismatch": "The downloaded update file {{file}} failed checksum verification and was discarded. Please try again.",
+    "browserChecksumUnavailable": "{{browser}} {{version}} could not be verified because its checksum file could not be retrieved. The download was stopped; it will be retried later.",
+    "browserChecksumMismatch": "The downloaded {{browser}} {{version}} archive failed checksum verification and was discarded. Please try again.",
     "nameCannotBeEmpty": "Name cannot be empty",
     "wayfernVersionNotAvailable": "Wayfern version {{requested}} is not available for download. The current version is {{current}}.",
     "profileNameExists": "A profile named \"{{name}}\" already exists",

@@ -1889,6 +1889,8 @@
     "camoufoxImportDeprecated": "Bu profil türünün içe aktarılması artık desteklenmiyor. Lütfen bunun yerine Wayfern kullanın.",
     "updateChecksumsUnavailable": "{{version}} güncellemesi doğrulanamadı çünkü sağlama toplamı dosyası alınamadı. Güncelleme yüklenmedi; daha sonra yeniden denenecek.",
     "updateChecksumMismatch": "İndirilen güncelleme dosyası {{file}} sağlama toplamı doğrulamasını geçemedi ve silindi. Lütfen yeniden deneyin.",
+    "browserChecksumUnavailable": "{{browser}} {{version}} doğrulanamadı çünkü sağlama toplamı dosyası alınamadı. İndirme durduruldu; daha sonra yeniden denenecek.",
+    "browserChecksumMismatch": "İndirilen {{browser}} {{version}} arşivi sağlama toplamı doğrulamasını geçemedi ve silindi. Lütfen yeniden deneyin.",
     "nameCannotBeEmpty": "Ad boş olamaz",
     "wayfernVersionNotAvailable": "Wayfern {{requested}} sürümü indirilemiyor. Güncel sürüm: {{current}}.",
     "profileNameExists": "\"{{name}}\" adlı bir profil zaten var",

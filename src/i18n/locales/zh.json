@@ -1889,6 +1889,8 @@
     "camoufoxImportDeprecated": "不再支持导入此类型的配置文件。请改用 Wayfern。",
     "updateChecksumsUnavailable": "无法验证更新 {{version}}：无法获取其校验和文件。更新未安装，稍后将重试。",
     "updateChecksumMismatch": "下载的更新文件 {{file}} 未通过校验和验证，已被丢弃。请重试。",
+    "browserChecksumUnavailable": "无法验证 {{browser}} {{version}}：无法获取其校验和文件。下载已停止，稍后将重试。",
+    "browserChecksumMismatch": "下载的 {{browser}} {{version}} 压缩包未通过校验和验证，已被丢弃。请重试。",
     "nameCannotBeEmpty": "名称不能为空",
     "wayfernVersionNotAvailable": "Wayfern 版本 {{requested}} 无法下载。当前版本为 {{current}}。",
     "profileNameExists": "名为“{{name}}”的配置文件已存在",

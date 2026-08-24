@@ -15,6 +15,10 @@ use crate::events;
 // the UI can surface it and the caller can move on / retry.
 const STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
+// Sent on both the asset request and its checksum sidecar so the CDN sees one
+// consistent client for the pair.
+const DOWNLOAD_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+
 // Global state to track currently downloading browser-version pairs
 lazy_static::lazy_static! {
   static ref DOWNLOADING_BROWSERS: std::sync::Arc<Mutex<std::collections::HashSet<String>>> =
@@ -233,6 +237,113 @@ impl Downloader {
       .await?;
     log::info!("Download URL resolved");
 
+    // Every browser asset is published with a `<asset>.sha256` sidecar. Fetch
+    // it before the transfer starts: an asset nobody can verify costs one small
+    // request to reject here, or a wasted gigabyte to reject later.
+    let expected_sha256 = self
+      .fetch_expected_archive_checksum(&download_url, browser_type.display_name(), version)
+      .await?;
+
+    let file_path = self
+      .stream_download(
+        browser_type.clone(),
+        version,
+        &download_url,
+        file_path,
+        cancel_token,
+      )
+      .await?;
+
+    // Hashing a multi-gigabyte archive takes seconds, so tell the UI what the
+    // pause is for instead of leaving the bar sitting at 100%.
+    let _ = events::emit(
+      "download-progress",
+      &DownloadProgress {
+        browser: browser_type.as_str().to_string(),
+        version: version.to_string(),
+        downloaded_bytes: 0,
+        total_bytes: None,
+        percentage: 100.0,
+        speed_bytes_per_sec: 0.0,
+        eta_seconds: None,
+        stage: "verifying".to_string(),
+      },
+    );
+    verify_archive_checksum(
+      &file_path,
+      &expected_sha256,
+      browser_type.display_name(),
+      version,
+    )
+    .await?;
+
+    Ok(file_path)
+  }
+
+  /// Fetch `<asset>.sha256` and return the digest it publishes for the asset.
+  /// Every failure mode maps to `BROWSER_CHECKSUM_UNAVAILABLE`; the specifics
+  /// go to the log.
+  async fn fetch_expected_archive_checksum(
+    &self,
+    download_url: &str,
+    browser: &str,
+    version: &str,
+  ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let unavailable = || -> Box<dyn std::error::Error + Send + Sync> {
+      serde_json::json!({
+        "code": "BROWSER_CHECKSUM_UNAVAILABLE",
+        "params": { "browser": browser, "version": version }
+      })
+      .to_string()
+      .into()
+    };
+
+    let sidecar_url = checksum_sidecar_url(download_url);
+    let response = match self
+      .client
+      .get(&sidecar_url)
+      .header("User-Agent", DOWNLOAD_USER_AGENT)
+      .send()
+      .await
+    {
+      Ok(response) if response.status().is_success() => response,
+      Ok(response) => {
+        log::warn!(
+          "Checksum sidecar request failed for {browser} {version}: HTTP {}",
+          response.status()
+        );
+        return Err(unavailable());
+      }
+      Err(e) => {
+        log::warn!("Checksum sidecar request failed for {browser} {version}: {e}");
+        return Err(unavailable());
+      }
+    };
+
+    let sidecar_text = match response.text().await {
+      Ok(text) => text,
+      Err(e) => {
+        log::warn!("Failed to read the checksum sidecar for {browser} {version}: {e}");
+        return Err(unavailable());
+      }
+    };
+
+    let asset_name = asset_filename_from_url(download_url);
+    let Some(expected) = crate::checksum::parse_sidecar_digest(&sidecar_text, asset_name) else {
+      log::warn!("No usable digest for {asset_name} in {sidecar_url}");
+      return Err(unavailable());
+    };
+    Ok(expected)
+  }
+
+  async fn stream_download(
+    &self,
+    browser_type: BrowserType,
+    version: &str,
+    download_url: &str,
+    file_path: PathBuf,
+    cancel_token: Option<&CancellationToken>,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     // In-session resume: a large (~1GB) download over a flaky connection can
     // drop mid-stream. Rather than surfacing the first stall/chunk error as a
     // terminal failure (which forces the user to re-click and risks the CDN
@@ -257,11 +368,8 @@ impl Downloader {
       for attempt in 0..=max_send_retries {
         let mut request = self
           .client
-          .get(&download_url)
-          .header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-          );
+          .get(download_url)
+          .header("User-Agent", DOWNLOAD_USER_AGENT);
 
         if existing_size > 0 {
           request = request.header("Range", format!("bytes={existing_size}-"));
@@ -682,7 +790,7 @@ impl Downloader {
         };
         let _ = events::emit("download-progress", &progress);
 
-        return Err(format!("Failed to download browser: {e}").into());
+        return Err(contextualize("Failed to download browser", e));
       }
     };
 
@@ -872,6 +980,74 @@ impl Downloader {
   }
 }
 
+/// Offset of a URL's query or fragment, or its length when it has neither.
+fn url_path_end(url: &str) -> usize {
+  url.find(['?', '#']).unwrap_or(url.len())
+}
+
+/// The `<asset>.sha256` published next to every browser asset. Any query or
+/// fragment stays at the end so a signed URL keeps working.
+fn checksum_sidecar_url(download_url: &str) -> String {
+  let (base, suffix) = download_url.split_at(url_path_end(download_url));
+  format!("{base}.sha256{suffix}")
+}
+
+/// Last path segment of `url`. This is the name a `sha256sum` sidecar records,
+/// and it is not the local filename: the local one is built from the running
+/// platform, while this one is whatever the publisher called the asset.
+fn asset_filename_from_url(url: &str) -> &str {
+  url[..url_path_end(url)].rsplit('/').next().unwrap_or("")
+}
+
+/// Compare the finished archive against the digest published beside it. A
+/// mismatch means the bytes on disk are not the asset the manifest promised,
+/// so the file is deleted instead of being handed to the extractor.
+async fn verify_archive_checksum(
+  file_path: &Path,
+  expected: &str,
+  browser: &str,
+  version: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let hash_path = file_path.to_path_buf();
+  let actual = tokio::task::spawn_blocking(move || crate::checksum::sha256_file(&hash_path))
+    .await
+    .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+      format!("Checksum task failed: {e}").into()
+    })??;
+
+  if actual.eq_ignore_ascii_case(expected) {
+    log::info!("Checksum verified for {browser} {version}: {actual}");
+    return Ok(());
+  }
+
+  log::error!("Checksum mismatch for {browser} {version}: expected {expected}, got {actual}");
+  let _ = std::fs::remove_file(file_path);
+  Err(
+    serde_json::json!({
+      "code": "BROWSER_CHECKSUM_MISMATCH",
+      "params": { "browser": browser, "version": version }
+    })
+    .to_string()
+    .into(),
+  )
+}
+
+/// Prefix the calling context onto a bare message, but leave an already-coded
+/// backend error alone: `wrap_backend_error` only passes a payload through
+/// when it still starts with `{`, so prefixing one would strip the code and
+/// the frontend would fall back to the untranslated INTERNAL_ERROR text.
+fn contextualize(
+  context: &str,
+  e: impl std::fmt::Display,
+) -> Box<dyn std::error::Error + Send + Sync> {
+  let msg = e.to_string();
+  if msg.starts_with('{') {
+    msg.into()
+  } else {
+    format!("{context}: {msg}").into()
+  }
+}
+
 /// Check if a specific browser-version pair is currently being downloaded
 pub fn is_downloading(browser: &str, version: &str) -> bool {
   let download_key = format!("{browser}-{version}");
@@ -1038,6 +1214,183 @@ mod tests {
 
     let downloaded_content = std::fs::read(&downloaded_file).unwrap();
     assert_eq!(downloaded_content.len(), test_content.len());
+  }
+
+  // Stand-in archive body for the checksum tests. Digests are computed from
+  // it rather than hardcoded, so the fixture and the assertion cannot drift.
+  const ARCHIVE_BODY: &[u8] = b"wayfern archive bytes";
+
+  fn digest_of(bytes: &[u8]) -> String {
+    let temp_dir = TempDir::new().unwrap();
+    let path = temp_dir.path().join("archive.zip");
+    std::fs::write(&path, bytes).unwrap();
+    crate::checksum::sha256_file(&path).unwrap()
+  }
+
+  #[test]
+  fn test_checksum_sidecar_url_appends_to_the_asset_path() {
+    assert_eq!(
+      checksum_sidecar_url("https://download.wayfern.com/wayfern-151_windows_x64.zip"),
+      "https://download.wayfern.com/wayfern-151_windows_x64.zip.sha256"
+    );
+    // A signed URL keeps its query, so the sidecar stays reachable.
+    assert_eq!(
+      checksum_sidecar_url("https://cdn.example.com/a.zip?token=abc&exp=1"),
+      "https://cdn.example.com/a.zip.sha256?token=abc&exp=1"
+    );
+    assert_eq!(
+      checksum_sidecar_url("https://cdn.example.com/a.zip#frag"),
+      "https://cdn.example.com/a.zip.sha256#frag"
+    );
+  }
+
+  #[test]
+  fn test_asset_filename_from_url_takes_the_publisher_name() {
+    // Deliberately different from the local filename, which is built from the
+    // running platform and would never match a sidecar entry.
+    assert_eq!(
+      asset_filename_from_url("https://download.wayfern.com/wayfern-151.0.7922.71_windows_x64.zip"),
+      "wayfern-151.0.7922.71_windows_x64.zip"
+    );
+    assert_eq!(
+      asset_filename_from_url("https://cdn.example.com/dir/a.tar.xz?token=abc"),
+      "a.tar.xz"
+    );
+    assert_eq!(asset_filename_from_url("https://cdn.example.com/"), "");
+  }
+
+  #[tokio::test]
+  async fn test_fetch_expected_archive_checksum_reads_the_sidecar() {
+    let server = MockServer::start().await;
+    let downloader = Downloader::new_for_test();
+    let digest = digest_of(ARCHIVE_BODY);
+
+    Mock::given(method("GET"))
+      .and(path("/wayfern-151_windows_x64.zip.sha256"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(format!("{digest}  wayfern-151_windows_x64.zip\n")),
+      )
+      .mount(&server)
+      .await;
+
+    let url = format!("{}/wayfern-151_windows_x64.zip", server.uri());
+    let expected = downloader
+      .fetch_expected_archive_checksum(&url, "wayfern", "151")
+      .await
+      .expect("sidecar should resolve");
+
+    assert_eq!(expected, digest);
+  }
+
+  #[tokio::test]
+  async fn test_fetch_expected_archive_checksum_fails_when_the_sidecar_is_missing() {
+    let server = MockServer::start().await;
+    let downloader = Downloader::new_for_test();
+
+    Mock::given(method("GET"))
+      .and(path("/wayfern-151_windows_x64.zip.sha256"))
+      .respond_with(ResponseTemplate::new(404))
+      .mount(&server)
+      .await;
+
+    let url = format!("{}/wayfern-151_windows_x64.zip", server.uri());
+    let error = downloader
+      .fetch_expected_archive_checksum(&url, "wayfern", "151")
+      .await
+      .expect_err("an unverifiable asset must not be downloaded")
+      .to_string();
+
+    assert!(
+      error.contains("BROWSER_CHECKSUM_UNAVAILABLE") && error.contains("151"),
+      "expected a coded, translatable error, got: {error}"
+    );
+  }
+
+  #[tokio::test]
+  async fn test_fetch_expected_archive_checksum_rejects_a_sidecar_without_a_digest() {
+    let server = MockServer::start().await;
+    let downloader = Downloader::new_for_test();
+
+    // A CDN that answers 200 with an error page must not be read as a digest.
+    Mock::given(method("GET"))
+      .and(path("/wayfern-151_windows_x64.zip.sha256"))
+      .respond_with(ResponseTemplate::new(200).set_body_string("<!doctype html><title>404</title>"))
+      .mount(&server)
+      .await;
+
+    let url = format!("{}/wayfern-151_windows_x64.zip", server.uri());
+    let error = downloader
+      .fetch_expected_archive_checksum(&url, "wayfern", "151")
+      .await
+      .expect_err("an unparsable sidecar must not pass")
+      .to_string();
+
+    assert!(
+      error.contains("BROWSER_CHECKSUM_UNAVAILABLE"),
+      "expected a coded error, got: {error}"
+    );
+  }
+
+  #[tokio::test]
+  async fn test_verify_archive_checksum_accepts_a_matching_digest() {
+    let temp_dir = TempDir::new().unwrap();
+    let archive = temp_dir.path().join("wayfern.zip");
+    std::fs::write(&archive, ARCHIVE_BODY).unwrap();
+    let digest = crate::checksum::sha256_file(&archive).unwrap();
+
+    // Case is normalized on both sides, so an uppercase sidecar still matches.
+    verify_archive_checksum(
+      &archive,
+      &digest.to_ascii_uppercase(),
+      "wayfern",
+      "151.0.7922.71",
+    )
+    .await
+    .expect("a matching digest should verify");
+
+    assert!(archive.exists(), "a verified archive must be kept");
+  }
+
+  #[tokio::test]
+  async fn test_verify_archive_checksum_rejects_and_deletes_a_mismatch() {
+    let temp_dir = TempDir::new().unwrap();
+    let archive = temp_dir.path().join("wayfern.zip");
+    // The file on disk is the wrong asset entirely, which is what a mislinked
+    // manifest slot delivers, while the sidecar describes the right one.
+    std::fs::write(&archive, b"a macOS disk image, not a windows zip").unwrap();
+    let expected = digest_of(ARCHIVE_BODY);
+
+    let error = verify_archive_checksum(&archive, &expected, "wayfern", "151.0.7922.71")
+      .await
+      .expect_err("a mismatched digest must fail")
+      .to_string();
+
+    assert!(
+      error.contains("BROWSER_CHECKSUM_MISMATCH") && error.contains("151.0.7922.71"),
+      "expected a coded, translatable error, got: {error}"
+    );
+    assert!(
+      !archive.exists(),
+      "an archive that failed verification must be deleted, not extracted"
+    );
+  }
+
+  #[test]
+  fn test_contextualize_preserves_a_coded_backend_error() {
+    // A coded payload must survive untouched: wrap_backend_error only passes
+    // it through while it still starts with '{'.
+    let coded = r#"{"code":"BROWSER_CHECKSUM_MISMATCH","params":{"browser":"wayfern"}}"#;
+    assert_eq!(
+      contextualize("Failed to download browser", coded).to_string(),
+      coded
+    );
+
+    // A bare message still gets its context.
+    assert_eq!(
+      contextualize("Failed to download browser", "connection reset").to_string(),
+      "Failed to download browser: connection reset"
+    );
   }
 
   #[test]

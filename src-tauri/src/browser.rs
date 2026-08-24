@@ -25,6 +25,14 @@ impl BrowserType {
     }
   }
 
+  /// Brand name for user-facing strings. `as_str` is the internal id and is
+  /// the wrong thing to put in a message the user reads.
+  pub fn display_name(&self) -> &'static str {
+    match self {
+      BrowserType::Wayfern => "Wayfern",
+    }
+  }
+
   pub fn from_str(s: &str) -> Result<Self, String> {
     match s {
       "wayfern" => Ok(BrowserType::Wayfern),

@@ -62,6 +62,7 @@ mod browser;
 mod browser_runner;
 mod browser_version_manager;
 mod cdp_target;
+mod checksum;
 mod default_browser;
 pub mod dns_blocklist;
 mod downloaded_browsers_registry;

@@ -1896,6 +1896,8 @@
     "camoufoxImportDeprecated": "La importación de este tipo de perfil ya no es compatible. Utiliza Wayfern en su lugar.",
     "updateChecksumsUnavailable": "No se pudo verificar la actualización {{version}} porque no se pudo obtener su archivo de sumas de comprobación. La actualización no se instaló; se reintentará más tarde.",
     "updateChecksumMismatch": "El archivo de actualización descargado {{file}} no superó la verificación de suma de comprobación y fue descartado. Inténtalo de nuevo.",
+    "browserChecksumUnavailable": "No se pudo verificar {{browser}} {{version}} porque no se pudo obtener su archivo de sumas de comprobación. La descarga se detuvo; se reintentará más tarde.",
+    "browserChecksumMismatch": "El archivo descargado de {{browser}} {{version}} no superó la verificación de suma de comprobación y fue descartado. Inténtalo de nuevo.",
     "nameCannotBeEmpty": "El nombre no puede estar vacío",
     "wayfernVersionNotAvailable": "La versión {{requested}} de Wayfern no está disponible para descargar. La versión actual es {{current}}.",
     "profileNameExists": "Ya existe un perfil llamado \"{{name}}\"",

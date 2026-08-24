@@ -1889,6 +1889,8 @@
     "camoufoxImportDeprecated": "このタイプのプロファイルのインポートはサポートされなくなりました。代わりにWayfernを使用してください。",
     "updateChecksumsUnavailable": "アップデート {{version}} のチェックサムファイルを取得できなかったため、検証できませんでした。アップデートはインストールされませんでした。後で再試行されます。",
     "updateChecksumMismatch": "ダウンロードしたアップデートファイル {{file}} はチェックサム検証に失敗したため破棄されました。もう一度お試しください。",
+    "browserChecksumUnavailable": "{{browser}} {{version}} のチェックサムファイルを取得できなかったため、検証できませんでした。ダウンロードは中止されました。後で再試行されます。",
+    "browserChecksumMismatch": "ダウンロードした {{browser}} {{version}} のアーカイブはチェックサム検証に失敗したため破棄されました。もう一度お試しください。",
     "nameCannotBeEmpty": "名前を空にすることはできません",
     "wayfernVersionNotAvailable": "Wayfernのバージョン{{requested}}はダウンロードできません。現在のバージョンは{{current}}です。",
     "profileNameExists": "「{{name}}」という名前のプロファイルは既に存在します",
