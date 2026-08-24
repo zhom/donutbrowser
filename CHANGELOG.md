@@ -1,6 +1,27 @@
 # Changelog
 
 
+## v0.29.6 (2026-08-24)
+
+### Refactoring
+
+- cleanup
+
+### Documentation
+
+- readme
+- switch to svg
+
+### Maintenance
+
+- chore: linting
+- chore: version bump
+- chore: linting
+- test: integration cleanup
+- chore: switch to gitdebt
+- chore: update flake.nix for v0.29.5 [skip ci] (#563)
+
+
 ## v0.29.5 (2026-08-16)
 
 ### Features
