@@ -237,6 +237,7 @@
     "noResultsDescription": "Нет профилей, соответствующих критериям поиска.",
     "table": {
       "name": "Название",
+      "none": "Нет",
       "browser": "Браузер",
       "status": "Статус",
       "actions": "Действия",
@@ -245,10 +246,8 @@
       "proxy": "Прокси / VPN",
       "lastLaunch": "Последний запуск",
       "empty": "Профили не найдены.",
-      "notSelected": "Не выбрано",
       "ext": "РАСШ",
       "dns": "DNS",
-      "extDefault": "По умолч.",
       "dnsLevel": "DNS-блок-лист: {{level}}",
       "extSearch": "Поиск групп…",
       "extEmpty": "Нет групп расширений",

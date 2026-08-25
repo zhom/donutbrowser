@@ -237,6 +237,7 @@
     "noResultsDescription": "没有配置文件匹配您的搜索条件。",
     "table": {
       "name": "名称",
+      "none": "无",
       "browser": "浏览器",
       "status": "状态",
       "actions": "操作",
@@ -245,10 +246,8 @@
       "proxy": "代理 / VPN",
       "lastLaunch": "最后启动",
       "empty": "未找到配置文件。",
-      "notSelected": "未选择",
       "ext": "扩展",
       "dns": "DNS",
-      "extDefault": "默认",
       "dnsLevel": "DNS 屏蔽列表: {{level}}",
       "extSearch": "搜索分组…",
       "extEmpty": "没有扩展组",

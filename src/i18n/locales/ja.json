@@ -237,6 +237,7 @@
     "noResultsDescription": "検索条件に一致するプロファイルがありません。",
     "table": {
       "name": "名前",
+      "none": "なし",
       "browser": "ブラウザ",
       "status": "ステータス",
       "actions": "アクション",
@@ -245,10 +246,8 @@
       "proxy": "プロキシ / VPN",
       "lastLaunch": "最終起動",
       "empty": "プロファイルが見つかりません。",
-      "notSelected": "未選択",
       "ext": "拡張",
       "dns": "DNS",
-      "extDefault": "既定",
       "dnsLevel": "DNS ブロックリスト: {{level}}",
       "extSearch": "グループを検索…",
       "extEmpty": "拡張機能グループがありません",

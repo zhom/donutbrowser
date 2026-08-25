@@ -237,6 +237,7 @@
     "noResultsDescription": "Nenhum perfil corresponde aos seus critérios de pesquisa.",
     "table": {
       "name": "Nome",
+      "none": "Nenhum",
       "browser": "Navegador",
       "status": "Status",
       "actions": "Ações",
@@ -245,10 +246,8 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Último Início",
       "empty": "Nenhum perfil encontrado.",
-      "notSelected": "Não selecionado",
       "ext": "EXT",
       "dns": "DNS",
-      "extDefault": "Padrão",
       "dnsLevel": "Lista DNS: {{level}}",
       "extSearch": "Pesquisar grupos…",
       "extEmpty": "Sem grupos de extensões",

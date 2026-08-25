@@ -237,6 +237,7 @@
     "noResultsDescription": "Arama kriterlerinizle eşleşen profil yok.",
     "table": {
       "name": "Ad",
+      "none": "Yok",
       "browser": "Tarayıcı",
       "status": "Durum",
       "actions": "İşlemler",
@@ -245,10 +246,8 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Son Başlatma",
       "empty": "Profil bulunamadı.",
-      "notSelected": "Seçilmedi",
       "ext": "UZN",
       "dns": "DNS",
-      "extDefault": "Varsayılan",
       "dnsLevel": "DNS engel listesi: {{level}}",
       "extSearch": "Gruplarda ara…",
       "extEmpty": "Uzantı grubu yok",

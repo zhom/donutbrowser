@@ -237,6 +237,7 @@
     "noResultsDescription": "Không có hồ sơ nào khớp với tiêu chí tìm kiếm.",
     "table": {
       "name": "Tên",
+      "none": "Không có",
       "browser": "Trình duyệt",
       "status": "Trạng thái",
       "actions": "Thao tác",
@@ -245,10 +246,8 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Lần chạy cuối",
       "empty": "Không tìm thấy hồ sơ.",
-      "notSelected": "Chưa chọn",
       "ext": "TIỆN ÍCH",
       "dns": "DNS",
-      "extDefault": "Mặc định",
       "dnsLevel": "Danh sách chặn DNS: {{level}}",
       "extSearch": "Tìm kiếm nhóm…",
       "extEmpty": "Không có nhóm tiện ích",

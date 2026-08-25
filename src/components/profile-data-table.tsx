@@ -432,7 +432,7 @@ function ExtCell({
   const group = groupId
     ? meta.extensionGroups.find((g) => g.id === groupId)
     : undefined;
-  const label = group?.name ?? meta.t("profiles.table.extDefault");
+  const label = group?.name ?? meta.t("profiles.table.none");
 
   const onPick = async (nextId: string | null) => {
     setIsSaving(true);
@@ -478,7 +478,7 @@ function ExtCell({
               >
                 {groupId === null && <LuCheck className="mr-2 size-3.5" />}
                 <span className={groupId === null ? "" : "ml-5"}>
-                  {meta.t("profiles.table.extDefault")}
+                  {meta.t("profiles.table.none")}
                 </span>
               </CommandItem>
               {meta.extensionGroups.map((g) => (
@@ -3242,7 +3242,7 @@ export function ProfilesDataTable({
             ? effectiveVpn.name
             : effectiveProxy
               ? effectiveProxy.name
-              : meta.t("profiles.table.notSelected");
+              : meta.t("profiles.table.none");
           const vpnBadge = effectiveVpn ? "WG" : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
           const selectedId = effectiveVpnId ?? effectiveProxyId ?? null;

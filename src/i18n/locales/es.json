@@ -237,6 +237,7 @@
     "noResultsDescription": "Ningún perfil coincide con tus criterios de búsqueda.",
     "table": {
       "name": "Nombre",
+      "none": "Ninguno",
       "browser": "Navegador",
       "status": "Estado",
       "actions": "Acciones",
@@ -245,10 +246,8 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Último Inicio",
       "empty": "No se encontraron perfiles.",
-      "notSelected": "No seleccionado",
       "ext": "EXT",
       "dns": "DNS",
-      "extDefault": "Predet.",
       "dnsLevel": "Lista DNS: {{level}}",
       "extSearch": "Buscar grupos…",
       "extEmpty": "Sin grupos de extensiones",

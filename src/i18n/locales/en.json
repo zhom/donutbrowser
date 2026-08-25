@@ -237,6 +237,7 @@
     "noResultsDescription": "No profiles match your search criteria.",
     "table": {
       "name": "Name",
+      "none": "None",
       "browser": "Browser",
       "status": "Status",
       "actions": "Actions",
@@ -245,10 +246,8 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Last Launch",
       "empty": "No profiles found.",
-      "notSelected": "Not Selected",
       "ext": "EXT",
       "dns": "DNS",
-      "extDefault": "Default",
       "dnsLevel": "DNS blocklist: {{level}}",
       "extSearch": "Search groups…",
       "extEmpty": "No extension groups",

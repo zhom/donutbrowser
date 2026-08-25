@@ -237,6 +237,7 @@
     "noResultsDescription": "Aucun profil ne correspond à vos critères de recherche.",
     "table": {
       "name": "Nom",
+      "none": "Aucun",
       "browser": "Navigateur",
       "status": "Statut",
       "actions": "Actions",
@@ -245,10 +246,8 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Dernier lancement",
       "empty": "Aucun profil trouvé.",
-      "notSelected": "Non sélectionné",
       "ext": "EXT",
       "dns": "DNS",
-      "extDefault": "Défaut",
       "dnsLevel": "Liste DNS : {{level}}",
       "extSearch": "Rechercher des groupes…",
       "extEmpty": "Aucun groupe d’extensions",
