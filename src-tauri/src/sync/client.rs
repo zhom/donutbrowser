@@ -234,10 +234,15 @@ impl SyncClient {
       }
     }
 
+    // The storage host here comes from the presigned URL, so on a self-hosted
+    // server it is whatever the server signed against — frequently an address
+    // only the server can resolve. `reqwest`'s own Display collapses that to
+    // "error sending request", which is why this failure used to be
+    // undiagnosable; report the innermost cause instead.
     let response = req
       .send()
       .await
-      .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+      .map_err(|e| SyncError::NetworkError(super::preflight::transport_reason(&e)))?;
 
     if !response.status().is_success() {
       let status = response.status();
@@ -256,7 +261,7 @@ impl SyncClient {
       .get(presigned_url)
       .send()
       .await
-      .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+      .map_err(|e| SyncError::NetworkError(super::preflight::transport_reason(&e)))?;
 
     if !response.status().is_success() {
       return Err(SyncError::NetworkError(format!(

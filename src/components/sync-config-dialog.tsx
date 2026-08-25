@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import type { SyncSettings } from "@/types";
+import type { SyncServerCheck, SyncSettings } from "@/types";
 
 const DEVICE_LINK_URL = "https://donutbrowser.com/auth/link";
 
@@ -78,49 +78,51 @@ export function SyncConfigDialog({
   const [, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<
-    "unknown" | "testing" | "connected" | "error"
+    "unknown" | "testing" | "connected" | "error" | "storage-unreachable"
   >("unknown");
   const [storageEndpoint, setStorageEndpoint] = useState<string | null>(null);
   const hasConfig = Boolean(serverUrl && token);
 
-  // `/health` is a bare liveness probe: it answers ok on a server whose storage
-  // is unreachable or misconfigured, which is how a green "connected" could sit
-  // next to a sync where every single file failed. `/readyz` checks storage and
-  // reports the endpoint clients are handed in presigned URLs, so surface that
-  // too — when transfers fail, it is the value worth checking first.
-  const probeServer = useCallback(async (url: string) => {
-    const base = url.replace(/\/$/, "");
-    const response = await fetch(`${base}/readyz`);
+  // Probing the sync server alone is what let a broken setup look correct.
+  // Files never travel through that server: the client is handed a presigned
+  // URL and uploads straight to storage, so a server whose storage address is
+  // reachable only from its own network answers every probe while every single
+  // transfer fails at connect. The check runs in the backend because that is
+  // the client that performs the transfers — same DNS, proxy and TLS trust, so
+  // a setup that passes here can actually move bytes.
+  const probeServer = useCallback(
+    (url: string) =>
+      invoke<SyncServerCheck>("check_sync_server_connection", {
+        serverUrl: url,
+      }),
+    [],
+  );
 
-    // A server old enough to predate /readyz is still a working server, so
-    // fall back rather than reporting a healthy setup as broken.
-    if (response.status === 404) {
-      const health = await fetch(`${base}/health`);
-      return { ok: health.ok, storageEndpoint: undefined };
+  const applyProbeResult = useCallback((result: SyncServerCheck) => {
+    setStorageEndpoint(result.storage_endpoint ?? null);
+    if (!result.server_reachable || result.storage_ready === false) {
+      setConnectionStatus("error");
+      return "error" as const;
     }
-
-    if (!response.ok) {
-      return { ok: false as const, storageEndpoint: undefined };
+    if (result.storage_reachable === false) {
+      setConnectionStatus("storage-unreachable");
+      return "storage-unreachable" as const;
     }
-    const body = (await response.json()) as {
-      storageEndpoint?: string;
-    } | null;
-    return { ok: true as const, storageEndpoint: body?.storageEndpoint };
+    setConnectionStatus("connected");
+    return "connected" as const;
   }, []);
 
   const testConnection = useCallback(
     async (url: string) => {
       setConnectionStatus("testing");
       try {
-        const result = await probeServer(url);
-        setStorageEndpoint(result.storageEndpoint ?? null);
-        setConnectionStatus(result.ok ? "connected" : "error");
+        applyProbeResult(await probeServer(url));
       } catch {
         setStorageEndpoint(null);
         setConnectionStatus("error");
       }
     },
-    [probeServer],
+    [probeServer, applyProbeResult],
   );
 
   const loadSettings = useCallback(async () => {
@@ -173,12 +175,18 @@ export function SyncConfigDialog({
     setConnectionStatus("testing");
     try {
       const result = await probeServer(serverUrl);
-      setStorageEndpoint(result.storageEndpoint ?? null);
-      if (result.ok) {
-        setConnectionStatus("connected");
+      const outcome = applyProbeResult(result);
+      if (outcome === "connected") {
         showSuccessToast(t("sync.config.connectionSuccess"));
+      } else if (outcome === "storage-unreachable") {
+        // Deliberately an error, not a warning. Nothing will sync in this
+        // state, and reporting it as success is the bug being fixed.
+        showErrorToast(
+          t("sync.config.storageUnreachable", {
+            endpoint: result.storage_endpoint ?? "",
+          }),
+        );
       } else {
-        setConnectionStatus("error");
         showErrorToast(t("sync.config.serverError"));
       }
     } catch {
@@ -188,7 +196,7 @@ export function SyncConfigDialog({
     } finally {
       setIsTesting(false);
     }
-  }, [serverUrl, t, probeServer]);
+  }, [serverUrl, t, probeServer, applyProbeResult]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -483,6 +491,19 @@ export function SyncConfigDialog({
                           })}
                         </span>
                       )}
+                    </div>
+                  )}
+                  {connectionStatus === "storage-unreachable" && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="size-2 rounded-full bg-destructive" />
+                        {t("sync.config.storageUnreachableStatus")}
+                      </div>
+                      <span className="text-xs text-muted-foreground break-all">
+                        {t("sync.config.storageUnreachable", {
+                          endpoint: storageEndpoint ?? "",
+                        })}
+                      </span>
                     </div>
                   )}
                   {connectionStatus === "error" && (

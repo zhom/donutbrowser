@@ -12,6 +12,7 @@
 # testing
 /coverage
 /e2e/app/target/
+/e2e/app/Cargo.lock
 /e2e/.driver/
 
 # next.js

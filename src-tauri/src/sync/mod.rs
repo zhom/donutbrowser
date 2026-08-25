@@ -2,6 +2,7 @@ mod client;
 pub mod encryption;
 mod engine;
 pub mod manifest;
+pub mod preflight;
 pub mod scheduler;
 pub mod subscription;
 pub mod types;
@@ -25,6 +26,7 @@ pub use manifest::{
   compute_diff, compute_diff_with_bias, generate_manifest, DiffBias, HashCache, ManifestDiff,
   SyncManifest,
 };
+pub use preflight::{check_sync_server, check_sync_server_connection, SyncServerCheck};
 pub use scheduler::{get_global_scheduler, set_global_scheduler, SyncScheduler};
 pub use subscription::{SubscriptionManager, SyncWorkItem};
 pub use types::{SyncError, SyncResult};

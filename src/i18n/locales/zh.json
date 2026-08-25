@@ -636,6 +636,8 @@
       "serverError": "服务器返回了错误",
       "connectFailed": "连接服务器失败",
       "storageEndpoint": "存储: {{endpoint}}",
+      "storageUnreachableStatus": "无法连接存储",
+      "storageUnreachable": "服务器可以连接，但此设备无法访问其存储地址 {{endpoint}}。文件传输将会失败。如果你自建服务器，请将 S3_PUBLIC_ENDPOINT 设置为此设备可以访问的地址。",
       "settingsSaved": "同步设置已保存",
       "saveFailed": "保存设置失败",
       "disconnected": "已断开同步",

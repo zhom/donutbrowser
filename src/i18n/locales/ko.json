@@ -636,6 +636,8 @@
       "serverError": "서버가 오류로 응답했습니다",
       "connectFailed": "서버에 연결하지 못했습니다",
       "storageEndpoint": "스토리지: {{endpoint}}",
+      "storageUnreachableStatus": "스토리지에 연결할 수 없음",
+      "storageUnreachable": "서버에는 연결되지만 스토리지 주소 {{endpoint}}에 이 기기에서 연결할 수 없습니다. 파일 전송이 실패합니다. 자체 호스팅 중이라면 S3_PUBLIC_ENDPOINT를 이 기기에서 연결할 수 있는 주소로 설정하세요.",
       "settingsSaved": "동기화 설정이 저장되었습니다",
       "saveFailed": "설정 저장 실패",
       "disconnected": "동기화 연결 끊김",

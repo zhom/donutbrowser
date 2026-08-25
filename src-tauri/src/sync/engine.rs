@@ -134,9 +134,38 @@ fn critical_failure_message(action: &str, failures: &[(String, String)]) -> Stri
 
   match failures.first() {
     Some((_, cause)) => format!(
-      "Critical files failed to {action}: {files}. Cause: {cause}. Sync aborted to prevent data loss."
+      "Critical files failed to {action}: {files}. Cause: {cause}.{hint} Sync aborted to prevent data loss.",
+      hint = storage_endpoint_hint(cause)
     ),
     None => format!("Critical files failed to {action}: {files}. Sync aborted to prevent data loss."),
+  }
+}
+
+/// The one fix worth naming when every transfer dies at connect.
+///
+/// Transfers go straight to the storage host named in the presigned URL, not
+/// through the sync server, so a self-hosted server that signs URLs against an
+/// address only it can resolve fails every file here while its own `/health`
+/// and `/readyz` stay green. The cause string already carries the host; without
+/// this line it still reads as an unexplained network fault, and the setting
+/// that fixes it lives on the server, where the user is not looking.
+fn storage_endpoint_hint(cause: &str) -> String {
+  let lowered = cause.to_ascii_lowercase();
+  let is_transport_failure = [
+    "connection failed",
+    "timed out",
+    "dns",
+    "error sending request",
+  ]
+  .iter()
+  .any(|marker| lowered.contains(marker));
+
+  if is_transport_failure {
+    " The storage host in the presigned URL could not be reached from this device. \
+     On a self-hosted server, set S3_PUBLIC_ENDPOINT to an address this device can reach."
+      .to_string()
+  } else {
+    String::new()
   }
 }
 
@@ -4324,6 +4353,43 @@ mod tests {
     assert!(!message.contains(&format!("file-{MAX_LISTED_FAILURES}")));
     assert!(message.contains("(and 15 more)"));
     assert!(message.contains("failed to download"));
+  }
+
+  #[test]
+  fn test_critical_failure_message_names_the_storage_endpoint_fix() {
+    // A self-hosted server that signs presigned URLs against a container-only
+    // host fails every transfer at connect while the server itself looks
+    // healthy. Naming the file and the socket error is not enough to find the
+    // setting that fixes it.
+    let failures = vec![(
+      "Default/Cookies".to_string(),
+      "Failed to upload Default/Cookies after 3 retries: connection failed: \
+       failed to lookup address information for minio"
+        .to_string(),
+    )];
+
+    let message = critical_failure_message("upload", &failures);
+    assert!(message.contains("S3_PUBLIC_ENDPOINT"), "{message}");
+    assert!(message.contains("could not be reached from this device"));
+    assert!(message.contains("Sync aborted to prevent data loss."));
+  }
+
+  #[test]
+  fn test_critical_failure_message_omits_the_hint_for_non_transport_causes() {
+    // A rejected signature or a full disk is not a routing problem, and
+    // pointing those users at S3_PUBLIC_ENDPOINT sends them the wrong way.
+    for cause in [
+      "Upload failed with status 403: SignatureDoesNotMatch",
+      "Upload failed with status 507: quota exceeded",
+      "No space left on device",
+    ] {
+      let failures = vec![("Default/Cookies".to_string(), cause.to_string())];
+      let message = critical_failure_message("upload", &failures);
+      assert!(
+        !message.contains("S3_PUBLIC_ENDPOINT"),
+        "hint must not fire for: {cause}"
+      );
+    }
   }
 
   #[test]

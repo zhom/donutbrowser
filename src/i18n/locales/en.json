@@ -636,6 +636,8 @@
       "serverError": "Server responded with an error",
       "connectFailed": "Failed to connect to server",
       "storageEndpoint": "Storage: {{endpoint}}",
+      "storageUnreachableStatus": "Storage unreachable",
+      "storageUnreachable": "The server is reachable, but its storage address {{endpoint}} cannot be reached from this device. File transfers will fail. If you self-host, set S3_PUBLIC_ENDPOINT to an address this device can reach.",
       "settingsSaved": "Sync settings saved",
       "saveFailed": "Failed to save settings",
       "disconnected": "Sync disconnected",
@@ -1983,7 +1985,7 @@
     "importSourceBrowserRunning": "Close {{browser}} first, or choose to import anyway",
     "wayfernFingerprintApplyFailed": "Could not apply this profile's fingerprint, so the browser was not started. {{detail}}",
     "wayfernFingerprintGenerationFailed": "Could not create a fingerprint for this profile. {{detail}}",
-    "wayfernGenerationLimitReached": "The fingerprint generation limit for this account has been reached. New fingerprints are unavailable for up to 24 hours. This limit applies to this computer, not to one profile.",
+    "wayfernGenerationLimitReached": "The fingerprint generation limit for this account has been reached. Your existing profiles will keep launching normally — only new fingerprints are paused, and they become available again a little later.",
     "wayfernCrossOsRequiresPlan": "This profile claims {{detail}}, which needs a paid plan and an active sign-in. Sign in or switch the profile to your own operating system."
   },
   "rail": {

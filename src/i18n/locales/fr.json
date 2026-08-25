@@ -637,6 +637,8 @@
       "serverError": "Le serveur a répondu avec une erreur",
       "connectFailed": "Échec de la connexion au serveur",
       "storageEndpoint": "Stockage : {{endpoint}}",
+      "storageUnreachableStatus": "Stockage inaccessible",
+      "storageUnreachable": "Le serveur est accessible, mais son adresse de stockage {{endpoint}} est inaccessible depuis cet appareil. Les transferts de fichiers échoueront. Si vous l'hébergez vous-même, définissez S3_PUBLIC_ENDPOINT sur une adresse accessible depuis cet appareil.",
       "settingsSaved": "Paramètres de synchronisation enregistrés",
       "saveFailed": "Échec de l’enregistrement des paramètres",
       "disconnected": "Synchronisation déconnectée",

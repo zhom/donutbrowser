@@ -636,6 +636,8 @@
       "serverError": "サーバーがエラーで応答しました",
       "connectFailed": "サーバーへの接続に失敗しました",
       "storageEndpoint": "ストレージ: {{endpoint}}",
+      "storageUnreachableStatus": "ストレージに接続できません",
+      "storageUnreachable": "サーバーには接続できますが、ストレージのアドレス {{endpoint}} にこのデバイスから接続できません。ファイル転送は失敗します。セルフホストの場合は、S3_PUBLIC_ENDPOINT にこのデバイスから接続できるアドレスを設定してください。",
       "settingsSaved": "同期設定を保存しました",
       "saveFailed": "設定の保存に失敗しました",
       "disconnected": "同期を切断しました",

@@ -89,6 +89,24 @@ export interface SyncSettings {
 }
 
 /**
+ * Result of `check_sync_server_connection`. Files upload straight to the
+ * storage host named in the presigned URL rather than through the sync server,
+ * so a healthy server is not evidence that sync works: `storage_reachable`
+ * false means every transfer will fail at connect.
+ *
+ * `null` means "not known", which is not the same as false — a server that
+ * predates `/readyz`, or a cloud deployment that withholds its storage host,
+ * discloses nothing to probe.
+ */
+export interface SyncServerCheck {
+  server_reachable: boolean;
+  storage_ready: boolean | null;
+  storage_endpoint: string | null;
+  storage_reachable: boolean | null;
+  storage_error: string | null;
+}
+
+/**
  * Capability/limit set derived from the plan by the backend. Features are gated
  * on these flags instead of a single "is paid?" check, so a plan like "solo"
  * (cloud backup + nightly cookie bot, no automation, no fingerprint editing, no

@@ -637,6 +637,8 @@
       "serverError": "El servidor respondió con un error",
       "connectFailed": "Error al conectar con el servidor",
       "storageEndpoint": "Almacenamiento: {{endpoint}}",
+      "storageUnreachableStatus": "Almacenamiento inaccesible",
+      "storageUnreachable": "Se puede acceder al servidor, pero no a su dirección de almacenamiento {{endpoint}} desde este dispositivo. Las transferencias de archivos fallarán. Si usas un servidor propio, configura S3_PUBLIC_ENDPOINT con una dirección accesible desde este dispositivo.",
       "settingsSaved": "Ajustes de sincronización guardados",
       "saveFailed": "Error al guardar los ajustes",
       "disconnected": "Sincronización desconectada",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment } from "../lib/app.mjs";
@@ -573,5 +574,87 @@ test("global config sealing and encrypted profile sync reject a wrong password, 
       receiver.close(),
       rolloverReceiver.close(),
     ]);
+  }
+});
+
+// A self-hosted server reaches its storage over an address only it can
+// resolve — the documented compose file points S3_ENDPOINT at
+// http://minio:9000, a Docker service name that exists on the compose network
+// and nowhere else. Files never travel through the sync server, so every
+// presigned URL then names a host the desktop cannot open: /health and /readyz
+// stay green while every single transfer dies at connect. Reported as "the
+// endpoint connection works every time, but no MB is ever synced".
+test("the connection check fails a server whose storage host this device cannot reach", async () => {
+  assert.ok(syncUrl && syncToken, "Sync infrastructure was not started");
+  const app = appFromEnvironment("sync-preflight");
+
+  // Answers exactly like a healthy self-hosted server that signs presigned
+  // URLs against a container-only host.
+  const misconfigured = createServer((request, response) => {
+    if (request.url === "/readyz") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          status: "ready",
+          s3: true,
+          storageEndpoint: "http://minio.invalid:9000",
+        }),
+      );
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise((resolve) => misconfigured.listen(0, "127.0.0.1", resolve));
+  const misconfiguredUrl = `http://127.0.0.1:${misconfigured.address().port}`;
+
+  try {
+    await app.start();
+
+    const healthy = await app.invoke("check_sync_server_connection", {
+      serverUrl: syncUrl,
+    });
+    assert.equal(healthy.server_reachable, true, "real sync server answers");
+    assert.notEqual(
+      healthy.storage_reachable,
+      false,
+      "the suite's own storage must be reachable from the test device",
+    );
+
+    // The regression itself: green server, storage nobody here can open.
+    const broken = await app.invoke("check_sync_server_connection", {
+      serverUrl: misconfiguredUrl,
+    });
+    assert.equal(broken.server_reachable, true, "server itself answered");
+    assert.equal(broken.storage_ready, true, "server reaches its own storage");
+    assert.equal(broken.storage_endpoint, "http://minio.invalid:9000");
+    assert.equal(
+      broken.storage_reachable,
+      false,
+      "an unreachable storage host must not report as a working connection",
+    );
+    assert.ok(
+      broken.storage_error && broken.storage_error.length > 0,
+      "the failure must carry a cause",
+    );
+    assert.notEqual(
+      broken.storage_error,
+      "error sending request",
+      "the cause must name the transport failure, not the bare reqwest text",
+    );
+
+    // A server that does not answer at all stays a plain connection failure,
+    // so the two are never confused in the UI.
+    const dead = await app.invoke("check_sync_server_connection", {
+      serverUrl: "http://127.0.0.1:1",
+    });
+    assert.equal(dead.server_reachable, false);
+    assert.equal(dead.storage_reachable, null);
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    await new Promise((resolve) => misconfigured.close(resolve));
+    await app.close();
   }
 });

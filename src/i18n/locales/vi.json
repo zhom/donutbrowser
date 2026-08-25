@@ -636,6 +636,8 @@
       "serverError": "Máy chủ trả về lỗi",
       "connectFailed": "Kết nối máy chủ thất bại",
       "storageEndpoint": "Bộ nhớ: {{endpoint}}",
+      "storageUnreachableStatus": "Không thể kết nối tới bộ nhớ",
+      "storageUnreachable": "Máy chủ có thể kết nối được, nhưng thiết bị này không truy cập được địa chỉ bộ nhớ {{endpoint}}. Việc truyền tệp sẽ thất bại. Nếu bạn tự lưu trữ, hãy đặt S3_PUBLIC_ENDPOINT thành địa chỉ mà thiết bị này truy cập được.",
       "settingsSaved": "Đã lưu cài đặt đồng bộ",
       "saveFailed": "Lưu cài đặt thất bại",
       "disconnected": "Đã ngắt kết nối đồng bộ",

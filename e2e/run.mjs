@@ -2,6 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   createReadStream,
   createWriteStream,
   existsSync,
@@ -44,6 +45,9 @@ const driverBinary = path.join(
   "bin",
   `tauri-wd${executableSuffix}`,
 );
+const appManifest = path.join(appManifestDir, "Cargo.toml");
+const appLockfile = path.join(appManifestDir, "Cargo.lock");
+const donutLockfile = path.join(projectRoot, "src-tauri", "Cargo.lock");
 
 const suiteFiles = {
   smoke: ["diagnostics.test.mjs", "smoke.test.mjs", "coverage.test.mjs"],
@@ -237,16 +241,13 @@ async function loadLocalValues(names) {
   return values;
 }
 
-function lockedDriverVersion() {
-  const lockfile = readFileSync(
-    path.join(appManifestDir, "Cargo.lock"),
-    "utf8",
-  );
-  const match = lockfile.match(
-    /\[\[package\]\]\s*\nname = "tauri-wd"\s*\nversion = "([^"]+)"/,
-  );
+function pinnedDriverVersion() {
+  const manifest = readFileSync(appManifest, "utf8");
+  const match = manifest.match(/^tauri-wd\s*=\s*"=([^"]+)"$/m);
   if (!match) {
-    throw new Error("e2e/app/Cargo.lock does not resolve a tauri-wd version");
+    throw new Error(
+      'e2e/app/Cargo.toml must pin tauri-wd to an exact version, e.g. tauri-wd = "=0.1.11"',
+    );
   }
   return match[1];
 }
@@ -263,7 +264,7 @@ function installedDriverVersion() {
 }
 
 function ensureDriver() {
-  const version = lockedDriverVersion();
+  const version = pinnedDriverVersion();
   if (installedDriverVersion() === version) {
     log(`tauri-wd ${version} already installed at ${driverBinary}`);
     return;
@@ -285,15 +286,27 @@ function ensureDriver() {
   );
 }
 
+// The harness links the Donut crate, so it has to resolve the same versions
+// Donut itself ships. Seeding the harness lockfile from src-tauri/Cargo.lock
+// keeps the two in step whenever a dependency or the app version moves; cargo
+// fills in the harness-only packages on top. It is generated, never hand-edited.
+function syncHarnessLockfile() {
+  if (
+    existsSync(appLockfile) &&
+    statSync(appLockfile).mtimeMs >= statSync(donutLockfile).mtimeMs
+  ) {
+    return;
+  }
+  copyFileSync(donutLockfile, appLockfile);
+  log("seeded e2e/app/Cargo.lock from src-tauri/Cargo.lock");
+}
+
 function buildAll() {
   run("pnpm", ["build"], projectRoot);
   run("pnpm", ["copy-proxy-binary"], projectRoot);
   run(process.execPath, ["src-tauri/download-xray.mjs"], projectRoot);
-  run(
-    "cargo",
-    ["build", "--locked", "--manifest-path", "e2e/app/Cargo.toml"],
-    projectRoot,
-  );
+  syncHarnessLockfile();
+  run("cargo", ["build", "--manifest-path", "e2e/app/Cargo.toml"], projectRoot);
   ensureDriver();
 }
 

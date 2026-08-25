@@ -102,6 +102,10 @@ into the ignored `e2e/.driver` root) and launch an `e2e`-feature build.
 Every session gets its own temporary Donut data/cache/log root, home directory,
 WebView store, ports, and sync bucket. Never point a suite at production or development data.
 
+`e2e/app/Cargo.lock` is generated, gitignored, and never edited by hand. `e2e/run.mjs` seeds it
+from `src-tauri/Cargo.lock` whenever that file is newer, so the harness always links the exact
+dependency versions Donut ships and a version bump or a Dependabot upgrade needs no second edit.
+
 After a behavior change, run the smallest affected subset below in addition to the standard
 format/lint/unit-test command. A code change is not verified until its affected native
 suite passes:

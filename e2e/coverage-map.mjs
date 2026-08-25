@@ -212,6 +212,7 @@ export const commandCoverage = {
     commands: [
       "get_sync_settings",
       "save_sync_settings",
+      "check_sync_server_connection",
       "cloud_auth::restart_sync_service",
       "set_profile_sync_mode",
       "cancel_profile_sync",

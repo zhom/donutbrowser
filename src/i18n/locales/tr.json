@@ -636,6 +636,8 @@
       "serverError": "Sunucu bir hatayla yanıt verdi",
       "connectFailed": "Sunucuya bağlanılamadı",
       "storageEndpoint": "Depolama: {{endpoint}}",
+      "storageUnreachableStatus": "Depolamaya erişilemiyor",
+      "storageUnreachable": "Sunucuya erişilebiliyor, ancak depolama adresine {{endpoint}} bu cihazdan erişilemiyor. Dosya aktarımları başarısız olacak. Kendi sunucunuzu barındırıyorsanız S3_PUBLIC_ENDPOINT değerini bu cihazdan erişilebilen bir adres olarak ayarlayın.",
       "settingsSaved": "Eşitleme ayarları kaydedildi",
       "saveFailed": "Ayarlar kaydedilemedi",
       "disconnected": "Eşitleme bağlantısı kesildi",
