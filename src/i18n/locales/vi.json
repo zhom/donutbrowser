@@ -1085,7 +1085,9 @@
     "brandVersion": "Phiên bản thương hiệu",
     "proFeature": "Đây là tính năng Pro",
     "generateFingerprint": "Tạo vân tay",
-    "refreshFingerprint": "Làm mới vân tay",
+    "regenerateFingerprint": "Tạo lại vân tay",
+    "regenerateConfirmTitle": "Tạo lại vân tay này?",
+    "regenerateConfirmDescription": "Hồ sơ vẫn giữ cookie và phiên đăng nhập, nhưng sẽ hiện ra như một thiết bị khác. Các trang đã biết hồ sơ này có thể yêu cầu bạn đăng nhập lại, bắt bạn xác minh, hoặc khóa tài khoản. Chỉ tạo lại hồ sơ mà bạn chưa dùng, hoặc hồ sơ bạn chấp nhận mất. Không thể hoàn tác thao tác này.",
     "canvasNoiseSeedPlaceholder": "Nhập chuỗi hạt giống cho vân tay canvas",
     "addFontsPlaceholder": "Thêm phông chữ...",
     "enterAsJson": "Nhập {{title}} dưới dạng JSON"

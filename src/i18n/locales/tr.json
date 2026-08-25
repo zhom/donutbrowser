@@ -1085,7 +1085,9 @@
     "brandVersion": "Marka Sürümü",
     "proFeature": "Bu bir Pro özelliğidir",
     "generateFingerprint": "Parmak İzi Oluştur",
-    "refreshFingerprint": "Parmak İzini Yenile",
+    "regenerateFingerprint": "Parmak İzini Yeniden Oluştur",
+    "regenerateConfirmTitle": "Bu parmak izi yeniden oluşturulsun mu?",
+    "regenerateConfirmDescription": "Profil çerezlerini ve oturumlarını korur, ancak farklı bir cihaz olarak görünür. Bu profili zaten tanıyan siteler yeniden giriş yapmanızı isteyebilir, doğrulama uygulayabilir veya hesabı engelleyebilir. Yalnızca henüz kullanmadığınız ya da kaybetmeyi göze aldığınız bir profili yeniden oluşturun. Bu işlem geri alınamaz.",
     "canvasNoiseSeedPlaceholder": "Canvas parmak izi için bir tohum dizesi girin",
     "addFontsPlaceholder": "Yazı tipi ekleyin...",
     "enterAsJson": "{{title}} değerini JSON olarak girin"

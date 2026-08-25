@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import type { Key, ReactNode } from "react";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,23 @@ interface StepTransitionProps {
   className?: string;
 }
 
+/**
+ * Slides a step into place when it changes.
+ *
+ * Nothing here decides whether the step is on screen. It used to: an
+ * `AnimatePresence mode="wait"` held the incoming panel unmounted until the
+ * outgoing one finished its exit, and both panels faded from `opacity: 0`. Both
+ * halves put the content behind an animation, and an animation is not a
+ * guarantee — `requestAnimationFrame` stalls whenever the webview is occluded,
+ * unfocused or throttled. When it stalled the dialog was left showing the old
+ * step forever, or a panel frozen at zero opacity, with the new step absent
+ * from the DOM entirely.
+ *
+ * So the step renders immediately and at full opacity, and the only animated
+ * property is a few pixels of travel. If the animation never runs, the content
+ * is still there, still readable, a hair off its final position. Motion may
+ * decorate a transition; it may never be what performs one.
+ */
 export function StepTransition({
   transitionKey,
   direction,
@@ -21,39 +38,16 @@ export function StepTransition({
   const reduceMotion = useReducedMotion();
 
   return (
-    <AnimatePresence initial={false} mode="wait" custom={direction}>
-      <motion.div
-        key={transitionKey}
-        custom={direction}
-        variants={{
-          enter: (customDirection: 1 | -1) => ({
-            opacity: 0,
-            x: reduceMotion ? 0 : customDirection * 6,
-          }),
-          center: {
-            opacity: 1,
-            x: 0,
-            transition: {
-              duration: reduceMotion ? 0.16 : 0.18,
-              ease: MOTION_EASE_OUT,
-            },
-          },
-          exit: (customDirection: 1 | -1) => ({
-            opacity: 0,
-            x: reduceMotion ? 0 : customDirection * -6,
-            transition: {
-              duration: reduceMotion ? 0.16 : 0.12,
-              ease: MOTION_EASE_OUT,
-            },
-          }),
-        }}
-        initial="enter"
-        animate="center"
-        exit="exit"
-        className={cn(className)}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      // Remounting on the key is what replaces the old step. It is synchronous,
+      // so the swap does not depend on any animation finishing.
+      key={transitionKey}
+      initial={reduceMotion ? false : { x: direction * 6 }}
+      animate={{ x: 0 }}
+      transition={{ duration: 0.18, ease: MOTION_EASE_OUT }}
+      className={cn(className)}
+    >
+      {children}
+    </motion.div>
   );
 }

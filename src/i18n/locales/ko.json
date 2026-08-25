@@ -1085,7 +1085,9 @@
     "brandVersion": "브랜드 버전",
     "proFeature": "이것은 Pro 기능입니다",
     "generateFingerprint": "핑거프린트 생성",
-    "refreshFingerprint": "핑거프린트 새로 고침",
+    "regenerateFingerprint": "핑거프린트 재생성",
+    "regenerateConfirmTitle": "이 핑거프린트를 재생성할까요?",
+    "regenerateConfirmDescription": "쿠키와 로그인 상태는 유지되지만 프로필은 다른 기기로 표시됩니다. 이미 이 프로필을 알고 있는 사이트에서는 다시 로그인을 요구하거나 추가 인증을 요청하거나 계정을 차단할 수 있습니다. 아직 사용하지 않았거나 잃어도 괜찮은 프로필만 재생성하세요. 이 작업은 되돌릴 수 없습니다.",
     "canvasNoiseSeedPlaceholder": "캔버스 핑거프린트의 시드 문자열 입력",
     "addFontsPlaceholder": "글꼴 추가...",
     "enterAsJson": "{{title}}을(를) JSON으로 입력"

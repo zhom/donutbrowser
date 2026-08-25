@@ -36,10 +36,23 @@ const panelSpring = {
   damping: 28,
 } as const;
 
+/**
+ * Steps travel, they do not fade in.
+ *
+ * Onboarding is the first thing a new install shows and the only way past it is
+ * the button on the current step, so a step that fails to appear is a dead app.
+ * These panels used to start at `opacity: 0` inside an `AnimatePresence
+ * mode="wait"`, which put both the visibility AND the mount of every step
+ * behind an animation. `requestAnimationFrame` stops whenever the webview is
+ * occluded, unfocused or throttled, and when it stopped mid-transition the
+ * dialog sat empty with the next step never mounted.
+ *
+ * Full opacity at rest means a stalled animation costs 12px of offset instead
+ * of the whole screen.
+ */
 const panelVariants = {
-  enter: { opacity: 0, y: 12 },
-  center: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -12 },
+  enter: { y: 12 },
+  center: { y: 0 },
 };
 
 // Concrete feature list shown on the intro step, rendered as an icon grid.
@@ -216,14 +229,13 @@ export function WelcomeDialog({
           />
         </div>
 
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout" initial={false}>
           {step === "intro" && (
             <motion.div
               key="intro"
               variants={panelVariants}
               initial="enter"
               animate="center"
-              exit="exit"
               transition={panelTransition}
               className="flex flex-col gap-7"
             >
@@ -301,7 +313,6 @@ export function WelcomeDialog({
               variants={panelVariants}
               initial="enter"
               animate="center"
-              exit="exit"
               transition={panelTransition}
               className="flex flex-col gap-7"
             >
@@ -380,7 +391,6 @@ export function WelcomeDialog({
               variants={panelVariants}
               initial="enter"
               animate="center"
-              exit="exit"
               transition={panelTransition}
               className="flex flex-col gap-7"
             >
@@ -438,7 +448,6 @@ export function WelcomeDialog({
               variants={panelVariants}
               initial="enter"
               animate="center"
-              exit="exit"
               transition={panelTransition}
               className="flex flex-col items-center gap-6 text-center"
             >

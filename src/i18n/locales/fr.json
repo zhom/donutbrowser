@@ -1088,7 +1088,9 @@
     "brandVersion": "Version de la marque",
     "proFeature": "Ceci est une fonctionnalité Pro",
     "generateFingerprint": "Générer l'empreinte",
-    "refreshFingerprint": "Actualiser l'empreinte",
+    "regenerateFingerprint": "Régénérer l'empreinte",
+    "regenerateConfirmTitle": "Régénérer cette empreinte ?",
+    "regenerateConfirmDescription": "Le profil conserve ses cookies et ses sessions, mais présentera un autre appareil. Les sites qui connaissent déjà ce profil peuvent vous demander de vous reconnecter, vous soumettre à une vérification ou bloquer le compte. Ne régénérez qu'un profil que vous n'avez pas encore utilisé ou que vous acceptez de perdre. Cette action est irréversible.",
     "canvasNoiseSeedPlaceholder": "Entrez une graine pour l'empreinte canvas",
     "addFontsPlaceholder": "Ajouter des polices...",
     "enterAsJson": "Entrez {{title}} en JSON"

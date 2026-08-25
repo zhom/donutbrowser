@@ -1088,7 +1088,9 @@
     "brandVersion": "Versión de marca",
     "proFeature": "Esta es una función Pro",
     "generateFingerprint": "Generar Huella Digital",
-    "refreshFingerprint": "Actualizar Huella Digital",
+    "regenerateFingerprint": "Regenerar Huella Digital",
+    "regenerateConfirmTitle": "¿Regenerar esta huella digital?",
+    "regenerateConfirmDescription": "El perfil conserva sus cookies y sesiones, pero mostrará un dispositivo distinto. Los sitios que ya conocen este perfil pueden pedirte iniciar sesión de nuevo, someterte a una verificación o bloquear la cuenta. Regenera solo un perfil que aún no hayas usado o que estés dispuesto a perder. Esta acción no se puede deshacer.",
     "canvasNoiseSeedPlaceholder": "Introduce una semilla para la huella digital del canvas",
     "addFontsPlaceholder": "Agregar fuentes...",
     "enterAsJson": "Ingresa {{title}} como JSON"

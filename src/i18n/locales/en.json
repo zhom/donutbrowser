@@ -1086,7 +1086,9 @@
     "brandVersion": "Brand Version",
     "proFeature": "This is a Pro feature",
     "generateFingerprint": "Generate Fingerprint",
-    "refreshFingerprint": "Refresh Fingerprint",
+    "regenerateFingerprint": "Regenerate Fingerprint",
+    "regenerateConfirmTitle": "Regenerate this fingerprint?",
+    "regenerateConfirmDescription": "The profile keeps its cookies and logins but will present a different device. Sites that already know this profile can ask you to sign in again, challenge you, or block the account. Only regenerate a profile you have not used yet, or one you are willing to lose. This cannot be undone.",
     "canvasNoiseSeedPlaceholder": "Enter a seed string for canvas fingerprint",
     "addFontsPlaceholder": "Add fonts...",
     "enterAsJson": "Enter {{title}} as JSON"

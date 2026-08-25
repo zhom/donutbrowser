@@ -1088,7 +1088,9 @@
     "brandVersion": "Versão da Marca",
     "proFeature": "Este é um recurso Pro",
     "generateFingerprint": "Gerar Impressão Digital",
-    "refreshFingerprint": "Atualizar Impressão Digital",
+    "regenerateFingerprint": "Regenerar Impressão Digital",
+    "regenerateConfirmTitle": "Regenerar esta impressão digital?",
+    "regenerateConfirmDescription": "O perfil mantém os cookies e as sessões, mas passará a apresentar um dispositivo diferente. Sites que já conhecem este perfil podem pedir que você entre novamente, aplicar uma verificação ou bloquear a conta. Só regenere um perfil que ainda não usou ou que esteja disposto a perder. Esta ação não pode ser desfeita.",
     "canvasNoiseSeedPlaceholder": "Insira uma string seed para a impressão digital do canvas",
     "addFontsPlaceholder": "Adicionar fontes...",
     "enterAsJson": "Insira {{title}} como JSON"

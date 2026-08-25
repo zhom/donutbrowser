@@ -1085,7 +1085,9 @@
     "brandVersion": "品牌版本",
     "proFeature": "这是 Pro 功能",
     "generateFingerprint": "生成指纹",
-    "refreshFingerprint": "刷新指纹",
+    "regenerateFingerprint": "重新生成指纹",
+    "regenerateConfirmTitle": "要重新生成此指纹吗？",
+    "regenerateConfirmDescription": "配置文件会保留 Cookie 和登录状态，但会呈现为另一台设备。已经认识此配置文件的网站可能要求你重新登录、进行验证，或封禁账号。请只对尚未使用过的配置文件，或你愿意舍弃的配置文件执行重新生成。此操作无法撤销。",
     "canvasNoiseSeedPlaceholder": "输入用于 canvas 指纹的种子字符串",
     "addFontsPlaceholder": "添加字体...",
     "enterAsJson": "以 JSON 格式输入 {{title}}"

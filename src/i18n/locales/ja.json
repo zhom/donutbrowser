@@ -1085,7 +1085,9 @@
     "brandVersion": "ブランドバージョン",
     "proFeature": "これはPro機能です",
     "generateFingerprint": "フィンガープリントを生成",
-    "refreshFingerprint": "フィンガープリントを更新",
+    "regenerateFingerprint": "フィンガープリントを再生成",
+    "regenerateConfirmTitle": "このフィンガープリントを再生成しますか？",
+    "regenerateConfirmDescription": "Cookie とログイン状態は保持されますが、プロファイルは別のデバイスとして認識されます。すでにこのプロファイルを知っているサイトでは、再ログインを求められたり、追加の確認を要求されたり、アカウントがブロックされたりする場合があります。再生成するのは、まだ使用していないプロファイル、または失っても問題ないプロファイルだけにしてください。この操作は取り消せません。",
     "canvasNoiseSeedPlaceholder": "キャンバスフィンガープリント用のシード文字列を入力",
     "addFontsPlaceholder": "フォントを追加...",
     "enterAsJson": "{{title}} を JSON で入力"
