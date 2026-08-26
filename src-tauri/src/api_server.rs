@@ -4253,7 +4253,7 @@ async fn import_profiles_api(
     (status = 400, description = "Invalid cookie file or unsupported browser"),
     (status = 401, description = "Unauthorized"),
     (status = 404, description = "Profile not found"),
-    (status = 409, description = "Browser is currently running"),
+    (status = 409, description = "Browser is running, the profile is password-protected, or a remote session owns it"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -4300,10 +4300,16 @@ async fn import_profile_cookies(
       }))
     }
     Err(e) => {
-      let msg = e.to_lowercase();
-      if msg.contains("running") {
+      // The importer speaks in `{"code":…}` strings now; match those, and keep
+      // the substring checks for the messages that are still plain text.
+      if e.contains("COOKIE_IMPORT_BROWSER_RUNNING")
+        || e.contains("COOKIE_IMPORT_PROFILE_PROTECTED")
+        || e.contains("COOKIE_IMPORT_REMOTE_SESSION")
+      {
         Err(StatusCode::CONFLICT)
-      } else if msg.contains("no valid cookies") || msg.contains("unsupported browser") {
+      } else if e.contains("COOKIE_IMPORT_NO_COOKIES")
+        || e.to_lowercase().contains("unsupported browser")
+      {
         Err(StatusCode::BAD_REQUEST)
       } else {
         Err(StatusCode::INTERNAL_SERVER_ERROR)

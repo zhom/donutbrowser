@@ -5,9 +5,11 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuChevronRight, LuUpload } from "react-icons/lu";
+import { LuChevronRight } from "react-icons/lu";
 import { toast } from "sonner";
+import { CookiePastePanel, IssueRow } from "@/components/cookie-paste-panel";
 import { LoadingButton } from "@/components/loading-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AnimatedDisclosureChevron,
   AnimatedDisclosureContent,
@@ -31,18 +33,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { translateBackendError } from "@/lib/backend-errors";
 import type {
   BrowserProfile,
+  CookieAnalysis,
+  CookiePasteImportResult,
   CookieReadResult,
+  CookieWriteMode,
   DomainCookies,
   UnifiedCookie,
 } from "@/types";
-
-interface CookieImportResult {
-  cookies_imported: number;
-  cookies_replaced: number;
-  errors: string[];
-}
 
 interface CookieManagementDialogProps {
   isOpen: boolean;
@@ -59,21 +59,8 @@ type SelectionState = Record<
   }
 >;
 
-const countCookies = (content: string): number => {
-  const trimmed = content.trim();
-  if (trimmed.startsWith("[")) {
-    try {
-      const arr = JSON.parse(trimmed);
-      if (Array.isArray(arr)) return arr.length;
-    } catch {
-      // Fall through to Netscape counting
-    }
-  }
-  return content.split("\n").filter((line) => {
-    const l = line.trim();
-    return l && !l.startsWith("#");
-  }).length;
-};
+/** Long enough that a paste is not re-parsed on every keystroke of a fix. */
+const ANALYZE_DEBOUNCE_MS = 250;
 
 function formatJsonCookies(cookies: UnifiedCookie[]): string {
   const arr = cookies.map((c) => {
@@ -130,13 +117,16 @@ export function CookieManagementDialog({
 }: CookieManagementDialogProps) {
   const { t } = useTranslation();
   // Import state
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [cookieCount, setCookieCount] = useState(0);
+  const [pasteContent, setPasteContent] = useState("");
+  const [pasteSite, setPasteSite] = useState("");
+  const [writeMode, setWriteMode] = useState<CookieWriteMode>("merge");
+  const [includeExpired, setIncludeExpired] = useState(false);
+  const [analysis, setAnalysis] = useState<CookieAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<CookieImportResult | null>(
-    null,
-  );
+  const [importResult, setImportResult] =
+    useState<CookiePasteImportResult | null>(null);
 
   // Export state
   const [format, setFormat] = useState<"netscape" | "json">("json");
@@ -179,7 +169,7 @@ export function CookieManagementDialog({
       } catch (err) {
         toast.error(
           t("cookies.management.loadFailed", {
-            error: err instanceof Error ? err.message : String(err),
+            error: translateBackendError(t, err),
           }),
         );
       } finally {
@@ -196,9 +186,13 @@ export function CookieManagementDialog({
   }, [activeTab, profile, exportCookieData, loadExportCookies]);
 
   const resetImportState = useCallback(() => {
-    setFileContent(null);
-    setFileName(null);
-    setCookieCount(0);
+    setPasteContent("");
+    setPasteSite("");
+    setWriteMode("merge");
+    setIncludeExpired(false);
+    setAnalysis(null);
+    setIsAnalyzing(false);
+    setImportError(null);
     setIsImporting(false);
     setImportResult(null);
   }, []);
@@ -229,41 +223,82 @@ export function CookieManagementDialog({
     [resetImportState, resetExportState],
   );
 
-  const handleFileRead = useCallback(
-    (file: File) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        setFileContent(content);
-        setFileName(file.name);
-        setCookieCount(countCookies(content));
-      };
-      reader.onerror = () => {
-        toast.error(t("cookies.management.fileReadError"));
-      };
-      reader.readAsText(file);
-    },
-    [t],
-  );
+  const profileId = profile?.id;
+
+  useEffect(() => {
+    if (!isOpen || !profileId || importResult) return;
+    if (pasteContent.trim() === "") {
+      setAnalysis(null);
+      setIsAnalyzing(false);
+      return;
+    }
+
+    // Editing the paste is the user acting on the last failure, so retire it.
+    setImportError(null);
+    setIsAnalyzing(true);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void invoke<CookieAnalysis>("analyze_pasted_cookies", {
+        profileId,
+        content: pasteContent,
+        site: pasteSite.trim() === "" ? null : pasteSite,
+      })
+        .then((result) => {
+          if (!cancelled) setAnalysis(result);
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          setAnalysis(null);
+          setImportError(translateBackendError(t, error));
+        })
+        .finally(() => {
+          if (!cancelled) setIsAnalyzing(false);
+        });
+    }, ANALYZE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, profileId, pasteContent, pasteSite, importResult, t]);
 
   const handleImport = useCallback(async () => {
-    if (!fileContent || !profile) return;
+    if (!profileId) return;
     setIsImporting(true);
+    setImportError(null);
     try {
-      const result = await invoke<CookieImportResult>(
-        "import_cookies_from_file",
+      const result = await invoke<CookiePasteImportResult>(
+        "import_pasted_cookies",
         {
-          profileId: profile.id,
-          content: fileContent,
+          profileId,
+          content: pasteContent,
+          site: pasteSite.trim() === "" ? null : pasteSite,
+          mode: writeMode,
+          includeExpired,
         },
       );
       setImportResult(result);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      // Kept inside the dialog rather than toasted: a toast would take the
+      // failure away while leaving the user with a paste they cannot fix.
+      setImportError(translateBackendError(t, error));
     } finally {
       setIsImporting(false);
     }
-  }, [fileContent, profile]);
+  }, [profileId, pasteContent, pasteSite, writeMode, includeExpired, t]);
+
+  const importBlockedReason = useMemo(() => {
+    if (pasteContent.trim() === "") return t("cookies.paste.disabledEmpty");
+    if (isAnalyzing || !analysis) return null;
+    if (analysis.blockedBy) {
+      return translateBackendError(t, analysis.blockedBy);
+    }
+    if (analysis.siteRequired) return t("cookies.paste.disabledSite");
+    if (analysis.cookies.length === 0) {
+      return t("cookies.paste.disabledNoCookies");
+    }
+    return null;
+  }, [pasteContent, isAnalyzing, analysis, t]);
 
   const getSelectedCookies = useCallback((): UnifiedCookie[] => {
     if (!exportCookieData) return [];
@@ -312,7 +347,7 @@ export function CookieManagementDialog({
       toast.success(t("cookies.export.success"));
       handleClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      toast.error(translateBackendError(t, error));
     } finally {
       setIsExporting(false);
     }
@@ -415,92 +450,102 @@ export function CookieManagementDialog({
           </TabsList>
 
           <TabsContent value="import" className="mt-4 space-y-4">
-            {!fileContent && (
-              <div className="space-y-4">
+            {!importResult && (
+              <>
                 <p className="text-sm text-muted-foreground">
                   {t("cookies.management.importDescription")}
                 </p>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 transition-colors hover:border-muted-foreground/50"
-                  onClick={() =>
-                    document.getElementById("cookie-file-input")?.click()
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      document.getElementById("cookie-file-input")?.click();
-                    }
-                  }}
-                >
-                  <LuUpload className="mb-4 size-10 text-muted-foreground" />
-                  <p className="text-center text-sm text-muted-foreground">
-                    {t("cookies.management.dropPrompt")}
-                    <br />
-                    <span className="text-xs">
-                      {t("cookies.management.fileFormats")}
-                    </span>
-                  </p>
-                  <input
-                    id="cookie-file-input"
-                    type="file"
-                    accept=".txt,.cookies,.json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileRead(file);
-                      e.target.value = "";
-                    }}
-                  />
-                </div>
-              </div>
-            )}
 
-            {fileContent && !importResult && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-4">
-                  <div>
-                    <div className="font-medium">{fileName}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {t("cookies.management.cookiesFound", {
-                        count: cookieCount,
-                      })}
-                    </div>
+                <CookiePastePanel
+                  content={pasteContent}
+                  onContentChange={setPasteContent}
+                  site={pasteSite}
+                  onSiteChange={setPasteSite}
+                  mode={writeMode}
+                  onModeChange={setWriteMode}
+                  includeExpired={includeExpired}
+                  onIncludeExpiredChange={setIncludeExpired}
+                  analysis={analysis}
+                  isAnalyzing={isAnalyzing}
+                  disabled={isImporting}
+                />
+
+                <div className="space-y-2">
+                  {/* Sits with the button, not at the top of the dialog: the
+                      panel is taller than the viewport, so a failure announced
+                      above the description is a failure nobody sees. */}
+                  {importError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{importError}</AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <RippleButton variant="outline" onClick={handleClose}>
+                      {t("common.buttons.cancel")}
+                    </RippleButton>
+                    <LoadingButton
+                      isLoading={isImporting}
+                      variant={
+                        writeMode === "replaceMatchingSites"
+                          ? "destructive"
+                          : "default"
+                      }
+                      onClick={() => void handleImport()}
+                      disabled={
+                        isAnalyzing ||
+                        analysis === null ||
+                        importBlockedReason !== null
+                      }
+                    >
+                      {t("common.buttons.import")}
+                    </LoadingButton>
                   </div>
+                  {importBlockedReason && (
+                    <p className="text-right text-xs text-muted-foreground">
+                      {importBlockedReason}
+                    </p>
+                  )}
                 </div>
-                <div className="flex justify-end gap-2">
-                  <RippleButton variant="outline" onClick={resetImportState}>
-                    {t("cookies.management.backButton")}
-                  </RippleButton>
-                  <LoadingButton
-                    isLoading={isImporting}
-                    onClick={() => void handleImport()}
-                    disabled={cookieCount === 0}
-                  >
-                    {t("cookies.management.importButton")}
-                  </LoadingButton>
-                </div>
-              </div>
+              </>
             )}
 
             {importResult && (
               <div className="space-y-4">
-                <div className="rounded-lg bg-success/10 p-4">
-                  <div className="font-medium text-success-text">
-                    {t("cookies.management.importedSuccess", {
-                      imported: importResult.cookies_imported,
-                      replaced: importResult.cookies_replaced,
-                    })}
-                  </div>
-                  {importResult.errors.length > 0 && (
-                    <div className="mt-2 text-sm text-muted-foreground">
-                      {t("cookies.management.linesSkipped", {
-                        count: importResult.errors.length,
-                      })}
-                    </div>
-                  )}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-muted/30 p-4 sm:grid-cols-4">
+                  <ResultCounter
+                    label={t("cookies.paste.resultAdded")}
+                    value={importResult.added}
+                  />
+                  <ResultCounter
+                    label={t("cookies.paste.resultOverwritten")}
+                    value={importResult.overwritten}
+                  />
+                  <ResultCounter
+                    label={t("cookies.paste.resultDeleted")}
+                    value={importResult.deleted}
+                  />
+                  <ResultCounter
+                    label={t("cookies.paste.resultSkipped")}
+                    value={importResult.skipped}
+                  />
                 </div>
+
+                {importResult.issues.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>{t("cookies.paste.issuesTitle")}</Label>
+                    <FadingScrollArea className="max-h-[clamp(100px,24vh,300px)]">
+                      <div className="space-y-1 pr-3">
+                        {importResult.issues.map((issue, index) => (
+                          <IssueRow
+                            key={`${issue.code}-${issue.source ?? ""}-${index}`}
+                            issue={issue}
+                          />
+                        ))}
+                      </div>
+                    </FadingScrollArea>
+                  </div>
+                )}
+
                 <div className="flex justify-end">
                   <RippleButton onClick={handleClose}>
                     {t("cookies.management.doneButton")}
@@ -602,6 +647,16 @@ export function CookieManagementDialog({
         </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Zeros are shown too: "deleted 0" is the reassurance replace mode needs. */
+function ResultCounter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-lg font-medium tabular-nums">{value}</div>
+    </div>
   );
 }
 

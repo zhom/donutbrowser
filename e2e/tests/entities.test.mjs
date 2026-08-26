@@ -766,11 +766,16 @@ test("cookie import/copy/export, profile encryption, and traffic-stat read/clear
         expirationDate: 2_000_000_000,
       },
     ]);
-    const imported = await app.invoke("import_cookies_from_file", {
+    const imported = await app.invoke("import_pasted_cookies", {
       profileId: source.id,
       content: cookieJson,
+      site: null,
+      mode: "merge",
+      includeExpired: false,
     });
-    assert.equal(imported.cookies_imported, 1);
+    assert.equal(imported.added, 1);
+    assert.equal(imported.overwritten, 0);
+    assert.equal(imported.deleted, 0);
     const cookies = await app.invoke("read_profile_cookies", {
       profileId: source.id,
     });
@@ -802,6 +807,62 @@ test("cookie import/copy/export, profile encryption, and traffic-stat read/clear
       }),
       /fixture\.local/,
     );
+
+    const paste = [
+      "# Netscape HTTP Cookie File",
+      "#HttpOnly_.fixture.local\tTRUE\t/\tFALSE\t2000000000\tpasted\tpasted-value",
+    ].join("\n");
+    const analysis = await app.invoke("analyze_pasted_cookies", {
+      profileId: target.id,
+      content: paste,
+      site: null,
+    });
+    assert.equal(analysis.format, "netscape");
+    assert.equal(analysis.cookies.length, 1);
+    assert.equal(analysis.cookies[0].name, "pasted");
+    assert.equal(analysis.cookies[0].isHttpOnly, true);
+    assert.equal(
+      analysis.cookies[0].value,
+      undefined,
+      "the preview must never carry the cookie value",
+    );
+    assert.equal(analysis.siteRequired, false);
+    assert.equal(analysis.expiredCount, 0);
+    assert.equal(analysis.blockedBy, null);
+    // The copied fixture.local cookie is the one row replace mode would clear.
+    assert.equal(analysis.replaceDeleteCount, 1);
+
+    const merged = await app.invoke("import_pasted_cookies", {
+      profileId: target.id,
+      content: paste,
+      site: null,
+      mode: "merge",
+      includeExpired: false,
+    });
+    assert.equal(merged.added, 1);
+    assert.equal(merged.deleted, 0);
+    assert.equal(merged.skipped, 0);
+    assert.equal(
+      (await app.invoke("get_profile_cookie_stats", { profileId: target.id }))
+        .total_count,
+      2,
+    );
+
+    // Both spellings of the pasted site go, and only they do.
+    const replacedPaste = await app.invoke("import_pasted_cookies", {
+      profileId: target.id,
+      content: paste,
+      site: null,
+      mode: "replaceMatchingSites",
+      includeExpired: false,
+    });
+    assert.equal(replacedPaste.deleted, 2);
+    assert.equal(replacedPaste.added, 1);
+    const afterReplace = await app.invoke("read_profile_cookies", {
+      profileId: target.id,
+    });
+    assert.equal(afterReplace.total_count, 1);
+    assert.equal(afterReplace.domains[0].cookies[0].name, "pasted");
 
     await app.invoke("set_profile_password", {
       profileId: source.id,

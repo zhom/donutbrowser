@@ -650,6 +650,53 @@ export interface CookieCopyResult {
   errors: string[];
 }
 
+// Cookie paste types. Unlike the copy types above these are serialized with
+// `rename_all = "camelCase"`, so the field names differ from the Rust structs.
+export type CookieIssueSeverity = "error" | "warning" | "info";
+
+export interface CookieIssue {
+  code: string;
+  severity: CookieIssueSeverity;
+  source: string | null;
+  params: Record<string, string>;
+}
+
+export type CookiePasteFormat = "json" | "netscape" | "nameValue";
+
+export type CookieWriteMode = "merge" | "replaceMatchingSites";
+
+/** Carries no `value`: the value is the credential and never leaves Rust. */
+export interface PastedCookiePreview {
+  name: string;
+  domain: string;
+  path: string;
+  expires: number;
+  isSecure: boolean;
+  isHttpOnly: boolean;
+  sameSite: number;
+}
+
+export interface CookieAnalysis {
+  format: CookiePasteFormat | null;
+  cookies: PastedCookiePreview[];
+  issues: CookieIssue[];
+  siteRequired: boolean;
+  expiredCount: number;
+  /** `null` when the store cannot be read, which is not the same as zero. */
+  replaceDeleteCount: number | null;
+  clearsOnClose: boolean;
+  /** A `{"code":…}` string for `translateBackendError`, or `null` to proceed. */
+  blockedBy: string | null;
+}
+
+export interface CookiePasteImportResult {
+  added: number;
+  overwritten: number;
+  deleted: number;
+  skipped: number;
+  issues: CookieIssue[];
+}
+
 // Proxy import/export types
 export interface ProxyExportData {
   version: string;

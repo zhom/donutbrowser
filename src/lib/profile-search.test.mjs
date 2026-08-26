@@ -201,7 +201,7 @@ test("quotes hold a value together and keep separators literal", () => {
   assert.equal(hit('"-lead"', profile({ name: "-lead" })), true);
 });
 
-test("several terms are ANDed", () => {
+test("several terms combine with AND", () => {
   const target = profile({ tags: ["prod"], group_id: "g1", note: "vat" });
   assert.equal(hit("tag:prod group:client", target), true);
   assert.equal(hit("tag:prod group:other", target), false);

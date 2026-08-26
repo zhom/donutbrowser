@@ -358,38 +358,44 @@ mod windows {
     Ok(())
   }
 
+  /// Tell the shell that the association it has cached is stale.
+  ///
+  /// `SHChangeNotify` is the documented announcement for an association change,
+  /// and the `WM_SETTINGCHANGE` broadcast is what the shell's own settings UI
+  /// sends alongside it, so both go out.
+  ///
+  /// This used to hand-declare `SendMessageTimeoutA` with `lpdwResult` typed as
+  /// `*mut u32` and pass it a `u32`. The real parameter is `PDWORD_PTR`, eight
+  /// bytes on x64, so every call wrote four bytes past a stack slot. The result
+  /// was a corrupted stack at the exact moment a user set Donut as their default
+  /// browser, and the process died with nothing in the log. Go through the
+  /// `windows` crate instead, which types the out-parameter correctly and cannot
+  /// drift from the real ABI.
   fn notify_system_of_changes() {
-    // Use Windows API to notify the system of association changes
-    // This helps refresh the system's understanding of the changes
+    use windows::core::w;
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+    use windows::Win32::UI::WindowsAndMessaging::{
+      SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+    };
+
     unsafe {
-      use std::ffi::c_void;
+      SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
 
-      const HWND_BROADCAST: *mut c_void = 0xffff as *mut c_void;
-      const WM_SETTINGCHANGE: u32 = 0x001A;
-      const SMTO_ABORTIFHUNG: u32 = 0x0002;
-
-      extern "system" {
-        fn SendMessageTimeoutA(
-          hWnd: *mut c_void,
-          Msg: u32,
-          wParam: usize,
-          lParam: isize,
-          fuFlags: u32,
-          uTimeout: u32,
-          lpdwResult: *mut u32,
-        ) -> isize;
-      }
-
-      let mut result: u32 = 0;
-
-      SendMessageTimeoutA(
+      // The broadcast is best-effort: a hung top-level window elsewhere on the
+      // desktop must not hold up the click that triggered this, hence the
+      // timeout and SMTO_ABORTIFHUNG. `WM_SETTINGCHANGE`'s lParam string is
+      // marshalled cross-process by the window manager, and this one is
+      // 'static, so it stays valid for the whole call.
+      let mut result: usize = 0;
+      SendMessageTimeoutW(
         HWND_BROADCAST,
         WM_SETTINGCHANGE,
-        0,
-        c"Software\\Classes".as_ptr() as isize,
+        WPARAM(0),
+        LPARAM(w!("Software\\Classes").as_ptr() as isize),
         SMTO_ABORTIFHUNG,
         1000,
-        &mut result,
+        Some(&mut result),
       );
     }
   }

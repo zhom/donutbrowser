@@ -105,6 +105,7 @@ mod cloud_errors;
 mod commercial_license;
 mod cookie_bot;
 mod cookie_manager;
+mod cookie_paste;
 pub mod events;
 mod mcp_integrations;
 mod mcp_server;
@@ -476,29 +477,57 @@ async fn copy_profile_cookies(
   Ok(results)
 }
 
+/// Push a profile's freshly written cookies to the cloud, if it syncs at all.
+fn queue_profile_cookie_sync(profile_id: &str) {
+  let Some(scheduler) = crate::sync::get_global_scheduler() else {
+    return;
+  };
+  let Ok(profiles) = profile::manager::ProfileManager::instance().list_profiles() else {
+    return;
+  };
+  let syncs = profiles
+    .iter()
+    .any(|p| p.id.to_string() == profile_id && p.is_sync_enabled());
+  if !syncs {
+    return;
+  }
+  let pid = profile_id.to_string();
+  tauri::async_runtime::spawn(async move {
+    scheduler.queue_profile_sync(pid).await;
+  });
+}
+
 #[tauri::command]
-async fn import_cookies_from_file(
+async fn analyze_pasted_cookies(
   app_handle: tauri::AppHandle,
   profile_id: String,
   content: String,
-) -> Result<cookie_manager::CookieImportResult, String> {
-  let result =
-    cookie_manager::CookieManager::import_cookies(&app_handle, &profile_id, &content).await?;
+  site: Option<String>,
+) -> Result<cookie_manager::CookiePasteAnalysis, String> {
+  cookie_manager::CookieManager::analyze_paste(&app_handle, &profile_id, &content, site.as_deref())
+    .await
+}
 
-  // Trigger sync for the profile if sync is enabled
-  if let Some(scheduler) = crate::sync::get_global_scheduler() {
-    let profile_manager = profile::manager::ProfileManager::instance();
-    if let Ok(profiles) = profile_manager.list_profiles() {
-      if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == profile_id) {
-        if profile.is_sync_enabled() {
-          let pid = profile_id.clone();
-          tauri::async_runtime::spawn(async move {
-            scheduler.queue_profile_sync(pid).await;
-          });
-        }
-      }
-    }
-  }
+#[tauri::command]
+async fn import_pasted_cookies(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  content: String,
+  site: Option<String>,
+  mode: cookie_manager::CookieWriteMode,
+  include_expired: bool,
+) -> Result<cookie_manager::CookiePasteImportResult, String> {
+  let result = cookie_manager::CookieManager::import_paste(
+    &app_handle,
+    &profile_id,
+    &content,
+    site.as_deref(),
+    mode,
+    include_expired,
+  )
+  .await?;
+
+  queue_profile_cookie_sync(&profile_id);
 
   Ok(result)
 }
@@ -2821,7 +2850,8 @@ pub fn run_with_builder(
       read_profile_cookies,
       get_profile_cookie_stats,
       copy_profile_cookies,
-      import_cookies_from_file,
+      analyze_pasted_cookies,
+      import_pasted_cookies,
       export_profile_cookies,
       check_wayfern_terms_accepted,
       check_wayfern_downloaded,
