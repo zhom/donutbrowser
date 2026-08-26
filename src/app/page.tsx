@@ -76,6 +76,11 @@ import {
   setOnboardingActive,
 } from "@/lib/onboarding-signal";
 import {
+  matchesProfile,
+  type ProfileSearchContext,
+  parseProfileSearch,
+} from "@/lib/profile-search";
+import {
   matchesGroupDigit,
   matchesShortcut,
   SHORTCUTS,
@@ -91,6 +96,7 @@ import {
 import type {
   BrowserProfile,
   ConsistencyResult,
+  ExtensionGroup,
   PreLaunchChecks,
   SyncSettings,
   WayfernConfig,
@@ -265,6 +271,36 @@ export default function Home() {
   } = useProxyEvents();
 
   const { vpnConfigs } = useVpnEvents();
+
+  // Extension groups feed both the table's Ext column and the search filter's
+  // `ext:` lookup, so the list is loaded here and handed down rather than
+  // fetched twice. Refreshed when the backend emits 'extensions-changed'
+  // (group rename/create/delete).
+  const [extensionGroups, setExtensionGroups] = useState<ExtensionGroup[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    let unlisten: (() => void) | undefined;
+    const load = async () => {
+      try {
+        const data = await invoke<ExtensionGroup[]>("list_extension_groups");
+        if (mounted) setExtensionGroups(data);
+      } catch (e) {
+        console.error("Failed to load extension groups:", e);
+      }
+    };
+    void load();
+    void listen("extensions-changed", () => {
+      void load();
+    }).then((u) => {
+      if (mounted) unlisten = u;
+      else u();
+    });
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
+  }, []);
 
   // Synchronizer sessions
   const { getProfileSyncInfo } = useSyncSessions();
@@ -1921,41 +1957,39 @@ export default function Home() {
     void checkSelfHostedSync();
   }, [checkSelfHostedSync]);
 
-  // Filter data by selected group and search query
+  // A profile stores ids, and the query asks about names, so the matcher is
+  // handed the resolution up front. Built off the entity lists rather than off
+  // `profiles`, because the alternative — a .find() per row per term — is
+  // O(profiles x entities) on every single keystroke.
+  const searchContext = useMemo<ProfileSearchContext>(
+    () => ({
+      groupNames: new Map(groupsData.map((g) => [g.id, g.name])),
+      proxyNames: new Map(storedProxies.map((p) => [p.id, p.name])),
+      vpnNames: new Map(vpnConfigs.map((v) => [v.id, v.name])),
+      extensionGroupNames: new Map(extensionGroups.map((e) => [e.id, e.name])),
+      runningProfiles,
+    }),
+    [groupsData, storedProxies, vpnConfigs, extensionGroups, runningProfiles],
+  );
+
+  // Filter data by selected group and search query. The two are independent
+  // controls and both apply: the rail narrows to a group, the query narrows
+  // within whatever the rail left.
   const filteredProfiles = useMemo(() => {
-    let filtered = profiles;
+    // "__all__" is a virtual filter that shows every profile (including
+    // ungrouped ones). Any other value is a real group id; ungrouped profiles
+    // only show through "All".
+    const inGroup =
+      !selectedGroupId || selectedGroupId === "__all__"
+        ? profiles
+        : profiles.filter((profile) => profile.group_id === selectedGroupId);
 
-    // Filter by group. "__all__" is a virtual filter that shows every
-    // profile (including ungrouped ones). Any other value is a real
-    // group id; ungrouped profiles only show through "All".
-    if (!selectedGroupId || selectedGroupId === "__all__") {
-      filtered = profiles;
-    } else {
-      filtered = profiles.filter(
-        (profile) => profile.group_id === selectedGroupId,
-      );
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter((profile) => {
-        // Search in profile name
-        if (profile.name.toLowerCase().includes(query)) return true;
-
-        // Search in note
-        if (profile.note?.toLowerCase().includes(query)) return true;
-
-        // Search in tags
-        if (profile.tags?.some((tag) => tag.toLowerCase().includes(query)))
-          return true;
-
-        return false;
-      });
-    }
-
-    return filtered;
-  }, [profiles, selectedGroupId, searchQuery]);
+    const parsed = parseProfileSearch(searchQuery);
+    if (parsed.isEmpty) return inGroup;
+    return inGroup.filter((profile) =>
+      matchesProfile(profile, parsed, searchContext),
+    );
+  }, [profiles, selectedGroupId, searchQuery, searchContext]);
 
   // Update loading states
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
@@ -2015,6 +2049,7 @@ export default function Home() {
                 onCopyCookiesToProfile={handleCopyCookiesToProfile}
                 onOpenCookieManagement={handleOpenCookieManagement}
                 runningProfiles={runningProfiles}
+                extensionGroups={extensionGroups}
                 isUpdating={isUpdating}
                 onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
                 onAssignProfilesToGroup={handleAssignProfilesToGroup}

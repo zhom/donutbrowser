@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "Faire défiler les groupes vers la gauche",
     "scrollGroupsRight": "Faire défiler les groupes vers la droite"
   },
+  "search": {
+    "helpLabel": "Syntaxe de recherche",
+    "helpTitle": "Syntaxe de recherche",
+    "helpIntro": "Tapez des mots pour chercher dans les noms, les notes, les étiquettes et les ids. Ajoutez des champs pour affiner.",
+    "fieldsTitle": "Champs",
+    "operatorsTitle": "Opérateurs",
+    "examplesTitle": "Exemples",
+    "fields": {
+      "name": "Nom du profil",
+      "tag": "Étiquette",
+      "note": "Note",
+      "id": "Id du profil, à partir du début",
+      "group": "Nom du groupe",
+      "proxy": "Nom du proxy",
+      "vpn": "Nom du VPN",
+      "ext": "Nom du groupe d'extensions",
+      "dns": "Liste de blocage DNS",
+      "os": "Système d'exploitation",
+      "browser": "Navigateur",
+      "status": "En cours d'exécution ou non",
+      "sync": "Mode de synchronisation",
+      "email": "E-mail du propriétaire",
+      "version": "Version du navigateur",
+      "locked": "Protégé par mot de passe",
+      "ephemeral": "Profil éphémère",
+      "created": "Date de création",
+      "launched": "Date du dernier lancement"
+    },
+    "operators": {
+      "negate": "Exclut ce qui correspond",
+      "quote": "Garde ensemble une valeur contenant des espaces",
+      "or": "Correspond à l'un ou l'autre terme",
+      "comma": "Raccourci pour l'une ou l'autre valeur",
+      "exact": "Correspond à la valeur entière, pas à une partie",
+      "none": "Rien de défini ici ; utilisez any pour l'inverse",
+      "compare": "Compare les dates et les versions ; 7d, 3w et 6m comptent à rebours depuis maintenant"
+    },
+    "examples": {
+      "a": "Profils en cours d'exécution dans un groupe",
+      "b": "Profils sans étiquette qui ont un proxy",
+      "c": "Non lancés depuis plus de 30 jours, en ignorant les archivés"
+    }
+  },
   "profiles": {
     "title": "Profils",
     "empty": "Aucun profil pour l'instant",
@@ -261,7 +304,8 @@
       "emptyImport": "Importer des profils",
       "emptyFilteredTitle": "Aucun profil trouvé",
       "emptyFilteredHint": "Aucun profil ne correspond à ce groupe ou à cette recherche. Essayez un autre filtre ou créez-en un.",
-      "bot": "Bot"
+      "bot": "Bot",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "Lancer",

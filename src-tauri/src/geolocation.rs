@@ -112,7 +112,7 @@ impl LocaleSelector {
       match reader.read_event_into(&mut buf) {
         Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
           let name = e.name();
-          let name_str = std::str::from_utf8(name.as_ref()).unwrap_or("");
+          let name_str = name.as_ref();
 
           if name_str == "territory" {
             if let Some(code) = current_territory.take() {
@@ -122,8 +122,8 @@ impl LocaleSelector {
             }
 
             for attr in e.attributes().flatten() {
-              if attr.key.as_ref() == b"type" {
-                current_territory = Some(String::from_utf8_lossy(&attr.value).to_uppercase());
+              if attr.key.as_ref() == "type" {
+                current_territory = Some(attr.value.to_uppercase());
               }
             }
           } else if name_str == "languagePopulation" && current_territory.is_some() {
@@ -132,11 +132,11 @@ impl LocaleSelector {
 
             for attr in e.attributes().flatten() {
               match attr.key.as_ref() {
-                b"type" => {
-                  lang_type = Some(String::from_utf8_lossy(&attr.value).to_string());
+                "type" => {
+                  lang_type = Some(attr.value.to_string());
                 }
-                b"populationPercent" => {
-                  pop_percent = String::from_utf8_lossy(&attr.value).parse().unwrap_or(0.0);
+                "populationPercent" => {
+                  pop_percent = attr.value.parse().unwrap_or(0.0);
                 }
                 _ => {}
               }
@@ -152,7 +152,7 @@ impl LocaleSelector {
         }
         Ok(Event::End(ref e)) => {
           let name_ref = e.name();
-          let name = std::str::from_utf8(name_ref.as_ref()).unwrap_or("");
+          let name = name_ref.as_ref();
           if name == "territory" {
             if let Some(code) = current_territory.take() {
               if !current_languages.is_empty() {

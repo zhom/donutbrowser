@@ -627,9 +627,9 @@ export function GroupManagementDialog({
                   className="w-full table-fixed"
                   containerClassName="overflow-visible"
                 >
-                  <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-0">
                     {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
+                      <TableRow key={headerGroup.id} className="border-0!">
                         {headerGroup.headers.map((header) => (
                           <TableHead
                             key={header.id}
@@ -659,6 +659,7 @@ export function GroupManagementDialog({
                       <TableRow
                         key={row.id}
                         data-state={row.getIsSelected() && "selected"}
+                        className="border-0! hover:bg-muted"
                       >
                         {row.getVisibleCells().map((cell) => (
                           <TableCell

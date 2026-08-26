@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "向左滚动分组",
     "scrollGroupsRight": "向右滚动分组"
   },
+  "search": {
+    "helpLabel": "搜索语法",
+    "helpTitle": "搜索语法",
+    "helpIntro": "输入文字可搜索名称、备注、标签和 ID。加上字段可进一步筛选。",
+    "fieldsTitle": "字段",
+    "operatorsTitle": "运算符",
+    "examplesTitle": "示例",
+    "fields": {
+      "name": "配置文件名称",
+      "tag": "标签",
+      "note": "备注",
+      "id": "配置文件 ID，从开头匹配",
+      "group": "分组名称",
+      "proxy": "代理名称",
+      "vpn": "VPN 名称",
+      "ext": "扩展分组名称",
+      "dns": "DNS 拦截列表",
+      "os": "操作系统",
+      "browser": "浏览器",
+      "status": "是否正在运行",
+      "sync": "同步模式",
+      "email": "所有者邮箱",
+      "version": "浏览器版本",
+      "locked": "密码保护",
+      "ephemeral": "临时配置文件",
+      "created": "创建日期",
+      "launched": "上次启动日期"
+    },
+    "operators": {
+      "negate": "排除匹配的结果",
+      "quote": "把带空格的值作为整体",
+      "or": "匹配其中任一条件",
+      "comma": "匹配任一值的简写",
+      "exact": "匹配整个值，而不是其中一部分",
+      "none": "此处未设置任何内容；相反的情况用 any",
+      "compare": "比较日期和版本；7d、3w 和 6m 从当前时间往回算"
+    },
+    "examples": {
+      "a": "某个分组中正在运行的配置文件",
+      "b": "没有标签但有代理的配置文件",
+      "c": "超过 30 天未启动，且排除已归档的"
+    }
+  },
   "profiles": {
     "title": "配置文件",
     "empty": "暂无配置文件",
@@ -261,7 +304,8 @@
       "emptyImport": "导入配置文件",
       "emptyFilteredTitle": "未找到配置文件",
       "emptyFilteredHint": "没有符合此分组或搜索的配置文件。请尝试其他筛选条件或新建一个。",
-      "bot": "机器人"
+      "bot": "机器人",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "启动",

@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "Grupları sola kaydır",
     "scrollGroupsRight": "Grupları sağa kaydır"
   },
+  "search": {
+    "helpLabel": "Arama söz dizimi",
+    "helpTitle": "Arama söz dizimi",
+    "helpIntro": "Adlarda, notlarda, etiketlerde ve kimliklerde aramak için kelime yazın. Daraltmak için alan ekleyin.",
+    "fieldsTitle": "Alanlar",
+    "operatorsTitle": "Operatörler",
+    "examplesTitle": "Örnekler",
+    "fields": {
+      "name": "Profil adı",
+      "tag": "Etiket",
+      "note": "Not",
+      "id": "Profil kimliği, baştan eşleşir",
+      "group": "Grup adı",
+      "proxy": "Proxy adı",
+      "vpn": "VPN adı",
+      "ext": "Uzantı grubu adı",
+      "dns": "DNS engelleme listesi",
+      "os": "İşletim sistemi",
+      "browser": "Tarayıcı",
+      "status": "Çalışıyor mu",
+      "sync": "Senkronizasyon modu",
+      "email": "Sahibinin e-postası",
+      "version": "Tarayıcı sürümü",
+      "locked": "Parola korumalı",
+      "ephemeral": "Geçici profil",
+      "created": "Oluşturulma tarihi",
+      "launched": "Son başlatma tarihi"
+    },
+    "operators": {
+      "negate": "Eşleşenleri hariç tutar",
+      "quote": "Boşluk içeren bir değeri bir arada tutar",
+      "or": "İki terimden herhangi biriyle eşleşir",
+      "comma": "Değerlerden herhangi biri için kısayol",
+      "exact": "Bir parçasıyla değil, değerin tamamıyla eşleşir",
+      "none": "Burada bir şey ayarlı değil; tersi için any kullanın",
+      "compare": "Tarihleri ve sürümleri karşılaştırır; 7d, 3w ve 6m şu andan geriye sayar"
+    },
+    "examples": {
+      "a": "Bir gruptaki çalışan profiller",
+      "b": "Etiketi olmayan ama proxy'si olan profiller",
+      "c": "30 günden uzun süredir başlatılmayanlar, arşivlenenler hariç"
+    }
+  },
   "profiles": {
     "title": "Profiller",
     "empty": "Henüz profil yok",
@@ -261,7 +304,8 @@
       "emptyImport": "Profilleri içe aktar",
       "emptyFilteredTitle": "Profil bulunamadı",
       "emptyFilteredHint": "Bu grup veya aramayla eşleşen profil yok. Başka bir filtre deneyin veya yeni bir profil oluşturun.",
-      "bot": "Bot"
+      "bot": "Bot",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "Başlat",

@@ -4,13 +4,25 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
-import { LuChevronLeft, LuChevronRight, LuSearch, LuX } from "react-icons/lu";
+import {
+  LuChevronLeft,
+  LuChevronRight,
+  LuCircleHelp,
+  LuSearch,
+  LuX,
+} from "react-icons/lu";
 import { useWindowDecorations } from "@/hooks/use-window-decorations";
 import { getCurrentOS } from "@/lib/browser-utils";
+import {
+  PROFILE_SEARCH_EXAMPLES,
+  PROFILE_SEARCH_FIELDS,
+  PROFILE_SEARCH_OPERATORS,
+} from "@/lib/profile-search";
 import { cn } from "@/lib/utils";
 import type { GroupWithCount } from "@/types";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const HOLD_MS = 150;
@@ -41,6 +53,103 @@ interface Props {
   onGroupSelect: (groupId: string) => void;
   pageTitle?: string;
 }
+
+/**
+ * What the search box understands. The vocabulary is data owned by the parser
+ * (`src/lib/profile-search.ts`), so the tokens listed here cannot drift from the
+ * ones a query is actually matched against; only the prose beside them is
+ * translated, because the tokens themselves have to mean the same thing to
+ * everybody who is handed a query.
+ */
+const SearchSyntaxHelp = () => {
+  const { t } = useTranslation();
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={t("search.helpLabel")}
+          className="grid size-6 shrink-0 place-items-center rounded-sm text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
+        >
+          <LuCircleHelp className="size-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-96 max-w-[calc(100vw-1.5rem)] p-0"
+      >
+        <div className="space-y-3 p-3 text-xs">
+          <div>
+            <p className="font-medium text-foreground">
+              {t("search.helpTitle")}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              {t("search.helpIntro")}
+            </p>
+          </div>
+
+          <div>
+            <p className="font-medium text-foreground">
+              {t("search.fieldsTitle")}
+            </p>
+            <div className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+              {PROFILE_SEARCH_FIELDS.map((field) => (
+                <div key={field.key} className="contents">
+                  <code className="font-mono text-[11px] text-foreground">
+                    {field.key}:
+                  </code>
+                  <span className="text-muted-foreground">
+                    {t(field.labelKey)}
+                    {field.values ? (
+                      <span className="ml-1.5 font-mono text-[10px] text-muted-foreground/70">
+                        {field.values.join(" ")}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="font-medium text-foreground">
+              {t("search.operatorsTitle")}
+            </p>
+            <div className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+              {PROFILE_SEARCH_OPERATORS.map((operator) => (
+                <div key={operator.labelKey} className="contents">
+                  <code className="font-mono text-[11px] text-foreground">
+                    {operator.token}
+                  </code>
+                  <span className="text-muted-foreground">
+                    {t(operator.labelKey)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="font-medium text-foreground">
+              {t("search.examplesTitle")}
+            </p>
+            <div className="mt-1.5 space-y-1.5">
+              {PROFILE_SEARCH_EXAMPLES.map((example) => (
+                <div key={example.labelKey}>
+                  <code className="font-mono text-[11px] text-foreground">
+                    {example.query}
+                  </code>
+                  <p className="text-muted-foreground">{t(example.labelKey)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 const HomeHeader = ({
   onCreateProfileDialogOpen,
@@ -353,6 +462,8 @@ const HomeHeader = ({
           ) : null}
         </div>
       )}
+
+      {showProfileToolbar && <SearchSyntaxHelp />}
 
       {showProfileToolbar && (
         <Tooltip>

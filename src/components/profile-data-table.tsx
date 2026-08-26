@@ -70,6 +70,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { CopyToClipboard } from "@/components/ui/copy-to-clipboard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -326,6 +327,13 @@ const BOT_LABEL_WIDTH = 880;
 
 /** Below this the bot column leaves entirely, like the other low-priority ones. */
 const BOT_COLUMN_MIN_WIDTH = 400;
+
+/**
+ * Above this the table has room for the profile id. Below it the name column,
+ * which takes whatever the fixed columns leave over, needs those 100px more
+ * than a value that is already one click away in the info dialog.
+ */
+const PROFILE_ID_MIN_WIDTH = 1152;
 
 /** Bulk enrolments of this size or larger are confirmed, as run and stop are. */
 const BULK_ENROL_CONFIRM_THRESHOLD = 10;
@@ -590,6 +598,41 @@ function DnsCell({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * The first eight characters of the profile's UUID: the whole first group of a
+ * v4, which is also the prefix `id:` searches on, so what the row shows can be
+ * pasted straight back into the search box. The clipboard gets the FULL id —
+ * the only thing it is for is the REST and MCP APIs, which take nothing less.
+ */
+function ProfileIdCell({
+  profile,
+  meta,
+}: {
+  profile: BrowserProfile;
+  meta: TableMeta;
+}) {
+  return (
+    <div className="flex h-7 w-full items-center gap-1">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex-1 truncate font-mono text-[11px] text-muted-foreground select-text">
+            {profile.id.slice(0, 8)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-[11px]">
+          {profile.id}
+        </TooltipContent>
+      </Tooltip>
+      <CopyToClipboard
+        text={profile.id}
+        variant="ghost"
+        className="size-6 text-muted-foreground"
+        successMessage={meta.t("toasts.success.copied")}
+      />
+    </div>
   );
 }
 
@@ -1403,6 +1446,11 @@ interface ProfilesDataTableProps {
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onOpenCookieManagement?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
+  /**
+   * Loaded by the page rather than here, because the search filter resolves
+   * `ext:` to a group name and needs the same list. One invoke, one listener.
+   */
+  extensionGroups: ExtensionGroup[];
   isUpdating: (browser: string) => boolean;
   onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
   onAssignProfilesToGroup: (profileIds: string[]) => void;
@@ -1461,6 +1509,7 @@ export function ProfilesDataTable({
   onCopyCookiesToProfile,
   onOpenCookieManagement,
   runningProfiles,
+  extensionGroups,
   isUpdating,
   onAssignProfilesToGroup,
   onAssignProfilesToProxy,
@@ -1675,35 +1724,6 @@ export function ProfilesDataTable({
   const [countries, setCountries] = React.useState<LocationItem[]>([]);
   const [countriesLoaded, setCountriesLoaded] = React.useState(false);
 
-  // Extension groups for the Ext column lookup. Refreshed when the
-  // backend emits 'extensions-changed' (group rename/create/delete).
-  const [extensionGroups, setExtensionGroups] = React.useState<
-    ExtensionGroup[]
-  >([]);
-
-  React.useEffect(() => {
-    let mounted = true;
-    let unlisten: (() => void) | undefined;
-    const load = async () => {
-      try {
-        const data = await invoke<ExtensionGroup[]>("list_extension_groups");
-        if (mounted) setExtensionGroups(data);
-      } catch (e) {
-        console.error("Failed to load extension groups:", e);
-      }
-    };
-    void load();
-    void listen("extensions-changed", () => {
-      void load();
-    }).then((u) => {
-      if (mounted) unlisten = u;
-      else u();
-    });
-    return () => {
-      mounted = false;
-      unlisten?.();
-    };
-  }, []);
   const canCreateLocationProxy = false;
 
   const loadCountries = React.useCallback(async () => {
@@ -3149,6 +3169,19 @@ export function ProfilesDataTable({
         },
       },
       {
+        id: "profileId",
+        size: 100,
+        enableSorting: false,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profiles.table.profileId");
+        },
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          return <ProfileIdCell profile={row.original} meta={meta} />;
+        },
+      },
+      {
         id: "tags",
         size: 100,
         header: ({ table }) => {
@@ -3562,11 +3595,16 @@ export function ProfilesDataTable({
   // Low-priority columns leave the table as the container narrows (most
   // expendable first); their data stays reachable via the profile info
   // dialog. Visibility (not CSS hiding) so table-fixed reclaims the width.
-  // `bot` starts hidden and is switched on by the resize effect below. An
-  // unentitled account must never see a paid column, not even for the frame
-  // before the observer's first measurement lands.
+  // `bot` and `profileId` start hidden and are switched on by the resize effect
+  // below. An unentitled account must never see a paid column, not even for the
+  // frame before the observer's first measurement lands, and the id must not
+  // flash into a narrow table for that same frame.
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({ created_at: false, bot: false });
+    React.useState<VisibilityState>({
+      created_at: false,
+      bot: false,
+      profileId: false,
+    });
 
   const table = useReactTable({
     data: profiles,
@@ -3630,6 +3668,8 @@ export function ProfilesDataTable({
         const next: VisibilityState = {
           // Always hidden — sort-only column.
           created_at: false,
+          // First to leave: pure metadata, and the info dialog still has it.
+          profileId: w >= PROFILE_ID_MIN_WIDTH,
           dns: w >= 768,
           ext: w >= 672,
           note: w >= 576,

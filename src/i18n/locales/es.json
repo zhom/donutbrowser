@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "Desplazar grupos a la izquierda",
     "scrollGroupsRight": "Desplazar grupos a la derecha"
   },
+  "search": {
+    "helpLabel": "Sintaxis de búsqueda",
+    "helpTitle": "Sintaxis de búsqueda",
+    "helpIntro": "Escribe palabras para buscar en nombres, notas, etiquetas e ids. Añade campos para acotar más.",
+    "fieldsTitle": "Campos",
+    "operatorsTitle": "Operadores",
+    "examplesTitle": "Ejemplos",
+    "fields": {
+      "name": "Nombre del perfil",
+      "tag": "Etiqueta",
+      "note": "Nota",
+      "id": "Id del perfil, desde el principio",
+      "group": "Nombre del grupo",
+      "proxy": "Nombre del proxy",
+      "vpn": "Nombre de la VPN",
+      "ext": "Nombre del grupo de extensiones",
+      "dns": "Lista de bloqueo DNS",
+      "os": "Sistema operativo",
+      "browser": "Navegador",
+      "status": "En ejecución o no",
+      "sync": "Modo de sincronización",
+      "email": "Correo del propietario",
+      "version": "Versión del navegador",
+      "locked": "Protegido con contraseña",
+      "ephemeral": "Perfil efímero",
+      "created": "Fecha de creación",
+      "launched": "Fecha del último inicio"
+    },
+    "operators": {
+      "negate": "Excluye lo que coincide",
+      "quote": "Mantiene unido un valor con espacios",
+      "or": "Coincide con cualquiera de los dos términos",
+      "comma": "Atajo para cualquiera de los valores",
+      "exact": "Coincide con el valor completo, no con una parte",
+      "none": "Aquí no hay nada definido; usa any para lo contrario",
+      "compare": "Compara fechas y versiones; 7d, 3w y 6m cuentan hacia atrás desde ahora"
+    },
+    "examples": {
+      "a": "Perfiles en ejecución de un grupo",
+      "b": "Perfiles sin etiquetas que tienen proxy",
+      "c": "Sin iniciar desde hace más de 30 días, ignorando los archivados"
+    }
+  },
   "profiles": {
     "title": "Perfiles",
     "empty": "Sin perfiles aún",
@@ -261,7 +304,8 @@
       "emptyImport": "Importar perfiles",
       "emptyFilteredTitle": "No se encontraron perfiles",
       "emptyFilteredHint": "Ningún perfil coincide con este grupo o búsqueda. Prueba otro filtro o crea uno nuevo.",
-      "bot": "Bot"
+      "bot": "Bot",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "Iniciar",

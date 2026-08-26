@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "그룹 왼쪽으로 스크롤",
     "scrollGroupsRight": "그룹 오른쪽으로 스크롤"
   },
+  "search": {
+    "helpLabel": "검색 구문",
+    "helpTitle": "검색 구문",
+    "helpIntro": "단어를 입력하면 이름, 메모, 태그, ID를 검색합니다. 필드를 추가하면 더 좁힐 수 있습니다.",
+    "fieldsTitle": "필드",
+    "operatorsTitle": "연산자",
+    "examplesTitle": "예시",
+    "fields": {
+      "name": "프로필 이름",
+      "tag": "태그",
+      "note": "메모",
+      "id": "프로필 ID, 앞부분부터 일치",
+      "group": "그룹 이름",
+      "proxy": "프록시 이름",
+      "vpn": "VPN 이름",
+      "ext": "확장 프로그램 그룹 이름",
+      "dns": "DNS 차단 목록",
+      "os": "운영 체제",
+      "browser": "브라우저",
+      "status": "실행 중 여부",
+      "sync": "동기화 모드",
+      "email": "소유자 이메일",
+      "version": "브라우저 버전",
+      "locked": "비밀번호 보호",
+      "ephemeral": "임시 프로필",
+      "created": "생성 날짜",
+      "launched": "마지막 실행 날짜"
+    },
+    "operators": {
+      "negate": "일치하는 항목을 제외합니다",
+      "quote": "공백이 있는 값을 하나로 묶습니다",
+      "or": "둘 중 하나와 일치합니다",
+      "comma": "둘 중 하나의 값을 뜻하는 축약형",
+      "exact": "일부가 아니라 값 전체와 일치합니다",
+      "none": "여기에는 아무것도 설정되지 않았습니다. 반대는 any를 사용합니다",
+      "compare": "날짜와 버전을 비교합니다. 7d, 3w, 6m은 현재부터 거슬러 셉니다"
+    },
+    "examples": {
+      "a": "한 그룹에서 실행 중인 프로필",
+      "b": "태그가 없고 프록시가 있는 프로필",
+      "c": "30일 넘게 실행하지 않은 프로필, 보관된 것은 제외"
+    }
+  },
   "profiles": {
     "title": "프로필",
     "empty": "아직 프로필이 없습니다",
@@ -261,7 +304,8 @@
       "emptyImport": "프로필 가져오기",
       "emptyFilteredTitle": "프로필을 찾을 수 없습니다",
       "emptyFilteredHint": "이 그룹 또는 검색과 일치하는 프로필이 없습니다. 다른 필터를 사용하거나 새로 만드세요.",
-      "bot": "봇"
+      "bot": "봇",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "실행",

@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "Scroll groups left",
     "scrollGroupsRight": "Scroll groups right"
   },
+  "search": {
+    "helpLabel": "Search syntax",
+    "helpTitle": "Search syntax",
+    "helpIntro": "Type words to search names, notes, tags and ids. Add fields to narrow it down.",
+    "fieldsTitle": "Fields",
+    "operatorsTitle": "Operators",
+    "examplesTitle": "Examples",
+    "fields": {
+      "name": "Profile name",
+      "tag": "Tag",
+      "note": "Note",
+      "id": "Profile id, matched from the start",
+      "group": "Group name",
+      "proxy": "Proxy name",
+      "vpn": "VPN name",
+      "ext": "Extension group name",
+      "dns": "DNS blocklist",
+      "os": "Operating system",
+      "browser": "Browser",
+      "status": "Running or not",
+      "sync": "Sync mode",
+      "email": "Owner email",
+      "version": "Browser version",
+      "locked": "Password protected",
+      "ephemeral": "Ephemeral profile",
+      "created": "Creation date",
+      "launched": "Last launch date"
+    },
+    "operators": {
+      "negate": "Excludes what matches",
+      "quote": "Holds a value with spaces together",
+      "or": "Matches either term",
+      "comma": "Shorthand for either value",
+      "exact": "Matches the whole value, not a part of it",
+      "none": "Nothing set here; use any for the opposite",
+      "compare": "Compares dates and versions; 7d, 3w and 6m count back from now"
+    },
+    "examples": {
+      "a": "Running profiles in one group",
+      "b": "Untagged profiles that have a proxy",
+      "c": "Not launched for over 30 days, ignoring archived ones"
+    }
+  },
   "profiles": {
     "title": "Profiles",
     "empty": "No profiles yet",
@@ -261,7 +304,8 @@
       "emptyImport": "Import profiles",
       "emptyFilteredTitle": "No profiles found",
       "emptyFilteredHint": "No profiles match this group or search. Try another filter or create a new one.",
-      "bot": "Bot"
+      "bot": "Bot",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "Launch",

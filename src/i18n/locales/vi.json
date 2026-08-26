@@ -228,6 +228,49 @@
     "scrollGroupsLeft": "Cuộn nhóm sang trái",
     "scrollGroupsRight": "Cuộn nhóm sang phải"
   },
+  "search": {
+    "helpLabel": "Cú pháp tìm kiếm",
+    "helpTitle": "Cú pháp tìm kiếm",
+    "helpIntro": "Nhập từ khóa để tìm trong tên, ghi chú, thẻ và id. Thêm trường để thu hẹp kết quả.",
+    "fieldsTitle": "Trường",
+    "operatorsTitle": "Toán tử",
+    "examplesTitle": "Ví dụ",
+    "fields": {
+      "name": "Tên hồ sơ",
+      "tag": "Thẻ",
+      "note": "Ghi chú",
+      "id": "Id hồ sơ, khớp từ đầu",
+      "group": "Tên nhóm",
+      "proxy": "Tên proxy",
+      "vpn": "Tên VPN",
+      "ext": "Tên nhóm tiện ích",
+      "dns": "Danh sách chặn DNS",
+      "os": "Hệ điều hành",
+      "browser": "Trình duyệt",
+      "status": "Đang chạy hay không",
+      "sync": "Chế độ đồng bộ",
+      "email": "Email chủ sở hữu",
+      "version": "Phiên bản trình duyệt",
+      "locked": "Được bảo vệ bằng mật khẩu",
+      "ephemeral": "Hồ sơ tạm thời",
+      "created": "Ngày tạo",
+      "launched": "Ngày khởi chạy gần nhất"
+    },
+    "operators": {
+      "negate": "Loại trừ những gì khớp",
+      "quote": "Giữ nguyên giá trị có dấu cách",
+      "or": "Khớp với một trong hai điều kiện",
+      "comma": "Cách viết tắt cho một trong các giá trị",
+      "exact": "Khớp toàn bộ giá trị, không phải một phần",
+      "none": "Chưa đặt gì ở đây; dùng any cho trường hợp ngược lại",
+      "compare": "So sánh ngày và phiên bản; 7d, 3w và 6m tính lùi từ hiện tại"
+    },
+    "examples": {
+      "a": "Hồ sơ đang chạy trong một nhóm",
+      "b": "Hồ sơ không có thẻ nhưng có proxy",
+      "c": "Không khởi chạy hơn 30 ngày, bỏ qua hồ sơ đã lưu trữ"
+    }
+  },
   "profiles": {
     "title": "Hồ sơ",
     "empty": "Chưa có hồ sơ nào",
@@ -261,7 +304,8 @@
       "emptyImport": "Nhập hồ sơ",
       "emptyFilteredTitle": "Không tìm thấy hồ sơ",
       "emptyFilteredHint": "Không có hồ sơ nào khớp với nhóm hoặc tìm kiếm này. Hãy thử bộ lọc khác hoặc tạo mới.",
-      "bot": "Bot"
+      "bot": "Bot",
+      "profileId": "ID"
     },
     "actions": {
       "launch": "Khởi chạy",
