@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::browser::ProxySettings;
@@ -1618,54 +1617,11 @@ pub async fn cloud_get_proxy_usage() -> Result<Option<CloudProxyUsage>, String> 
 
 #[tauri::command]
 pub async fn restart_sync_service(app_handle: tauri::AppHandle) -> Result<(), String> {
-  // Stop existing scheduler
-  if let Some(scheduler) = sync::get_global_scheduler() {
-    scheduler.stop();
-  }
-
-  // Restart sync pipeline
-  let app_handle_sync = app_handle.clone();
+  // Rebuilding the pipeline reaches the network, so do it off the command and
+  // let the caller's dialog close. `start_pipeline` retires the previous
+  // scheduler and the previous subscription itself.
   tauri::async_runtime::spawn(async move {
-    let mut subscription_manager = sync::SubscriptionManager::new();
-    let work_rx = subscription_manager.take_work_receiver();
-
-    if let Err(e) = subscription_manager.start(app_handle_sync.clone()).await {
-      log::warn!("Failed to start sync subscription: {e}");
-      return;
-    }
-
-    if let Some(work_rx) = work_rx {
-      let scheduler = Arc::new(sync::SyncScheduler::new());
-      sync::set_global_scheduler(scheduler.clone());
-
-      scheduler.sync_all_enabled_profiles(&app_handle_sync).await;
-
-      match sync::SyncEngine::create_from_settings(&app_handle_sync).await {
-        Ok(engine) => {
-          if let Err(e) = engine
-            .check_for_missing_synced_profiles(&app_handle_sync)
-            .await
-          {
-            log::warn!("Failed to check for missing profiles: {}", e);
-          }
-          if let Err(e) = engine
-            .check_for_missing_synced_entities(&app_handle_sync)
-            .await
-          {
-            log::warn!("Failed to check for missing entities: {}", e);
-          }
-        }
-        Err(e) => {
-          log::warn!("Sync not configured, skipping missing profile check: {}", e);
-        }
-      }
-
-      scheduler
-        .clone()
-        .start(app_handle_sync.clone(), work_rx)
-        .await;
-      log::info!("Sync scheduler restarted");
-    }
+    sync::start_pipeline(app_handle).await;
   });
 
   Ok(())

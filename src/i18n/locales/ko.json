@@ -134,7 +134,11 @@
       "title": "기본 브라우저",
       "setAsDefault": "기본 브라우저로 설정",
       "alreadyDefault": "이미 기본 브라우저입니다",
-      "description": "기본 브라우저로 설정하면 Donut Browser가 웹 링크를 처리하고 사용할 프로필을 선택할 수 있습니다."
+      "description": "기본 브라우저로 설정하면 Donut Browser가 웹 링크를 처리하고 사용할 프로필을 선택할 수 있습니다.",
+      "setSuccess": "이제 Donut Browser가 기본 브라우저입니다",
+      "setFailed": "기본 브라우저를 설정하지 못했습니다",
+      "finishInSystemSettings": "Windows 설정에서 완료하세요",
+      "finishInSystemSettingsDescription": "Donut Browser가 등록되었습니다. Windows 설정이 열려 있습니다. '웹 브라우저'에서 Donut Browser를 선택하면 완료됩니다."
     },
     "permissions": {
       "title": "시스템 권한",

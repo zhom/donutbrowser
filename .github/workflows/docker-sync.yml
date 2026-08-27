@@ -31,7 +31,50 @@ env:
   IMAGE_NAME: donutbrowser/donut-sync
 
 jobs:
+  # donut-sync's own end-to-end suite covers which host it signs into presigned
+  # URLs. That is the whole of the self-hosted sync failure in issue 534: sign
+  # against an address only the server can reach and every client transfer dies
+  # at connect while /health and /readyz stay green. The suite existed and was
+  # never run by anything, so the guard was decorative. Run it here, before the
+  # image ships, because an image with broken presigning is the thing that
+  # reaches users.
+  #
+  # Ubuntu only, and separate from the Rust and Node matrices, because it needs
+  # Docker for MinIO and a POSIX env-var prefix in the package script.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Set up pnpm package manager
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 #v6.0.10
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 #v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Publishes MinIO on 8987, which is the port test/test-env.ts pins.
+      - name: Start test storage
+        run: docker compose -f donut-sync/docker-compose.yml up -d --wait
+
+      - name: Run donut-sync end-to-end tests
+        working-directory: ./donut-sync
+        run: pnpm test:e2e
+
+      - name: Stop test storage
+        if: always()
+        run: docker compose -f donut-sync/docker-compose.yml down -v
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

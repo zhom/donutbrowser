@@ -134,7 +134,11 @@
       "title": "デフォルトブラウザ",
       "setAsDefault": "デフォルトブラウザに設定",
       "alreadyDefault": "既にデフォルトブラウザです",
-      "description": "デフォルトに設定すると、Donut Browser がウェブリンクを処理し、使用するプロファイルを選択できます。"
+      "description": "デフォルトに設定すると、Donut Browser がウェブリンクを処理し、使用するプロファイルを選択できます。",
+      "setSuccess": "Donut Browser が既定のブラウザーになりました",
+      "setFailed": "既定のブラウザーを設定できませんでした",
+      "finishInSystemSettings": "Windows の設定で完了してください",
+      "finishInSystemSettingsDescription": "Donut Browser を登録しました。Windows の設定が開いています。「Web ブラウザー」で Donut Browser を選ぶと完了します。"
     },
     "permissions": {
       "title": "システム権限",

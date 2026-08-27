@@ -1,6 +1,30 @@
+use serde::Serialize;
 use tauri::command;
 
 pub struct DefaultBrowser {}
+
+/// What happened when the user asked Donut to become the default browser.
+///
+/// macOS and Linux let a program make the change itself. Windows does not. The
+/// registry value that decides the handler carries a signature only the shell
+/// can produce, so the most a program may do is register itself and open the
+/// page where the user makes the choice. Without this distinction the caller
+/// reports a change that has not happened yet, which is what the Windows path
+/// used to do.
+///
+/// Each platform builds exactly one of these, so on any single target the other
+/// one reads as never constructed. That is what the allow is for: the variant is
+/// live, just not on the host being compiled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+#[allow(dead_code)]
+pub enum SetDefaultOutcome {
+  /// Donut is the default browser now. Nothing is left for the user to do.
+  Set,
+  /// Registration is complete and the system settings page is open. The user
+  /// makes the final choice there.
+  AwaitingSystemSettings,
+}
 
 impl DefaultBrowser {
   fn new() -> Self {
@@ -21,7 +45,7 @@ impl DefaultBrowser {
     // Linux answers this by running `xdg-mime`, a shell script that forks
     // further. That is blocking work with no upper bound, and this command
     // runs on the same async runtime as every other command, the REST API and
-    // the sync scheduler — so doing it inline occupies a worker for as long as
+    // the sync scheduler, so doing it inline occupies a worker for as long as
     // the desktop takes to answer. The Settings page polls this on a timer.
     #[cfg(target_os = "linux")]
     return blocking(linux::is_default_browser).await;
@@ -30,16 +54,22 @@ impl DefaultBrowser {
     Err("Unsupported platform".to_string())
   }
 
-  pub async fn set_as_default_browser(&self) -> Result<(), String> {
+  pub async fn set_as_default_browser(&self) -> Result<SetDefaultOutcome, String> {
     #[cfg(target_os = "macos")]
-    return macos::set_as_default_browser();
+    return macos::set_as_default_browser().map(|()| SetDefaultOutcome::Set);
 
+    // Windows writes several registry trees, broadcasts `WM_SETTINGCHANGE` to
+    // every top-level window on the desktop and then hands off to the shell.
+    // The broadcast alone costs about 130 ms on an idle desktop and seconds on
+    // a busy one, so this does not belong on a runtime worker either.
     #[cfg(target_os = "windows")]
-    return windows::set_as_default_browser();
+    return blocking(windows::set_as_default_browser).await;
 
     // Same reasoning, and this one additionally sleeps 500ms before verifying.
     #[cfg(target_os = "linux")]
-    return blocking(linux::set_as_default_browser).await;
+    return blocking(linux::set_as_default_browser)
+      .await
+      .map(|()| SetDefaultOutcome::Set);
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     Err("Unsupported platform".to_string())
@@ -47,7 +77,7 @@ impl DefaultBrowser {
 }
 
 /// Run blocking work off the async runtime's worker threads.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 async fn blocking<T, F>(work: F) -> Result<T, String>
 where
   F: FnOnce() -> Result<T, String> + Send + 'static,
@@ -124,18 +154,44 @@ mod macos {
 #[cfg(target_os = "windows")]
 #[allow(clippy::needless_borrows_for_generic_args)]
 mod windows {
+  use super::SetDefaultOutcome;
   use std::path::Path;
   use winreg::enums::*;
   use winreg::RegKey;
 
+  /// The key Windows knows us by. Never shown to a person.
   const APP_NAME: &str = "DonutBrowser";
+  /// The name Windows shows in "Default apps" and in "Open with".
+  const DISPLAY_NAME: &str = "Donut Browser";
+  const DESCRIPTION: &str = "Donut Browser - Simple Yet Powerful Anti-Detect Browser";
   const PROG_ID: &str = "DonutBrowser.HTML";
 
-  pub fn is_default_browser() -> Result<bool, String> {
-    let schemes = ["http", "https"];
+  /// A web browser registers under `StartMenuInternet`, and
+  /// `RegisteredApplications` points at the `Capabilities` subkey of that
+  /// entry. Edge, Chrome and Firefox all do exactly this, and the shell reads
+  /// the capability data from there.
+  ///
+  /// The previous layout invented its own key at `Software\DonutBrowser` and
+  /// pointed `RegisteredApplications` at the parent instead of at
+  /// `Capabilities`. Every other entry on a normal machine ends in
+  /// `Capabilities`. The shell found no capability data, so Donut was never
+  /// offered as a browser and the button appeared to do nothing.
+  const CLIENT_KEY: &str = r"Software\Clients\StartMenuInternet\DonutBrowser";
+  /// The value written into `RegisteredApplications`.
+  const CAPABILITIES_KEY: &str = r"Software\Clients\StartMenuInternet\DonutBrowser\Capabilities";
+  /// The layout earlier builds wrote. Removed on every run, so a machine that
+  /// ran one of those does not keep stale capability data claiming http.
+  const LEGACY_APP_KEY: &str = r"Software\DonutBrowser";
 
-    for scheme in schemes {
-      // Check if our browser is set as the default handler for this scheme
+  const URL_SCHEMES: [&str; 2] = ["http", "https"];
+  /// The file types a browser is asked to open from Explorer. The ProgId
+  /// command passes the path through as `%1`, and `urls_from_args` in `lib.rs`
+  /// turns a path into a `file://` URL, so every extension listed here can
+  /// actually be serviced. Do not add one that cannot.
+  const FILE_EXTENSIONS: [&str; 4] = [".htm", ".html", ".shtml", ".xhtml"];
+
+  pub fn is_default_browser() -> Result<bool, String> {
+    for scheme in URL_SCHEMES {
       if !is_default_for_scheme(scheme)? {
         return Ok(false);
       }
@@ -144,44 +200,42 @@ mod windows {
     Ok(true)
   }
 
-  pub fn set_as_default_browser() -> Result<(), String> {
-    // Get the current executable path
-    let exe_path = std::env::current_exe()
-      .map_err(|e| format!("Failed to get current executable path: {}", e))?;
+  pub fn set_as_default_browser() -> Result<SetDefaultOutcome, String> {
+    let exe_path =
+      std::env::current_exe().map_err(|e| format!("Failed to get current executable path: {e}"))?;
 
-    let exe_path_str = exe_path
+    let exe_path = exe_path
       .to_str()
       .ok_or("Failed to convert executable path to string")?;
 
-    // Verify the executable exists
-    if !Path::new(exe_path_str).exists() {
-      return Err(format!("Executable not found at: {}", exe_path_str));
+    if !Path::new(exe_path).exists() {
+      return Err(format!("Executable not found at: {exe_path}"));
     }
 
-    // Register the application
-    register_application(exe_path_str)?;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    remove_legacy_registration(&hkcu);
+    register_prog_id(&hkcu, exe_path)?;
+    register_client(&hkcu, exe_path)?;
+    register_file_extensions(&hkcu)?;
+    register_application(&hkcu)?;
 
-    // Set as default for HTTP and HTTPS
-    set_default_for_scheme("http")?;
-    set_default_for_scheme("https")?;
-
-    // Register file associations for HTML files
-    register_html_file_association(exe_path_str)?;
-
-    // Notify the system of changes
     notify_system_of_changes();
 
-    Ok(())
+    open_default_apps_settings()?;
+
+    Ok(SetDefaultOutcome::AwaitingSystemSettings)
+  }
+
+  /// Wrap a path in the quotes the shell expects around a command or an icon.
+  fn quoted(value: &str) -> String {
+    format!(r#""{value}""#)
   }
 
   fn is_default_for_scheme(scheme: &str) -> Result<bool, String> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-    // Check Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice
-    let path = format!(
-      "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\{}\\UserChoice",
-      scheme
-    );
+    let path =
+      format!(r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice");
 
     match hkcu.open_subkey(&path) {
       Ok(key) => match key.get_value::<String, _>("ProgId") {
@@ -192,167 +246,276 @@ mod windows {
     }
   }
 
-  fn register_application(exe_path: &str) -> Result<(), String> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+  /// Delete the layout earlier builds wrote.
+  ///
+  /// Nothing else in this application has ever written under that key, so
+  /// removing it cannot lose anything a user cares about. Leaving it would
+  /// leave a second `Capabilities` block claiming http and https from a key the
+  /// shell no longer reads.
+  ///
+  /// The old code also wrote the ProgId into the default value of
+  /// `Software\Classes\.html` and `.htm`. That value is the association itself,
+  /// and it was never ours to take. Give it back, but only where it still holds
+  /// the ProgId we wrote. Any other value is the user's own choice and is left
+  /// alone.
+  fn remove_legacy_registration(root: &RegKey) {
+    match root.delete_subkey_all(LEGACY_APP_KEY) {
+      Ok(()) => log::debug!("Removed the superseded default-browser registration key"),
+      Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+      Err(e) => log::debug!("Could not remove the superseded registration key: {e}"),
+    }
 
-    // Register in Software\RegisteredApplications
-    let (registered_apps, _) = hkcu
-      .create_subkey("Software\\RegisteredApplications")
-      .map_err(|e| format!("Failed to create RegisteredApplications key: {}", e))?;
+    for extension in [".htm", ".html"] {
+      let path = format!(r"Software\Classes\{extension}");
+      let Ok(key) = root.open_subkey_with_flags(&path, KEY_READ | KEY_SET_VALUE) else {
+        continue;
+      };
 
-    registered_apps
-      .set_value(APP_NAME, &format!("Software\\{}", APP_NAME))
-      .map_err(|e| format!("Failed to set registered application: {}", e))?;
+      let ours = key
+        .get_value::<String, _>("")
+        .map(|value| value == PROG_ID)
+        .unwrap_or(false);
 
-    // Create application key
-    let (app_key, _) = hkcu
-      .create_subkey(&format!("Software\\{}", APP_NAME))
-      .map_err(|e| format!("Failed to create application key: {}", e))?;
-
-    // Set application properties
-    app_key
-      .set_value("ApplicationName", &APP_NAME)
-      .map_err(|e| format!("Failed to set ApplicationName: {}", e))?;
-
-    app_key
-      .set_value(
-        "ApplicationDescription",
-        &"Donut Browser - Simple Yet Powerful Anti-Detect Browser",
-      )
-      .map_err(|e| format!("Failed to set ApplicationDescription: {}", e))?;
-
-    app_key
-      .set_value("ApplicationIcon", &format!("\"{}\",0", exe_path))
-      .map_err(|e| format!("Failed to set ApplicationIcon: {}", e))?;
-
-    // Create Capabilities key
-    let (capabilities, _) = app_key
-      .create_subkey("Capabilities")
-      .map_err(|e| format!("Failed to create Capabilities key: {}", e))?;
-
-    capabilities
-      .set_value(
-        "ApplicationDescription",
-        &"Donut Browser - Simple Yet Powerful Anti-Detect Browser",
-      )
-      .map_err(|e| format!("Failed to set Capabilities description: {}", e))?;
-
-    // Set URL associations
-    let (url_assoc, _) = capabilities
-      .create_subkey("URLAssociations")
-      .map_err(|e| format!("Failed to create URLAssociations key: {}", e))?;
-
-    url_assoc
-      .set_value("http", &PROG_ID)
-      .map_err(|e| format!("Failed to set http association: {}", e))?;
-
-    url_assoc
-      .set_value("https", &PROG_ID)
-      .map_err(|e| format!("Failed to set https association: {}", e))?;
-
-    // Set file associations
-    let (file_assoc, _) = capabilities
-      .create_subkey("FileAssociations")
-      .map_err(|e| format!("Failed to create FileAssociations key: {}", e))?;
-
-    file_assoc
-      .set_value(".html", &PROG_ID)
-      .map_err(|e| format!("Failed to set .html association: {}", e))?;
-
-    file_assoc
-      .set_value(".htm", &PROG_ID)
-      .map_err(|e| format!("Failed to set .htm association: {}", e))?;
-
-    // Register the ProgID
-    register_prog_id(exe_path)?;
-
-    Ok(())
+      if ours {
+        match key.delete_value("") {
+          Ok(()) => log::debug!("Released the {extension} association taken by an older build"),
+          Err(e) => log::debug!("Could not release the {extension} association: {e}"),
+        }
+      }
+    }
   }
 
-  fn register_prog_id(exe_path: &str) -> Result<(), String> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-
-    // Create ProgID key
-    let (prog_id_key, _) = hkcu
-      .create_subkey(&format!("Software\\Classes\\{}", PROG_ID))
-      .map_err(|e| format!("Failed to create ProgID key: {}", e))?;
+  /// Describe the document type Donut opens, and how to open one.
+  fn register_prog_id(root: &RegKey, exe_path: &str) -> Result<(), String> {
+    let (prog_id_key, _) = root
+      .create_subkey(format!(r"Software\Classes\{PROG_ID}"))
+      .map_err(|e| format!("Failed to create ProgID key: {e}"))?;
 
     prog_id_key
       .set_value("", &"Donut Browser Document")
-      .map_err(|e| format!("Failed to set ProgID default value: {}", e))?;
+      .map_err(|e| format!("Failed to set ProgID default value: {e}"))?;
 
     prog_id_key
       .set_value("FriendlyTypeName", &"Donut Browser Document")
-      .map_err(|e| format!("Failed to set FriendlyTypeName: {}", e))?;
+      .map_err(|e| format!("Failed to set FriendlyTypeName: {e}"))?;
 
-    // Create DefaultIcon key
+    // The shell reads this block to put a name and an icon beside the ProgId in
+    // the "Open with" list. Without it the entry shows as the raw ProgId.
+    let (application, _) = prog_id_key
+      .create_subkey("Application")
+      .map_err(|e| format!("Failed to create ProgID Application key: {e}"))?;
+
+    application
+      .set_value("ApplicationName", &DISPLAY_NAME)
+      .map_err(|e| format!("Failed to set ProgID ApplicationName: {e}"))?;
+
+    application
+      .set_value("ApplicationIcon", &format!("{},0", quoted(exe_path)))
+      .map_err(|e| format!("Failed to set ProgID ApplicationIcon: {e}"))?;
+
     let (icon_key, _) = prog_id_key
       .create_subkey("DefaultIcon")
-      .map_err(|e| format!("Failed to create DefaultIcon key: {}", e))?;
+      .map_err(|e| format!("Failed to create DefaultIcon key: {e}"))?;
 
     icon_key
-      .set_value("", &format!("\"{}\",0", exe_path))
-      .map_err(|e| format!("Failed to set default icon: {}", e))?;
+      .set_value("", &format!("{},0", quoted(exe_path)))
+      .map_err(|e| format!("Failed to set default icon: {e}"))?;
 
-    // Create shell\open\command key
     let (command_key, _) = prog_id_key
-      .create_subkey("shell\\open\\command")
-      .map_err(|e| format!("Failed to create command key: {}", e))?;
+      .create_subkey(r"shell\open\command")
+      .map_err(|e| format!("Failed to create command key: {e}"))?;
 
     command_key
-      .set_value("", &format!("\"{}\" \"%1\"", exe_path))
-      .map_err(|e| format!("Failed to set command: {}", e))?;
+      .set_value("", &format!(r#"{} "%1""#, quoted(exe_path)))
+      .map_err(|e| format!("Failed to set command: {e}"))?;
 
     Ok(())
   }
 
-  fn set_default_for_scheme(scheme: &str) -> Result<(), String> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+  /// The `StartMenuInternet` entry: the shape the shell reads for a web
+  /// browser. A display name, an icon, the command that starts it, the
+  /// `InstallInfo` block the default-programs page expects, and the capability
+  /// lists that say which schemes and file types it handles.
+  fn register_client(root: &RegKey, exe_path: &str) -> Result<(), String> {
+    let (client, _) = root
+      .create_subkey(CLIENT_KEY)
+      .map_err(|e| format!("Failed to create browser client key: {e}"))?;
 
-    // Set in Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice
-    // Note: On Windows 10+, this might require elevated permissions or user interaction
-    // through the Settings app due to security restrictions
+    client
+      .set_value("", &DISPLAY_NAME)
+      .map_err(|e| format!("Failed to set client display name: {e}"))?;
 
-    // Try to set the association in the user's choice
-    let user_choice_path = format!(
-      "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\{}\\UserChoice",
-      scheme
-    );
+    let (icon, _) = client
+      .create_subkey("DefaultIcon")
+      .map_err(|e| format!("Failed to create client DefaultIcon key: {e}"))?;
 
-    // Note: Setting UserChoice directly may not work on Windows 10+ due to hash verification
-    // The user may need to manually set the default browser through Windows Settings
-    match hkcu.create_subkey(&user_choice_path) {
-      Ok((user_choice, _)) => {
-        // Attempt to set the ProgId
-        if user_choice.set_value("ProgId", &PROG_ID).is_err() {
-          // If we can't set UserChoice, that's expected on newer Windows versions
-          // The registration is still valuable for the "Open with" menu
-        }
-      }
-      Err(_) => {
-        // Expected on newer Windows versions - user must set manually
-      }
+    icon
+      .set_value("", &format!("{},0", quoted(exe_path)))
+      .map_err(|e| format!("Failed to set client icon: {e}"))?;
+
+    let (command, _) = client
+      .create_subkey(r"shell\open\command")
+      .map_err(|e| format!("Failed to create client command key: {e}"))?;
+
+    // No `%1` here. This entry is how the shell starts the browser with no
+    // document, for example from the Start menu.
+    command
+      .set_value("", &quoted(exe_path))
+      .map_err(|e| format!("Failed to set client command: {e}"))?;
+
+    // The shell reads the icons-visible state from here, so the block has to
+    // exist. It also understands `ReinstallCommand`, `HideIconsCommand` and
+    // `ShowIconsCommand`, and Edge and Chrome advertise all three. Donut does
+    // not, because it does not act on `--make-default-browser`, `--hide-icons`
+    // or `--show-icons`. Advertising a command the program ignores is the same
+    // empty claim as registering a file type nothing can open. Add them here on
+    // the day the flags do something.
+    let (install_info, _) = client
+      .create_subkey("InstallInfo")
+      .map_err(|e| format!("Failed to create InstallInfo key: {e}"))?;
+
+    install_info
+      .set_value("IconsVisible", &1u32)
+      .map_err(|e| format!("Failed to set IconsVisible: {e}"))?;
+
+    let (capabilities, _) = client
+      .create_subkey("Capabilities")
+      .map_err(|e| format!("Failed to create Capabilities key: {e}"))?;
+
+    // `ApplicationName` belongs inside `Capabilities`. The old code wrote it one
+    // level up, where the shell does not look, so the entry had no name.
+    capabilities
+      .set_value("ApplicationName", &DISPLAY_NAME)
+      .map_err(|e| format!("Failed to set ApplicationName: {e}"))?;
+
+    capabilities
+      .set_value("ApplicationDescription", &DESCRIPTION)
+      .map_err(|e| format!("Failed to set ApplicationDescription: {e}"))?;
+
+    capabilities
+      .set_value("ApplicationIcon", &format!("{},0", quoted(exe_path)))
+      .map_err(|e| format!("Failed to set ApplicationIcon: {e}"))?;
+
+    let (url_assoc, _) = capabilities
+      .create_subkey("URLAssociations")
+      .map_err(|e| format!("Failed to create URLAssociations key: {e}"))?;
+
+    for scheme in URL_SCHEMES {
+      url_assoc
+        .set_value(scheme, &PROG_ID)
+        .map_err(|e| format!("Failed to set {scheme} association: {e}"))?;
+    }
+
+    let (file_assoc, _) = capabilities
+      .create_subkey("FileAssociations")
+      .map_err(|e| format!("Failed to create FileAssociations key: {e}"))?;
+
+    for extension in FILE_EXTENSIONS {
+      file_assoc
+        .set_value(extension, &PROG_ID)
+        .map_err(|e| format!("Failed to set {extension} association: {e}"))?;
     }
 
     Ok(())
   }
 
-  fn register_html_file_association(_exe_path: &str) -> Result<(), String> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+  /// Offer Donut in the "Open with" list for the HTML file types, without
+  /// taking the association away from whatever the user already chose.
+  ///
+  /// The old code wrote the ProgId into the default value of
+  /// `Software\Classes\.html`, which is the association itself. That replaced
+  /// the user's choice without asking, was never undone on uninstall, and did
+  /// not even take effect, because the per-user `FileExts` choice outranks it.
+  /// `OpenWithProgids` is the additive form: it adds Donut to the list and
+  /// displaces nothing.
+  fn register_file_extensions(root: &RegKey) -> Result<(), String> {
+    for extension in FILE_EXTENSIONS {
+      let (open_with, _) = root
+        .create_subkey(format!(r"Software\Classes\{extension}\OpenWithProgids"))
+        .map_err(|e| format!("Failed to create OpenWithProgids key for {extension}: {e}"))?;
 
-    // Register .html and .htm file associations
-    for ext in &[".html", ".htm"] {
-      let ext_path = format!("Software\\Classes\\{}", ext);
+      // Only the value name matters here. The payload is a marker.
+      open_with
+        .set_value(PROG_ID, &"")
+        .map_err(|e| format!("Failed to register the {extension} handler: {e}"))?;
+    }
 
-      match hkcu.create_subkey(&ext_path) {
-        Ok((ext_key, _)) => {
-          // Set the default value to our ProgID
-          let _ = ext_key.set_value("", &PROG_ID);
-        }
-        Err(_) => {
-          // Continue if we can't set the file association
-        }
-      }
+    Ok(())
+  }
+
+  /// Point `RegisteredApplications` at the capability data. This is what puts
+  /// Donut in the list Windows offers under "Default apps".
+  fn register_application(root: &RegKey) -> Result<(), String> {
+    let (registered_apps, _) = root
+      .create_subkey(r"Software\RegisteredApplications")
+      .map_err(|e| format!("Failed to create RegisteredApplications key: {e}"))?;
+
+    registered_apps
+      .set_value(APP_NAME, &CAPABILITIES_KEY)
+      .map_err(|e| format!("Failed to set registered application: {e}"))
+  }
+
+  /// Open the page where the user chooses the default browser.
+  ///
+  /// Windows does not let a program make itself the default. The value that
+  /// decides the handler, the `UserChoice` key under `UrlAssociations`, carries
+  /// a hash over the user's SID, the ProgId and a timestamp, and only the shell
+  /// can produce it. Windows 11 also ships UCPD.sys, which blocks writes to
+  /// those keys outright.
+  ///
+  /// The old code wrote `ProgId` there with no hash and discarded every error,
+  /// then reported success. The registry never changed, the Settings page went
+  /// on saying "Inactive", and the user was told nothing. Registration is the
+  /// part a program is allowed to do. The choice belongs to the user, so open
+  /// the page where they can make it and let the caller say so.
+  fn open_default_apps_settings() -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::System::Com::{
+      CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    };
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    // `registeredAppUser` makes the page open on our entry rather than at the
+    // top of the list. It is the name just written into
+    // `RegisteredApplications`, so it only resolves because registration ran
+    // first.
+    let target = HSTRING::from(format!(
+      "ms-settings:defaultapps?registeredAppUser={APP_NAME}"
+    ));
+    let operation = HSTRING::from("open");
+
+    // ShellExecuteW hands the URI to a shell extension, and shell extensions
+    // are COM objects. This runs on a `spawn_blocking` thread, which has no
+    // apartment of its own, so give it one. An error means the thread already
+    // had an apartment in another mode, and in that case it is not ours to
+    // tear down.
+    let com_status =
+      unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
+    let owns_com = com_status.is_ok();
+
+    let result = unsafe {
+      ShellExecuteW(
+        None,
+        PCWSTR(operation.as_ptr()),
+        PCWSTR(target.as_ptr()),
+        PCWSTR::null(),
+        PCWSTR::null(),
+        SW_SHOWNORMAL,
+      )
+    };
+
+    if owns_com {
+      unsafe { CoUninitialize() };
+    }
+
+    // ShellExecuteW reports success as a value above 32. Anything at or below
+    // that is an error code wearing a handle's type.
+    let code = result.0 as isize;
+    if code <= 32 {
+      return Err(format!(
+        "Donut Browser is registered, but Windows Settings did not open (code {code}). Open Settings, then Apps, then Default apps, find Donut Browser and set it for HTTP and HTTPS."
+      ));
     }
 
     Ok(())
@@ -396,6 +559,199 @@ mod windows {
         SMTO_ABORTIFHUNG,
         1000,
         Some(&mut result),
+      );
+    }
+  }
+
+  #[cfg(test)]
+  mod registration_tests {
+    use super::*;
+
+    /// A scratch key that stands in for HKCU, so the test writes a real tree
+    /// through the real code without touching the tree Windows actually reads.
+    /// Deleted on the way out, including when an assertion fails.
+    struct ScratchRoot {
+      key: RegKey,
+      path: String,
+    }
+
+    const SCRATCH_PARENT: &str = r"Software\DonutBrowserTests";
+
+    impl ScratchRoot {
+      fn new(name: &str) -> Self {
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let path = format!(r"{SCRATCH_PARENT}\{name}");
+        let _ = hkcu.delete_subkey_all(&path);
+        let (key, _) = hkcu.create_subkey(&path).expect("create the scratch root");
+        Self { key, path }
+      }
+
+      fn value(&self, subkey: &str, name: &str) -> Option<String> {
+        self
+          .key
+          .open_subkey(subkey)
+          .ok()?
+          .get_value::<String, _>(name)
+          .ok()
+      }
+    }
+
+    impl Drop for ScratchRoot {
+      fn drop(&mut self) {
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let _ = hkcu.delete_subkey_all(&self.path);
+        // Take the shared parent too, so a test run leaves nothing at all in
+        // the user's registry. `delete_subkey` refuses a key that still has
+        // children, which is exactly the guard needed while tests run in
+        // parallel: whoever finishes last removes it.
+        let _ = hkcu.delete_subkey(SCRATCH_PARENT);
+      }
+    }
+
+    const EXE: &str = r"C:\Program Files\Donut Browser\donutbrowser.exe";
+
+    #[test]
+    fn registration_writes_the_shape_the_shell_reads() {
+      let root = ScratchRoot::new("registration");
+      register_prog_id(&root.key, EXE).expect("register the ProgId");
+      register_client(&root.key, EXE).expect("register the client");
+      register_file_extensions(&root.key).expect("register the file types");
+      register_application(&root.key).expect("register the application");
+
+      // The bug that made the button do nothing: this pointed at the
+      // application key instead of at its `Capabilities` subkey, so the shell
+      // read no capabilities and never offered Donut as a browser. Every other
+      // entry on a working machine ends in `Capabilities`.
+      let registered = root
+        .value(r"Software\RegisteredApplications", APP_NAME)
+        .expect("RegisteredApplications entry");
+      assert_eq!(registered, CAPABILITIES_KEY);
+      assert!(
+        registered.ends_with(r"\Capabilities"),
+        "RegisteredApplications must name the Capabilities subkey, got {registered}"
+      );
+      assert!(
+        root.key.open_subkey(&registered).is_ok(),
+        "RegisteredApplications names {registered}, which does not exist"
+      );
+
+      // The second bug: `ApplicationName` sat one level above `Capabilities`,
+      // where the shell does not look, so the entry had no name to show.
+      assert_eq!(
+        root.value(CAPABILITIES_KEY, "ApplicationName").as_deref(),
+        Some(DISPLAY_NAME)
+      );
+      assert_eq!(
+        root
+          .value(CAPABILITIES_KEY, "ApplicationDescription")
+          .as_deref(),
+        Some(DESCRIPTION)
+      );
+
+      // Every scheme and file type the capability lists claim.
+      for scheme in URL_SCHEMES {
+        assert_eq!(
+          root
+            .value(&format!(r"{CAPABILITIES_KEY}\URLAssociations"), scheme)
+            .as_deref(),
+          Some(PROG_ID),
+          "{scheme} is not claimed"
+        );
+      }
+      for extension in FILE_EXTENSIONS {
+        assert_eq!(
+          root
+            .value(&format!(r"{CAPABILITIES_KEY}\FileAssociations"), extension)
+            .as_deref(),
+          Some(PROG_ID),
+          "{extension} is not claimed"
+        );
+      }
+
+      // The rest of the StartMenuInternet entry.
+      assert_eq!(root.value(CLIENT_KEY, "").as_deref(), Some(DISPLAY_NAME));
+      assert_eq!(
+        root.value(&format!(r"{CLIENT_KEY}\shell\open\command"), ""),
+        Some(quoted(EXE))
+      );
+      assert!(root
+        .key
+        .open_subkey(format!(r"{CLIENT_KEY}\InstallInfo"))
+        .is_ok());
+
+      // The ProgId command has to carry `%1`. Without it the shell starts the
+      // browser and never says which page to open.
+      let prog_id_command = root
+        .value(
+          &format!(r"Software\Classes\{PROG_ID}\shell\open\command"),
+          "",
+        )
+        .expect("ProgId command");
+      assert_eq!(prog_id_command, format!(r#"{} "%1""#, quoted(EXE)));
+
+      // The file types are offered, not seized. Taking the default value of
+      // `Software\Classes\.html` is what the old code did, and that value
+      // belongs to whatever the user chose.
+      for extension in FILE_EXTENSIONS {
+        assert_eq!(
+          root
+            .value(
+              &format!(r"Software\Classes\{extension}\OpenWithProgids"),
+              PROG_ID
+            )
+            .as_deref(),
+          Some(""),
+          "{extension} should offer the handler"
+        );
+        assert!(
+          root
+            .value(&format!(r"Software\Classes\{extension}"), "")
+            .is_none(),
+          "{extension} default value must be left alone"
+        );
+      }
+    }
+
+    #[test]
+    fn the_association_an_older_build_took_is_given_back() {
+      let root = ScratchRoot::new("legacy");
+
+      // Recreate what the old code left behind: its own application key, and
+      // the ProgId written straight into the association for one file type.
+      let (legacy, _) = root
+        .key
+        .create_subkey(format!(r"{LEGACY_APP_KEY}\Capabilities\URLAssociations"))
+        .expect("legacy key");
+      legacy.set_value("http", &PROG_ID).expect("legacy claim");
+
+      let (html, _) = root
+        .key
+        .create_subkey(r"Software\Classes\.html")
+        .expect("html class");
+      html.set_value("", &PROG_ID).expect("legacy association");
+
+      // A file type the user pointed somewhere else. This one is not ours and
+      // must survive untouched.
+      let (htm, _) = root
+        .key
+        .create_subkey(r"Software\Classes\.htm")
+        .expect("htm class");
+      htm.set_value("", &"ChromeHTML").expect("user association");
+
+      remove_legacy_registration(&root.key);
+
+      assert!(
+        root.key.open_subkey(LEGACY_APP_KEY).is_err(),
+        "the superseded application key should be gone"
+      );
+      assert!(
+        root.value(r"Software\Classes\.html", "").is_none(),
+        "the association we took should have been released"
+      );
+      assert_eq!(
+        root.value(r"Software\Classes\.htm", "").as_deref(),
+        Some("ChromeHTML"),
+        "a choice that is not ours must not be touched"
       );
     }
   }
@@ -551,7 +907,105 @@ pub async fn is_default_browser() -> Result<bool, String> {
 }
 
 #[command]
-pub async fn set_as_default_browser() -> Result<(), String> {
+pub async fn set_as_default_browser() -> Result<SetDefaultOutcome, String> {
   let default_browser = DefaultBrowser::instance();
   default_browser.set_as_default_browser().await
+}
+
+#[cfg(test)]
+mod tests {
+  /// The type system now prevents the mistake behind the crash on Windows.
+  /// `SendMessageTimeoutW` comes from the `windows` crate, and its
+  /// out-parameter is typed `Option<*mut usize>`, so a four byte slot no longer
+  /// compiles. That guarantee holds only while the call goes through the crate.
+  /// A hand-written declaration would bring back the whole class of bug in a
+  /// form no compiler and no lint can see, so refuse one here.
+  ///
+  /// This looks at the Windows module on every platform, because the module is
+  /// compiled out everywhere else and would otherwise go unchecked on the
+  /// runners that do most of the work.
+  #[test]
+  fn the_windows_module_declares_no_foreign_functions_by_hand() {
+    const SOURCE: &str = include_str!("default_browser.rs");
+
+    let start = SOURCE
+      .find("mod windows {")
+      .expect("the Windows module was renamed; update this guard");
+    let end = SOURCE
+      .find("mod linux {")
+      .expect("the Linux module was renamed; update this guard");
+    assert!(
+      start < end,
+      "the module order changed; update this guard so it still reads the Windows module"
+    );
+
+    assert!(
+      !SOURCE[start..end].contains(r#"extern ""#),
+      "The Windows module declares a foreign function by hand. Do not. A \
+       hand-written declaration of SendMessageTimeoutA, with its out-parameter \
+       typed *mut u32 instead of the real PDWORD_PTR, is what made Windows \
+       write four bytes past a stack slot and kill the process every time a \
+       user set Donut as their default browser. Take the binding from the \
+       `windows` crate, which cannot drift from the real ABI, and add the \
+       feature it needs to Cargo.toml."
+    );
+  }
+
+  /// Show why the out-parameter has to be pointer sized.
+  ///
+  /// This does not try to reproduce the crash. Whether the four byte overrun is
+  /// fatal depends on the frame the optimiser happens to build, so a crash test
+  /// passes under one profile and fails under another. It measures the thing
+  /// that is always true instead: the call writes eight bytes.
+  #[cfg(target_os = "windows")]
+  #[test]
+  fn send_message_timeout_writes_a_pointer_sized_result() {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_NULL};
+
+    /// A four byte slot with a marker behind it, laid out the way the old code
+    /// laid out its `u32`. Eight bytes in total and eight byte aligned, so a
+    /// pointer sized write lands entirely inside the struct. Nothing outside it
+    /// is touched and the test is not itself undefined behaviour.
+    #[repr(C, align(8))]
+    struct Probe {
+      result: u32,
+      canary: u32,
+    }
+
+    const SENTINEL: u32 = 0xDEAD_BEEF;
+
+    let mut probe = Probe {
+      result: SENTINEL,
+      canary: SENTINEL,
+    };
+
+    // The window handle is deliberately not a window. USER32 clears the
+    // out-parameter before it looks at the target, so this measures the write
+    // width without creating a window, without a message loop and without
+    // sending anything to another process. The test is hermetic.
+    unsafe {
+      SendMessageTimeoutW(
+        HWND(0xDEAD_0000_usize as *mut core::ffi::c_void),
+        WM_NULL,
+        WPARAM(0),
+        LPARAM(0),
+        SMTO_ABORTIFHUNG,
+        50,
+        Some(&mut probe as *mut Probe as *mut usize),
+      );
+    }
+
+    assert_eq!(
+      probe.result, 0,
+      "SendMessageTimeoutW did not write the out-parameter at all, so this test \
+       no longer measures anything. Check the call before trusting it."
+    );
+    assert_ne!(
+      probe.canary, SENTINEL,
+      "SendMessageTimeoutW wrote only four bytes. If Windows has really narrowed \
+       lpdwResult to a DWORD then notify_system_of_changes may use a u32. Until \
+       then the out-parameter stays pointer sized."
+    );
+  }
 }

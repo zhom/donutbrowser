@@ -1,5 +1,27 @@
 use super::types::*;
 use reqwest::Client;
+use std::time::Duration;
+
+/// How long to wait for a storage host to accept a connection.
+///
+/// This client had no timeouts at all. A host that neither accepts nor refuses,
+/// which is what a dropping firewall or a black-holed address looks like, held
+/// every attempt for the operating system's own connect backoff: measured at
+/// 21 s on Windows and 134 s on Linux. With `MAX_FILE_RETRIES` and its backoff
+/// that is minutes for one file, and a profile of two hundred files reports
+/// nothing for most of an hour.
+///
+/// Matches the pre-flight probe, so a host that fails the check fails a
+/// transfer the same way and in the same time.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// How long a transfer may make no progress at all.
+///
+/// Deliberately an inactivity timeout and not a deadline on the whole request.
+/// Profile files run to tens of megabytes and a slow link is not a broken one,
+/// so a total timeout would start failing syncs that were working. This fires
+/// only when nothing arrives for a full minute.
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct SyncClient {
@@ -11,7 +33,15 @@ pub struct SyncClient {
 impl SyncClient {
   pub fn new(base_url: String, token: String) -> Self {
     Self {
-      client: Client::new(),
+      client: Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
+        .build()
+        // A builder failure here means the TLS backend did not start. The
+        // default client cannot transfer either, so fall back and let the first
+        // real request report it, rather than making this constructor fallible
+        // for a condition no caller can act on.
+        .unwrap_or_default(),
       base_url: base_url.trim_end_matches('/').to_string(),
       token,
     }
@@ -235,14 +265,13 @@ impl SyncClient {
     }
 
     // The storage host here comes from the presigned URL, so on a self-hosted
-    // server it is whatever the server signed against — frequently an address
+    // server it is whatever the server signed against, frequently an address
     // only the server can resolve. `reqwest`'s own Display collapses that to
     // "error sending request", which is why this failure used to be
-    // undiagnosable; report the innermost cause instead.
-    let response = req
-      .send()
-      .await
-      .map_err(|e| SyncError::NetworkError(super::preflight::transport_reason(&e)))?;
+    // undiagnosable; report the innermost cause and the host it names.
+    let response = req.send().await.map_err(|e| {
+      SyncError::NetworkError(super::preflight::transport_reason_for(presigned_url, &e))
+    })?;
 
     if !response.status().is_success() {
       let status = response.status();
@@ -256,12 +285,9 @@ impl SyncClient {
   }
 
   pub async fn download_bytes(&self, presigned_url: &str) -> SyncResult<Vec<u8>> {
-    let response = self
-      .client
-      .get(presigned_url)
-      .send()
-      .await
-      .map_err(|e| SyncError::NetworkError(super::preflight::transport_reason(&e)))?;
+    let response = self.client.get(presigned_url).send().await.map_err(|e| {
+      SyncError::NetworkError(super::preflight::transport_reason_for(presigned_url, &e))
+    })?;
 
     if !response.status().is_success() {
       return Err(SyncError::NetworkError(format!(

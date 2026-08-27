@@ -146,9 +146,14 @@ fn critical_failure_message(action: &str, failures: &[(String, String)]) -> Stri
 /// Transfers go straight to the storage host named in the presigned URL, not
 /// through the sync server, so a self-hosted server that signs URLs against an
 /// address only it can resolve fails every file here while its own `/health`
-/// and `/readyz` stay green. The cause string already carries the host; without
-/// this line it still reads as an unexplained network fault, and the setting
-/// that fixes it lives on the server, where the user is not looking.
+/// and `/readyz` stay green. The cause string names the host, which says which
+/// address is wrong; this line says where to change it, because the setting
+/// lives on the server, where the user is not looking.
+///
+/// The host only started appearing in that string when the transfer path moved
+/// to `transport_reason_for`. Before that this comment claimed a host that was
+/// never there, and every report of this bug arrived with a list of file names
+/// and nothing to act on.
 fn storage_endpoint_hint(cause: &str) -> String {
   let lowered = cause.to_ascii_lowercase();
   let is_transport_failure = [
@@ -4320,6 +4325,106 @@ pub async fn rollover_encryption_for_all_entities(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// The whole of issue 534, at the only place the user ever sees it.
+  ///
+  /// A self-hosted server signs every presigned URL against the address it uses
+  /// for storage itself. In the documented compose file that is a Docker
+  /// service name, so the server is healthy, `/health` and `/readyz` are green,
+  /// and the client cannot open a single one of the URLs it is handed. The
+  /// reporters got a list of file names, no host and no setting, and there was
+  /// nothing in it to act on.
+  ///
+  /// The message has to carry three things: which files, which host refused
+  /// them, and which setting fixes it.
+  #[test]
+  fn a_transfer_failure_names_the_host_and_the_setting_that_fixes_it() {
+    // Exactly the text the transfer path now produces. The trailing host comes
+    // from `preflight::transport_reason_for`, which the two transfer call sites
+    // in `client.rs` use.
+    let cause = "connection failed: No such host is known. (os error 11001) \
+                 (storage host minio:9000)";
+    let failures = vec![
+      ("profile/Default/Cookies".to_string(), cause.to_string()),
+      ("profile/Default/Login Data".to_string(), cause.to_string()),
+      ("profile/Local State".to_string(), cause.to_string()),
+    ];
+
+    let message = critical_failure_message("upload", &failures);
+
+    assert!(
+      message.contains("minio:9000"),
+      "the reader has to learn which host refused the transfer: {message}"
+    );
+    assert!(
+      message.contains("S3_PUBLIC_ENDPOINT"),
+      "the setting that fixes it lives on the server, so the message has to \
+       name it: {message}"
+    );
+    assert!(
+      message.contains("profile/Default/Cookies"),
+      "the affected files still belong in the message: {message}"
+    );
+  }
+
+  /// The same guarantee, but driven through the real transfer path instead of a
+  /// hand-written cause string.
+  ///
+  /// The test above pins the message builder. This one pins the join: that an
+  /// upload which cannot reach its host actually produces a cause carrying that
+  /// host. Dropping back to a reason that omits the host, which is how this
+  /// shipped for months, breaks this test and not the one above.
+  ///
+  /// No server is involved. `.invalid` never resolves (RFC 2606), so the
+  /// failure is the real one, offline and deterministic.
+  #[tokio::test]
+  async fn an_unreachable_storage_host_survives_the_whole_way_to_the_message() {
+    let client = SyncClient::new("http://127.0.0.1:1".to_string(), "unused".to_string());
+    let presigned = "http://donut-storage.invalid:9000/bucket/profiles/p1/Cookies\
+                     ?X-Amz-Signature=deadbeef";
+
+    let error = client
+      .upload_bytes(presigned, b"payload", None)
+      .await
+      .expect_err("a host that cannot resolve must not report a successful upload");
+
+    let message = critical_failure_message(
+      "upload",
+      &[("profile/Default/Cookies".to_string(), error.to_string())],
+    );
+
+    assert!(
+      message.contains("donut-storage.invalid:9000"),
+      "the host has to survive from the transfer to the message: {message}"
+    );
+    assert!(
+      message.contains("S3_PUBLIC_ENDPOINT"),
+      "an unreachable storage host has one fix, and it is on the server: {message}"
+    );
+    assert!(
+      !message.contains("X-Amz-Signature"),
+      "the signature must never reach the message: {message}"
+    );
+  }
+
+  /// The hint is for a transfer that never connected. A server that answered
+  /// and refused is a different problem with a different fix, and pointing that
+  /// user at their storage endpoint would send them the wrong way.
+  #[test]
+  fn a_rejected_transfer_is_not_blamed_on_the_storage_endpoint() {
+    let failures = vec![(
+      "profile/Default/Cookies".to_string(),
+      "Upload failed with status 403 Forbidden: SignatureDoesNotMatch".to_string(),
+    )];
+
+    let message = critical_failure_message("upload", &failures);
+
+    assert!(message.contains("SignatureDoesNotMatch"), "{message}");
+    assert!(
+      !message.contains("S3_PUBLIC_ENDPOINT"),
+      "a 403 is not an unreachable host: {message}"
+    );
+  }
 
   #[test]
   fn test_critical_failure_message_carries_the_cause() {

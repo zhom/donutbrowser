@@ -1872,36 +1872,34 @@ rm "{}"
           parameters
         );
 
-        // windows-sys is not a direct dep, so use the raw FFI via the
-        // windows crate that Tauri pulls in. ShellExecuteW returns an
-        // HINSTANCE > 32 on success.
-        #[link(name = "shell32")]
-        extern "system" {
-          fn ShellExecuteW(
-            hwnd: *mut std::ffi::c_void,
-            operation: *const u16,
-            file: *const u16,
-            parameters: *const u16,
-            directory: *const u16,
-            show_cmd: i32,
-          ) -> isize;
-        }
-        const SW_SHOWNORMAL: i32 = 1;
-        let open: Vec<u16> = "open\0".encode_utf16().collect();
+        // Take the binding from the `windows` crate rather than writing the
+        // declaration here. A hand-written one is what put the wrong width on
+        // `SendMessageTimeoutA`'s out-parameter in `default_browser.rs`, and
+        // that killed the process on every click of "Set as default browser".
+        // No compiler and no lint can see such a mistake. The generated binding
+        // cannot drift from the real ABI, so there is nothing to get wrong.
+        use windows::core::{w, PCWSTR};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
         let result = unsafe {
           ShellExecuteW(
-            std::ptr::null_mut(),
-            open.as_ptr(),
-            file_w.as_ptr(),
-            params_w.as_ptr(),
-            std::ptr::null(),
+            None,
+            w!("open"),
+            PCWSTR(file_w.as_ptr()),
+            PCWSTR(params_w.as_ptr()),
+            PCWSTR::null(),
             SW_SHOWNORMAL,
           )
         };
 
-        if result as usize <= 32 {
-          return Err(format!("ShellExecuteW failed with code {result}").into());
+        // ShellExecuteW reports success as a value above 32. Anything at or
+        // below that is an error code wearing a handle's type. Read it as a
+        // signed value: the old `as usize` turned every negative code into a
+        // very large number, which read as success.
+        let code = result.0 as isize;
+        if code <= 32 {
+          return Err(format!("ShellExecuteW failed with code {code}").into());
         }
       } else {
         // No pending installer — just restart the app. Use a minimal

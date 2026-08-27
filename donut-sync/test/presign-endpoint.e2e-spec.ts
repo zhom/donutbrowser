@@ -1,4 +1,4 @@
-import { INestApplication } from "@nestjs/common";
+import { INestApplication, Logger } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
@@ -197,5 +197,74 @@ describe("presigned URL host", () => {
         TEST_S3_ENDPOINT,
       );
     });
+  });
+});
+
+// The server cannot test whether a device can reach the endpoint it signs, so
+// the only honest thing it can do is say what it is handing out. Without this,
+// the one configuration that breaks every transfer boots completely silently.
+describe("boot message about the presign endpoint", () => {
+  let logs: string[];
+  let warnings: string[];
+  let logSpy: jest.SpyInstance;
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    logs = [];
+    warnings = [];
+    logSpy = jest
+      .spyOn(Logger.prototype, "log")
+      .mockImplementation((message: unknown) => {
+        logs.push(String(message));
+      });
+    warnSpy = jest
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation((message: unknown) => {
+        warnings.push(String(message));
+      });
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it("says which host clients will be handed when S3_PUBLIC_ENDPOINT is unset", async () => {
+    const app = await bootstrap(undefined);
+    try {
+      const spoken = [...logs, ...warnings].join("\n");
+      expect(spoken).toContain("S3_PUBLIC_ENDPOINT");
+      expect(spoken).toContain(TEST_S3_ENDPOINT);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // A single-label host is the documented compose default and cannot work for
+  // any client, so it earns a warning rather than a note.
+  it("warns loudly about a container-only host", async () => {
+    const app = await bootstrap("http://minio:9000");
+    try {
+      const spoken = warnings.join("\n");
+      expect(spoken).toContain("minio");
+      expect(spoken).toContain("S3_PUBLIC_ENDPOINT");
+    } finally {
+      delete process.env.S3_PUBLIC_ENDPOINT;
+      await app.close();
+    }
+  });
+
+  // An operator who set the variable made a choice. Repeating the note at them
+  // would train them to ignore it, and the warning above is for the value that
+  // provably cannot work, not for every value the server cannot verify.
+  it("stays quiet when an operator has chosen a routable endpoint", async () => {
+    const app = await bootstrap(PUBLIC_ENDPOINT);
+    try {
+      const spoken = [...logs, ...warnings].join("\n");
+      expect(spoken).not.toContain("S3_PUBLIC_ENDPOINT is not set");
+    } finally {
+      delete process.env.S3_PUBLIC_ENDPOINT;
+      await app.close();
+    }
   });
 });

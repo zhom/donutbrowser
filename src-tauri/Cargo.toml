@@ -1,6 +1,6 @@
 [package]
 name = "donutbrowser"
-version = "0.29.6"
+version = "0.30.0"
 description = "Simple Yet Powerful Anti-Detect Browser"
 authors = ["zhom@github"]
 edition = "2021"
@@ -147,6 +147,10 @@ windows = { version = "0.62", features = [
   "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_System_Registry",
+  # CoInitializeEx, so the `ms-settings:` hand-off in default_browser.rs has a
+  # COM apartment. ShellExecuteW activates the URI through a shell extension,
+  # and it runs on a `spawn_blocking` thread that has no apartment of its own.
+  "Win32_System_Com",
   "Win32_UI_Shell",
   # SendMessageTimeoutW, for the association-change broadcast in
   # default_browser.rs. Going through the crate rather than a hand-written

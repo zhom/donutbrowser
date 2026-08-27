@@ -134,7 +134,11 @@
       "title": "Trình duyệt mặc định",
       "setAsDefault": "Đặt làm trình duyệt mặc định",
       "alreadyDefault": "Đã là trình duyệt mặc định",
-      "description": "Khi được đặt làm mặc định, Donut Browser sẽ xử lý các liên kết web và cho phép bạn chọn hồ sơ để sử dụng."
+      "description": "Khi được đặt làm mặc định, Donut Browser sẽ xử lý các liên kết web và cho phép bạn chọn hồ sơ để sử dụng.",
+      "setSuccess": "Donut Browser hiện là trình duyệt mặc định của bạn",
+      "setFailed": "Không thể đặt trình duyệt mặc định",
+      "finishInSystemSettings": "Hoàn tất trong Cài đặt Windows",
+      "finishInSystemSettingsDescription": "Donut Browser đã được đăng ký. Cài đặt Windows đang mở: chọn Donut Browser trong mục Trình duyệt web để hoàn tất."
     },
     "permissions": {
       "title": "Quyền hệ thống",

@@ -134,7 +134,11 @@
       "title": "Navegador Padrão",
       "setAsDefault": "Definir como Navegador Padrão",
       "alreadyDefault": "Já é o Navegador Padrão",
-      "description": "Quando definido como padrão, o Donut Browser lidará com links da web e permitirá que você escolha qual perfil usar."
+      "description": "Quando definido como padrão, o Donut Browser lidará com links da web e permitirá que você escolha qual perfil usar.",
+      "setSuccess": "O Donut Browser agora é o seu navegador padrão",
+      "setFailed": "Não foi possível definir o navegador padrão",
+      "finishInSystemSettings": "Conclua nas Configurações do Windows",
+      "finishInSystemSettingsDescription": "O Donut Browser está registrado. As Configurações do Windows foram abertas: escolha o Donut Browser em Navegador da web para concluir."
     },
     "permissions": {
       "title": "Permissões do Sistema",

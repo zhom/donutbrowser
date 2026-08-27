@@ -86,6 +86,11 @@ export class SyncService implements OnModuleInit {
   // `S3_PUBLIC_ENDPOINT` names a different, client-reachable address.
   private presignClient: S3Client;
   private publicEndpoint: string;
+  /**
+   * Whether an operator chose the public endpoint, or it fell back to the
+   * server's own storage address. The fallback is the shape that fails.
+   */
+  private publicEndpointWasConfigured: boolean;
   private bucket: string;
   // Upper bound on presign batch array length (DoS guard).
   private static readonly MAX_BATCH_ITEMS = 1000;
@@ -131,9 +136,11 @@ export class SyncService implements OnModuleInit {
     // network and nowhere else. Signing is bound to the host, so the presign
     // client is a second client pinned to the public address rather than a
     // string rewrite of the signed URL.
-    const publicEndpoint =
-      this.configService.get<string>("S3_PUBLIC_ENDPOINT") || endpoint;
+    const configuredPublicEndpoint =
+      this.configService.get<string>("S3_PUBLIC_ENDPOINT");
+    const publicEndpoint = configuredPublicEndpoint || endpoint;
     this.publicEndpoint = publicEndpoint;
+    this.publicEndpointWasConfigured = Boolean(configuredPublicEndpoint);
     this.presignClient =
       publicEndpoint === endpoint
         ? this.s3Client
@@ -191,14 +198,33 @@ export class SyncService implements OnModuleInit {
 
     const isSingleLabel =
       !host.includes(".") && !host.includes(":") && host !== "localhost";
-    if (!isSingleLabel) return;
 
-    this.logger.warn(
-      `Storage endpoint '${this.publicEndpoint}' uses the container-only host '${host}'. ` +
-        "Presigned URLs built from it cannot be reached by Donut Browser, so every " +
-        "transfer will fail while /health and /readyz stay green. Set S3_PUBLIC_ENDPOINT " +
-        "to an address your devices can reach (and publish that port).",
-    );
+    if (isSingleLabel) {
+      this.logger.warn(
+        `Storage endpoint '${this.publicEndpoint}' uses the container-only host '${host}'. ` +
+          "Presigned URLs built from it cannot be reached by Donut Browser, so every " +
+          "transfer will fail while /health and /readyz stay green. Set S3_PUBLIC_ENDPOINT " +
+          "to an address your devices can reach (and publish that port).",
+      );
+      return;
+    }
+
+    // A dotted host proves nothing. With `S3_PUBLIC_ENDPOINT` unset, clients are
+    // handed whatever address this server uses for storage itself, and a
+    // reachable-looking name such as `storage.internal`, or a private address on
+    // a network the devices are not on, fails in exactly the same way while
+    // saying nothing at all. This server cannot test the endpoint for them,
+    // because it does not know where its clients are, so state what it does
+    // know and leave the judgement to the operator.
+    if (!this.publicEndpointWasConfigured) {
+      this.logger.log(
+        `S3_PUBLIC_ENDPOINT is not set, so presigned URLs will name '${this.publicEndpoint}', ` +
+          "the address this server uses for storage itself. Transfers go straight from each " +
+          "device to that address, and this server cannot verify a device can reach it. If " +
+          "transfers fail while /health and /readyz stay green, set S3_PUBLIC_ENDPOINT to an " +
+          "address your devices can reach and publish that port.",
+      );
+    }
   }
 
   private async ensureBucketExists(): Promise<void> {

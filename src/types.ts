@@ -818,3 +818,16 @@ export interface PreLaunchChecks {
   exit_measurement_unreliable: boolean;
   consent_token: string | null;
 }
+
+/**
+ * What happened when the user asked Donut to become the default browser.
+ *
+ * macOS and Linux let a program make the change itself, so the answer there is
+ * always "set". Windows reserves the final choice for its own settings page:
+ * the app registers itself, Windows Settings opens, and the user finishes the
+ * job. Treating that case as plain success is how the button used to report a
+ * change that had not happened.
+ */
+export type SetDefaultBrowserOutcome =
+  | { status: "set" }
+  | { status: "awaitingSystemSettings" };

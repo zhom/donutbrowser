@@ -8,7 +8,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 
 static GLOBAL_SCHEDULER: std::sync::Mutex<Option<Arc<SyncScheduler>>> = std::sync::Mutex::new(None);
 
@@ -22,6 +21,17 @@ pub fn set_global_scheduler(scheduler: Arc<SyncScheduler>) {
   }
 }
 
+/// What `start` should do, given the flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartDecision {
+  /// Nothing is running and nothing retired it. Spawn the loop.
+  Start,
+  /// A loop is already ticking on this scheduler.
+  AlreadyRunning,
+  /// `stop` was called on it, possibly before it ever ran.
+  Retired,
+}
+
 #[derive(Debug, Clone)]
 struct ProfileStopTime {
   #[allow(dead_code)]
@@ -31,6 +41,15 @@ struct ProfileStopTime {
 
 pub struct SyncScheduler {
   running: Arc<AtomicBool>,
+  /// Set by `stop()` and never cleared. A scheduler is one-shot.
+  ///
+  /// The pipeline publishes a scheduler before it starts its loop, because work
+  /// queued during the network checks in between has to land somewhere. That
+  /// left a window where `stop()` cleared a `running` flag that was still
+  /// false, so it did nothing, and the scheduler then started anyway and ticked
+  /// forever with no way to reach it. `running` cannot express "retired before
+  /// it ever ran", so this does.
+  cancelled: Arc<AtomicBool>,
   pending_profiles: Arc<Mutex<HashMap<String, ProfileStopTime>>>,
   pending_proxies: Arc<Mutex<HashSet<String>>>,
   pending_groups: Arc<Mutex<HashSet<String>>>,
@@ -52,6 +71,7 @@ impl SyncScheduler {
   pub fn new() -> Self {
     Self {
       running: Arc::new(AtomicBool::new(false)),
+      cancelled: Arc::new(AtomicBool::new(false)),
       pending_profiles: Arc::new(Mutex::new(HashMap::new())),
       pending_proxies: Arc::new(Mutex::new(HashSet::new())),
       pending_groups: Arc::new(Mutex::new(HashSet::new())),
@@ -68,7 +88,12 @@ impl SyncScheduler {
     self.running.load(Ordering::SeqCst)
   }
 
+  /// Retire this scheduler for good.
+  ///
+  /// Order matters: mark it cancelled before clearing `running`, so a `start()`
+  /// racing this call cannot slip between the two and begin ticking.
   pub fn stop(&self) {
+    self.cancelled.store(true, Ordering::SeqCst);
     self.running.store(false, Ordering::SeqCst);
   }
 
@@ -334,35 +359,93 @@ impl SyncScheduler {
     }
   }
 
+  /// The decision `start` makes before it spawns anything.
+  ///
+  /// Split out so it can be tested. `start` needs a `tauri::AppHandle`, which a
+  /// unit test cannot build, and the retirement rule is the part worth pinning
+  /// down. The `running` check stays a `swap` so two concurrent starts cannot
+  /// both win.
+  fn claim_start_slot(&self) -> StartDecision {
+    if self.cancelled.load(Ordering::SeqCst) {
+      return StartDecision::Retired;
+    }
+    if self.running.swap(true, Ordering::SeqCst) {
+      return StartDecision::AlreadyRunning;
+    }
+    StartDecision::Start
+  }
+
+  /// Begin ticking. Returns whether a loop was actually started, so the caller
+  /// can log the truth instead of assuming.
   pub async fn start(
     self: Arc<Self>,
     app_handle: tauri::AppHandle,
     mut work_rx: mpsc::UnboundedReceiver<SyncWorkItem>,
-  ) {
-    if self.running.swap(true, Ordering::SeqCst) {
-      return;
+  ) -> bool {
+    match self.claim_start_slot() {
+      StartDecision::Retired => {
+        // Retired while the pipeline was still assembling it. Starting now
+        // would leave a task nothing can stop, because the handle in the global
+        // has already been replaced.
+        log::info!("Sync scheduler was retired before it started; not starting it");
+        return false;
+      }
+      StartDecision::AlreadyRunning => {
+        log::warn!("Sync scheduler is already running; ignoring the second start");
+        return false;
+      }
+      StartDecision::Start => {}
     }
 
     let scheduler = self.clone();
     let app_handle_clone = app_handle.clone();
 
     tokio::spawn(async move {
+      // A fresh `sleep` inside the `select!` restarts from zero on every
+      // iteration, so a steady stream of work items kept resetting it and
+      // `process_pending` never ran: queued profiles sat there for as long as
+      // the stream lasted. An interval keeps its own schedule regardless of how
+      // often the other arm fires. `Delay` rather than `Burst` so a slow
+      // `process_pending` does not come back to a pile of missed ticks and run
+      // itself back to back.
+      let mut ticker = tokio::time::interval(Duration::from_millis(2000));
+      ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+      // The first tick of an interval resolves immediately. The old shape
+      // always waited 2000 ms before its first pass, so consume it here and
+      // keep that behaviour.
+      ticker.tick().await;
+
+      // Once the senders are gone `recv()` resolves instantly and forever, so
+      // the arm has to be disabled or the loop spins hot on a dead channel.
+      let mut work_channel_open = true;
+
       while scheduler.running.load(Ordering::SeqCst) {
         tokio::select! {
-          Some(work_item) = work_rx.recv() => {
-            match work_item {
-              SyncWorkItem::Profile(id) => scheduler.queue_profile_sync(id).await,
-              SyncWorkItem::Proxy(id) => scheduler.queue_proxy_sync(id).await,
-              SyncWorkItem::Group(id) => scheduler.queue_group_sync(id).await,
-              SyncWorkItem::Vpn(id) => scheduler.queue_vpn_sync(id).await,
-              SyncWorkItem::Extension(id) => scheduler.queue_extension_sync(id).await,
-              SyncWorkItem::ExtensionGroup(id) => scheduler.queue_extension_group_sync(id).await,
-              SyncWorkItem::Tombstone(entity_type, entity_id) => {
-                scheduler.queue_tombstone(entity_type, entity_id).await
+          received = work_rx.recv(), if work_channel_open => {
+            match received {
+              Some(work_item) => match work_item {
+                SyncWorkItem::Profile(id) => scheduler.queue_profile_sync(id).await,
+                SyncWorkItem::Proxy(id) => scheduler.queue_proxy_sync(id).await,
+                SyncWorkItem::Group(id) => scheduler.queue_group_sync(id).await,
+                SyncWorkItem::Vpn(id) => scheduler.queue_vpn_sync(id).await,
+                SyncWorkItem::Extension(id) => scheduler.queue_extension_sync(id).await,
+                SyncWorkItem::ExtensionGroup(id) => scheduler.queue_extension_group_sync(id).await,
+                SyncWorkItem::Tombstone(entity_type, entity_id) => {
+                  scheduler.queue_tombstone(entity_type, entity_id).await
+                }
+              },
+              None => {
+                // The subscription is gone, so no more live updates from other
+                // devices. Local changes and the timer still work, so keep
+                // ticking rather than ending the scheduler.
+                log::warn!(
+                  "Sync work channel closed; continuing on the timer without live updates"
+                );
+                work_channel_open = false;
               }
             }
           }
-          _ = sleep(Duration::from_millis(2000)) => {
+          _ = ticker.tick() => {
             scheduler.process_pending(&app_handle_clone).await;
           }
         }
@@ -370,6 +453,8 @@ impl SyncScheduler {
 
       log::info!("Sync scheduler stopped");
     });
+
+    true
   }
 
   async fn process_pending(&self, app_handle: &tauri::AppHandle) {
@@ -851,5 +936,58 @@ impl SyncScheduler {
         _ => {}
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_fresh_scheduler_starts_once() {
+    let scheduler = SyncScheduler::new();
+    assert_eq!(scheduler.claim_start_slot(), StartDecision::Start);
+    assert!(scheduler.is_running());
+    assert_eq!(
+      scheduler.claim_start_slot(),
+      StartDecision::AlreadyRunning,
+      "a second start must not spawn a second loop on the same scheduler"
+    );
+  }
+
+  #[test]
+  fn a_scheduler_retired_before_it_ran_never_starts() {
+    // The pipeline publishes a scheduler, then awaits two network checks, then
+    // starts the loop. A restart landing in that window calls `stop()` on a
+    // scheduler that has not started yet. `running` was already false, so the
+    // old `stop()` did nothing at all, the loop started afterwards, and it
+    // ticked forever with the global already pointing elsewhere.
+    let scheduler = SyncScheduler::new();
+    assert!(!scheduler.is_running());
+
+    scheduler.stop();
+
+    assert_eq!(
+      scheduler.claim_start_slot(),
+      StartDecision::Retired,
+      "a scheduler stopped before starting must stay stopped"
+    );
+    assert!(
+      !scheduler.is_running(),
+      "refusing to start must not leave the running flag set"
+    );
+  }
+
+  #[test]
+  fn stopping_a_running_scheduler_retires_it_for_good() {
+    let scheduler = SyncScheduler::new();
+    assert_eq!(scheduler.claim_start_slot(), StartDecision::Start);
+
+    scheduler.stop();
+    assert!(!scheduler.is_running());
+
+    // A scheduler is one-shot. Restarting the pipeline builds a new one, so a
+    // retired instance coming back to life could only ever be a duplicate.
+    assert_eq!(scheduler.claim_start_slot(), StartDecision::Retired);
   }
 }

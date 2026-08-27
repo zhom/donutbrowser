@@ -1,3 +1,14 @@
+# Storage for developing and testing donut-sync itself. It runs MinIO only, and
+# the sync server is expected to run on the host beside it (`pnpm start:dev`),
+# which is why MinIO is published and why the port matches the one pinned in
+# test/test-env.ts.
+#
+# This is NOT the self-hosting compose file. That one runs donut-sync in a
+# container too, and it must set S3_PUBLIC_ENDPOINT, because a server that signs
+# presigned URLs against a compose-internal host such as `http://minio:9000`
+# hands every device a URL it cannot open, while /health and /readyz stay green.
+# Take the self-hosting compose from https://donutbrowser.com/docs/self-hosting
+# rather than from here.
 services:
   minio:
     image: minio/minio:latest

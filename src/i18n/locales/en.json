@@ -134,7 +134,11 @@
       "title": "Default Browser",
       "setAsDefault": "Set as Default Browser",
       "alreadyDefault": "Already Default Browser",
-      "description": "When set as default, Donut Browser will handle web links and allow you to choose which profile to use."
+      "description": "When set as default, Donut Browser will handle web links and allow you to choose which profile to use.",
+      "setSuccess": "Donut Browser is now your default browser",
+      "setFailed": "Could not set the default browser",
+      "finishInSystemSettings": "Finish in Windows Settings",
+      "finishInSystemSettingsDescription": "Donut Browser is registered. Windows Settings is open: choose Donut Browser under Web browser to finish."
     },
     "permissions": {
       "title": "System Permissions",

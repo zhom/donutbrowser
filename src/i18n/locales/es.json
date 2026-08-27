@@ -134,7 +134,11 @@
       "title": "Navegador Predeterminado",
       "setAsDefault": "Establecer como Navegador Predeterminado",
       "alreadyDefault": "Ya es el Navegador Predeterminado",
-      "description": "Cuando se establece como predeterminado, Donut Browser manejará los enlaces web y te permitirá elegir qué perfil usar."
+      "description": "Cuando se establece como predeterminado, Donut Browser manejará los enlaces web y te permitirá elegir qué perfil usar.",
+      "setSuccess": "Donut Browser ya es tu navegador predeterminado",
+      "setFailed": "No se pudo establecer el navegador predeterminado",
+      "finishInSystemSettings": "Termina en la Configuración de Windows",
+      "finishInSystemSettingsDescription": "Donut Browser está registrado. Se abrió la Configuración de Windows: elige Donut Browser en Navegador web para terminar."
     },
     "permissions": {
       "title": "Permisos del Sistema",

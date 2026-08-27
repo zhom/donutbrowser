@@ -134,7 +134,11 @@
       "title": "默认浏览器",
       "setAsDefault": "设为默认浏览器",
       "alreadyDefault": "已是默认浏览器",
-      "description": "设为默认后，Donut Browser 将处理网页链接并允许您选择使用哪个配置文件。"
+      "description": "设为默认后，Donut Browser 将处理网页链接并允许您选择使用哪个配置文件。",
+      "setSuccess": "Donut Browser 现在是您的默认浏览器",
+      "setFailed": "无法设置默认浏览器",
+      "finishInSystemSettings": "请在 Windows 设置中完成",
+      "finishInSystemSettingsDescription": "Donut Browser 已注册。Windows 设置已打开：在“Web 浏览器”中选择 Donut Browser 即可完成。"
     },
     "permissions": {
       "title": "系统权限",

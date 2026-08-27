@@ -62,6 +62,7 @@ import {
 } from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
+import type { SetDefaultBrowserOutcome } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface AppSettings {
@@ -401,14 +402,39 @@ export function SettingsDialog({
   const handleSetDefaultBrowser = useCallback(async () => {
     setIsSettingDefault(true);
     try {
-      await invoke("set_as_default_browser");
+      // Windows keeps the final choice for its own settings page, so a call
+      // that succeeded does not always mean Donut is the default yet. Say which
+      // of the two happened. Saying nothing at all is what left the user
+      // watching the badge stay "Inactive" with no explanation.
+      const outcome = await invoke<SetDefaultBrowserOutcome>(
+        "set_as_default_browser",
+      );
       await checkDefaultBrowserStatus();
+
+      if (outcome.status === "awaitingSystemSettings") {
+        showSuccessToast(t("settings.defaultBrowser.finishInSystemSettings"), {
+          description: t(
+            "settings.defaultBrowser.finishInSystemSettingsDescription",
+          ),
+          duration: 8000,
+        });
+      } else {
+        showSuccessToast(t("settings.defaultBrowser.setSuccess"));
+      }
     } catch (error) {
-      console.error("Failed to set as default browser:", error);
+      showErrorToast(t("settings.defaultBrowser.setFailed"), {
+        description:
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : t("common.errors.unknown"),
+        duration: 8000,
+      });
     } finally {
       setIsSettingDefault(false);
     }
-  }, [checkDefaultBrowserStatus]);
+  }, [checkDefaultBrowserStatus, t]);
 
   const handleClearTraffic = useCallback(async () => {
     setIsClearingTraffic(true);

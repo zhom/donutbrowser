@@ -1745,6 +1745,44 @@ fn setup_system_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::E
   Ok(())
 }
 
+/// Pick the things to open out of a command line.
+///
+/// This is how the desktop hands a browser its work. Windows and Linux both
+/// start the executable with the target as an argument: a URL for a link, and a
+/// plain path for a file, because the ProgId command in the registry passes
+/// `%1` through unchanged. A path becomes a `file://` URL here, so callers only
+/// ever deal with URLs.
+///
+/// A path that does not exist is ignored. Guessing at one would turn a stray
+/// flag into a navigation. The first argument is the executable's own path and
+/// is never a target.
+fn urls_from_args<'a>(args: impl IntoIterator<Item = &'a String>) -> Vec<String> {
+  args
+    .into_iter()
+    .skip(1)
+    .filter_map(|arg| {
+      if arg.starts_with("http://") || arg.starts_with("https://") {
+        return Some(arg.clone());
+      }
+
+      let path = std::path::Path::new(arg);
+      if !path.is_file() {
+        return None;
+      }
+
+      let absolute = if path.is_absolute() {
+        path.to_path_buf()
+      } else {
+        env::current_dir().ok()?.join(path)
+      };
+
+      url::Url::from_file_path(absolute)
+        .ok()
+        .map(|url| url.to_string())
+    })
+    .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   run_with_builder(|builder| builder);
@@ -1755,7 +1793,7 @@ pub fn run_with_builder(
   configure_builder: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry>,
 ) {
   let args: Vec<String> = env::args().collect();
-  let startup_url = args.iter().find(|arg| arg.starts_with("http")).cloned();
+  let startup_url = urls_from_args(args.iter()).into_iter().next();
 
   if let Some(url) = startup_url.clone() {
     log::info!("Found startup URL in command line");
@@ -1818,6 +1856,20 @@ pub fn run_with_builder(
         let _ = window.show();
         let _ = window.set_focus();
         let _ = window.unminimize();
+      }
+
+      // A second launch is how the desktop hands a running browser its next
+      // link. The shell starts the executable with the target in argv, this
+      // callback receives that argv, and the second process exits. The callback
+      // used to log the arguments and drop them, so clicking a link did nothing
+      // whenever Donut was already open, which is every time after the first.
+      for url in urls_from_args(args.iter()) {
+        let handle = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+          if let Err(e) = handle_url_open(handle, url).await {
+            log::error!("Failed to handle a forwarded URL: {e}");
+          }
+        });
       }
     },
   ));
@@ -2620,51 +2672,7 @@ pub fn run_with_builder(
       // Start sync subscription and scheduler if configured
       let app_handle_sync = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        use std::sync::Arc;
-
-        let mut subscription_manager = sync::SubscriptionManager::new();
-        let work_rx = subscription_manager.take_work_receiver();
-
-        if let Err(e) = subscription_manager.start(app_handle_sync.clone()).await {
-          log::warn!("Failed to start sync subscription: {e}");
-        }
-
-        if let Some(work_rx) = work_rx {
-          let scheduler = Arc::new(sync::SyncScheduler::new());
-
-          // Set the global scheduler so commands can access it
-          sync::set_global_scheduler(scheduler.clone());
-
-          // Start initial sync for all enabled profiles
-          scheduler.sync_all_enabled_profiles(&app_handle_sync).await;
-
-          // Check for missing synced profiles (deleted locally but exist remotely)
-          match sync::SyncEngine::create_from_settings(&app_handle_sync).await {
-            Ok(engine) => {
-              if let Err(e) = engine
-                .check_for_missing_synced_profiles(&app_handle_sync)
-                .await
-              {
-                log::warn!("Failed to check for missing profiles: {}", e);
-              }
-              if let Err(e) = engine
-                .check_for_missing_synced_entities(&app_handle_sync)
-                .await
-              {
-                log::warn!("Failed to check for missing entities: {}", e);
-              }
-            }
-            Err(e) => {
-              log::warn!("Sync not configured, skipping missing profile check: {}", e);
-            }
-          }
-
-          scheduler
-            .clone()
-            .start(app_handle_sync.clone(), work_rx)
-            .await;
-          log::info!("Sync scheduler started");
-        }
+        sync::start_pipeline(app_handle_sync).await;
       });
 
       // Start cloud auth background refresh loop
@@ -2964,6 +2972,57 @@ pub fn run_with_builder(
 #[cfg(test)]
 mod tests {
   use std::fs;
+
+  #[test]
+  fn a_command_line_yields_the_links_and_files_it_carries() {
+    let exe = "C:/Program Files/Donut Browser/donutbrowser.exe".to_string();
+
+    // The executable's own path leads every command line and is not a target,
+    // even on a machine where that path happens to exist.
+    assert!(super::urls_from_args([&exe]).is_empty());
+
+    let link = "https://example.com/a?b=c".to_string();
+    let insecure = "http://example.com".to_string();
+    assert_eq!(
+      super::urls_from_args([&exe, &link, &insecure]),
+      vec![link.clone(), insecure]
+    );
+
+    // Flags and stray words are not links. The old filter took anything
+    // starting with "http", which is looser than it looks.
+    let flag = "--headless".to_string();
+    let near_miss = "httpsomething".to_string();
+    assert_eq!(
+      super::urls_from_args([&exe, &flag, &near_miss]),
+      Vec::<String>::new()
+    );
+
+    // A path that is not there is ignored rather than guessed at.
+    let missing = "C:/no/such/page.html".to_string();
+    assert!(super::urls_from_args([&exe, &missing]).is_empty());
+
+    // Explorer hands a browser a bare path, not a URL, because the registered
+    // command passes `%1` straight through. Turning it into a `file://` URL
+    // here is what makes the .html association in `default_browser.rs` a real
+    // claim rather than an empty one.
+    let directory = tempfile::tempdir().expect("temp dir");
+    let page = directory.path().join("page.html");
+    fs::write(&page, "<html></html>").expect("write the page");
+    let page_arg = page.to_string_lossy().to_string();
+
+    let found = super::urls_from_args([&exe, &page_arg]);
+    assert_eq!(found.len(), 1, "the file should have produced one URL");
+    assert!(
+      found[0].starts_with("file:///"),
+      "expected a file URL, got {}",
+      found[0]
+    );
+    assert!(
+      found[0].ends_with("page.html"),
+      "expected the page's own name, got {}",
+      found[0]
+    );
+  }
 
   #[test]
   fn backend_error_helpers_preserve_codes_and_structure_diagnostics() {
