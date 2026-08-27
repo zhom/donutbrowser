@@ -1,6 +1,35 @@
 # Changelog
 
 
+## v0.30.0 (2026-08-27)
+
+### Features
+
+- verify checksum for wayfern
+
+### Refactoring
+
+- cleanup
+- better cookie import experience
+- table style unification
+- confirmation button for profile-regeneration
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.29.6 [skip ci] (#575)
+
+### Maintenance
+
+- chore: linting
+- test: better sync coverage
+- chore: update flake.nix for v0.29.6 [skip ci] (#576)
+- ci(deps): bump the github-actions group with 5 updates
+
+### Other
+
+- style: copy
+
+
 ## v0.29.6 (2026-08-24)
 
 ### Refactoring
