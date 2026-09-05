@@ -55,7 +55,7 @@ const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
 interface GeneratedFingerprint {
   fingerprint: string;
   identity_id: string | null;
-  identity_baseline: string | null;
+  location: string | null;
 }
 
 const getCurrentOS = (): WayfernOS => {
@@ -109,15 +109,18 @@ export function WayfernConfigForm({
           configJson,
         },
       );
-      onConfigChange("fingerprint", result.fingerprint);
-      // The identity travels with the fingerprint it produced. Storing one
-      // without the other leaves a device the launch path cannot reproduce, so
-      // it would be discarded and re-minted on the next launch.
+      // An identity-backed profile stores the id, its location and the user's
+      // edits, never the device: the browser rebuilds the device from the id
+      // on every launch, so nothing worth copying is ever written to disk. A
+      // legacy browser without the identity API still stores the payload.
       onConfigChange("identity_id", result.identity_id ?? undefined);
+      onConfigChange("location", result.location ?? undefined);
       onConfigChange(
-        "identity_baseline",
-        result.identity_baseline ?? undefined,
+        "fingerprint",
+        result.identity_id ? undefined : result.fingerprint,
       );
+      onConfigChange("identity_overrides", undefined);
+      onConfigChange("identity_baseline", undefined);
     } catch (error) {
       console.error("Failed to generate fingerprint:", error);
     } finally {
@@ -164,12 +167,16 @@ export function WayfernConfigForm({
     onConfigChange,
   ]);
 
+  // What the form edits: the override map for an identity-backed profile
+  // (only the user's own edits exist on disk), the whole payload for a legacy
+  // one.
+  const editedJson = config.identity_id
+    ? config.identity_overrides
+    : config.fingerprint;
   useEffect(() => {
-    if (config.fingerprint) {
+    if (editedJson) {
       try {
-        const parsed = JSON.parse(
-          config.fingerprint,
-        ) as WayfernFingerprintConfig;
+        const parsed = JSON.parse(editedJson) as WayfernFingerprintConfig;
         setFingerprintConfig(parsed);
       } catch (error) {
         console.error("Failed to parse fingerprint config:", error);
@@ -178,7 +185,7 @@ export function WayfernConfigForm({
     } else {
       setFingerprintConfig({});
     }
-  }, [config.fingerprint]);
+  }, [editedJson]);
 
   const updateFingerprintConfig = (
     key: keyof WayfernFingerprintConfig,
@@ -200,7 +207,12 @@ export function WayfernConfigForm({
 
     try {
       const jsonString = JSON.stringify(newConfig);
-      onConfigChange("fingerprint", jsonString);
+      onConfigChange(
+        config.identity_id ? "identity_overrides" : "fingerprint",
+        Object.keys(newConfig).length === 0 && config.identity_id
+          ? undefined
+          : jsonString,
+      );
     } catch (error) {
       console.error("Failed to serialize fingerprint config:", error);
     }

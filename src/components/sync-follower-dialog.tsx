@@ -31,7 +31,11 @@ import { RippleButton } from "./ui/ripple";
 function getScreenSize(
   profile: BrowserProfile,
 ): { w: number; h: number } | null {
-  const fp = profile.wayfern_config?.fingerprint;
+  // An identity-backed profile stores no device, only the user's edits, so a
+  // screen size is available only when the user pinned one.
+  const fp =
+    profile.wayfern_config?.fingerprint ??
+    profile.wayfern_config?.identity_overrides;
   if (!fp) return null;
   try {
     const parsed: WayfernFingerprintConfig = JSON.parse(fp);

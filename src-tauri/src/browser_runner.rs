@@ -474,8 +474,21 @@ impl BrowserRunner {
       // tested immediately below - which is a deliberate per-profile setting
       // and not a consequence of the version.
       let mut updated_profile = profile.clone();
+      // ONE-TIME MIGRATION: a profile that still stores a whole device beside
+      // its identity moves to identity-only storage here, before the launch
+      // reads it, and the migrated shape is what gets persisted below.
+      if crate::wayfern_manager::WayfernManager::migrate_identity_config(&mut wayfern_config) {
+        let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
+        crate::wayfern_manager::WayfernManager::migrate_identity_config(&mut cfg);
+        updated_profile.wayfern_config = Some(cfg);
+        log::info!(
+          "Migrated Wayfern profile {} to identity-only storage",
+          profile.name
+        );
+      }
       let randomize_requested = wayfern_config.randomize_fingerprint_on_launch == Some(true);
-      let needs_device = wayfern_config.fingerprint.is_none();
+      let needs_device =
+        wayfern_config.fingerprint.is_none() && wayfern_config.identity_id.is_none();
       if randomize_requested || needs_device {
         if needs_device && !randomize_requested {
           log::info!(
@@ -530,16 +543,29 @@ impl BrowserRunner {
           generated.identity_id
         );
 
-        // Update the config with the new fingerprint for launching
-        wayfern_config.fingerprint = Some(generated.fingerprint.clone());
+        // Update the config with the new device for launching. An identity
+        // stores the id and the location only; a legacy browser stores the
+        // whole payload.
+        let is_identity = generated.identity_id.is_some();
         wayfern_config.identity_id = generated.identity_id.clone();
-        wayfern_config.identity_baseline = generated.identity_baseline.clone();
+        wayfern_config.location = generated.location.clone();
+        wayfern_config.identity_baseline = None;
+        wayfern_config.fingerprint = if is_identity {
+          None
+        } else {
+          Some(generated.fingerprint.clone())
+        };
 
-        // Save the updated fingerprint to the profile so it persists.
+        // Save the updated device to the profile so it persists.
         let mut updated_wayfern_config = updated_profile.wayfern_config.clone().unwrap_or_default();
-        updated_wayfern_config.fingerprint = Some(generated.fingerprint);
         updated_wayfern_config.identity_id = generated.identity_id;
-        updated_wayfern_config.identity_baseline = generated.identity_baseline;
+        updated_wayfern_config.location = generated.location;
+        updated_wayfern_config.identity_baseline = None;
+        updated_wayfern_config.fingerprint = if is_identity {
+          None
+        } else {
+          Some(generated.fingerprint)
+        };
         // Preserve the randomize flag so it persists across launches
         updated_wayfern_config.randomize_fingerprint_on_launch =
           wayfern_config.randomize_fingerprint_on_launch;
@@ -714,23 +740,19 @@ impl BrowserRunner {
       // which may differ from the stored one. Persist it so the next launch
       // starts from that value — saved below via
       // save_process_info(&updated_profile).
+      // LEGACY profiles only: an identity-backed profile never persists the
+      // device (the manager returns no echo for it), so this block is reached
+      // only by a whole-payload profile applied with setFingerprint.
       if let Some(used_fp) = wayfern_result.used_fingerprint.clone() {
         let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
-        let baseline_changed = wayfern_result.used_identity_baseline.is_some()
-          && cfg.identity_baseline != wayfern_result.used_identity_baseline;
-        if cfg.fingerprint.as_deref() != Some(used_fp.as_str()) || baseline_changed {
+        if cfg.identity_id.is_none() && cfg.fingerprint.as_deref() != Some(used_fp.as_str()) {
           log::info!(
             "Persisting applied fingerprint echoed by Wayfern for profile: {} (len {})",
             profile.name,
             used_fp.len()
           );
           cfg.fingerprint = Some(used_fp);
-          // The baseline must move with the fingerprint it was computed
-          // against, or the next launch diffs the two apart and invents
-          // overrides the user never asked for.
-          if let Some(baseline) = wayfern_result.used_identity_baseline.clone() {
-            cfg.identity_baseline = Some(baseline);
-          }
+          cfg.identity_baseline = None;
           updated_profile.wayfern_config = Some(cfg);
         }
       }

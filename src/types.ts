@@ -414,7 +414,9 @@ export interface WayfernConfig {
   os?: WayfernOS; // Operating system for fingerprint generation
   geo_proxy_signature?: string; // Internal: routing the fingerprint's location was computed for
   identity_id?: string; // Internal: UUID the device is derived from on browsers with the identity API
-  identity_baseline?: string; // Internal: derived fingerprint before edits, diffed to recover overrides
+  identity_baseline?: string; // Legacy: read once by the migration to identity-only storage, never written
+  identity_overrides?: string; // JSON object of the user's own edits to an identity-backed device
+  location?: string; // JSON object of the exit-derived location fields (timezone, language, coordinates)
 }
 
 // Wayfern fingerprint config - matches the C++ FingerprintData structure

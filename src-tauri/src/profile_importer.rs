@@ -948,7 +948,7 @@ impl ProfileImporter {
         }
       }
 
-      if config.fingerprint.is_none() {
+      if config.fingerprint.is_none() && config.identity_id.is_none() {
         let temp_profile = BrowserProfile {
           id: uuid::Uuid::new_v4(),
           name: new_profile_name.to_string(),
@@ -989,9 +989,14 @@ impl ProfileImporter {
           // geo_proxy_signature is intentionally left unset here: the first
           // launch's signature-mismatch refresh verifies the location either way.
           Ok(generated) => {
-            config.fingerprint = Some(generated.fingerprint);
             config.identity_id = generated.identity_id;
-            config.identity_baseline = generated.identity_baseline;
+            config.location = generated.location;
+            config.identity_baseline = None;
+            config.fingerprint = if config.identity_id.is_some() {
+              None
+            } else {
+              Some(generated.fingerprint)
+            };
           }
           Err(e) => {
             let _ = fs::remove_dir_all(&new_profile_uuid_dir);

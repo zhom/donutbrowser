@@ -45,15 +45,30 @@ pub struct WayfernConfig {
   /// location can be refreshed instead of showing stale data.
   #[serde(default)]
   pub geo_proxy_signature: Option<String>,
-  /// Identity handle for this profile, when it has one. `None` means the
-  /// profile stores a whole fingerprint payload instead.
+  /// Identity handle for this profile, when it has one. An identity-backed
+  /// profile stores the id, its `location` and its `identity_overrides` and
+  /// NOTHING else: the device is rebuilt from the id by the browser on every
+  /// launch, so no fingerprint payload ever sits on disk to be copied.
+  /// `None` means a legacy profile that still stores a whole payload in
+  /// `fingerprint` and is applied with `Wayfern.setFingerprint`.
   #[serde(default)]
   pub identity_id: Option<String>,
-  /// The fingerprint as first received for `identity_id`, before geolocation
-  /// and before any user edit. Diffed against `fingerprint` on launch to
-  /// recover the user's own edits.
+  /// LEGACY, read only by `migrate_identity_config`: the derived device an
+  /// older build snapshotted so the user's edits could be diffed out of the
+  /// stored payload. Cleared by the migration; never written again.
   #[serde(default)]
   pub identity_baseline: Option<String>,
+  /// The user's own edits to an identity-backed device, as a JSON object of
+  /// fingerprint fields. Sent verbatim as `setIdentity` overrides; everything
+  /// not listed here comes from the identity. `None` means no edits.
+  #[serde(default)]
+  pub identity_overrides: Option<String>,
+  /// The location the profile's exit resolves to (timezone, timezoneOffset,
+  /// language, languages, latitude, longitude, accuracy) as a JSON object.
+  /// It depends on the proxy, not on the identity, which is why it is the one
+  /// piece of device state an identity-backed profile persists.
+  #[serde(default)]
+  pub location: Option<String>,
 }
 
 /// First Wayfern version that ships `createIdentity`/`setIdentity`/
@@ -119,12 +134,15 @@ const LOCALE_CARRY_OVER_KEYS: [&str; 7] = [
 /// A freshly generated device, plus its identity handle when the browser
 /// supports identities.
 pub struct GeneratedFingerprint {
-  /// The fingerprint JSON to store in `WayfernConfig::fingerprint`. Both paths
-  /// produce a flat camelCase object, so everything that reads the stored
-  /// fingerprint keeps working either way.
+  /// The device the browser produced, as a flat camelCase JSON object. For a
+  /// LEGACY browser this is what `WayfernConfig::fingerprint` stores. For an
+  /// identity-backed profile it is a VIEW for the caller to show once and
+  /// discard: only `identity_id` and `location` are persisted.
   pub fingerprint: String,
   pub identity_id: Option<String>,
-  pub identity_baseline: Option<String>,
+  /// `WayfernConfig::location` for the exit this device was generated
+  /// against, or `None` when no location field was resolved.
+  pub location: Option<String>,
   /// Whether fresh geolocation was resolved and applied. Callers must only
   /// stamp `geo_proxy_signature` when this is true.
   pub geolocation_applied: bool,
@@ -277,12 +295,100 @@ impl WayfernManager {
 
   /// Parse a stored fingerprint JSON into its object, tolerating the legacy
   /// `{ "fingerprint": {...} }` wrapper some old profiles carry.
-  fn fingerprint_object(
+  pub fn fingerprint_object(
     fingerprint_json: &str,
   ) -> Option<serde_json::Map<String, serde_json::Value>> {
     let parsed: serde_json::Value = serde_json::from_str(fingerprint_json).ok()?;
     let fp = parsed.get("fingerprint").unwrap_or(&parsed);
     fp.as_object().cloned()
+  }
+
+  /// A stored JSON object field (`identity_overrides`, `location`), or an
+  /// empty map when absent or unparsable.
+  pub fn stored_object(json: Option<&str>) -> serde_json::Map<String, serde_json::Value> {
+    json.and_then(Self::fingerprint_object).unwrap_or_default()
+  }
+
+  /// The exit-derived location fields a device object carries, in the shape
+  /// `WayfernConfig::location` stores; `None` when it carries none.
+  pub fn location_of(
+    device: &serde_json::Map<String, serde_json::Value>,
+  ) -> Option<String> {
+    let mut location = serde_json::Map::new();
+    for key in LOCALE_CARRY_OVER_KEYS {
+      if let Some(value) = device.get(key) {
+        if !value.is_null() {
+          location.insert(key.to_string(), value.clone());
+        }
+      }
+    }
+    if location.is_empty() {
+      None
+    } else {
+      serde_json::to_string(&location).ok()
+    }
+  }
+
+  /// Overrides from a WHOLE fingerprint an API or MCP caller supplied for an
+  /// identity-backed profile: every field it names is taken as an explicit
+  /// edit, except the provenance keys the browser refuses and the location
+  /// keys, which travel through `location`.
+  pub fn overrides_from_explicit_fingerprint(
+    fingerprint: &serde_json::Map<String, serde_json::Value>,
+  ) -> serde_json::Map<String, serde_json::Value> {
+    let mut overrides = serde_json::Map::new();
+    for (key, value) in fingerprint {
+      if DERIVED_PROVENANCE_KEYS.contains(&key.as_str())
+        || GEO_PARAM_KEYS.contains(&key.as_str())
+        || LOCALE_CARRY_OVER_KEYS.contains(&key.as_str())
+        || value.is_null()
+      {
+        continue;
+      }
+      overrides.insert(key.clone(), value.clone());
+    }
+    overrides
+  }
+
+  /// ONE-TIME MIGRATION to identity-only storage. A profile created by an
+  /// earlier build stored the whole device in `fingerprint` beside its
+  /// `identity_id`, with `identity_baseline` recording the derived view so the
+  /// user's edits could be diffed out. This moves those edits into
+  /// `identity_overrides`, the exit-derived fields into `location`, and drops
+  /// the payload and the baseline. Returns whether anything changed.
+  ///
+  /// Without a baseline nothing can separate an edit from a derived value, so
+  /// no override is recovered: pinning the whole device would defeat the
+  /// identity, and the browser rebuilds every field from the id anyway.
+  pub fn migrate_identity_config(config: &mut WayfernConfig) -> bool {
+    if config.identity_id.is_none() {
+      return false;
+    }
+    let Some(stored_json) = config.fingerprint.clone() else {
+      if config.identity_baseline.is_some() {
+        config.identity_baseline = None;
+        return true;
+      }
+      return false;
+    };
+    let stored = Self::fingerprint_object(&stored_json).unwrap_or_default();
+    let overrides = match config
+      .identity_baseline
+      .as_deref()
+      .and_then(Self::fingerprint_object)
+    {
+      Some(baseline) => Self::identity_overrides(&stored, &baseline),
+      None => serde_json::Map::new(),
+    };
+    if config.identity_overrides.is_none() && !overrides.is_empty() {
+      config.identity_overrides = serde_json::to_string(&overrides).ok();
+    }
+    if config.location.is_none() {
+      config.location = Self::location_of(&stored);
+    }
+    config.fingerprint = None;
+    config.identity_baseline = None;
+    true
   }
 
   /// The user's edits, recovered as the difference between the fingerprint the
@@ -377,35 +483,6 @@ impl WayfernManager {
   /// itself the first `-`-separated part of the tag, so this reproduces it.
   fn base_language(locale: &str) -> &str {
     locale.split('-').next().unwrap_or(locale)
-  }
-
-  /// The baseline to persist after a successful `setIdentity`.
-  ///
-  /// For every key the user did NOT override, adopt whatever the browser just
-  /// derived, so a value that changes on a newer browser flows through instead
-  /// of reading as a user edit forever. For overridden keys the applied view
-  /// holds the override rather than the derived value, so the previous baseline
-  /// is kept as the diff reference.
-  fn refreshed_identity_baseline(
-    applied: &serde_json::Map<String, serde_json::Value>,
-    previous_baseline: &serde_json::Map<String, serde_json::Value>,
-    overrides: &serde_json::Map<String, serde_json::Value>,
-  ) -> serde_json::Map<String, serde_json::Value> {
-    let mut baseline = applied.clone();
-    for key in overrides.keys() {
-      match previous_baseline.get(key) {
-        Some(previous) => {
-          baseline.insert(key.clone(), previous.clone());
-        }
-        // The user added a field the baseline never carried, so there is
-        // nothing to fall back to and the key must stay absent from the
-        // baseline or the edit would diff away on the next launch.
-        None => {
-          baseline.remove(key);
-        }
-      }
-    }
-    baseline
   }
 
   /// The `setIdentity` geolocation parameters carried by a stored fingerprint.
@@ -942,7 +1019,7 @@ impl WayfernManager {
       }
     };
 
-    let (fingerprint, identity_id, identity_baseline, geolocation_applied) = match generate_result {
+    let (fingerprint, identity_id, geolocation_applied) = match generate_result {
       Ok(result) => {
         // createIdentity returns { identityId, identity }; getFingerprint
         // returns { fingerprint: {...} }. A bare object is tolerated so a
@@ -960,15 +1037,6 @@ impl WayfernManager {
           .unwrap_or(result);
         // Normalize the fingerprint: convert JSON string fields to proper types
         let mut normalized = Self::normalize_fingerprint(fp);
-
-        // Snapshot the derived view BEFORE geolocation is applied, so the
-        // location fields donut writes below are not mistaken for user edits
-        // when the overrides are recovered on launch.
-        let identity_baseline = if use_identity_api {
-          serde_json::to_string(&normalized).ok()
-        } else {
-          None
-        };
 
         // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
         // when a proxy splits a handshake reply across TCP segments, so a
@@ -1020,12 +1088,7 @@ impl WayfernManager {
           let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
         }
 
-        (
-          normalized,
-          identity_id,
-          identity_baseline,
-          geolocation_applied,
-        )
+        (normalized, identity_id, geolocation_applied)
       }
       Err(e) => {
         cleanup().await;
@@ -1075,9 +1138,9 @@ impl WayfernManager {
     }
 
     Ok(GeneratedFingerprint {
+      location: fingerprint.as_object().and_then(Self::location_of),
       fingerprint: fingerprint_json,
       identity_id,
-      identity_baseline,
       geolocation_applied,
     })
   }
@@ -1407,8 +1470,88 @@ impl WayfernManager {
 
     // Apply fingerprint if configured
     let mut used_fingerprint: Option<String> = None;
-    let mut used_identity_baseline: Option<String> = None;
-    if let Some(fingerprint_json) = &config.fingerprint {
+    // Always None: nothing writes a baseline any more. The field stays on the
+    // result for the one launch that still migrates a legacy identity profile.
+    let used_identity_baseline: Option<String> = None;
+    // An identity-backed profile: the id, the user's overrides and the exit's
+    // location are all the browser needs, and all the profile stores. The
+    // device comes back in the response and is deliberately NOT persisted.
+    let identity_only = supports_identity_api(&profile.version)
+      && config.identity_id.is_some()
+      && config.fingerprint.is_none();
+    if identity_only {
+      let identity_id = config.identity_id.clone().unwrap_or_default();
+      let overrides = Self::stored_object(config.identity_overrides.as_deref());
+      let location = Self::stored_object(config.location.as_deref());
+      let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+
+      let mut params = serde_json::Map::new();
+      params.insert("identityId".to_string(), json!(identity_id));
+      // The claimed OS travels explicitly as well as inside the id. A Wayfern
+      // 152 id carries an epoch and a 16-bit check that a 151 browser's decoder
+      // does not know; without this parameter 151 would read such an id as
+      // untagged and rebuild the HOST OS. Both releases let the explicit
+      // parameter win, so this keeps one stored profile portable across them.
+      if let Some(os) = config.os.as_deref().filter(|os| !os.is_empty()) {
+        params.insert("operatingSystem".to_string(), json!(os));
+      }
+      if !overrides.is_empty() {
+        params.insert(
+          "overrides".to_string(),
+          serde_json::Value::Object(overrides.clone()),
+        );
+      }
+      // Location is a property of the exit, not of the identity, so it travels
+      // in setIdentity's own parameters rather than as an override.
+      params.extend(Self::geo_params(&location));
+      if let Some(ref token) = wayfern_token {
+        params.insert("wayfernToken".to_string(), json!(token));
+      }
+      log::info!(
+        "Applying Wayfern identity {} with {} override(s): {:?}",
+        identity_id,
+        overrides.len(),
+        overrides.keys().collect::<Vec<_>>()
+      );
+
+      let mut applied_ok = false;
+      let mut last_apply_error: Option<String> = None;
+      for target in &page_targets {
+        if let Some(ws_url) = &target.websocket_debugger_url {
+          match self
+            .send_cdp_command(
+              ws_url,
+              "Wayfern.setIdentity",
+              serde_json::Value::Object(params.clone()),
+            )
+            .await
+          {
+            Ok(_) => {
+              applied_ok = true;
+              log::info!("Successfully applied identity to page target");
+            }
+            Err(e) => {
+              log::error!("Failed to apply identity to target: {e}");
+              last_apply_error = Some(e.to_string());
+            }
+          }
+        }
+      }
+      if !applied_ok {
+        let detail = last_apply_error
+          .unwrap_or_else(|| "the browser exposed no page target to apply it to".to_string());
+        log::error!(
+          "Killing Wayfern (pid {process_id:?}) for profile {}: the identity was never applied: {detail}",
+          profile.name
+        );
+        if let Some(pid) = process_id {
+          kill_browser_process(pid);
+        }
+        return Err(
+          Self::apply_failure_error(&detail, Self::claimed_operating_system(config, None)).into(),
+        );
+      }
+    } else if let Some(fingerprint_json) = &config.fingerprint {
       log::info!(
         "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
         fingerprint_json.len()
@@ -1490,7 +1633,7 @@ impl WayfernManager {
 
       // On the identity path only the user's own edits are sent; everything
       // else comes from the identity itself.
-      let (apply_method, apply_params, previous_baseline, overrides) =
+      let (apply_method, apply_params, _previous_baseline, overrides) =
         match config.identity_id.as_deref().filter(|_| apply_by_identity) {
           Some(identity_id) => {
             let previous_baseline = config
@@ -1577,23 +1720,6 @@ impl WayfernManager {
                   .cloned()
                   .unwrap_or(result);
                 if let Some(applied_obj) = applied.as_object() {
-                  if apply_by_identity {
-                    // The baseline is "what the browser derived", so it is
-                    // computed from the untouched response. Move it forward for
-                    // everything the user did not override: leaving it behind
-                    // would make the next launch read a re-derived value as a
-                    // user edit and pin it.
-                    let baseline = Self::refreshed_identity_baseline(
-                      applied_obj,
-                      &previous_baseline,
-                      &overrides,
-                    );
-                    match serde_json::to_string(&baseline) {
-                      Ok(s) => used_identity_baseline = Some(s),
-                      Err(e) => log::warn!("Failed to serialize identity baseline: {e}"),
-                    }
-                  }
-
                   let mut persisted = applied;
                   if apply_by_identity {
                     // The location travelled as setIdentity parameters rather
@@ -2154,42 +2280,6 @@ mod tests {
     assert_eq!(geo.get("timezone"), Some(&json!("Europe/Berlin")));
     assert_eq!(geo.get("language"), Some(&json!("de-DE")));
     assert!(geo.get("platform").is_none());
-  }
-
-  #[test]
-  fn baseline_adopts_rederived_values_but_keeps_overridden_ones() {
-    // The same identity on a newer browser derives 12 cores where it used to
-    // derive 8, while the user has pinned deviceMemory to 32.
-    let previous = obj(r#"{"hardwareConcurrency": 8, "deviceMemory": 8}"#);
-    let overrides = obj(r#"{"deviceMemory": 32}"#);
-    let applied = obj(r#"{"hardwareConcurrency": 12, "deviceMemory": 32}"#);
-
-    let refreshed = WayfernManager::refreshed_identity_baseline(&applied, &previous, &overrides);
-
-    // Re-derived: adopted, so the next launch does not mistake it for an edit.
-    assert_eq!(refreshed.get("hardwareConcurrency"), Some(&json!(12)));
-    // Overridden: the applied view holds the override, so the derived value is
-    // kept as the diff reference and the override survives.
-    assert_eq!(refreshed.get("deviceMemory"), Some(&json!(8)));
-
-    let next_overrides = WayfernManager::identity_overrides(&applied, &refreshed);
-    assert_eq!(next_overrides.len(), 1);
-    assert_eq!(next_overrides.get("deviceMemory"), Some(&json!(32)));
-  }
-
-  #[test]
-  fn baseline_keeps_a_user_added_key_out_so_the_override_survives() {
-    // The user set a field the derivation never produces. There is no derived
-    // value to fall back to, so the key must stay absent from the baseline.
-    let previous = obj(r#"{"platform": "Win32"}"#);
-    let overrides = obj(r#"{"doNotTrack": "1"}"#);
-    let applied = obj(r#"{"platform": "Win32", "doNotTrack": "1"}"#);
-
-    let refreshed = WayfernManager::refreshed_identity_baseline(&applied, &previous, &overrides);
-    assert!(refreshed.get("doNotTrack").is_none());
-
-    let next_overrides = WayfernManager::identity_overrides(&applied, &refreshed);
-    assert_eq!(next_overrides.get("doNotTrack"), Some(&json!("1")));
   }
 
   #[test]

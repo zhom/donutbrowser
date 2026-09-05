@@ -65,9 +65,10 @@ export function WayfernConfigDialog({
   const handleSave = async () => {
     if (!profile) return;
 
-    if (config.fingerprint) {
+    const storedJson = config.identity_overrides ?? config.fingerprint;
+    if (storedJson) {
       try {
-        JSON.parse(config.fingerprint);
+        JSON.parse(storedJson);
       } catch (_error) {
         const { toast } = await import("sonner");
         toast.error(t("wayfernConfigDialog.invalidFingerprint"), {

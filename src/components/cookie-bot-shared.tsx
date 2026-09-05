@@ -388,7 +388,10 @@ export function enableProfileSync(profileId: string): Promise<void> {
  * the operator happens to be sitting. Falls back to this machine's zone.
  */
 export function profileTimezone(profile: BrowserProfile): string {
-  const raw = profile.wayfern_config?.fingerprint;
+  // Identity-backed profiles keep the exit's location in `location`; legacy
+  // ones carry it inside the stored payload.
+  const raw =
+    profile.wayfern_config?.location ?? profile.wayfern_config?.fingerprint;
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as WayfernFingerprintConfig;

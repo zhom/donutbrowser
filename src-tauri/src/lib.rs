@@ -1304,7 +1304,7 @@ async fn list_active_vpn_connections() -> Result<Vec<vpn::VpnStatus>, String> {
 struct SampleFingerprint {
   fingerprint: String,
   identity_id: Option<String>,
-  identity_baseline: Option<String>,
+  location: Option<String>,
 }
 
 #[tauri::command]
@@ -1356,7 +1356,7 @@ async fn generate_sample_fingerprint(
       .map(|generated| SampleFingerprint {
         fingerprint: generated.fingerprint,
         identity_id: generated.identity_id,
-        identity_baseline: generated.identity_baseline,
+        location: generated.location,
       })
       .map_err(|e| format!("Failed to generate fingerprint: {e}"))
   } else {

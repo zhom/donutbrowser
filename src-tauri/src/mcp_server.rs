@@ -4224,6 +4224,9 @@ impl McpServer {
         serde_json::json!({
           "browser": "wayfern",
           "fingerprint": config.fingerprint,
+          "identity_id": config.identity_id,
+          "identity_overrides": config.identity_overrides,
+          "location": config.location,
           "os": config.os,
           "randomize_fingerprint_on_launch": config.randomize_fingerprint_on_launch,
           "screen_max_width": config.screen_max_width,

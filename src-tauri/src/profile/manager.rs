@@ -181,8 +181,9 @@ impl ProfileManager {
       // behavior; for generated ones this comes from the geolocation lookup.
       let mut geolocation_applied = true;
 
-      // Generate fingerprint if not already provided
-      if config.fingerprint.is_none() {
+      // Generate a device if the profile has neither a legacy payload nor an
+      // identity.
+      if config.fingerprint.is_none() && config.identity_id.is_none() {
         log::info!("Generating fingerprint for Wayfern profile: {name}");
 
         // Create a temporary profile for fingerprint generation
@@ -224,12 +225,16 @@ impl ProfileManager {
           .await
         {
           Ok(generated) => {
-            config.fingerprint = Some(generated.fingerprint);
-            // Set together with the fingerprint they describe. A profile that
-            // stored one without the other would either lose reproducibility or
-            // diff its whole device into overrides on the next launch.
+            // An identity-backed profile stores the id and the location and
+            // never the device; a legacy browser stores the whole payload.
             config.identity_id = generated.identity_id;
-            config.identity_baseline = generated.identity_baseline;
+            config.location = generated.location;
+            config.identity_baseline = None;
+            config.fingerprint = if config.identity_id.is_some() {
+              None
+            } else {
+              Some(generated.fingerprint)
+            };
             geolocation_applied = generated.geolocation_applied;
             log::info!("Successfully generated fingerprint for Wayfern profile: {name}");
           }
@@ -1193,12 +1198,42 @@ impl ProfileManager {
     // re-mint the device on the next launch and throw the edit away with it,
     // which is the opposite of what an override is for. Carry it forward unless
     // the caller either supplied its own or cleared the fingerprint outright.
-    if config.identity_id.is_none() && config.fingerprint.is_some() {
-      if let Some(stored) = profile.wayfern_config.as_ref() {
+    if let Some(stored) = profile.wayfern_config.as_ref() {
+      if config.identity_id.is_none()
+        && (config.fingerprint.is_some() || config.identity_overrides.is_some())
+      {
         config.identity_id = stored.identity_id.clone();
-        config.identity_baseline = stored.identity_baseline.clone();
+      }
+      if config.identity_id.is_some() {
+        if config.location.is_none() {
+          config.location = stored.location.clone();
+        }
+        if config.identity_overrides.is_none() {
+          config.identity_overrides = stored.identity_overrides.clone();
+        }
+        // A WHOLE fingerprint sent for an identity-backed profile (an older UI
+        // or an API/MCP caller) is an explicit set of fields: it becomes the
+        // override map and is never stored as a device.
+        if let Some(fingerprint) = config.fingerprint.take() {
+          if let Some(object) =
+            crate::wayfern_manager::WayfernManager::fingerprint_object(&fingerprint)
+          {
+            let overrides =
+              crate::wayfern_manager::WayfernManager::overrides_from_explicit_fingerprint(&object);
+            config.identity_overrides = if overrides.is_empty() {
+              None
+            } else {
+              serde_json::to_string(&overrides).ok()
+            };
+            if config.location.is_none() {
+              config.location = crate::wayfern_manager::WayfernManager::location_of(&object);
+            }
+          }
+        }
       }
     }
+    // The baseline is a legacy field; nothing writes it any more.
+    config.identity_baseline = None;
 
     // Update the Wayfern configuration
     profile.wayfern_config = Some(config);
@@ -2036,7 +2071,7 @@ pub async fn update_wayfern_config(
   profile_id: String,
   config: WayfernConfig,
 ) -> Result<(), String> {
-  if config.fingerprint.is_some()
+  if (config.fingerprint.is_some() || config.identity_overrides.is_some())
     && !crate::cloud_auth::CLOUD_AUTH
       .can_use_cross_os_fingerprints()
       .await
