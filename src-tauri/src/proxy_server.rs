@@ -1191,7 +1191,7 @@ fn build_reqwest_client_with_proxy(
       Proxy::http(upstream_url)?
     }
     "socks5" => {
-      // Donut: force REMOTE (proxy-side) DNS for plaintext HTTP over a SOCKS5
+      // Force REMOTE (proxy-side) DNS for plaintext HTTP over a SOCKS5
       // upstream. reqwest maps the bare `socks5` scheme to DnsResolve::Local,
       // which resolves the destination hostname on the HOST (getaddrinfo) BEFORE
       // connecting — leaking the destination domain to the host's DNS resolver

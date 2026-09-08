@@ -923,6 +923,19 @@ impl ProfileImporter {
     let final_wayfern_config = if mapped == "wayfern" {
       let mut config = wayfern_config.unwrap_or_default();
 
+      // A caller-supplied device is a set of explicit field choices, not a
+      // payload to store: on a browser with the identity API it becomes the
+      // identity's overrides and its location, and the device is minted from a
+      // freshly created identity below.
+      let supplied_device = if crate::wayfern_manager::supports_identity_api(&version) {
+        config
+          .fingerprint
+          .take()
+          .and_then(|json| crate::wayfern_manager::WayfernManager::fingerprint_object(&json))
+      } else {
+        None
+      };
+
       if let Some(ref proxy_id_val) = proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_val) {
           let proxy_url = if let (Some(username), Some(password)) =
@@ -1009,6 +1022,17 @@ impl ProfileImporter {
               .into(),
             );
           }
+        }
+      }
+
+      if let Some(object) = supplied_device {
+        let overrides =
+          crate::wayfern_manager::WayfernManager::overrides_from_explicit_fingerprint(&object);
+        if !overrides.is_empty() {
+          config.identity_overrides = serde_json::to_string(&overrides).ok();
+        }
+        if let Some(location) = crate::wayfern_manager::WayfernManager::location_of(&object) {
+          config.location = Some(location);
         }
       }
 

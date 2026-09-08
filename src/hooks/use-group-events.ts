@@ -74,14 +74,10 @@ export function useGroupEvents() {
 
     void setupListeners();
 
-    // Cleanup listeners on unmount.
-    // NOTE: the previous version stored both unlisten fns by reassigning
-    // `groupsUnlisten` to a wrapper that called itself, which produced a
-    // `Maximum call stack size exceeded` crash whenever this effect tore
-    // down. React's reconciler then bailed out mid-commit and left stale
-    // overlay nodes in the DOM, blocking every subsequent click in the
-    // window. Holding the two unlisten fns in separate locals avoids both
-    // problems.
+    // Cleanup listeners on unmount. The two unlisten fns stay in separate
+    // locals: merging them into one wrapper that reassigns the local it then
+    // calls makes that wrapper call itself, and the stack overflow aborts the
+    // teardown mid-commit, leaving stale overlay nodes that swallow clicks.
     return () => {
       if (groupsUnlisten) groupsUnlisten();
       if (profilesUnlisten) profilesUnlisten();

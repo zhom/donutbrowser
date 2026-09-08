@@ -181,6 +181,21 @@ impl ProfileManager {
       // behavior; for generated ones this comes from the geolocation lookup.
       let mut geolocation_applied = true;
 
+      // A caller-supplied device is a set of explicit field choices, not a
+      // payload to store. On a browser with the identity API it becomes the
+      // identity's overrides and its location, and the device is minted from a
+      // freshly created identity below like any other profile's. A browser
+      // without that API has nowhere to put the choices, so there it stays the
+      // stored payload.
+      let supplied_device = if crate::wayfern_manager::supports_identity_api(version) {
+        config
+          .fingerprint
+          .take()
+          .and_then(|json| crate::wayfern_manager::WayfernManager::fingerprint_object(&json))
+      } else {
+        None
+      };
+
       // Generate a device if the profile has neither a legacy payload nor an
       // identity.
       if config.fingerprint.is_none() && config.identity_id.is_none() {
@@ -246,6 +261,19 @@ impl ProfileManager {
         }
       } else {
         log::info!("Using provided fingerprint for Wayfern profile: {name}");
+      }
+
+      if let Some(object) = supplied_device {
+        let overrides =
+          crate::wayfern_manager::WayfernManager::overrides_from_explicit_fingerprint(&object);
+        if !overrides.is_empty() {
+          config.identity_overrides = serde_json::to_string(&overrides).ok();
+        }
+        // A location the caller named wins over the one resolved for the exit;
+        // whatever it leaves out keeps the resolved value.
+        if let Some(location) = crate::wayfern_manager::WayfernManager::location_of(&object) {
+          config.location = Some(location);
+        }
       }
 
       // Record which proxy/geoip the fingerprint's location data was computed
@@ -1128,7 +1156,7 @@ impl ProfileManager {
       updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
-    // Donut: a clone must NOT be linkable to its source. The source
+    // A clone must NOT be linkable to its source. The source
     // wayfern_config embeds the persisted fingerprint JSON (including the
     // canvas_noise_seed), so copying it verbatim makes the clone emit
     // BYTE-IDENTICAL canvas/WebGL/audio readback hashes and identical device

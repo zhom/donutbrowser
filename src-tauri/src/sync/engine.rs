@@ -3522,7 +3522,7 @@ pub async fn set_profile_sync_mode(
     // tokio::spawn here allowed the tombstone-write to land *after* a fast
     // user-triggered re-enable's tombstone-clear, re-introducing the
     // tombstone and tripping the reconcile-pass deletion of a profile the
-    // user had just re-enabled (e.g. Personal (z.ai) on 2026-05-20).
+    // user had just re-enabled.
     if old_mode != SyncMode::Disabled {
       match SyncEngine::create_from_settings(&app_handle).await {
         Ok(engine) => {

@@ -460,23 +460,24 @@ impl BrowserRunner {
 
       // Check if we need to generate a device for this launch.
       //
-      // Two cases share the block: the user asked for a fresh device on every
-      // launch, or the profile stores none at all. The second is how a clone
-      // arrives here — cloning clears the fingerprint and the identity so the
-      // clone gets an independent device instead of the browser's default —
-      // and it also covers any profile that reached disk without one, which
-      // used to launch on whatever device the browser drew for itself.
+      // Three cases share the block: the user asked for a fresh device on
+      // every launch, the profile stores none at all, or the profile is legacy
+      // — a whole device payload and no identity — on a browser that speaks
+      // the identity API. The second is how a clone arrives here, since
+      // cloning clears both the payload and the identity so the clone gets an
+      // independent device instead of the browser's default.
       //
-      // A profile that ALREADY stores a device keeps it across a browser
-      // upgrade: nothing here mints a replacement, and its stored payload is
-      // what the launch applies. The one thing that does replace a stored
-      // device is the user asking for it - `randomize_fingerprint_on_launch`,
-      // tested immediately below - which is a deliberate per-profile setting
-      // and not a consequence of the version.
+      // The third is the migration to identity-only storage: donutbrowser
+      // holds no device on disk, and a payload cannot become an identity
+      // locally, because only the browser mints an id and the id it mints
+      // derives its own device. That one-time rotation is the cost of the
+      // payload leaving disk, and it happens once because the minted id is
+      // persisted below.
       let mut updated_profile = profile.clone();
-      // ONE-TIME MIGRATION: a profile that still stores a whole device beside
-      // its identity moves to identity-only storage here, before the launch
-      // reads it, and the migrated shape is what gets persisted below.
+      // A profile that stores a whole device BESIDE an identity needs no new
+      // device, only its payload folded into overrides and location. This runs
+      // before the launch reads the config, and the migrated shape is what
+      // gets persisted below.
       if crate::wayfern_manager::WayfernManager::migrate_identity_config(&mut wayfern_config) {
         let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
         crate::wayfern_manager::WayfernManager::migrate_identity_config(&mut cfg);
@@ -487,10 +488,18 @@ impl BrowserRunner {
         );
       }
       let randomize_requested = wayfern_config.randomize_fingerprint_on_launch == Some(true);
-      let needs_device =
-        wayfern_config.fingerprint.is_none() && wayfern_config.identity_id.is_none();
+      let migrating_payload = wayfern_config.identity_id.is_none()
+        && wayfern_config.fingerprint.is_some()
+        && crate::wayfern_manager::supports_identity_api(&profile.version);
+      let needs_device = migrating_payload
+        || (wayfern_config.fingerprint.is_none() && wayfern_config.identity_id.is_none());
       if randomize_requested || needs_device {
-        if needs_device && !randomize_requested {
+        if migrating_payload && !randomize_requested {
+          log::info!(
+            "Migrating Wayfern profile {} from a stored device to an identity",
+            profile.name
+          );
+        } else if needs_device && !randomize_requested {
           log::info!(
             "No stored device for Wayfern profile {}; generating one",
             profile.name
@@ -734,27 +743,6 @@ impl BrowserRunner {
       xray_launch_guard.worker_id = None;
       if let Some(guard) = vpn_launch_guard.as_mut() {
         guard.worker_id = None;
-      }
-
-      // The apply command echoes back the device the browser actually used,
-      // which may differ from the stored one. Persist it so the next launch
-      // starts from that value — saved below via
-      // save_process_info(&updated_profile).
-      // LEGACY profiles only: an identity-backed profile never persists the
-      // device (the manager returns no echo for it), so this block is reached
-      // only by a whole-payload profile applied with setFingerprint.
-      if let Some(used_fp) = wayfern_result.used_fingerprint.clone() {
-        let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
-        if cfg.identity_id.is_none() && cfg.fingerprint.as_deref() != Some(used_fp.as_str()) {
-          log::info!(
-            "Persisting applied fingerprint echoed by Wayfern for profile: {} (len {})",
-            profile.name,
-            used_fp.len()
-          );
-          cfg.fingerprint = Some(used_fp);
-          cfg.identity_baseline = None;
-          updated_profile.wayfern_config = Some(cfg);
-        }
       }
 
       // Update profile with the process info

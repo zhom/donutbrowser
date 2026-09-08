@@ -120,7 +120,6 @@ export function WayfernConfigForm({
         result.identity_id ? undefined : result.fingerprint,
       );
       onConfigChange("identity_overrides", undefined);
-      onConfigChange("identity_baseline", undefined);
     } catch (error) {
       console.error("Failed to generate fingerprint:", error);
     } finally {

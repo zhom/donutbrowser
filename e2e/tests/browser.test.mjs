@@ -223,8 +223,8 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       "Wayfern returned an incomplete fingerprint",
     );
     // A browser with the identity API must hand back the UUID the device was
-    // derived from, plus the pre-edit baseline the launch path diffs against.
-    // Without both, the profile stores a device it cannot reproduce.
+    // derived from. Without it the profile cannot reproduce the device, since
+    // it stores none.
     const identityCapable =
       Number.parseInt(prepared.version.split(".")[0], 10) >= 151;
     assert.equal(
@@ -232,28 +232,32 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       identityCapable,
       "identity_id must be present exactly on browsers with the identity API",
     );
-    assert.equal(
-      typeof sample.identity_baseline === "string",
-      identityCapable,
-      "identity_baseline must be present exactly on browsers with the identity API",
-    );
 
     const profile = await createRealProfile(
       app,
       prepared.version,
       `Real Wayfern (${prepared.source})`,
     );
-    assert.ok(profile.wayfern_config.fingerprint);
-    assert.ok(
-      Object.keys(JSON.parse(profile.wayfern_config.fingerprint)).length >= 10,
-    );
-    // Profile creation stores the identity alongside the device it derived, or
-    // the launch path would treat the profile as un-migrated and replace it.
+    // An identity-backed profile stores the identity and never the device: the
+    // browser rebuilds the device from the id on every launch. A browser
+    // without the identity API has nowhere to put an id, so there the payload
+    // is still what gets stored.
     assert.equal(
       typeof profile.wayfern_config.identity_id === "string",
       identityCapable,
       "a created profile must carry the identity its device came from",
     );
+    assert.equal(
+      profile.wayfern_config.fingerprint === undefined,
+      identityCapable,
+      "an identity-backed profile must store no device payload",
+    );
+    if (!identityCapable) {
+      assert.ok(
+        Object.keys(JSON.parse(profile.wayfern_config.fingerprint)).length >=
+          10,
+      );
+    }
     assert.equal(await app.invoke("check_missing_geoip_database"), true);
     assert.equal(await app.invoke("is_geoip_database_available"), false);
     await app.invoke("download_geoip_database");
@@ -281,9 +285,9 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
         "the identity must survive update_wayfern_config and an exit re-match",
       );
       assert.equal(
-        stored.wayfern_config.identity_baseline,
-        profile.wayfern_config.identity_baseline,
-        "the baseline must survive with the identity it describes",
+        stored.wayfern_config.fingerprint,
+        undefined,
+        "neither call may leave a device payload behind",
       );
     }
     // Pre-launch gate: local-only checks that must answer without starting a
