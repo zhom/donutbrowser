@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import type { Key, ReactNode } from "react";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -36,15 +37,17 @@ export function StepTransition({
   className,
 }: StepTransitionProps) {
   const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const animateStep = !reduceMotion && inputModality === "pointer";
 
   return (
     <motion.div
       // Remounting on the key is what replaces the old step. It is synchronous,
       // so the swap does not depend on any animation finishing.
       key={transitionKey}
-      initial={reduceMotion ? false : { x: direction * 6 }}
+      initial={animateStep ? { x: direction * 6 } : false}
       animate={{ x: 0 }}
-      transition={{ duration: 0.18, ease: MOTION_EASE_OUT }}
+      transition={{ duration: animateStep ? 0.18 : 0, ease: MOTION_EASE_OUT }}
       className={cn(className)}
     >
       {children}

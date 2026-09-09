@@ -375,14 +375,25 @@ impl DownloadedBrowsersRegistry {
   }
 
   /// Get all browsers and versions referenced by active profiles
+  /// Every (browser, version) something still needs.
+  ///
+  /// A TRASHED profile counts. Its browser directory is exactly what a restore
+  /// puts back into use, and removing the binary underneath it would turn an
+  /// undo into a gigabyte download, quietly, days after the delete.
   pub fn get_active_browser_versions(
     &self,
     profiles: &[crate::profile::BrowserProfile],
   ) -> Vec<(String, String)> {
-    profiles
+    let mut versions: Vec<(String, String)> = profiles
       .iter()
       .map(|profile| (profile.browser.clone(), profile.version.clone()))
-      .collect()
+      .collect();
+    versions.extend(
+      crate::profile::trash::list_entries(&crate::profile::trash::trash_dir())
+        .into_iter()
+        .map(|(profile, _)| (profile.browser, profile.version)),
+    );
+    versions
   }
 
   /// Verify that all registered browsers actually exist on disk and clean up stale entries
@@ -693,6 +704,73 @@ impl DownloadedBrowsersRegistry {
     Ok(cleaned_up)
   }
 
+  /// Update every stale profile of one browser to `latest_version`, then drop
+  /// the version binaries that leaves unused.
+  ///
+  /// The update and cleanup passes deliberately sit outside the classification
+  /// loop. Running them inside it replayed every already-processed profile on
+  /// each iteration, so N profiles cost N(N+1)/2 metadata rewrites and just as
+  /// many `profile-updated` events. Taking both actions as callbacks also keeps
+  /// the pass exercisable without a `tauri::AppHandle`.
+  fn consolidate_profiles_for_browser(
+    browser_name: &str,
+    browser_profiles: &[&BrowserProfile],
+    latest_version: &str,
+    update_profile: &mut dyn FnMut(&BrowserProfile) -> Result<(), String>,
+    remove_version: &mut dyn FnMut(&str) -> Result<(), String>,
+  ) -> Vec<String> {
+    let mut consolidated = Vec::new();
+    let mut profiles_to_update = Vec::new();
+    let mut older_versions_to_remove = std::collections::HashSet::<String>::new();
+
+    for profile in browser_profiles {
+      if profile.version != latest_version {
+        // Only update if profile is not currently running
+        if profile.process_id.is_none() {
+          profiles_to_update.push(*profile);
+          older_versions_to_remove.insert(profile.version.clone());
+        } else {
+          log::info!(
+            "Skipping version update for running profile: {} ({})",
+            profile.name,
+            profile.version
+          );
+        }
+      }
+    }
+
+    // Update profiles to latest version
+    for profile in &profiles_to_update {
+      match update_profile(profile) {
+        Ok(()) => {
+          consolidated.push(format!(
+            "Updated profile '{}' from {} to {}",
+            profile.name, profile.version, latest_version
+          ));
+        }
+        Err(e) => {
+          log::error!("Failed to update profile '{}': {}", profile.name, e);
+        }
+      }
+    }
+
+    // Remove older version binaries that are no longer needed
+    for old_version in &older_versions_to_remove {
+      log::info!("Consolidating: removing old version {browser_name} {old_version}");
+      match remove_version(old_version.as_str()) {
+        Ok(()) => {
+          consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
+          log::info!("Successfully removed old version: {browser_name} {old_version}");
+        }
+        Err(e) => {
+          log::error!("Failed to cleanup old version {browser_name} {old_version}: {e}");
+        }
+      }
+    }
+
+    consolidated
+  }
+
   /// Consolidate browser versions - keep only the latest version per browser
   pub fn consolidate_browser_versions(
     &self,
@@ -755,58 +833,24 @@ impl DownloadedBrowsersRegistry {
       let latest_version = &available_versions[0];
       log::info!("Latest available version for {browser_name}: {latest_version}");
 
-      // Check which profiles need to be updated to the latest version
-      let mut profiles_to_update = Vec::new();
-      let mut older_versions_to_remove = std::collections::HashSet::<String>::new();
-
-      for profile in browser_profiles {
-        if profile.version != *latest_version {
-          // Only update if profile is not currently running
-          if profile.process_id.is_none() {
-            profiles_to_update.push(profile);
-            older_versions_to_remove.insert(profile.version.clone());
-          } else {
-            log::info!(
-              "Skipping version update for running profile: {} ({})",
-              profile.name,
-              profile.version
-            );
-          }
-        }
-
-        // Update profiles to latest version
-        for profile in &profiles_to_update {
-          match self.profile_manager.update_profile_version(
-            app_handle,
-            &profile.id.to_string(),
-            latest_version,
-          ) {
-            Ok(_) => {
-              consolidated.push(format!(
-                "Updated profile '{}' from {} to {}",
-                profile.name, profile.version, latest_version
-              ));
-            }
-            Err(e) => {
-              log::error!("Failed to update profile '{}': {}", profile.name, e);
-            }
-          }
-        }
-
-        // Remove older version binaries that are no longer needed
-        for old_version in &older_versions_to_remove {
-          log::info!("Consolidating: removing old version {browser_name} {old_version}");
-          match self.cleanup_failed_download(browser_name, old_version) {
-            Ok(_) => {
-              consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
-              log::info!("Successfully removed old version: {browser_name} {old_version}");
-            }
-            Err(e) => {
-              log::error!("Failed to cleanup old version {browser_name} {old_version}: {e}");
-            }
-          }
-        }
-      }
+      let mut consolidated_for_browser = Self::consolidate_profiles_for_browser(
+        browser_name,
+        browser_profiles,
+        latest_version,
+        &mut |profile: &BrowserProfile| -> Result<(), String> {
+          self
+            .profile_manager
+            .update_profile_version(app_handle, &profile.id.to_string(), latest_version)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+        },
+        &mut |old_version: &str| -> Result<(), String> {
+          self
+            .cleanup_failed_download(browser_name, old_version)
+            .map_err(|e| e.to_string())
+        },
+      );
+      consolidated.append(&mut consolidated_for_browser);
     }
 
     // Save registry after consolidation
@@ -1060,6 +1104,47 @@ lazy_static::lazy_static! {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_trashed_profile_still_counts_as_a_reason_to_keep_its_browser() {
+    let root = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(root.path().to_path_buf());
+    let registry = DownloadedBrowsersRegistry::new();
+    assert!(registry.get_active_browser_versions(&[]).is_empty());
+
+    // What `trash_profile` leaves behind: one directory per profile holding
+    // the profile it archived.
+    let profile = crate::profile::BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      browser: "wayfern".to_string(),
+      version: "152.0.7977.64".to_string(),
+      ..Default::default()
+    };
+    let entry = crate::profile::trash::trash_dir().join(profile.id.to_string());
+    std::fs::create_dir_all(&entry).unwrap();
+    std::fs::write(
+      entry.join("profile.json"),
+      serde_json::to_vec(&profile).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+      entry.join("manifest.json"),
+      serde_json::json!({
+        "deleted_at": 1,
+        "expires_at": 2,
+        "size_bytes": 0,
+        "original_name": "Trashed",
+      })
+      .to_string(),
+    )
+    .unwrap();
+
+    assert_eq!(
+      registry.get_active_browser_versions(&[]),
+      vec![("wayfern".to_string(), "152.0.7977.64".to_string())],
+      "removing the binary under a trashed profile turns an undo into a download"
+    );
+  }
 
   #[test]
   fn test_registry_creation() {
@@ -1394,6 +1479,51 @@ mod tests {
       !registry.is_browser_downloaded("testbrowser", "139.0"),
       "Browser should not be considered downloaded when files don't exist on disk"
     );
+  }
+
+  #[test]
+  fn test_consolidate_profiles_for_browser_acts_once_per_profile() {
+    let profile = |name: &str, version: &str, process_id: Option<u32>| BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: name.to_string(),
+      browser: "testbrowser".to_string(),
+      version: version.to_string(),
+      process_id,
+      ..Default::default()
+    };
+
+    let stale_a = profile("stale-a", "139.0", None);
+    let stale_b = profile("stale-b", "139.0", None);
+    let older = profile("older", "138.0", None);
+    let running = profile("running", "139.0", Some(4242));
+    let current = profile("current", "140.0", None);
+    let profiles = [&stale_a, &stale_b, &older, &running, &current];
+
+    let mut updated: Vec<String> = Vec::new();
+    let mut removed: Vec<String> = Vec::new();
+
+    let consolidated = DownloadedBrowsersRegistry::consolidate_profiles_for_browser(
+      "testbrowser",
+      &profiles,
+      "140.0",
+      &mut |p: &BrowserProfile| -> Result<(), String> {
+        updated.push(p.name.clone());
+        Ok(())
+      },
+      &mut |version: &str| -> Result<(), String> {
+        removed.push(version.to_string());
+        Ok(())
+      },
+    );
+
+    // Every stale, stopped profile is updated exactly once - the loop used to
+    // re-update each of them once per remaining profile.
+    assert_eq!(updated, vec!["stale-a", "stale-b", "older"]);
+
+    removed.sort();
+    assert_eq!(removed, vec!["138.0", "139.0"]);
+
+    assert_eq!(consolidated.len(), updated.len() + removed.len());
   }
 }
 

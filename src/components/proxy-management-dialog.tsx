@@ -30,6 +30,7 @@ import {
   DataTableActionBarSelection,
 } from "@/components/data-table-action-bar";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { ProfileUsageButton } from "@/components/profile-usage-button";
 import { ProxyExportDialog } from "@/components/proxy-export-dialog";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { ProxyImportDialog } from "@/components/proxy-import-dialog";
@@ -65,13 +66,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfileReferences } from "@/hooks/use-profile-references";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
+import { isFirstHopEncrypted, proxyProtocolToken } from "@/lib/proxy-string";
+import { canonicalProxyType } from "@/lib/proxy-type";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
-import type { ProxyCheckResult, StoredProxy, VpnConfig } from "@/types";
-import { ProxyCheckButton } from "./proxy-check-button";
+import type { StoredProxy, VpnConfig } from "@/types";
+import { ProxyCheckButton, ProxyUdpBadge } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
 import { VpnCheckButton } from "./vpn-check-button";
 import { VpnFormDialog } from "./vpn-form-dialog";
@@ -142,6 +146,8 @@ export function ProxyManagementDialog({
   initialTab = "proxies",
 }: ProxyManagementDialogProps) {
   const { t } = useTranslation();
+  const { profiles: referencedProfiles, failed: referencesFailed } =
+    useProfileReferences(isOpen);
   // Proxy state
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -149,10 +155,6 @@ export function ProxyManagementDialog({
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
   const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [checkingProxyId, setCheckingProxyId] = useState<string | null>(null);
-  const [proxyCheckResults, setProxyCheckResults] = useState<
-    Record<string, ProxyCheckResult>
-  >({});
   const [proxySyncStatus, setProxySyncStatus] = useState<
     Record<string, SyncStatus>
   >({});
@@ -288,21 +290,12 @@ export function ProxyManagementDialog({
     };
   }, []);
 
-  // Load cached check results on mount and when proxies change
+  // Load whether sync is required by an assigned profile.
   useEffect(() => {
-    const loadCachedResults = async () => {
-      const results: Record<string, ProxyCheckResult> = {};
+    const loadProxyInUse = async () => {
       const inUse: Record<string, boolean> = {};
       for (const proxy of storedProxies) {
         try {
-          const cached = await invoke<ProxyCheckResult | null>(
-            "get_cached_proxy_check",
-            { proxyId: proxy.id },
-          );
-          if (cached) {
-            results[proxy.id] = cached;
-          }
-
           const inUseBySynced = await invoke<boolean>(
             "is_proxy_in_use_by_synced_profile",
             { proxyId: proxy.id },
@@ -312,11 +305,10 @@ export function ProxyManagementDialog({
           // Ignore errors
         }
       }
-      setProxyCheckResults(results);
       setProxyInUse(inUse);
     };
     if (storedProxies.length > 0) {
-      void loadCachedResults();
+      void loadProxyInUse();
     }
   }, [storedProxies]);
 
@@ -503,35 +495,6 @@ export function ProxyManagementDialog({
         ),
       },
       {
-        id: "status",
-        size: 28,
-        enableSorting: false,
-        header: () => null,
-        cell: ({ row }) => {
-          const proxy = row.original;
-          const syncDot = getSyncStatusDot(
-            proxy,
-            proxySyncStatus[proxy.id],
-            t,
-            proxySyncErrors[proxy.id],
-          );
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
-                    syncDot.animate ? "animate-pulse" : ""
-                  }`}
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{syncDot.tooltip}</p>
-              </TooltipContent>
-            </Tooltip>
-          );
-        },
-      },
-      {
         accessorKey: "name",
         enableSorting: true,
         sortingFn: "alphanumeric",
@@ -562,11 +525,53 @@ export function ProxyManagementDialog({
         size: 96,
         enableSorting: false,
         header: () => t("proxies.management.protocolCol"),
-        cell: ({ row }) => (
-          <span className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-            {row.original.proxy_settings.proxy_type}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const proxyType = row.original.proxy_settings.proxy_type;
+          // Shadowsocks keeps its cipher in `username`, and the cipher is what
+          // decides this hop.
+          const cipher = row.original.proxy_settings.username;
+          const encrypted = isFirstHopEncrypted(proxyType, cipher);
+          // A stored Shadowsocks proxy can carry no cipher at all -
+          // `parse_txt_proxies` reads `ss://host:8388` as username None, and
+          // `import_proxies_json` stores proxy_type and username verbatim, and
+          // with none recorded the honest answer is "undecided", not
+          // "plaintext". The add/edit form says exactly that, so this cell
+          // saying "not encrypted" made the app contradict itself about one
+          // proxy. Only the sentence changes: `encrypted` stays false, so the
+          // warning tint and everything downstream still fail closed.
+          const cipherUndecided =
+            !encrypted &&
+            canonicalProxyType(proxyType) === "ss" &&
+            (cipher ?? "").trim().length === 0;
+          // The type is free text from the REST API, so an unrecognised one
+          // still prints itself; only a blank one falls back to the label.
+          const protocolLabel =
+            proxyProtocolToken(proxyType) ||
+            t("proxies.management.protocolUnknown");
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    "font-mono text-[10px] tracking-wider uppercase",
+                    encrypted ? "text-muted-foreground" : "text-warning-text",
+                  )}
+                >
+                  {protocolLabel}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {encrypted
+                    ? t("proxies.management.firstHopEncryptedTooltip")
+                    : cipherUndecided
+                      ? t("proxies.management.firstHopCipherTooltip")
+                      : t("proxies.management.firstHopPlaintextTooltip")}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        },
       },
       {
         id: "hostPort",
@@ -580,12 +585,32 @@ export function ProxyManagementDialog({
         ),
       },
       {
+        // WebRTC is UDP, so whether this proxy carries it decides whether a
+        // profile on it can route WebRTC at all. That belongs in the table,
+        // not only behind the check popover.
+        id: "udp",
+        size: 72,
+        enableSorting: false,
+        header: () => t("proxies.management.udpCol"),
+        cell: ({ row }) => <ProxyUdpBadge proxy={row.original} />,
+      },
+      {
         id: "usage",
         size: 80,
         enableSorting: false,
         header: () => t("proxies.management.usage"),
         cell: ({ row }) => (
-          <Badge variant="secondary">{proxyUsage[row.original.id] ?? 0}</Badge>
+          <ProfileUsageButton
+            label={t("appFeedback.assignedProfiles", {
+              name: row.original.name,
+            })}
+            failed={referencesFailed}
+            profiles={
+              referencedProfiles?.filter(
+                (profile) => profile.proxy_id === row.original.id,
+              ) ?? null
+            }
+          />
         ),
       },
       {
@@ -596,11 +621,28 @@ export function ProxyManagementDialog({
         cell: ({ row }) => {
           const proxy = row.original;
           const locked = proxyInUse[proxy.id];
+          const syncDot = getSyncStatusDot(
+            proxy,
+            proxySyncStatus[proxy.id],
+            t,
+            proxySyncErrors[proxy.id],
+          );
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center">
+                <span
+                  className="inline-flex items-center gap-2"
+                  title={syncDot.tooltip}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      syncDot.color,
+                    )}
+                  />
                   <AnimatedSwitch
+                    aria-label={`${t("proxies.management.syncCol")}: ${proxy.name}`}
                     checked={proxy.sync_enabled}
                     onCheckedChange={() => void handleToggleSync(proxy)}
                     disabled={isTogglingSync[proxy.id] || locked}
@@ -631,25 +673,7 @@ export function ProxyManagementDialog({
           const proxy = row.original;
           return (
             <div className="flex gap-1">
-              <ProxyCheckButton
-                proxy={proxy}
-                profileId={proxy.id}
-                checkingProfileId={checkingProxyId}
-                cachedResult={proxyCheckResults[proxy.id]}
-                setCheckingProfileId={setCheckingProxyId}
-                onCheckComplete={(result) => {
-                  setProxyCheckResults((prev) => ({
-                    ...prev,
-                    [proxy.id]: result,
-                  }));
-                }}
-                onCheckFailed={(result) => {
-                  setProxyCheckResults((prev) => ({
-                    ...prev,
-                    [proxy.id]: result,
-                  }));
-                }}
-              />
+              <ProxyCheckButton proxy={proxy} />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -704,13 +728,13 @@ export function ProxyManagementDialog({
     ],
     [
       t,
+      referencedProfiles,
+      referencesFailed,
       proxySyncStatus,
       proxySyncErrors,
       proxyUsage,
       isTogglingSync,
       proxyInUse,
-      checkingProxyId,
-      proxyCheckResults,
       handleToggleSync,
       handleEditProxy,
       handleDeleteProxy,
@@ -785,29 +809,10 @@ export function ProxyManagementDialog({
           </Button>
         ),
         cell: ({ row }) => {
-          const vpn = row.original;
-          const syncDot = getSyncStatusDot(
-            vpn,
-            vpnSyncStatus[vpn.id],
-            t,
-            vpnSyncErrors[vpn.id],
-          );
           return (
-            <div className="flex min-w-0 items-center gap-2 font-medium">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
-                      syncDot.animate ? "animate-pulse" : ""
-                    }`}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{syncDot.tooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-              <span className="truncate">{vpn.name}</span>
-            </div>
+            <span className="block truncate font-medium">
+              {row.original.name}
+            </span>
           );
         },
       },
@@ -824,7 +829,17 @@ export function ProxyManagementDialog({
         enableSorting: false,
         header: () => t("proxies.management.usage"),
         cell: ({ row }) => (
-          <Badge variant="secondary">{vpnUsage[row.original.id] ?? 0}</Badge>
+          <ProfileUsageButton
+            label={t("appFeedback.assignedProfiles", {
+              name: row.original.name,
+            })}
+            failed={referencesFailed}
+            profiles={
+              referencedProfiles?.filter(
+                (profile) => profile.vpn_id === row.original.id,
+              ) ?? null
+            }
+          />
         ),
       },
       {
@@ -835,11 +850,28 @@ export function ProxyManagementDialog({
         cell: ({ row }) => {
           const vpn = row.original;
           const locked = vpnInUse[vpn.id];
+          const syncDot = getSyncStatusDot(
+            vpn,
+            vpnSyncStatus[vpn.id],
+            t,
+            vpnSyncErrors[vpn.id],
+          );
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center">
+                <span
+                  className="inline-flex items-center gap-2"
+                  title={syncDot.tooltip}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      syncDot.color,
+                    )}
+                  />
                   <AnimatedSwitch
+                    aria-label={`${t("proxies.management.syncCol")}: ${vpn.name}`}
                     checked={vpn.sync_enabled}
                     onCheckedChange={() => void handleToggleVpnSync(vpn)}
                     disabled={isTogglingVpnSync[vpn.id] || locked}
@@ -930,6 +962,8 @@ export function ProxyManagementDialog({
     ],
     [
       t,
+      referencedProfiles,
+      referencesFailed,
       vpnSyncStatus,
       vpnSyncErrors,
       vpnUsage,
@@ -964,12 +998,25 @@ export function ProxyManagementDialog({
     .getFilteredSelectedRowModel()
     .rows.map((row) => row.original);
 
+  // Row selection is gated on sync ownership, which says nothing about local
+  // use, so a selection can hold entries the per-row delete refuses. Deleting
+  // one anyway leaves every profile that points at it holding an id that
+  // resolves to nothing, and the browser then launches with no upstream.
+  const deletableProxies = selectedProxies.filter(
+    (proxy) => (proxyUsage[proxy.id] ?? 0) === 0,
+  );
+  const skippedProxyCount = selectedProxies.length - deletableProxies.length;
+  const deletableVpns = selectedVpns.filter(
+    (vpn) => (vpnUsage[vpn.id] ?? 0) === 0,
+  );
+  const skippedVpnCount = selectedVpns.length - deletableVpns.length;
+
   const handleBulkDeleteProxies = useCallback(async () => {
     if (selectedProxies.length === 0) return;
     setIsBulkDeletingProxies(true);
     try {
       const results = await Promise.allSettled(
-        selectedProxies.map((proxy) =>
+        deletableProxies.map((proxy) =>
           invoke("delete_stored_proxy", { proxyId: proxy.id }),
         ),
       );
@@ -981,20 +1028,25 @@ export function ProxyManagementDialog({
       if (failed > 0) {
         toast.error(t("proxies.management.deleteFailed"));
       }
+      if (skippedProxyCount > 0) {
+        toast.warning(
+          t("proxies.bulkDelete.skippedProxies", { count: skippedProxyCount }),
+        );
+      }
       await emit("stored-proxies-changed");
       setProxiesRowSelection({});
     } finally {
       setIsBulkDeletingProxies(false);
       setShowBulkDeleteProxiesDialog(false);
     }
-  }, [selectedProxies, t]);
+  }, [selectedProxies, deletableProxies, skippedProxyCount, t]);
 
   const handleBulkDeleteVpns = useCallback(async () => {
     if (selectedVpns.length === 0) return;
     setIsBulkDeletingVpns(true);
     try {
       const results = await Promise.allSettled(
-        selectedVpns.map((vpn) =>
+        deletableVpns.map((vpn) =>
           invoke("delete_vpn_config", { vpnId: vpn.id }),
         ),
       );
@@ -1006,13 +1058,18 @@ export function ProxyManagementDialog({
       if (failed > 0) {
         toast.error(t("vpns.management.deleteFailed"));
       }
+      if (skippedVpnCount > 0) {
+        toast.warning(
+          t("proxies.bulkDelete.skippedVpns", { count: skippedVpnCount }),
+        );
+      }
       await emit("vpn-configs-changed");
       setVpnsRowSelection({});
     } finally {
       setIsBulkDeletingVpns(false);
       setShowBulkDeleteVpnsDialog(false);
     }
-  }, [selectedVpns, t]);
+  }, [selectedVpns, deletableVpns, skippedVpnCount, t]);
 
   // Bulk-toggle sync: if every selectable row has sync ON, turn them all
   // OFF; otherwise turn them all ON. Items locked by a synced profile
@@ -1535,6 +1592,14 @@ export function ProxyManagementDialog({
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}
             onClick={() => {
+              if (skippedProxyCount > 0 && deletableProxies.length === 0) {
+                toast.warning(
+                  t("proxies.bulkDelete.skippedProxies", {
+                    count: skippedProxyCount,
+                  }),
+                );
+                return;
+              }
               setShowBulkDeleteProxiesDialog(true);
             }}
             size="icon"
@@ -1558,6 +1623,14 @@ export function ProxyManagementDialog({
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}
             onClick={() => {
+              if (skippedVpnCount > 0 && deletableVpns.length === 0) {
+                toast.warning(
+                  t("proxies.bulkDelete.skippedVpns", {
+                    count: skippedVpnCount,
+                  }),
+                );
+                return;
+              }
               setShowBulkDeleteVpnsDialog(true);
             }}
             size="icon"
@@ -1576,11 +1649,11 @@ export function ProxyManagementDialog({
         onConfirm={handleBulkDeleteProxies}
         title={t("proxies.bulkDelete.proxiesTitle")}
         description={t("proxies.bulkDelete.proxiesDescription", {
-          count: selectedProxies.length,
-          names: selectedProxies.map((p) => p.name).join(", "),
+          count: deletableProxies.length,
+          names: deletableProxies.map((p) => p.name).join(", "),
         })}
         confirmButtonText={t("proxies.bulkDelete.confirmButton", {
-          count: selectedProxies.length,
+          count: deletableProxies.length,
         })}
         isLoading={isBulkDeletingProxies}
       />
@@ -1592,11 +1665,11 @@ export function ProxyManagementDialog({
         onConfirm={handleBulkDeleteVpns}
         title={t("proxies.bulkDelete.vpnsTitle")}
         description={t("proxies.bulkDelete.vpnsDescription", {
-          count: selectedVpns.length,
-          names: selectedVpns.map((v) => v.name).join(", "),
+          count: deletableVpns.length,
+          names: deletableVpns.map((v) => v.name).join(", "),
         })}
         confirmButtonText={t("proxies.bulkDelete.confirmButton", {
-          count: selectedVpns.length,
+          count: deletableVpns.length,
         })}
         isLoading={isBulkDeletingVpns}
       />

@@ -458,13 +458,15 @@ impl SyncScheduler {
   }
 
   async fn process_pending(&self, app_handle: &tauri::AppHandle) {
+    // Deletions first. A queued sync for an entity another device deleted would
+    // otherwise re-upload it from the local copy this tick is about to remove.
+    self.process_pending_tombstones(app_handle).await;
     self.process_pending_profiles(app_handle).await;
     self.process_pending_proxies(app_handle).await;
     self.process_pending_groups(app_handle).await;
     self.process_pending_vpns(app_handle).await;
     self.process_pending_extensions(app_handle).await;
     self.process_pending_extension_groups(app_handle).await;
-    self.process_pending_tombstones(app_handle).await;
   }
 
   async fn process_pending_profiles(&self, app_handle: &tauri::AppHandle) {
@@ -830,6 +832,29 @@ impl SyncScheduler {
     }
   }
 
+  /// Forget a queued config sync for an entity whose deletion is being applied
+  /// this tick, so the drain that follows cannot re-upload it.
+  async fn drop_pending_config_sync(&self, entity_type: &str, entity_id: &str) {
+    match entity_type {
+      "proxy" => {
+        self.pending_proxies.lock().await.remove(entity_id);
+      }
+      "group" => {
+        self.pending_groups.lock().await.remove(entity_id);
+      }
+      "vpn" => {
+        self.pending_vpns.lock().await.remove(entity_id);
+      }
+      "extension" => {
+        self.pending_extensions.lock().await.remove(entity_id);
+      }
+      "extension_group" => {
+        self.pending_extension_groups.lock().await.remove(entity_id);
+      }
+      _ => {}
+    }
+  }
+
   async fn process_pending_tombstones(&self, _app_handle: &tauri::AppHandle) {
     let tombstones: Vec<(String, String)> = {
       let mut pending = self.pending_tombstones.lock().await;
@@ -838,6 +863,10 @@ impl SyncScheduler {
 
     if tombstones.is_empty() {
       return;
+    }
+
+    for (entity_type, entity_id) in &tombstones {
+      self.drop_pending_config_sync(entity_type, entity_id).await;
     }
 
     for (entity_type, entity_id) in tombstones {
@@ -989,5 +1018,23 @@ mod tests {
     // A scheduler is one-shot. Restarting the pipeline builds a new one, so a
     // retired instance coming back to life could only ever be a duplicate.
     assert_eq!(scheduler.claim_start_slot(), StartDecision::Retired);
+  }
+
+  #[tokio::test]
+  async fn test_drop_pending_config_sync_removes_only_the_deleted_entity() {
+    let scheduler = SyncScheduler::new();
+    scheduler.queue_proxy_sync("proxy-1".to_string()).await;
+    scheduler.queue_group_sync("group-1".to_string()).await;
+    assert!(scheduler.is_sync_in_progress().await);
+
+    // A tombstone drops that entity's queued sync, otherwise the drain that
+    // follows re-uploads the copy this tick is about to delete. Every other
+    // queued entity is left alone.
+    scheduler.drop_pending_config_sync("proxy", "proxy-1").await;
+    assert!(scheduler.pending_proxies.lock().await.is_empty());
+    assert!(scheduler.pending_groups.lock().await.contains("group-1"));
+
+    scheduler.drop_pending_config_sync("group", "group-1").await;
+    assert!(!scheduler.is_sync_in_progress().await);
   }
 }

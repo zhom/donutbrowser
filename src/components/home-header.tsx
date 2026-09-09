@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/profile-search";
 import { cn } from "@/lib/utils";
 import type { GroupWithCount } from "@/types";
+import { UNGROUPED_DROP_ID, useProfileGroupDrag } from "./profile-group-drag";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -162,6 +164,8 @@ const HomeHeader = ({
   pageTitle,
 }: Props) => {
   const { t } = useTranslation();
+  const profileDrag = useProfileGroupDrag();
+  const reducedMotion = useReducedMotion();
   const [platform, setPlatform] = useState<string>("macos");
 
   useEffect(() => {
@@ -267,6 +271,7 @@ const HomeHeader = ({
   const [groupsFadeLeft, setGroupsFadeLeft] = useState(false);
   const [groupsFadeRight, setGroupsFadeRight] = useState(false);
   useEffect(() => {
+    if (!showProfileToolbar) return;
     const el = groupsScrollRef.current;
     if (!el) return;
     const update = () => {
@@ -277,11 +282,18 @@ const HomeHeader = ({
     el.addEventListener("scroll", update, { passive: true });
     const ro = new ResizeObserver(update);
     ro.observe(el);
+    const mutations = new MutationObserver(update);
+    mutations.observe(el, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
     return () => {
       el.removeEventListener("scroll", update);
       ro.disconnect();
+      mutations.disconnect();
     };
-  }, []);
+  }, [showProfileToolbar]);
 
   const isWindows = platform === "windows";
 
@@ -349,7 +361,10 @@ const HomeHeader = ({
                 if (el)
                   el.scrollBy({
                     left: -el.clientWidth * 0.6,
-                    behavior: "smooth",
+                    behavior:
+                      reducedMotion || profileDrag?.active
+                        ? "instant"
+                        : "smooth",
                   });
               }}
               className="absolute top-1/2 left-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
@@ -359,7 +374,8 @@ const HomeHeader = ({
           )}
           <div
             ref={groupsScrollRef}
-            className="ml-2 flex scrollbar-none items-center gap-3 overflow-x-auto scroll-smooth [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            data-slot="profile-group-strip"
+            className="ml-2 flex scrollbar-none items-center gap-3 overflow-x-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             style={{
               paddingLeft: groupsFadeLeft ? 22 : 0,
               paddingRight: groupsFadeRight ? 22 : 0,
@@ -389,18 +405,57 @@ const HomeHeader = ({
                 </button>
               );
             })()}
+            {profileDrag && profileDrag.movingIds.size > 0 && (
+              <span
+                data-profile-group-drop={UNGROUPED_DROP_ID}
+                data-drop-state={
+                  profileDrag.targetId === UNGROUPED_DROP_ID
+                    ? "target"
+                    : profileDrag.canDrop(UNGROUPED_DROP_ID)
+                      ? "available"
+                      : "unavailable"
+                }
+                title={t("profileMotion.dragTarget", {
+                  group: t("groups.noGroup"),
+                })}
+                className={cn(
+                  "flex h-7 shrink-0 items-center rounded-sm px-2 text-xs text-muted-foreground transition-colors duration-100",
+                  profileDrag.targetId === UNGROUPED_DROP_ID &&
+                    "bg-accent font-medium text-accent-foreground",
+                  !profileDrag.canDrop(UNGROUPED_DROP_ID) && "opacity-40",
+                )}
+              >
+                {t("groups.noGroup")}
+              </span>
+            )}
             {groups.map((group) => {
               const active = selectedGroupId === group.id;
+              const dropTarget = profileDrag?.targetId === group.id;
               return (
                 <button
                   key={group.id}
                   type="button"
                   title={group.name}
+                  data-profile-group-drop={group.id}
+                  data-drop-state={
+                    profileDrag?.active
+                      ? dropTarget
+                        ? "target"
+                        : profileDrag.canDrop(group.id)
+                          ? "available"
+                          : "unavailable"
+                      : undefined
+                  }
+                  aria-current={active ? "true" : undefined}
                   onClick={() => {
                     onGroupSelect(active ? ALL_FILTER_ID : group.id);
                   }}
                   className={cn(
-                    "flex h-7 shrink-0 items-center gap-1.5 px-1 text-xs transition-colors duration-100",
+                    "flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1 text-xs transition-colors duration-100",
+                    dropTarget && "bg-accent text-accent-foreground",
+                    profileDrag?.active &&
+                      !profileDrag.canDrop(group.id) &&
+                      "opacity-40",
                     active
                       ? "font-medium text-foreground"
                       : "text-muted-foreground hover:text-foreground",
@@ -423,7 +478,10 @@ const HomeHeader = ({
                 if (el)
                   el.scrollBy({
                     left: el.clientWidth * 0.6,
-                    behavior: "smooth",
+                    behavior:
+                      reducedMotion || profileDrag?.active
+                        ? "instant"
+                        : "smooth",
                   });
               }}
               className="absolute top-1/2 right-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"

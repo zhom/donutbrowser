@@ -1,9 +1,9 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuSearch } from "react-icons/lu";
+import { LuChevronRight, LuSearch } from "react-icons/lu";
 import {
   formatDateTime,
   formatDuration,
@@ -24,6 +24,10 @@ import {
   sessionTone,
   useSecondTicker,
 } from "@/components/cookie-bot-shared";
+import {
+  AnimatedDisclosureChevron,
+  AnimatedDisclosureContent,
+} from "@/components/ui/animated-disclosure";
 import { Button } from "@/components/ui/button";
 import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
 import { Input } from "@/components/ui/input";
@@ -59,7 +63,7 @@ import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile } from "@/types";
 
-export type RunFilter = "all" | "succeeded" | "partial" | "failed";
+export type RunFilter = "all" | "succeeded" | "partial" | "failed" | "skipped";
 
 interface CookieBotActivityProps {
   live: RemoteSessionState[];
@@ -145,6 +149,9 @@ export function CookieBotActivity({
             </SelectItem>
             <SelectItem value="partial">
               {t("cookieBot.history.filterPartial")}
+            </SelectItem>
+            <SelectItem value="skipped">
+              {t("cookieBot.runStatus.skipped")}
             </SelectItem>
             <SelectItem value="failed">
               {t("cookieBot.history.filterFailed")}
@@ -245,7 +252,7 @@ function RunRow({
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const reduceMotion = useReducedMotion();
+  const detailId = useId();
 
   const started = parseIso(run.started_at);
   const ended = parseIso(run.ended_at);
@@ -261,12 +268,7 @@ function RunRow({
 
   return (
     <>
-      <TableRow
-        className={cn("hover:bg-muted/30", hasDetail && "cursor-pointer")}
-        onClick={() => {
-          if (hasDetail) setExpanded((open) => !open);
-        }}
-      >
+      <TableRow className="hover:bg-muted/30">
         <TableCell className="tabular-nums text-muted-foreground">
           {formatDateTime(run.started_at ?? run.scheduled_for) ?? "—"}
         </TableCell>
@@ -276,9 +278,9 @@ function RunRow({
         <TableCell className="hidden tabular-nums @2xl:table-cell">
           {durationSeconds === null ? "—" : formatDuration(t, durationSeconds)}
         </TableCell>
-        {/* An em dash, not a confident `0/12`: the counters are not written
-            until the fleet's figures are ingested, and printing the column
-            default as a fact tells a paying user their run did nothing. */}
+        {/* An em dash, not a confident `0/12`: the counters are not always
+            populated, and printing the column default as a fact tells a paying
+            user their run did nothing. */}
         <TableCell className="hidden text-right tabular-nums text-muted-foreground @3xl:table-cell">
           {!countersKnown ? (
             <Tooltip>
@@ -296,10 +298,27 @@ function RunRow({
           )}
         </TableCell>
         <TableCell>
-          <span className="flex items-center gap-2 text-xs">
-            <StatusDot tone={runStatusTone(run.status)} />
-            {runStatusLabel(t, run.status)}
-          </span>
+          {hasDetail ? (
+            <button
+              type="button"
+              data-slot="run-details-toggle"
+              aria-expanded={expanded}
+              aria-controls={detailId}
+              onClick={() => setExpanded((open) => !open)}
+              className="flex min-h-7 items-center gap-2 rounded-sm text-left text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <StatusDot tone={runStatusTone(run.status)} />
+              {runStatusLabel(t, run.status)}
+              <AnimatedDisclosureChevron open={expanded}>
+                <LuChevronRight className="size-3" />
+              </AnimatedDisclosureChevron>
+            </button>
+          ) : (
+            <span className="flex min-h-7 items-center gap-2 text-xs">
+              <StatusDot tone={runStatusTone(run.status)} />
+              {runStatusLabel(t, run.status)}
+            </span>
+          )}
         </TableCell>
         {showOperator && (
           <TableCell className="hidden max-w-0 truncate text-muted-foreground @4xl:table-cell">
@@ -313,42 +332,34 @@ function RunRow({
             colSpan={showOperator ? 6 : 5}
             className={cn("p-0", !expanded && "border-0!")}
           >
-            <AnimatePresence initial={false}>
-              {expanded && (
-                <motion.div
-                  initial={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                  transition={{
-                    duration: reduceMotion ? 0.15 : 0.16,
-                    ease: MOTION_EASE_OUT,
-                  }}
-                  className="flex flex-col gap-1 px-2 pb-3 text-xs text-muted-foreground"
-                >
-                  {run.outcome_code && (
-                    <span>
-                      {t("cookieBot.history.outcome", {
-                        reason: outcomeLabel(t, run.outcome_code) ?? "",
-                      })}
-                    </span>
-                  )}
-                  {run.sites_failed > 0 && (
-                    <span>
-                      {t("cookieBot.history.sitesFailed", {
-                        count: run.sites_failed,
-                      })}
-                    </span>
-                  )}
-                  {run.consent_dismissed > 0 && (
-                    <span>
-                      {t("cookieBot.history.consentHandled", {
-                        count: run.consent_dismissed,
-                      })}
-                    </span>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div id={detailId}>
+              <AnimatedDisclosureContent
+                open={expanded}
+                className="flex flex-col gap-1 px-2 pb-3 text-xs text-muted-foreground"
+              >
+                {run.outcome_code && (
+                  <span>
+                    {t("cookieBot.history.outcome", {
+                      reason: outcomeLabel(t, run.outcome_code) ?? "",
+                    })}
+                  </span>
+                )}
+                {run.sites_failed > 0 && (
+                  <span>
+                    {t("cookieBot.history.sitesFailed", {
+                      count: run.sites_failed,
+                    })}
+                  </span>
+                )}
+                {run.consent_dismissed > 0 && (
+                  <span>
+                    {t("cookieBot.history.consentHandled", {
+                      count: run.consent_dismissed,
+                    })}
+                  </span>
+                )}
+              </AnimatedDisclosureContent>
+            </div>
           </TableCell>
         </TableRow>
       )}
@@ -450,11 +461,8 @@ function LiveSessionRow({
   const visited = run?.sites_visited ?? 0;
   const progress =
     countersKnown && total > 0 ? Math.min(1, visited / total) : null;
-  // A night longer than one session's cap is split into chunks, and the run row
-  // is the only place that can say which one is running. `chunk_index` counts
-  // chunks STARTED — the server bumps it as it launches each one and treats 0
-  // as "never got going" — so it already reads as a 1-based position and must
-  // not be incremented again.
+  // `chunk_index` counts chunks STARTED and uses 0 for "never got going", so
+  // it already reads as a 1-based position and must not be incremented again.
   const chunks =
     run && run.chunks_total > 1 && run.chunk_index > 0
       ? t("cookieBot.live.chunk", {
@@ -488,24 +496,12 @@ function LiveSessionRow({
           {name ?? t("cookieBot.live.unnamedSession")}
         </span>
 
-        {/* The phase swaps in place: the words change, the row does not move.
-            The slot is a fixed width so the elapsed clock beside it never
-            shifts, and the entering label starts at 0.55 rather than 0 — if
-            the animation never runs, the single most important live signal on
-            the screen is still legible. */}
+        {/* Keep phase updates immediate and reserve their width so the clock
+            beside them stays still. */}
         <span className="w-36 shrink-0 text-right">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={phase}
-              initial={{ opacity: reduceMotion ? 1 : 0.55 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: reduceMotion ? 0.01 : 0.12 }}
-              className="block truncate text-xs text-muted-foreground"
-            >
-              {phase}
-            </motion.span>
-          </AnimatePresence>
+          <span className="block truncate text-xs text-muted-foreground">
+            {phase}
+          </span>
         </span>
 
         <span className="shrink-0 text-xs tabular-nums text-foreground">

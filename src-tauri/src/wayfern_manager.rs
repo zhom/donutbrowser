@@ -3,8 +3,8 @@ use crate::profile::BrowserProfile;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,8 +37,38 @@ pub struct WayfernConfig {
   pub geoip: Option<serde_json::Value>, // For compatibility with shared config form
   #[serde(default)]
   pub block_images: Option<bool>, // For compatibility with shared config form
+  /// LEGACY on/off switch kept for stored configs; `webrtc_mode` wins when
+  /// both are present, and `Some(true)` alone reads as `block`.
   #[serde(default)]
   pub block_webrtc: Option<bool>,
+  /// How WebRTC may reach the network: `auto` (real STUN only where the UDP
+  /// it needs is carried by the route, else the exit-IP posture), `tcp_only`
+  /// (one server-reflexive candidate on the proxy's exit IP), or `block` (no
+  /// ICE candidates at all). `None` is `auto`.
+  #[serde(default)]
+  pub webrtc_mode: Option<String>,
+  /// The user's edits to the profile's persona, as a JSON array of
+  /// `{id,label,value}`. Everything not edited is derived from the profile's
+  /// own seed, so this holds edits and nothing else. An empty value removes
+  /// that row from what the browser offers.
+  #[serde(default)]
+  pub persona: Option<String>,
+  /// A still (.png) or clip (.y4m/.mjpeg) the claimed camera serves, as an
+  /// absolute path. `None` means the camera serves dark frames; the browser
+  /// never falls back to the host device.
+  #[serde(default)]
+  pub camera_file: Option<String>,
+  /// `x,y,width,height` in SOURCE pixels, cropped before the frame is scaled.
+  #[serde(default)]
+  pub camera_crop: Option<String>,
+  /// Whether an interactive launch reopens the windows and tabs of the last
+  /// session. `None` is the default, which is on. Automation, headless,
+  /// ephemeral and clear-on-close launches never restore, whatever this says,
+  /// and neither does a browser that cannot take the identity at launch: a
+  /// restored tab loads before any post-launch `setIdentity`, so it would
+  /// carry the host device for its whole lifetime.
+  #[serde(default)]
+  pub restore_session: Option<bool>,
   #[serde(default)]
   pub block_webgl: Option<bool>,
   #[serde(default, skip_serializing)]
@@ -85,8 +115,8 @@ pub struct WayfernConfig {
 /// 151, which is the only command that reproduces such a payload exactly.
 ///
 /// Written as a full version rather than a major so it can be pinned to an
-/// exact build if the identity commands land part-way through the 151 line;
-/// missing components compare as zero, so `"151"` means "any 151 or newer".
+/// exact build if that is ever needed; missing components compare as zero, so
+/// `"151"` means "any 151 or newer".
 const IDENTITY_API_MIN_VERSION: &str = "151";
 
 /// Whether `version` speaks the identity API.
@@ -103,6 +133,624 @@ const IDENTITY_API_MIN_VERSION: &str = "151";
 /// ever shipped, while `createIdentity` on an older build is an unknown method.
 pub fn supports_identity_api(version: &str) -> bool {
   crate::api_client::compare_versions(version, IDENTITY_API_MIN_VERSION) != std::cmp::Ordering::Less
+}
+
+/// First Wayfern version that ships the 152 launch contract: the identity file
+/// (`--wayfern-identity-file`), the `--wayfern-token` switch, WebRTC mode and
+/// exit IP, persona/icon/camera/Widevine/entitlement-cache switches, the
+/// `Vellum` input domain and the perception/locator/extraction commands.
+/// Everything gated on it keeps its pre-152 path on any older browser.
+const WAYFERN_152_MIN_VERSION: &str = "152";
+
+/// Whether `version` speaks the Wayfern 152 launch and automation contract.
+/// Same rule as [`supports_identity_api`]: pass `BrowserProfile::version`, read
+/// it at the point of use, and an unparsable version takes the older path.
+pub fn supports_wayfern_152(version: &str) -> bool {
+  crate::api_client::compare_versions(version, WAYFERN_152_MIN_VERSION) != std::cmp::Ordering::Less
+}
+
+/// Where the launch-time identity document lives inside the profile directory.
+/// Rewritten before every launch; the sync manifest excludes it.
+pub const LAUNCH_IDENTITY_FILE: &str = "wayfern-identity.json";
+
+/// What kind of launch this is, from the browser's point of view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchKind {
+  /// A person opened the profile from the app: the window is theirs, and the
+  /// session they left is the one they expect to find again.
+  Interactive,
+  /// REST, MCP or a batch run drives the browser: it starts clean on the URL
+  /// the caller named and never reopens what a person left behind.
+  Automation,
+}
+
+/// Whether this launch reopens the last session, or why it does not.
+///
+/// `identity_at_launch` says the device is committed before the first
+/// navigation (the 152 identity file), or that there is no device to commit.
+/// Anything applied over CDP after the window opens loses the race with a
+/// restored tab, which then carries the host device for its whole lifetime,
+/// so such a launch starts on a fresh tab instead and the log says why.
+pub fn session_restore_verdict(
+  config: &WayfernConfig,
+  kind: LaunchKind,
+  headless: bool,
+  ephemeral: bool,
+  clear_on_close: bool,
+  identity_at_launch: bool,
+) -> Result<(), &'static str> {
+  if kind == LaunchKind::Automation {
+    return Err("an automation run starts clean");
+  }
+  if headless {
+    return Err("a headless launch has no session to show");
+  }
+  if ephemeral {
+    return Err("an ephemeral profile keeps nothing between launches");
+  }
+  if clear_on_close {
+    return Err("the profile clears its data on close");
+  }
+  if config.randomize_fingerprint_on_launch == Some(true) {
+    return Err("a device randomized on every launch has no session to continue");
+  }
+  if config.restore_session == Some(false) {
+    return Err("the profile has session restore switched off");
+  }
+  if !identity_at_launch {
+    return Err(
+      "this browser applies the identity after the window opens, so a restored tab would load on the host device",
+    );
+  }
+  Ok(())
+}
+
+/// The switches that shape the first window: session restore and the launch
+/// identity. Kept apart from the rest of the command line so a test can pin
+/// them per launch kind.
+pub fn session_switches(restore_session: bool, identity_file: Option<&Path>) -> Vec<String> {
+  let mut switches = Vec::new();
+  if let Some(path) = identity_file {
+    switches.push(format!("--wayfern-identity-file={}", path.display()));
+  }
+  if restore_session {
+    switches.push("--restore-last-session".to_string());
+  }
+  switches
+}
+
+/// The WebRTC posture a 152 browser is launched with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebRtcMode {
+  Auto,
+  TcpOnly,
+  Block,
+}
+
+impl WebRtcMode {
+  pub fn parse(value: &str) -> Option<Self> {
+    match value.trim().to_ascii_lowercase().as_str() {
+      "auto" => Some(Self::Auto),
+      "tcp_only" | "tcp-only" | "tcponly" => Some(Self::TcpOnly),
+      "block" | "blocked" | "off" => Some(Self::Block),
+      _ => None,
+    }
+  }
+
+  /// The mode a stored config asks for. `webrtc_mode` wins; the legacy
+  /// `block_webrtc: true` reads as `block`; anything else is `auto`. An
+  /// unknown string is `auto` too, logged by the caller, never a launch error.
+  pub fn from_config(config: &WayfernConfig) -> Self {
+    if let Some(mode) = config.webrtc_mode.as_deref().and_then(Self::parse) {
+      return mode;
+    }
+    if config.block_webrtc == Some(true) {
+      return Self::Block;
+    }
+    Self::Auto
+  }
+
+  pub fn switch_value(self) -> &'static str {
+    match self {
+      Self::Auto => "auto",
+      Self::TcpOnly => "tcp_only",
+      Self::Block => "block",
+    }
+  }
+}
+
+/// The WebRTC switches for a launch: the mode always, and the exit IP whenever
+/// one is known and the mode can use it. A value the browser will not accept
+/// costs only the synthetic server-reflexive candidate that makes a TCP-only
+/// route look natural, never a leak. Pre-152 browsers do not read these, and
+/// get nothing.
+pub fn webrtc_switches(version: &str, mode: WebRtcMode, exit_ip: Option<&str>) -> Vec<String> {
+  if !supports_wayfern_152(version) {
+    return Vec::new();
+  }
+  let mut switches = vec![format!("--wayfern-webrtc-mode={}", mode.switch_value())];
+  if mode != WebRtcMode::Block {
+    if let Some(ip) = exit_ip.map(str::trim).filter(|ip| !ip.is_empty()) {
+      if let Ok(address) = ip.parse::<std::net::IpAddr>() {
+        switches.push(format!("--wayfern-webrtc-exit-ip={address}"));
+      }
+    }
+  }
+  switches
+}
+
+/// Say so when a device claims a screen the host cannot show.
+///
+/// One function for both launch paths: an identity-backed profile learns its
+/// screen from the running browser, a legacy one carries it on disk, and the
+/// sentence is the same either way.
+impl WayfernManager {
+  fn warn_on_screen_over_host(device_json: &str, profile: &BrowserProfile, app_handle: &AppHandle) {
+    if let Some((claimed_w, claimed_h, host_w, host_h)) =
+      screen_claim_over_host(Some(device_json), host_screen_size(app_handle))
+    {
+      log::warn!(
+        "Profile {} claims a {claimed_w}x{claimed_h} screen on a {host_w}x{host_h} display: its window can never fill the screen it reports, which a page can measure",
+        profile.name
+      );
+    }
+  }
+}
+
+/// The claimed screen a stored device presents, in CSS pixels.
+fn claimed_screen(fingerprint_json: &str) -> Option<(u32, u32)> {
+  let device = WayfernManager::fingerprint_object(fingerprint_json)?;
+  let read = |key: &str| device.get(key).and_then(|v| v.as_u64()).map(|v| v as u32);
+  Some((read("screenWidth")?, read("screenHeight")?))
+}
+
+/// How much bigger the claimed screen is than the display the browser will
+/// actually open on, when it is bigger at all.
+///
+/// A device claiming a screen the host cannot show is visible from the page:
+/// the window can never grow to the claimed size, so `outerWidth` stays below
+/// `screen.width` however the user maximises it. Donut cannot fix the device
+/// at launch without silently changing it, so it says so instead, on the
+/// launch report and in the log.
+pub fn screen_claim_over_host(
+  fingerprint_json: Option<&str>,
+  host: Option<(u32, u32)>,
+) -> Option<(u32, u32, u32, u32)> {
+  let (claimed_width, claimed_height) = claimed_screen(fingerprint_json?)?;
+  let (host_width, host_height) = host?;
+  if host_width == 0 || host_height == 0 {
+    return None;
+  }
+  (claimed_width > host_width || claimed_height > host_height).then_some((
+    claimed_width,
+    claimed_height,
+    host_width,
+    host_height,
+  ))
+}
+
+/// The primary display's size in CSS pixels, which is what a page reads.
+pub fn host_screen_size(app_handle: &AppHandle) -> Option<(u32, u32)> {
+  let monitor = app_handle.primary_monitor().ok().flatten()?;
+  let scale = monitor.scale_factor();
+  let size = monitor.size().to_logical::<f64>(scale);
+  if size.width < 1.0 || size.height < 1.0 {
+    return None;
+  }
+  Some((size.width as u32, size.height as u32))
+}
+
+/// Where a 152 browser keeps its entitlement cache: inside donut's own cache
+/// root rather than the OS default, so it is removed with the app's data and
+/// never shared between an e2e session and the real installation.
+pub fn entitlement_cache_switch(version: &str, cache_root: &Path) -> Option<String> {
+  if !supports_wayfern_152(version) {
+    return None;
+  }
+  let dir = cache_root.join("wayfern-entitlements");
+  if let Err(e) = std::fs::create_dir_all(&dir) {
+    log::warn!(
+      "Could not create the Wayfern entitlement cache at {}: {e}; the browser keeps its default",
+      dir.display()
+    );
+    return None;
+  }
+  Some(format!("--wayfern-entitlement-cache-dir={}", dir.display()))
+}
+
+/// Fonts for the window badge, loaded from the system once per process. The
+/// load walks every font directory, which is far too slow to repeat per launch.
+fn badge_fonts() -> std::sync::Arc<resvg::usvg::fontdb::Database> {
+  static FONTS: std::sync::OnceLock<std::sync::Arc<resvg::usvg::fontdb::Database>> =
+    std::sync::OnceLock::new();
+  FONTS
+    .get_or_init(|| {
+      let mut db = resvg::usvg::fontdb::Database::new();
+      db.load_system_fonts();
+      std::sync::Arc::new(db)
+    })
+    .clone()
+}
+
+/// The first letter (or digit) of a profile name, upper-cased, for its badge.
+pub fn badge_initial(name: &str) -> String {
+  name
+    .chars()
+    .find(|c| c.is_alphanumeric())
+    .map(|c| c.to_uppercase().collect())
+    .unwrap_or_default()
+}
+
+/// Whether text on `color` (bare or `#`-prefixed RRGGBB) reads better dark.
+fn badge_wants_dark_ink(color: &str) -> bool {
+  let hex = color.trim().trim_start_matches('#');
+  if hex.len() != 6 {
+    return false;
+  }
+  let channel = |i: usize| {
+    u8::from_str_radix(&hex[i..i + 2], 16)
+      .map(|v| v as f64 / 255.0)
+      .unwrap_or(0.0)
+  };
+  // Relative luminance, sRGB weights; 0.6 keeps white ink on every mid tone.
+  0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4) > 0.6
+}
+
+/// Render the PNG a 152 browser shows as this profile's window, taskbar and
+/// Dock icon: the profile's frame colour with its initial. `None` when the
+/// badge cannot be rendered, in which case the browser keeps its stock icon.
+pub fn render_profile_icon(name: &str, color: &str) -> Option<Vec<u8>> {
+  use resvg::tiny_skia;
+  let hex = color.trim().trim_start_matches('#');
+  if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+    return None;
+  }
+  let initial = badge_initial(name);
+  let ink = if badge_wants_dark_ink(hex) {
+    "#1b1b1b"
+  } else {
+    "#ffffff"
+  };
+  let escaped = initial
+    .replace('&', "&amp;")
+    .replace('<', "&lt;")
+    .replace('>', "&gt;");
+  let svg = format!(
+    r##"<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<rect x="16" y="16" width="224" height="224" rx="56" fill="#{hex}"/>
+<text x="128" y="128" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-weight="700" font-size="140" fill="{ink}">{escaped}</text>
+</svg>"##
+  );
+  let options = resvg::usvg::Options {
+    fontdb: badge_fonts(),
+    ..Default::default()
+  };
+  let tree = resvg::usvg::Tree::from_str(&svg, &options).ok()?;
+  let mut pixmap = tiny_skia::Pixmap::new(256, 256)?;
+  resvg::render(
+    &tree,
+    tiny_skia::Transform::identity(),
+    &mut pixmap.as_mut(),
+  );
+  pixmap.encode_png().ok()
+}
+
+/// Write the profile's window badge beside its data directory and return the
+/// switch that hands it to a 152 browser. Older browsers get nothing.
+pub fn profile_icon_switch(
+  version: &str,
+  profile_path: &str,
+  name: &str,
+  color: &str,
+) -> Option<String> {
+  if !supports_wayfern_152(version) {
+    return None;
+  }
+  let png = render_profile_icon(name, color)?;
+  let dir = Path::new(profile_path)
+    .parent()
+    .map(Path::to_path_buf)
+    .unwrap_or_else(|| PathBuf::from(profile_path));
+  let path = dir.join("window-icon.png");
+  if let Err(e) = std::fs::write(&path, png) {
+    log::warn!(
+      "Could not write the window badge for profile {name} at {}: {e}; the browser keeps its stock icon",
+      path.display()
+    );
+    return None;
+  }
+  let path = path.canonicalize().unwrap_or(path);
+  Some(format!("--wayfern-profile-icon={}", path.display()))
+}
+
+/// Write the profile's persona beside its data directory and return the switch
+/// that hands it to a 152 browser. The document is DERIVED from `seed` with
+/// the user's edits applied, so it is stable per profile and unique to it.
+pub fn persona_switch(
+  version: &str,
+  profile_path: &str,
+  seed: &str,
+  edits: Option<&str>,
+) -> Option<String> {
+  if !supports_wayfern_152(version) {
+    return None;
+  }
+  let edits: Vec<crate::wayfern_persona::PersonaField> = edits
+    .map(str::trim)
+    .filter(|edits| !edits.is_empty())
+    .and_then(|edits| serde_json::from_str(edits).ok())
+    .unwrap_or_default();
+  let fields = crate::wayfern_persona::with_edits(seed, &edits);
+  if fields.is_empty() {
+    return None;
+  }
+  let path = Path::new(profile_path).join("wayfern-persona.json");
+  let body = serde_json::to_vec(&crate::wayfern_persona::document(&fields)).ok()?;
+  if let Err(e) = std::fs::write(&path, body) {
+    log::warn!(
+      "Could not write the persona at {}: {e}; the browser offers no fill entries",
+      path.display()
+    );
+    return None;
+  }
+  crate::app_dirs::restrict_to_owner(&path);
+  let path = path.canonicalize().unwrap_or(path);
+  Some(format!("--wayfern-profile-persona={}", path.display()))
+}
+
+/// The camera switches for a launch. A file that is not there is not passed:
+/// the browser would report it and serve dark frames anyway, and the log line
+/// here names the profile, which its own does not.
+pub fn camera_switches(version: &str, config: &WayfernConfig) -> Vec<String> {
+  if !supports_wayfern_152(version) {
+    return Vec::new();
+  }
+  let Some(file) = config
+    .camera_file
+    .as_deref()
+    .map(str::trim)
+    .filter(|file| !file.is_empty())
+  else {
+    return Vec::new();
+  };
+  if !Path::new(file).is_file() {
+    log::warn!("Camera source {file} is missing; the claimed camera serves dark frames");
+    return Vec::new();
+  }
+  let mut switches = vec![format!("--wayfern-camera-file={file}")];
+  if let Some(crop) = config
+    .camera_crop
+    .as_deref()
+    .map(str::trim)
+    .filter(|crop| !crop.is_empty())
+  {
+    if valid_camera_crop(crop) {
+      switches.push(format!("--wayfern-camera-crop={crop}"));
+    } else {
+      log::warn!(
+        "Camera crop {crop:?} is not x,y,width,height in source pixels; using the whole frame"
+      );
+    }
+  }
+  switches
+}
+
+/// `x,y,width,height`, all non-negative integers, width and height non-zero.
+fn valid_camera_crop(crop: &str) -> bool {
+  let parts: Vec<&str> = crop.split(',').map(str::trim).collect();
+  if parts.len() != 4 {
+    return false;
+  }
+  let Ok(values) = parts
+    .iter()
+    .map(|part| part.parse::<u32>())
+    .collect::<Result<Vec<_>, _>>()
+  else {
+    return false;
+  };
+  values[2] > 0 && values[3] > 0
+}
+
+/// The platform directory a component-updater CDM install uses, and the
+/// library name inside it. `None` on a platform Widevine does not ship for.
+fn widevine_platform() -> Option<(&'static str, &'static str)> {
+  let arch = match std::env::consts::ARCH {
+    "x86_64" => "x64",
+    "aarch64" => "arm64",
+    _ => return None,
+  };
+  let (os, library) = match std::env::consts::OS {
+    "macos" => ("mac", "libwidevinecdm.dylib"),
+    "windows" => ("win", "widevinecdm.dll"),
+    "linux" => ("linux", "libwidevinecdm.so"),
+    _ => return None,
+  };
+  Some((Box::leak(format!("{os}_{arch}").into_boxed_str()), library))
+}
+
+/// The Widevine switch for a launch, when a CDM has been provisioned into
+/// `<data>/WidevineCdm` in the component-updater layout.
+///
+/// Donut does not download the CDM: its distribution is a licensing decision.
+/// What this does is use one that is present, and say so when one is present
+/// but unusable — the browser registers nothing from a broken directory, and a
+/// silent fallback to the bundled path would hide that.
+pub fn widevine_switch(version: &str, data_root: &Path) -> Option<String> {
+  if !supports_wayfern_152(version) {
+    return None;
+  }
+  let dir = data_root.join("WidevineCdm");
+  if !dir.join("manifest.json").is_file() {
+    return None;
+  }
+  match widevine_platform() {
+    Some((platform, library)) => {
+      let payload = dir.join("_platform_specific").join(platform).join(library);
+      if !payload.is_file() {
+        log::warn!(
+          "Widevine is provisioned at {} but {} is missing; the browser will register no CDM",
+          dir.display(),
+          payload.display()
+        );
+      }
+    }
+    None => log::warn!(
+      "Widevine does not ship for this platform; the CDM directory is passed as provisioned"
+    ),
+  }
+  Some(format!("--wayfern-widevine-cdm-dir={}", dir.display()))
+}
+
+/// The last lines the browser wrote about Wayfern itself.
+///
+/// A refusal of the launch identity is logged by the browser and never fatal
+/// to it (it keeps the device it would have used anyway), so the launcher has
+/// to read the verdict off stderr to turn it into an error the user sees.
+#[derive(Clone, Default)]
+pub struct BrowserLogTap(Arc<std::sync::Mutex<VecDeque<String>>>);
+
+impl BrowserLogTap {
+  const CAPACITY: usize = 32;
+
+  pub fn push(&self, line: String) {
+    let mut lines = self.0.lock().unwrap_or_else(|e| e.into_inner());
+    if lines.len() >= Self::CAPACITY {
+      lines.pop_front();
+    }
+    lines.push_back(line);
+  }
+
+  pub fn lines(&self) -> Vec<String> {
+    self
+      .0
+      .lock()
+      .unwrap_or_else(|e| e.into_inner())
+      .iter()
+      .cloned()
+      .collect()
+  }
+
+  /// The reason of the most recent launch-identity refusal, if any.
+  pub fn identity_refusal(&self) -> Option<String> {
+    self.lines().iter().rev().find_map(|line| {
+      line
+        .split_once("Wayfern launch identity refused: ")
+        .map(|(_, reason)| reason.trim().to_string())
+    })
+  }
+
+  /// Whether the browser reported the launch identity as applied.
+  pub fn identity_applied(&self) -> bool {
+    self
+      .lines()
+      .iter()
+      .any(|line| line.contains("Wayfern launch identity applied"))
+  }
+
+  pub fn has_identity_verdict(&self) -> bool {
+    self.identity_applied() || self.identity_refusal().is_some()
+  }
+}
+
+/// Keep reading the browser's stderr for its lifetime, keeping only what it
+/// says about Wayfern. Reading it all is what keeps the pipe from filling.
+fn tap_browser_stderr(
+  stderr: tokio::process::ChildStderr,
+  tap: BrowserLogTap,
+  profile_name: String,
+) {
+  tauri::async_runtime::spawn(async move {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let mut lines = BufReader::new(stderr).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+      if line.contains("Wayfern") || line.contains("wayfern_") {
+        log::info!(
+          "[browser {profile_name}] {}",
+          crate::log_redaction::text(&line)
+        );
+        tap.push(line);
+      }
+    }
+  });
+}
+
+/// How a browser process ended up stopping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopOutcome {
+  /// It shut itself down after `Browser.close`, so its session files are
+  /// complete and the next launch can restore them.
+  Closed,
+  /// It exited on a termination request.
+  Terminated,
+  /// It had to be killed outright.
+  Killed,
+  /// Nothing this function did stopped it.
+  StillRunning,
+}
+
+impl std::fmt::Display for StopOutcome {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str(match self {
+      Self::Closed => "closed cleanly",
+      Self::Terminated => "terminated",
+      Self::Killed => "killed",
+      Self::StillRunning => "still running",
+    })
+  }
+}
+
+/// Ask a process to exit: SIGTERM, which Chromium handles as a normal
+/// shutdown, or `taskkill` without `/F`, which only reaches a process with a
+/// window. The caller escalates when this is not enough.
+fn terminate_process(pid: u32) {
+  #[cfg(unix)]
+  {
+    use nix::sys::signal::{kill, Signal};
+    use nix::unistd::Pid;
+    let _ = kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+  }
+  #[cfg(windows)]
+  {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let _ = std::process::Command::new("taskkill")
+      .args(["/PID", &pid.to_string()])
+      .creation_flags(CREATE_NO_WINDOW)
+      .output();
+  }
+}
+
+/// End a process without asking.
+fn force_kill_process(pid: u32) {
+  #[cfg(unix)]
+  {
+    use nix::sys::signal::{kill, Signal};
+    use nix::unistd::Pid;
+    let _ = kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
+  }
+  #[cfg(windows)]
+  {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let _ = std::process::Command::new("taskkill")
+      .args(["/PID", &pid.to_string(), "/F"])
+      .creation_flags(CREATE_NO_WINDOW)
+      .output();
+  }
+}
+
+/// Wait up to `limit` for `pid` to leave the process table.
+async fn wait_for_exit(pid: u32, limit: Duration) -> bool {
+  let started = std::time::Instant::now();
+  loop {
+    if !crate::proxy_storage::is_process_running(pid) {
+      return true;
+    }
+    if started.elapsed() >= limit {
+      return false;
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+  }
 }
 
 /// Fingerprint fields the browser takes as dedicated parameters rather than as
@@ -135,6 +783,57 @@ const LOCALE_CARRY_OVER_KEYS: [&str; 7] = [
   "longitude",
   "accuracy",
 ];
+
+/// How the geolocation probe reaches this profile's exit.
+///
+/// Every variant either genuinely carries the traffic or refuses. There is no
+/// "try it and see" arm on purpose: a probe that does not cross the profile's
+/// upstream resolves THIS MACHINE'S address, and its location was then written
+/// into the fingerprint as the exit's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProbeRoute {
+  /// `reqwest` proxies this scheme itself. Carries the rewritten URL, so
+  /// `httpstls` is already the `https` reqwest understands.
+  Reqwest(String),
+  /// A temporary local `donut-proxy` worker dials this upstream. Carries the
+  /// URL the WORKER should dial, which is not always the stored one.
+  Worker(String),
+  /// The upstream is VLESS, which no `donut-proxy` worker can speak. An
+  /// Xray-core sidecar carries the VLESS hop and a `donut-proxy` worker fronts
+  /// its loopback SOCKS5 endpoint, the same two-stage path `browser_runner`
+  /// builds for a VLESS launch. Carries the VLESS URI.
+  Xray(String),
+  /// Nothing available here carries this upstream. The probe is skipped and
+  /// the fingerprint keeps no location at all, which is the only honest
+  /// outcome: a location that is neither the user's nor the exit's is worse
+  /// than none.
+  Unroutable,
+}
+
+/// A probe transport built for one fingerprint generation, plus the temporary
+/// workers that have to be stopped once the probe is done.
+#[derive(Default)]
+struct ProbeTransport {
+  /// The proxy URL to hand `reqwest`, or `None` when nothing could carry the
+  /// probe and it must be skipped rather than sent unproxied.
+  proxy: Option<String>,
+  donut_worker_id: Option<String>,
+  xray_worker_id: Option<String>,
+}
+
+impl ProbeTransport {
+  /// Stop everything this transport started. The `donut-proxy` worker goes
+  /// first because it is the one holding connections open through the Xray
+  /// sidecar behind it.
+  async fn shutdown(self) {
+    if let Some(id) = self.donut_worker_id {
+      let _ = crate::proxy_runner::stop_proxy_process(&id).await;
+    }
+    if let Some(id) = self.xray_worker_id {
+      let _ = crate::xray_worker_runner::stop_xray_worker(&id).await;
+    }
+  }
+}
 
 /// A freshly generated device, plus its identity handle when the browser
 /// supports identities.
@@ -171,6 +870,11 @@ struct WayfernInstance {
   profile_path: Option<String>,
   url: Option<String>,
   cdp_port: Option<u16>,
+  /// What the browser said about Wayfern on stderr, for diagnostics. Read
+  /// through `browser_log_lines`, which the WebRTC and persona launch checks
+  /// consult; nothing else needs it yet.
+  #[allow(dead_code)]
+  log_tap: BrowserLogTap,
 }
 
 struct WayfernManagerInner {
@@ -268,9 +972,7 @@ impl WayfernManager {
   /// Chromium's default untouched. The fingerprint JSON may be the bare object
   /// or the legacy `{ "fingerprint": {...} }` wrapper.
   fn window_size_from_fingerprint(fingerprint_json: &str) -> Option<(u32, u32)> {
-    let parsed: serde_json::Value = serde_json::from_str(fingerprint_json).ok()?;
-    let fp = parsed.get("fingerprint").unwrap_or(&parsed);
-    let obj = fp.as_object()?;
+    let obj = Self::fingerprint_object(fingerprint_json)?;
 
     // Accept both numeric and stringified numbers (Wayfern emits numbers, but a
     // CDP echo or older saved fingerprint may stringify them).
@@ -288,14 +990,64 @@ impl WayfernManager {
       .or_else(|| pair("screenWidth", "screenHeight"))
   }
 
+  /// The fingerprint value a stored `WayfernConfig::fingerprint` string holds:
+  /// the object itself, or the one nested in the legacy
+  /// `{ "fingerprint": {...} }` wrapper some old profiles carry.
+  ///
+  /// The single place that shape is resolved. Everything that reads a stored
+  /// fingerprint goes through this or through [`Self::fingerprint_object`], so
+  /// no two readers can end up disagreeing about which shapes count.
+  fn unwrap_stored_fingerprint(stored: &serde_json::Value) -> &serde_json::Value {
+    stored.get("fingerprint").unwrap_or(stored)
+  }
+
   /// Parse a stored fingerprint JSON into its object, tolerating the legacy
   /// `{ "fingerprint": {...} }` wrapper some old profiles carry.
+  ///
+  /// Shared with `fingerprint_consistency`, which reads the timezone and
+  /// language it compares against the measured exit through this exact
+  /// accessor. Two readers with their own idea of the stored shape is how the
+  /// gate came to report "this profile declares no timezone" for a wrapped
+  /// fingerprint whose launch presented the timezone nested one level down.
   pub fn fingerprint_object(
     fingerprint_json: &str,
   ) -> Option<serde_json::Map<String, serde_json::Value>> {
     let parsed: serde_json::Value = serde_json::from_str(fingerprint_json).ok()?;
-    let fp = parsed.get("fingerprint").unwrap_or(&parsed);
-    fp.as_object().cloned()
+    Self::unwrap_stored_fingerprint(&parsed)
+      .as_object()
+      .cloned()
+  }
+
+  /// The device this launch hands the browser, derived from what the profile
+  /// stores. Pure, and the only place that payload is built, so what the
+  /// browser is actually given can be asserted without one running.
+  ///
+  /// It never invents a field. A stored fingerprint that declares no timezone
+  /// produces a payload with no timezone, and the engine keeps whatever it
+  /// reports natively. The launcher used to insert `America/New_York` and
+  /// offset 300 here, which put a US clock behind whatever exit the profile
+  /// routed through, while `fingerprint_consistency`, reading the same stored
+  /// fingerprint, told the user its timezone had never been compared. That is
+  /// the one combination that must never happen: the app cannot claim it
+  /// compared nothing while shipping a location it made up.
+  fn launch_fingerprint_payload(fingerprint_json: &str) -> Result<serde_json::Value, String> {
+    let stored: serde_json::Value = serde_json::from_str(fingerprint_json)
+      .map_err(|e| format!("Failed to parse stored fingerprint JSON: {e}"))?;
+
+    // Denormalize for Wayfern CDP (arrays/objects travel as JSON strings).
+    let mut payload =
+      Self::denormalize_fingerprint(Self::unwrap_stored_fingerprint(&stored).clone());
+
+    // Normalize languages: a comma-separated string becomes the array the
+    // browser expects.
+    if let Some(obj) = payload.as_object_mut() {
+      if let Some(serde_json::Value::String(s)) = obj.get("languages").cloned() {
+        let arr: Vec<&str> = s.split(',').map(|l| l.trim()).collect();
+        obj.insert("languages".to_string(), json!(arr));
+      }
+    }
+
+    Ok(payload)
   }
 
   /// A stored JSON object field (`identity_overrides`, `location`), or an
@@ -306,9 +1058,7 @@ impl WayfernManager {
 
   /// The exit-derived location fields a device object carries, in the shape
   /// `WayfernConfig::location` stores; `None` when it carries none.
-  pub fn location_of(
-    device: &serde_json::Map<String, serde_json::Value>,
-  ) -> Option<String> {
+  pub fn location_of(device: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
     let mut location = serde_json::Map::new();
     for key in LOCALE_CARRY_OVER_KEYS {
       if let Some(value) = device.get(key) {
@@ -511,7 +1261,7 @@ impl WayfernManager {
 
   /// The OS a `navigator.platform` value describes.
   ///
-  /// Mirrors `WayfernHandler::IsCrossOSFromPlatform`, including the order of
+  /// Matches the browser's own platform-to-OS mapping, including the order of
   /// the tests: `Linux armv8l` and `aarch64` must read as android before the
   /// plain `Linux` test can claim them.
   fn os_from_platform(platform: &str) -> Option<&'static str> {
@@ -556,10 +1306,10 @@ impl WayfernManager {
   /// Translate a refused apply into a code the frontend can explain.
   ///
   /// CDP carries a message, not a machine-readable code, so matching the text
-  /// is the only channel the browser has. The literals are the ones
-  /// `WayfernHandler` emits from its cross-OS gate and its quota branch; if one
-  /// is ever reworded this degrades to the generic code, which still carries
-  /// the raw text for support, rather than breaking.
+  /// is the only channel the browser has. The literals are the ones the browser
+  /// emits when it refuses a cross-OS claim or a generation; if one is ever
+  /// reworded this degrades to the generic code, which still carries the raw
+  /// text for support, rather than breaking.
   fn apply_failure_error(detail: &str, claimed_os: Option<&str>) -> String {
     if detail.contains("Cross-OS fingerprinting requires") {
       return crate::backend_error_with_detail(
@@ -567,15 +1317,156 @@ impl WayfernManager {
         claimed_os.unwrap_or("another operating system"),
       );
     }
-    // BOTH refusal texts - this maps failures from either release. 151 emits
-    // "Fingerprint generation limit reached for this account."; the shipped 150
-    // browser emits "Too many profiles are being created." A 150 user would
-    // otherwise fall through to the generic apply-failed message and lose the
-    // one piece of information that makes the failure actionable.
+    // BOTH refusal texts, because a profile may be on either browser version.
+    // Older builds word the generation-limit refusal differently, and matching
+    // only one wording leaves those users falling through to the generic
+    // apply-failed message, losing the one piece of information that makes the
+    // failure actionable.
     if detail.contains("generation limit reached") || detail.contains("Too many profiles") {
       return crate::backend_error("WAYFERN_GENERATION_LIMIT_REACHED");
     }
     crate::backend_error_with_detail("WAYFERN_FINGERPRINT_APPLY_FAILED", detail)
+  }
+
+  /// The document a 152 browser takes through `--wayfern-identity-file`, or
+  /// `None` when this profile cannot be described that way: a legacy device
+  /// payload (only `setFingerprint` reproduces one), no identity, no claimed
+  /// operating system, or no timezone. The browser requires the timezone
+  /// because it does not resolve the exit itself; donut holds the proxy and
+  /// resolved it when the location was written.
+  pub fn launch_identity_document(config: &WayfernConfig) -> Option<serde_json::Value> {
+    if config.fingerprint.is_some() {
+      return None;
+    }
+    let identity_id = config
+      .identity_id
+      .as_deref()
+      .map(str::trim)
+      .filter(|id| !id.is_empty())?;
+    // The browser requires the operating system in the document. Over CDP an
+    // omitted `operatingSystem` means the host, so the document says so
+    // explicitly, and the profile's own claim wins when it has one.
+    let host_os = crate::profile::types::get_host_os();
+    let os = Self::claimed_operating_system(config, None).unwrap_or(host_os.as_str());
+    let location = Self::stored_object(config.location.as_deref());
+    let geo = Self::geo_params(&location);
+    let timezone = geo
+      .get("timezone")
+      .and_then(|v| v.as_str())
+      .filter(|tz| !tz.is_empty())?;
+
+    let mut document = serde_json::Map::new();
+    document.insert("identityId".to_string(), json!(identity_id));
+    document.insert("operatingSystem".to_string(), json!(os));
+    document.insert("timezone".to_string(), json!(timezone));
+    if let Some(language) = geo
+      .get("language")
+      .and_then(|v| v.as_str())
+      .filter(|l| !l.is_empty())
+    {
+      document.insert("language".to_string(), json!(language));
+    }
+    if let (Some(latitude), Some(longitude)) = (
+      geo.get("latitude").and_then(|v| v.as_f64()),
+      geo.get("longitude").and_then(|v| v.as_f64()),
+    ) {
+      document.insert("latitude".to_string(), json!(latitude));
+      document.insert("longitude".to_string(), json!(longitude));
+    }
+    let overrides = Self::stored_object(config.identity_overrides.as_deref());
+    if !overrides.is_empty() {
+      document.insert(
+        "overrides".to_string(),
+        serde_json::Value::Object(overrides),
+      );
+    }
+    Some(serde_json::Value::Object(document))
+  }
+
+  /// Write the launch identity into the profile directory and return the
+  /// absolute path the browser is given. Private to the user on Unix: the
+  /// document names the identity and the user's overrides.
+  fn write_launch_identity(
+    profile_path: &str,
+    document: &serde_json::Value,
+  ) -> Result<PathBuf, String> {
+    let dir = PathBuf::from(profile_path);
+    std::fs::create_dir_all(&dir)
+      .map_err(|e| format!("could not create the profile directory for the identity file: {e}"))?;
+    let path = dir.join(LAUNCH_IDENTITY_FILE);
+    let body = serde_json::to_vec(document)
+      .map_err(|e| format!("could not encode the identity document: {e}"))?;
+    #[cfg(unix)]
+    {
+      use std::io::Write;
+      use std::os::unix::fs::OpenOptionsExt;
+      let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|e| format!("could not write the identity file: {e}"))?;
+      file
+        .write_all(&body)
+        .map_err(|e| format!("could not write the identity file: {e}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+      std::fs::write(&path, &body)
+        .map_err(|e| format!("could not write the identity file: {e}"))?;
+    }
+    let path = path.canonicalize().unwrap_or(path);
+    Ok(path)
+  }
+
+  /// Whether the browser started on the identity the launcher handed it.
+  ///
+  /// The browser's own stderr verdict is authoritative when present: a
+  /// refusal names its reason, an "applied" line settles it. Without one, the
+  /// identity id the browser reports decides, and as a last resort the
+  /// timezone, language and platform of the running device are compared with
+  /// the document.
+  fn launch_identity_verdict(
+    document: &serde_json::Value,
+    observed: Option<&serde_json::Value>,
+    cdp_error: Option<&str>,
+    tap: &BrowserLogTap,
+  ) -> Result<&'static str, String> {
+    if let Some(reason) = tap.identity_refusal() {
+      return Err(reason);
+    }
+    let expected_id = document["identityId"].as_str().unwrap_or_default();
+    let observed_id = observed.and_then(|o| o["identityId"].as_str());
+    if !expected_id.is_empty() && observed_id == Some(expected_id) {
+      return Ok("the browser reports the identity");
+    }
+    if tap.identity_applied() {
+      return Ok("the browser logged the identity as applied");
+    }
+    let Some(observed) = observed else {
+      return Err(match cdp_error {
+        Some(error) => format!("Wayfern.getIdentity failed: {error}"),
+        None => "the browser exposed no page target to verify the identity on".to_string(),
+      });
+    };
+    let identity = &observed["identity"];
+    let same = |key: &str| identity[key].as_str() == document[key].as_str();
+    let platform = identity["platform"].as_str().unwrap_or_default();
+    let os_matches = Self::os_from_platform(platform) == document["operatingSystem"].as_str();
+    if same("timezone") && (document.get("language").is_none() || same("language")) && os_matches {
+      return Ok("the running device matches the document's timezone, language and platform");
+    }
+    Err(format!(
+      "the browser reports identity {} (timezone {}, language {}, platform {}) instead of {expected_id} ({}, {}, {})",
+      observed_id.unwrap_or("none"),
+      identity["timezone"].as_str().unwrap_or("unknown"),
+      identity["language"].as_str().unwrap_or("unknown"),
+      if platform.is_empty() { "unknown" } else { platform },
+      document["timezone"].as_str().unwrap_or("unknown"),
+      document["language"].as_str().unwrap_or("any"),
+      document["operatingSystem"].as_str().unwrap_or("unknown"),
+    ))
   }
 
   async fn wait_for_cdp_ready(
@@ -756,15 +1647,19 @@ impl WayfernManager {
         true
       }
       Err(e) => {
-        log::warn!("Geolocation failed, using defaults: {e}");
-        if let Some(obj) = fingerprint.as_object_mut() {
-          if !obj.contains_key("timezone") {
-            obj.insert("timezone".to_string(), json!("America/New_York"));
-          }
-          if !obj.contains_key("timezoneOffset") {
-            obj.insert("timezoneOffset".to_string(), json!(300));
-          }
-        }
+        // NOTHING is written here, deliberately. A failed probe used to fill in
+        // America/New_York and offset 300, which made "we could not resolve the
+        // exit" indistinguishable from "the exit is in New York": the profile
+        // then presented a US location as its proxy's, in the one field the
+        // consistency gate and the user both read as authoritative. A location
+        // that is neither the user's nor the exit's is worse than no location,
+        // so the fields are left ungenerated.
+        //
+        // Returning false is what makes that recoverable: the caller must not
+        // stamp `geo_proxy_signature`, so the launch-time refresh sees a
+        // signature mismatch and probes again through the local worker the
+        // browser is about to use.
+        log::warn!("Geolocation failed; leaving the fingerprint's location ungenerated: {e}");
         false
       }
     }
@@ -794,9 +1689,46 @@ impl WayfernManager {
   /// case where reqwest's SOCKS connector can't be trusted with the
   /// geolocation fetch. Loopback socks URLs are the app's own donut-proxy
   /// workers, whose single-segment replies don't trigger the connector bug.
-  fn is_remote_socks_url(url: &str) -> bool {
-    url.starts_with("socks")
-      && url::Url::parse(url)
+  /// Upstreams the geolocation probe must reach through a local donut-proxy
+  /// worker instead of handing to `reqwest`.
+  ///
+  /// Two groups. Remote SOCKS, which reqwest could proxy but which this code has
+  /// always routed through a worker. And EVERY scheme reqwest cannot proxy,
+  /// whatever its host, that group is the dangerous one: `Proxy::all` ACCEPTS
+  /// such a URL, then matches nothing, so the probe went out from the user's
+  /// REAL address and its geolocation was written into the profile fingerprint.
+  /// Nothing failed and nothing was logged: exactly the exit-vs-fingerprint
+  /// mismatch `fingerprint_consistency.rs` exists to catch, manufactured by the
+  /// fingerprint generator itself. And `probe_url` skips `ss`/`vless` entirely,
+  /// so the launch-time gate cannot catch it either.
+  ///
+  /// The loopback exemption applies ONLY to schemes reqwest can proxy. A
+  /// loopback SOCKS upstream IS the local worker, so it needs no second one; a
+  /// loopback `ss://127.0.0.1:8388` is still a scheme reqwest discards, and
+  /// exempting it re-opened the whole leak.
+  ///
+  /// True here means only "reqwest must not be handed this". It does NOT mean a
+  /// `donut-proxy` worker can carry it, reading it that way is what sent
+  /// `vless://` to a worker that cannot speak VLESS, so the probe could never
+  /// succeed. `worker_upstream_url` answers what a worker can actually dial,
+  /// and `probe_route` puts the two together.
+  fn needs_local_worker_for_probe(url: &str) -> bool {
+    // Measured on the REWRITTEN url, because `httpstls://` becomes `https://`
+    // before reqwest ever sees it and is proxyable from that point on.
+    let rewritten = crate::proxy_storage::reqwest_upstream_url(url);
+    let scheme = rewritten
+      .split("://")
+      .next()
+      .unwrap_or_default()
+      .to_ascii_lowercase();
+
+    if !crate::proxy_storage::reqwest_can_proxy(&rewritten) {
+      // No host exemption here: reqwest discards it wherever it points.
+      return true;
+    }
+
+    scheme.starts_with("socks")
+      && url::Url::parse(&rewritten)
         .ok()
         .and_then(|u| match u.host() {
           Some(url::Host::Ipv4(ip)) => Some(!ip.is_loopback()),
@@ -813,6 +1745,179 @@ impl WayfernManager {
           None => None,
         })
         .unwrap_or(false)
+  }
+
+  /// The URL a `donut-proxy` worker can actually dial for this upstream, or
+  /// `None` when no worker can carry it at all.
+  ///
+  /// The allow-list is the exact set `proxy_server::dial_upstream` matches on.
+  /// Everything outside it reaches that function's `_` arm, so every request
+  /// through the worker dies as "Unsupported upstream proxy scheme", a worker
+  /// started on such a URL is not a fallback, it is a guaranteed failure. That
+  /// is how `vless://` came to be routed here: `needs_local_worker_for_probe`
+  /// answers "reqwest cannot proxy this", which was read as "a worker can", and
+  /// the probe could then never succeed. VLESS is carried by an Xray-core
+  /// sidecar instead (see `probe_route`), and anything else honestly has no
+  /// transport here.
+  ///
+  /// `socks5h`/`socks4a` are the "resolve at the exit" spellings of `socks5`/
+  /// `socks4`. The worker hands the target hostname to the SOCKS server rather
+  /// than resolving it locally, which is exactly what the `h` asks for, so they
+  /// are normalized to the spelling the worker matches instead of rejected.
+  fn worker_upstream_url(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let scheme = scheme.to_ascii_lowercase();
+    match scheme.as_str() {
+      "http" | "https" | "httpstls" | "socks4" | "socks5" | "ss" | "shadowsocks" => {
+        Some(format!("{scheme}://{rest}"))
+      }
+      "socks5h" => Some(format!("socks5://{rest}")),
+      "socks4a" => Some(format!("socks4://{rest}")),
+      _ => None,
+    }
+  }
+
+  /// Decide how the geolocation probe for `url` reaches the exit.
+  ///
+  /// Preference order, and the reason for it: probe through something that
+  /// genuinely carries the traffic, or do not probe at all. Every arm that
+  /// cannot carry it resolves to `Unroutable`, which the caller turns into a
+  /// skipped probe and an ungenerated location, never into a probe sent from
+  /// this machine's own address, and never into a default location presented as
+  /// the exit's.
+  fn probe_route(url: &str) -> ProbeRoute {
+    if !Self::needs_local_worker_for_probe(url) {
+      let rewritten = crate::proxy_storage::reqwest_upstream_url(url);
+      // Checked rather than assumed. `needs_local_worker_for_probe` already
+      // returns true for everything reqwest cannot proxy, but handing reqwest a
+      // URL it cannot match makes it send the request DIRECT with no error and
+      // no log line, so the invariant is re-asserted where it matters.
+      return if crate::proxy_storage::reqwest_can_proxy(&rewritten) {
+        ProbeRoute::Reqwest(rewritten)
+      } else {
+        ProbeRoute::Unroutable
+      };
+    }
+
+    // The worker gets the STORED url, never the reqwest rewrite: to
+    // `donut-proxy`, `httpstls` means "TLS to the proxy, then CONNECT" while
+    // `https` means a plaintext CONNECT, so handing it the reqwest spelling
+    // would silently downgrade that hop.
+    if let Some(upstream) = Self::worker_upstream_url(url) {
+      return ProbeRoute::Worker(upstream);
+    }
+
+    if url
+      .split_once("://")
+      .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("vless"))
+    {
+      return match crate::xray::parse_vless_uri(url) {
+        Ok(_) => ProbeRoute::Xray(url.to_string()),
+        // A `vless://host:port` with no id, flow or security parameters is what
+        // a stored VLESS proxy collapses to when it is rendered as
+        // `type://host:port`. Xray cannot dial that, so there is nothing to
+        // probe through and the launch-time refresh does the location instead -
+        // by then the upstream is the loopback SOCKS5 endpoint of a real Xray
+        // worker, which any transport here can carry.
+        Err(_) => ProbeRoute::Unroutable,
+      };
+    }
+
+    ProbeRoute::Unroutable
+  }
+
+  /// Whether the probe has to be skipped outright.
+  ///
+  /// True when the profile routes its traffic somewhere, the probe would
+  /// actually leave this machine, and no transport was built to carry it.
+  /// Probing anyway resolves this machine's own address and writes its location
+  /// into the fingerprint as the exit's.
+  ///
+  /// `probe_leaves_this_machine` is false when the location comes from a pinned
+  /// geoip IP or geolocation is switched off. `apply_geolocation` never touches
+  /// the network through the proxy in either case, so a routed profile with a
+  /// pinned IP must still get its location.
+  fn must_skip_probe(
+    routes_traffic: bool,
+    probe_leaves_this_machine: bool,
+    have_probe_proxy: bool,
+  ) -> bool {
+    routes_traffic && probe_leaves_this_machine && !have_probe_proxy
+  }
+
+  /// Build the transport the geolocation probe for `url` will use. Callers must
+  /// `shutdown()` the result once the probe is done, on every path.
+  async fn build_probe_transport(url: &str) -> ProbeTransport {
+    match Self::probe_route(url) {
+      ProbeRoute::Reqwest(proxy) => ProbeTransport {
+        proxy: Some(proxy),
+        ..Default::default()
+      },
+      ProbeRoute::Worker(upstream) => Self::front_with_local_worker(upstream, None).await,
+      ProbeRoute::Xray(uri) => {
+        // The error is flattened to a String on the spot. `start_xray_worker`
+        // reports a bare `Box<dyn Error>`, which is not `Send`, and holding one
+        // across the `front_with_local_worker` await below would make this
+        // whole future non-`Send`, and with it every Tauri command and spawned
+        // task that reaches fingerprint generation.
+        let started = crate::xray_worker_runner::start_xray_worker(None, &uri)
+          .await
+          .map_err(|error| error.to_string());
+        match started {
+          Ok(worker) => {
+            let upstream =
+              crate::proxy_manager::ProxyManager::build_proxy_url(&worker.local_proxy_settings());
+            Self::front_with_local_worker(upstream, Some(worker.id)).await
+          }
+          Err(e) => {
+            log::warn!(
+              "Could not start an Xray-core worker to carry the VLESS geolocation probe ({e}); skipping the probe rather than sending it unproxied"
+            );
+            ProbeTransport::default()
+          }
+        }
+      }
+      ProbeRoute::Unroutable => {
+        log::warn!(
+          "No transport here can carry the geolocation probe through this profile's upstream; skipping the probe rather than resolving this machine's own address"
+        );
+        ProbeTransport::default()
+      }
+    }
+  }
+
+  /// Put a temporary local `donut-proxy` worker in front of `upstream`, the
+  /// same path the browser itself uses. `xray_worker_id` is threaded through so
+  /// a sidecar started for a VLESS upstream is still stopped when the worker in
+  /// front of it fails to start.
+  async fn front_with_local_worker(
+    upstream: String,
+    xray_worker_id: Option<String>,
+  ) -> ProbeTransport {
+    match crate::proxy_runner::start_proxy_process(Some(upstream), None).await {
+      Ok(worker) => ProbeTransport {
+        proxy: Some(format!(
+          "http://127.0.0.1:{}",
+          worker.local_port.unwrap_or(0)
+        )),
+        donut_worker_id: Some(worker.id),
+        xray_worker_id,
+      },
+      Err(e) => {
+        // NOT the raw upstream. reqwest silently ignores a proxy URL it cannot
+        // match, so handing it back here sent the probe from this machine's
+        // real address. `None` means "no proxied probe available", and the
+        // caller skips the probe entirely rather than making it unproxied.
+        log::warn!(
+          "Could not start local proxy worker for geolocation ({e}); skipping the probe rather than sending it unproxied"
+        );
+        ProbeTransport {
+          proxy: None,
+          donut_worker_id: None,
+          xray_worker_id,
+        }
+      }
+    }
   }
 
   /// Generate a device for `config` on a headless Wayfern.
@@ -878,6 +1983,18 @@ impl WayfernManager {
       format!("Failed to spawn headless Wayfern: {e}{hint}")
     })?;
     let child_id = child.id();
+    // Drain stderr for the browser's lifetime and keep what it says about
+    // Wayfern: a generation browser that dies before CDP is up leaves its
+    // reason there and nowhere else.
+    let generation_log = BrowserLogTap::default();
+    let mut child = child;
+    if let Some(stderr) = child.stderr.take() {
+      tap_browser_stderr(
+        stderr,
+        generation_log.clone(),
+        format!("generation for {}", profile.name),
+      );
+    }
 
     let cleanup = || async {
       if let Some(id) = child_id {
@@ -910,11 +2027,18 @@ impl WayfernManager {
         .process(sysinfo::Pid::from(id as usize))
         .is_some();
 
-        if !is_running {
-          // Process exited — try to read its stderr
-          String::from("(process exited before CDP became ready)")
+        // The tap may still be a line behind the process's exit.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let said = generation_log.lines();
+        let said = if said.is_empty() {
+          String::from("it said nothing about Wayfern on stderr")
         } else {
-          String::from("(process still running but not responding on CDP)")
+          format!("its last Wayfern lines: {}", said.join(" | "))
+        };
+        if !is_running {
+          format!("(process exited before CDP became ready; {said})")
+        } else {
+          format!("(process still running but not responding on CDP; {said})")
         }
       } else {
         String::new()
@@ -963,9 +2087,8 @@ impl WayfernManager {
     let use_identity_api = supports_identity_api(&profile.version);
 
     // No geolocation override is passed here. Donut resolves the exit's
-    // location itself, below, through the profile's own proxy — the browser's
-    // C++ geo service cannot, because an authenticated upstream answers its
-    // SimpleURLLoader requests with HTTP 407.
+    // location itself, below, through the profile's own proxy, because the
+    // browser cannot resolve it through an authenticated upstream.
     let generate_result = if use_identity_api {
       self
         .send_cdp_command(&ws_url, "Wayfern.createIdentity", generate_params)
@@ -1005,55 +2128,58 @@ impl WayfernManager {
         // Normalize the fingerprint: convert JSON string fields to proper types
         let mut normalized = Self::normalize_fingerprint(fp);
 
-        // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
-        // when a proxy splits a handshake reply across TCP segments, so a
-        // socks upstream here can fail even though the proxy is healthy.
-        // Route the geolocation lookup through a temporary local donut-proxy
-        // worker — the same path the browser itself uses — and fall back to
-        // the upstream URL only if the worker can't start. Two exclusions:
-        // no worker when geolocation won't fetch through the proxy at all
-        // (disabled, or a fixed geoip IP), and none for loopback socks URLs —
-        // launch-time callers pass the already-running local worker's
-        // socks5://127.0.0.1 URL, whose single-segment replies don't trigger
-        // the bug, so chaining a second worker would only add latency.
-        let needs_proxied_geo_fetch = !matches!(
+        // Build a transport that genuinely carries the probe through this
+        // profile's upstream, or none at all. `probe_route` decides which:
+        // reqwest where it can proxy the scheme itself, a temporary local
+        // donut-proxy worker for the schemes that worker speaks (including
+        // every remote SOCKS one, because reqwest's SOCKS connector corrupts
+        // its parse buffer when a proxy splits a handshake reply across TCP
+        // segments), an Xray-core sidecar behind such a worker for VLESS, and
+        // nothing for an upstream none of them can speak.
+        //
+        // No transport is built when the probe would not leave this machine
+        // anyway: `apply_geolocation` ignores `proxy` entirely when geolocation
+        // is off or the location comes from a pinned geoip IP.
+        let probe_leaves_this_machine = !matches!(
           config.geoip.as_ref(),
           Some(serde_json::Value::Bool(false)) | Some(serde_json::Value::String(_))
         );
-        let remote_socks_upstream = config
-          .proxy
-          .as_deref()
-          .filter(|url| Self::is_remote_socks_url(url));
-        let (geo_proxy, temp_worker_id) = match remote_socks_upstream {
-          Some(url) if needs_proxied_geo_fetch => {
-            match crate::proxy_runner::start_proxy_process(Some(url.to_string()), None)
-              .await
-              .map_err(|e| e.to_string())
-            {
-              Ok(worker) => {
-                let local_url = format!("http://127.0.0.1:{}", worker.local_port.unwrap_or(0));
-                (Some(local_url), Some(worker.id))
-              }
-              Err(e) => {
-                log::warn!(
-                  "Could not start local proxy worker for geolocation ({e}); using the socks upstream directly"
-                );
-                (config.proxy.clone(), None)
-              }
-            }
-          }
-          _ => (config.proxy.clone(), None),
+        let transport = match config.proxy.as_deref() {
+          Some(url) if probe_leaves_this_machine => Self::build_probe_transport(url).await,
+          _ => ProbeTransport::default(),
         };
 
         // Apply timezone/geolocation for the proxy this fingerprint is being
         // generated against. Shared with the launch-time location refresh.
-        let geolocation_applied =
-          Self::apply_geolocation(&mut normalized, geo_proxy.as_deref(), config.geoip.as_ref())
-            .await;
+        // A profile that ROUTES ITS TRAFFIC must never probe from the real
+        // address: `apply_geolocation` treats `None` as "no proxy configured",
+        // which is right for a direct profile and an IP leak for a routed one.
+        //
+        // `config.proxy.is_some()` alone was not that predicate. A WireGuard
+        // profile carries its route in `vpn_id` and reaches here with
+        // `config.proxy == None`, so the guard never fired and the host's own
+        // timezone, latitude/longitude and language were written into the
+        // fingerprint as authoritative.
+        let routes_traffic = config.proxy.is_some() || profile.vpn_id.is_some();
+        let geolocation_applied = if Self::must_skip_probe(
+          routes_traffic,
+          probe_leaves_this_machine,
+          transport.proxy.is_some(),
+        ) {
+          log::warn!(
+            "Skipping the geolocation probe: this profile has an upstream but no proxied probe could be built, and probing directly would write this machine's own location into the fingerprint"
+          );
+          false
+        } else {
+          Self::apply_geolocation(
+            &mut normalized,
+            transport.proxy.as_deref(),
+            config.geoip.as_ref(),
+          )
+          .await
+        };
 
-        if let Some(worker_id) = temp_worker_id {
-          let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
-        }
+        transport.shutdown().await;
 
         (normalized, identity_id, geolocation_applied)
       }
@@ -1125,6 +2251,7 @@ impl WayfernManager {
     extension_paths: &[String],
     remote_debugging_port: Option<u16>,
     headless: bool,
+    kind: LaunchKind,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
@@ -1233,8 +2360,12 @@ impl WayfernManager {
       "--disable-background-timer-throttling".to_string(),
       "--crash-server-url=".to_string(),
       "--disable-updater".to_string(),
-      "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
+      // Release builds log nothing unless asked. Wayfern reports what it did
+      // with the launch identity, WebRTC and the rest on stderr, and that is
+      // the only channel that carries a refusal's reason.
+      "--enable-logging=stderr".to_string(),
+      "--log-level=0".to_string(),
       "--disable-infobars".to_string(),
       // Prefetch* / NoStatePrefetch: cross-site Speculation-Rules prefetch uses
       // an isolated NetworkContext that defaults to DIRECT egress (real host IP
@@ -1282,11 +2413,11 @@ impl WayfernManager {
     }
 
     // Per-profile window label + distinct frame color so concurrent profile
-    // windows are easy to tell apart. Wayfern reads these in
-    // BrowserView::GetWindowTitle() (label) and BrowserFrameView::GetFrameColor()
-    // (color). The label is the profile name; the color is the user's
-    // window_color when set, otherwise deterministically derived from the
-    // profile id so every profile still gets a stable, distinct color.
+    // windows are easy to tell apart. The browser reads these switches and uses
+    // them for the window title (label) and the frame colour. The label is the
+    // profile name; the color is the user's window_color when set, otherwise
+    // deterministically derived from the profile id so every profile still gets
+    // a stable, distinct color.
     if !profile.name.is_empty() {
       args.push(format!("--wayfern-profile-label={}", profile.name));
     }
@@ -1345,18 +2476,15 @@ impl WayfernManager {
     }
 
     // A cross-OS claim is authorized from the `wayfernToken` PARAMETER of
-    // setIdentity/setFingerprint. The browser's gate does not consult the
-    // WAYFERN_TOKEN env var this launch also sets, so with no token in hand the
-    // apply is refused and the window would sit there running the HOST device
-    // under a macOS or Android profile. Refuse before spawning rather than
-    // opening a window we are about to kill.
+    // setIdentity/setFingerprint, so with no token in hand the apply is refused
+    // and the window would sit there running the HOST device under a macOS or
+    // Android profile. Refuse before spawning rather than opening a window we
+    // are about to kill.
     //
-    // "Cross-OS" is the browser's own test (`WayfernHandler::IsCrossOS` against
-    // `GetHostOperatingSystem`), so `android` and `ios` count on every desktop.
-    //
-    // Not a 151 regression: setFingerprint on 150 has the identical
-    // parameter-only gate. What changed is that the refusal is no longer
-    // swallowed as a log line (see the apply loop below).
+    // "Cross-OS" is the browser's own test against the host OS, so `android`
+    // and `ios` count on every desktop. Every browser version gates it the same
+    // way; what changed is that the refusal is no longer swallowed as a log
+    // line (see the apply loop below).
     //
     // Deliberately conservative — this only pre-empts when the claim is
     // certain. An unrecognised `os`, a platform that maps to nothing, and a
@@ -1402,18 +2530,131 @@ impl WayfernManager {
       args.push("--dns-prefetch-disable".to_string());
     }
 
+    // A 152 browser takes the identity on its command line and commits it
+    // before the first navigation, which is what lets a restored tab load on
+    // the profile's device rather than the host's. Older browsers, legacy
+    // device payloads and a profile whose location carries no timezone keep
+    // the post-launch CDP apply below.
+    let launch_identity = if supports_wayfern_152(&profile.version) {
+      Self::launch_identity_document(config)
+    } else {
+      None
+    };
+    if launch_identity.is_none()
+      && supports_wayfern_152(&profile.version)
+      && config.identity_id.is_some()
+      && config.fingerprint.is_none()
+    {
+      log::warn!(
+        "Profile {} has an identity but no resolved timezone (or no claimed operating system); applying it over CDP after launch instead of at startup",
+        profile.name
+      );
+    }
+    let identity_file = match &launch_identity {
+      Some(document) => Some(
+        Self::write_launch_identity(profile_path, document)
+          .map_err(|e| crate::backend_error_with_detail("WAYFERN_IDENTITY_REFUSED", e))?,
+      ),
+      None => None,
+    };
+    let identity_at_launch =
+      identity_file.is_some() || (config.identity_id.is_none() && config.fingerprint.is_none());
+    let restore_session = match session_restore_verdict(
+      config,
+      kind,
+      headless,
+      ephemeral,
+      profile.clear_on_close,
+      identity_at_launch,
+    ) {
+      Ok(()) => true,
+      Err(reason) => {
+        log::info!(
+          "Session restore is off for profile {}: {reason}",
+          profile.name
+        );
+        false
+      }
+    };
+    args.extend(session_switches(restore_session, identity_file.as_deref()));
+
+    // WebRTC posture, plus the exit the launch gate measured for this route
+    // (cache only: an automation launch never probes). A direct connection
+    // has nothing cached and needs nothing: its real egress is already what
+    // every HTTP request shows.
+    let webrtc_mode = WebRtcMode::from_config(config);
+    if let Some(unknown) = config
+      .webrtc_mode
+      .as_deref()
+      .filter(|value| WebRtcMode::parse(value).is_none())
+    {
+      log::warn!(
+        "Profile {} names an unknown WebRTC mode {unknown:?}; launching with auto",
+        profile.name
+      );
+    }
+    let exit_ip = crate::fingerprint_consistency::cached_exit_ip(profile);
+    let webrtc = webrtc_switches(&profile.version, webrtc_mode, exit_ip.as_deref());
+    if !webrtc.is_empty() {
+      log::info!(
+        "WebRTC for profile {}: mode {}, exit IP {}",
+        profile.name,
+        webrtc_mode.switch_value(),
+        exit_ip.as_deref().unwrap_or("unknown")
+      );
+    }
+    args.extend(webrtc);
+    args.extend(entitlement_cache_switch(
+      &profile.version,
+      &crate::app_dirs::cache_dir(),
+    ));
+    args.extend(profile_icon_switch(
+      &profile.version,
+      profile_path,
+      &profile.name,
+      profile_color,
+    ));
+    // The persona is a property of the profile, so an identity-backed profile
+    // seeds it from the identity and a legacy one from its id: either way the
+    // same profile presents the same person on every launch.
+    let persona_seed = config
+      .identity_id
+      .as_deref()
+      .map(str::trim)
+      .filter(|id| !id.is_empty())
+      .map(str::to_string)
+      .unwrap_or_else(|| profile.id.to_string());
+    args.extend(persona_switch(
+      &profile.version,
+      profile_path,
+      &persona_seed,
+      config.persona.as_deref(),
+    ));
+    args.extend(camera_switches(&profile.version, config));
+    args.extend(widevine_switch(
+      &profile.version,
+      &crate::app_dirs::data_dir(),
+    ));
+    if let Some(path) = &identity_file {
+      log::info!(
+        "Launch identity for profile {} written to {}",
+        profile.name,
+        path.display()
+      );
+    }
+
     let mut command = TokioCommand::new(&executable_path);
     command
       .args(&args)
       .stdin(Stdio::null())
       .stdout(Stdio::null())
-      .stderr(Stdio::null());
+      .stderr(Stdio::piped());
     if let Some(ref token) = wayfern_token {
       command.env("WAYFERN_TOKEN", token);
       log::info!("Wayfern authorization configured for browser process");
     }
 
-    let child = command
+    let mut child = command
       .spawn()
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
         let hint = if e.raw_os_error() == Some(14001) {
@@ -1425,6 +2666,10 @@ impl WayfernManager {
         format!("Failed to spawn Wayfern: {e}{hint}").into()
       })?;
     let process_id = child.id();
+    let log_tap = BrowserLogTap::default();
+    if let Some(stderr) = child.stderr.take() {
+      tap_browser_stderr(stderr, log_tap.clone(), profile.name.clone());
+    }
     drop(child);
 
     self.wait_for_cdp_ready(port).await?;
@@ -1441,7 +2686,65 @@ impl WayfernManager {
     let identity_only = supports_identity_api(&profile.version)
       && config.identity_id.is_some()
       && config.fingerprint.is_none();
-    if identity_only {
+    if let Some(document) = launch_identity.as_ref().filter(|_| identity_file.is_some()) {
+      // The identity travelled on the command line. The browser never fails
+      // its own launch over it (a refusal only logs), so the launcher checks,
+      // and a browser running on the wrong device is closed rather than
+      // handed to the user with the app still showing the profile's device.
+      let mut observed: Option<serde_json::Value> = None;
+      let mut last_error: Option<String> = None;
+      for target in &page_targets {
+        if let Some(ws_url) = &target.websocket_debugger_url {
+          match self
+            .send_cdp_command(ws_url, "Wayfern.getIdentity", json!({}))
+            .await
+          {
+            Ok(result) => {
+              observed = Some(result);
+              break;
+            }
+            Err(e) => last_error = Some(e.to_string()),
+          }
+        }
+      }
+      // The browser wrote its verdict to stderr before it opened the
+      // debugging port; the tap may still be a line behind the socket.
+      if !log_tap.has_identity_verdict() {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+      }
+      match Self::launch_identity_verdict(
+        document,
+        observed.as_ref(),
+        last_error.as_deref(),
+        &log_tap,
+      ) {
+        Ok(confirmation) => {
+          log::info!(
+            "Launch identity confirmed for profile {}: {confirmation}",
+            profile.name
+          );
+          // The only place an identity-backed profile's screen is known: the
+          // device is derived by the browser, so nothing on disk carries it.
+          if let Some(device) = observed
+            .as_ref()
+            .and_then(|value| value.get("identity"))
+            .map(ToString::to_string)
+          {
+            Self::warn_on_screen_over_host(&device, profile, _app_handle);
+          }
+        }
+        Err(reason) => {
+          log::error!(
+            "Killing Wayfern (pid {process_id:?}) for profile {}: the launch identity was not applied: {reason}",
+            profile.name
+          );
+          if let Some(pid) = process_id {
+            kill_browser_process(pid);
+          }
+          return Err(crate::backend_error_with_detail("WAYFERN_IDENTITY_REFUSED", reason).into());
+        }
+      }
+    } else if identity_only {
       let identity_id = config.identity_id.clone().unwrap_or_default();
       let overrides = Self::stored_object(config.identity_overrides.as_deref());
       let location = Self::stored_object(config.location.as_deref());
@@ -1449,11 +2752,10 @@ impl WayfernManager {
 
       let mut params = serde_json::Map::new();
       params.insert("identityId".to_string(), json!(identity_id));
-      // The claimed OS travels explicitly as well as inside the id. A Wayfern
-      // 152 id carries an epoch and a 16-bit check that a 151 browser's decoder
-      // does not know; without this parameter 151 would read such an id as
-      // untagged and rebuild the HOST OS. Both releases let the explicit
-      // parameter win, so this keeps one stored profile portable across them.
+      // The claimed OS travels explicitly as well as inside the id, because an
+      // older browser cannot read an id minted by a newer one and would rebuild
+      // the HOST OS instead. Every release lets the explicit parameter win, so
+      // this keeps one stored profile portable across them.
       if let Some(os) = config.os.as_deref().filter(|os| !os.is_empty()) {
         params.insert("operatingSystem".to_string(), json!(os));
       }
@@ -1518,42 +2820,14 @@ impl WayfernManager {
         "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
         fingerprint_json.len()
       );
+      Self::warn_on_screen_over_host(fingerprint_json, profile, _app_handle);
 
-      let stored_value: serde_json::Value = serde_json::from_str(fingerprint_json)
-        .map_err(|e| format!("Failed to parse stored fingerprint JSON: {e}"))?;
-
-      // The stored fingerprint should be the fingerprint object directly (after our fix in generate_fingerprint_config)
-      // But for backwards compatibility, also handle the wrapped format
-      let mut fingerprint = if stored_value.get("fingerprint").is_some() {
-        // Old format: {"fingerprint": {...}} - extract the inner fingerprint
-        stored_value.get("fingerprint").cloned().unwrap()
-      } else {
-        // New format: fingerprint object directly {...}
-        stored_value.clone()
-      };
-
-      // Add default timezone if not present (for profiles created before timezone was added)
-      if let Some(obj) = fingerprint.as_object_mut() {
-        if !obj.contains_key("timezone") {
-          obj.insert("timezone".to_string(), json!("America/New_York"));
-          log::info!("Added default timezone to fingerprint");
-        }
-        if !obj.contains_key("timezoneOffset") {
-          obj.insert("timezoneOffset".to_string(), json!(300));
-          log::info!("Added default timezoneOffset to fingerprint");
-        }
-      }
-
-      // Denormalize fingerprint for Wayfern CDP (convert arrays/objects to JSON strings)
-      let mut fingerprint_for_cdp = Self::denormalize_fingerprint(fingerprint);
-
-      // Normalize languages: if it's a comma-separated string, convert to array
-      if let Some(obj) = fingerprint_for_cdp.as_object_mut() {
-        if let Some(serde_json::Value::String(s)) = obj.get("languages").cloned() {
-          let arr: Vec<&str> = s.split(',').map(|l| l.trim()).collect();
-          obj.insert("languages".to_string(), json!(arr));
-        }
-      }
+      // Both stored shapes, the bare object and the legacy
+      // `{"fingerprint": {...}}` wrapper, are resolved by the same accessor the
+      // consistency gate reads, and nothing is defaulted in. A profile that
+      // declares no timezone is launched with none, which is exactly what the
+      // gate reports to the user.
+      let fingerprint_for_cdp = Self::launch_fingerprint_payload(fingerprint_json)?;
 
       log::info!(
         "Fingerprint prepared for CDP command, fields: {:?}",
@@ -1648,14 +2922,23 @@ impl WayfernManager {
     // Geolocation is handled internally by the browser binary.
 
     if let Some(url) = url {
-      log::info!("Navigating to URL via CDP");
-      if let Some(target) = page_targets.first() {
-        if let Some(ws_url) = &target.websocket_debugger_url {
-          if let Err(e) = self
-            .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
-            .await
-          {
-            log::error!("Failed to navigate to URL: {e}");
+      if restore_session {
+        // The tabs the browser reopened are the user's; the URL gets a tab of
+        // its own instead of replacing whichever one came first.
+        log::info!("Opening the launch URL in a new tab beside the restored session");
+        if let Err(e) = self.open_url_on_port(port, url).await {
+          log::error!("Failed to open the launch URL in a new tab: {e}");
+        }
+      } else {
+        log::info!("Navigating to URL via CDP");
+        if let Some(target) = page_targets.first() {
+          if let Some(ws_url) = &target.websocket_debugger_url {
+            if let Err(e) = self
+              .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
+              .await
+            {
+              log::error!("Failed to navigate to URL: {e}");
+            }
           }
         }
       }
@@ -1690,6 +2973,7 @@ impl WayfernManager {
       profile_path: Some(profile_path.to_string()),
       url: url.map(|s| s.to_string()),
       cdp_port: Some(port),
+      log_tap,
     };
 
     let mut inner = self.inner.lock().await;
@@ -1708,17 +2992,77 @@ impl WayfernManager {
     &self,
     id: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut inner = self.inner.lock().await;
+    // Taken out of the map first, and the lock dropped: a clean shutdown can
+    // take seconds, and nothing else should wait on it.
+    let instance = {
+      let mut inner = self.inner.lock().await;
+      inner.instances.remove(id)
+    };
 
-    if let Some(instance) = inner.instances.remove(id) {
+    if let Some(instance) = instance {
       log::info!("Cleaning up Wayfern instance {}", instance.id);
       if let Some(pid) = instance.process_id {
-        kill_browser_process(pid);
-        log::info!("Stopped Wayfern instance {id} (PID: {pid})");
+        let outcome = self.stop_browser_process(pid, instance.cdp_port).await;
+        log::info!("Stopped Wayfern instance {id} (PID: {pid}): {outcome}");
       }
     }
 
     Ok(())
+  }
+
+  /// Stop a browser the way its session files need: ask it to close over
+  /// CDP so Chromium runs its own shutdown (that is what writes the session
+  /// and commits the cookie jar), then terminate, then kill. Each step gets a
+  /// bounded wait, so a wedged browser still ends within seconds.
+  pub async fn stop_browser_process(&self, pid: u32, cdp_port: Option<u16>) -> StopOutcome {
+    if !crate::proxy_storage::is_process_running(pid) {
+      return StopOutcome::Closed;
+    }
+    if let Some(port) = cdp_port {
+      match tokio::time::timeout(Duration::from_secs(3), self.browser_close(port)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => log::warn!("Browser.close was not accepted on port {port}: {e}"),
+        Err(_) => log::warn!("Browser.close timed out on port {port}"),
+      }
+      if wait_for_exit(pid, Duration::from_secs(5)).await {
+        return StopOutcome::Closed;
+      }
+      log::warn!("Wayfern (PID {pid}) did not exit after Browser.close; terminating it");
+    }
+    terminate_process(pid);
+    if wait_for_exit(pid, Duration::from_secs(5)).await {
+      return StopOutcome::Terminated;
+    }
+    log::warn!("Wayfern (PID {pid}) ignored the termination request; killing it");
+    force_kill_process(pid);
+    if wait_for_exit(pid, Duration::from_secs(2)).await {
+      return StopOutcome::Killed;
+    }
+    StopOutcome::StillRunning
+  }
+
+  /// Send `Browser.close` on the browser endpoint. The browser answers with an
+  /// empty result, or simply drops the socket on its way out; both mean it
+  /// agreed, and the caller watches the process rather than the reply.
+  async fn browser_close(&self, port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let version: serde_json::Value = self
+      .http_client
+      .get(format!("http://127.0.0.1:{port}/json/version"))
+      .send()
+      .await?
+      .json()
+      .await?;
+    let ws_url = version["webSocketDebuggerUrl"]
+      .as_str()
+      .ok_or("the browser reported no webSocketDebuggerUrl")?;
+    match self
+      .send_cdp_command(ws_url, "Browser.close", json!({}))
+      .await
+    {
+      Ok(_) => Ok(()),
+      Err(e) if e.to_string().contains("No response received") => Ok(()),
+      Err(e) => Err(e),
+    }
   }
 
   /// Opens a URL in a new tab for an existing Wayfern instance.
@@ -1749,8 +3093,16 @@ impl WayfernManager {
       .and_then(|i| i.cdp_port)
       .ok_or("Wayfern instance (with CDP port) not found for profile")?;
     drop(inner);
+    self.open_url_on_port(port, url).await
+  }
 
-    // Open the URL in a new tab via the CDP HTTP convenience endpoint.
+  /// Open `url` in a new tab of the browser on `port`, through the CDP HTTP
+  /// convenience endpoint, which needs no page target to exist yet.
+  async fn open_url_on_port(
+    &self,
+    port: u16,
+    url: &str,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let new_tab_url = format!(
       "http://127.0.0.1:{port}/json/new?{}",
       urlencoding::encode(url)
@@ -1767,6 +3119,29 @@ impl WayfernManager {
 
     log::info!("Opened URL in new tab via CDP");
     Ok(())
+  }
+
+  /// What the running browser for `profile_path` has said about Wayfern on
+  /// stderr so far (launch identity, refusals), newest last.
+  #[allow(dead_code)]
+  pub async fn browser_log_lines(&self, profile_path: &str) -> Vec<String> {
+    let inner = self.inner.lock().await;
+    let target_path = std::path::Path::new(profile_path)
+      .canonicalize()
+      .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf());
+    inner
+      .instances
+      .values()
+      .find(|instance| {
+        instance.profile_path.as_deref().is_some_and(|path| {
+          std::path::Path::new(path)
+            .canonicalize()
+            .unwrap_or_else(|_| std::path::Path::new(path).to_path_buf())
+            == target_path
+        })
+      })
+      .map(|instance| instance.log_tap.lines())
+      .unwrap_or_default()
   }
 
   pub async fn get_cdp_port(&self, profile_path: &str) -> Option<u16> {
@@ -1861,6 +3236,7 @@ impl WayfernManager {
           profile_path: Some(found_profile_path.clone()),
           url: None,
           cdp_port,
+          log_tap: BrowserLogTap::default(),
         },
       );
 
@@ -1972,6 +3348,7 @@ impl WayfernManager {
         &[],
         None,
         false,
+        LaunchKind::Interactive,
       )
       .await
   }
@@ -2011,20 +3388,9 @@ impl WayfernManager {
 /// id to stop it by.
 fn kill_browser_process(pid: u32) {
   #[cfg(unix)]
-  {
-    use nix::sys::signal::{kill, Signal};
-    use nix::unistd::Pid;
-    let _ = kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
-  }
+  terminate_process(pid);
   #[cfg(windows)]
-  {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    let _ = std::process::Command::new("taskkill")
-      .args(["/PID", &pid.to_string(), "/F"])
-      .creation_flags(CREATE_NO_WINDOW)
-      .output();
-  }
+  force_kill_process(pid);
 }
 
 lazy_static::lazy_static! {
@@ -2074,36 +3440,797 @@ mod tests {
   #[test]
   fn remote_socks_url_detection() {
     // Remote socks upstreams (the hyper-util-affected case) are detected...
-    assert!(WayfernManager::is_remote_socks_url(
+    assert!(WayfernManager::needs_local_worker_for_probe(
       "socks5://user:pass@gw.dataimpulse.com:10000"
     ));
-    assert!(WayfernManager::is_remote_socks_url("socks5://1.2.3.4:1080"));
-    assert!(WayfernManager::is_remote_socks_url("socks4://1.2.3.4:1080"));
+    assert!(WayfernManager::needs_local_worker_for_probe(
+      "socks5://1.2.3.4:1080"
+    ));
+    assert!(WayfernManager::needs_local_worker_for_probe(
+      "socks4://1.2.3.4:1080"
+    ));
 
     // ...but the app's own loopback workers are not. socks is a non-special
     // URL scheme, so the IP literal parses as Host::Domain — the launch-time
     // randomize path depends on this returning false.
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!WayfernManager::needs_local_worker_for_probe(
       "socks5://127.0.0.1:24001"
     ));
-    assert!(!WayfernManager::is_remote_socks_url("socks5://[::1]:24001"));
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!WayfernManager::needs_local_worker_for_probe(
+      "socks5://[::1]:24001"
+    ));
+    assert!(!WayfernManager::needs_local_worker_for_probe(
       "socks5://localhost:24001"
     ));
 
-    // Non-socks schemes and unparsable URLs never need the workaround.
-    assert!(!WayfernManager::is_remote_socks_url(
+    // http/https reqwest proxies natively, so they stay on the direct path.
+    assert!(!WayfernManager::needs_local_worker_for_probe(
       "http://gw.dataimpulse.com:10000"
     ));
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!WayfernManager::needs_local_worker_for_probe(
       "https://gw.dataimpulse.com:10000"
     ));
-    assert!(!WayfernManager::is_remote_socks_url("socks5://"));
-    assert!(!WayfernManager::is_remote_socks_url("not a url"));
+    // A hostless socks URL has nothing to route to; reqwest cannot use it, and
+    // the worker path ends in a skipped probe rather than an unproxied one.
+    assert!(!WayfernManager::needs_local_worker_for_probe("socks5://"));
+    // An unparsable upstream asks for a worker ON PURPOSE. It used to answer
+    // "no worker needed", which sent it down the arm that hands reqwest the raw
+    // string, and reqwest answers garbage by silently going DIRECT. The worker
+    // will fail to start for a malformed URL, and that failure now skips the
+    // probe entirely, which is the outcome we want: no geolocation beats
+    // geolocation taken from the user's own address.
+    assert!(WayfernManager::needs_local_worker_for_probe("not a url"));
+
+    // The schemes reqwest ACCEPTS and then silently does not proxy. Before
+    // these were routed through a local worker, the fingerprint's geolocation
+    // probe went out from the user's real address with nothing logged.
+    // `httpstls` is NOT in this group: `reqwest_upstream_url` rewrites it to
+    // `https://`, which reqwest proxies natively and over TLS, so the probe
+    // genuinely goes through the proxy without spawning a worker. The rewrite
+    // is what makes it safe, which is why the filter measures the REWRITTEN url
+    // rather than the stored one.
+    assert!(!WayfernManager::needs_local_worker_for_probe(
+      "httpstls://user:pass@proxy.example.com:443"
+    ));
+    assert!(WayfernManager::needs_local_worker_for_probe(
+      "ss://method:pass@1.2.3.4:8388"
+    ));
+    assert!(WayfernManager::needs_local_worker_for_probe(
+      "vless://uuid@1.2.3.4:443"
+    ));
+    // Loopback is exempt ONLY for schemes reqwest can proxy. `httpstls` is
+    // rewritten to `https`, so a loopback one genuinely needs no worker.
+    assert!(!WayfernManager::needs_local_worker_for_probe(
+      "httpstls://127.0.0.1:8443"
+    ));
+    // But a LOOPBACK ss/vless is still a scheme reqwest discards. Exempting
+    // these re-opened the entire leak for anyone pointing at a locally
+    // forwarded Shadowsocks or VLESS endpoint.
+    for loopback in [
+      "ss://cipher:pw@127.0.0.1:8388",
+      "ss://cipher:pw@localhost:8388",
+      "ss://cipher:pw@[::1]:8388",
+      "shadowsocks://cipher:pw@127.0.0.1:8388",
+      "vless://uuid@127.0.0.1:443",
+    ] {
+      assert!(
+        WayfernManager::needs_local_worker_for_probe(loopback),
+        "{loopback} must still go through a worker"
+      );
+    }
+    // An ALLOW-list, so a scheme nobody anticipated cannot fall through.
+    // `proxy_type` is free text via POST /v1/proxies, import_proxies_json and
+    // the MCP tool, so this is reachable without a code change. Note this only
+    // says "reqwest must not be handed it", whether anything here can carry it
+    // is `probe_route`'s answer, tested below.
+    for unknown in [
+      "trojan://gw.example.com:443",
+      "hysteria2://gw.example.com:443",
+      "wireguard://gw.example.com:51820",
+      "SS://cipher:pw@1.2.3.4:8388",
+    ] {
+      assert!(
+        WayfernManager::needs_local_worker_for_probe(unknown),
+        "{unknown} is not proxyable by reqwest and must not be handed to it"
+      );
+    }
+    // socks5h is proxyable and remote, so it keeps the socks rule.
+    assert!(WayfernManager::needs_local_worker_for_probe(
+      "socks5h://1.2.3.4:1080"
+    ));
+    // http/https reqwest proxies natively, so they stay on the direct path.
+    assert!(!WayfernManager::needs_local_worker_for_probe(
+      "https://user:pass@proxy.example.com:8443"
+    ));
+  }
+
+  /// A complete VLESS + XTLS Vision + REALITY URI, the only shape Donut takes.
+  fn valid_vless_uri() -> String {
+    "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@vpn.example.com:443\
+?security=reality&flow=xtls-rprx-vision&encryption=none&type=tcp&sni=a.com\
+&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4&sid=00&fp=chrome"
+      .to_string()
+  }
+
+  #[test]
+  fn worker_upstream_url_mirrors_what_donut_proxy_can_actually_dial() {
+    // This list is `proxy_server::dial_upstream`'s match arms. Anything outside
+    // it reaches that function's `_` arm, and every request through the worker
+    // fails as "Unsupported upstream proxy scheme".
+    for carried in [
+      "http://gw.example.com:8080",
+      "https://gw.example.com:8080",
+      "httpstls://user:pass@gw.example.com:443",
+      "socks4://1.2.3.4:1080",
+      "socks5://user:pass@gw.example.com:1080",
+      "ss://aes-256-gcm:pw@1.2.3.4:8388",
+      "shadowsocks://aes-256-gcm:pw@1.2.3.4:8388",
+    ] {
+      assert_eq!(
+        WayfernManager::worker_upstream_url(carried).as_deref(),
+        Some(carried),
+        "{carried} is dialable by a donut-proxy worker and must pass through unchanged"
+      );
+    }
+
+    // VLESS is the whole point of this defect: a worker started on it can never
+    // complete a single request, so it must not be offered as a transport.
+    assert_eq!(
+      WayfernManager::worker_upstream_url(&valid_vless_uri()),
+      None,
+      "a donut-proxy worker cannot speak VLESS"
+    );
+    for unspeakable in [
+      "vless://uuid@1.2.3.4:443",
+      "trojan://gw.example.com:443",
+      "hysteria2://gw.example.com:443",
+      "wireguard://gw.example.com:51820",
+      "not a url",
+    ] {
+      assert_eq!(
+        WayfernManager::worker_upstream_url(unspeakable),
+        None,
+        "{unspeakable} is not dialable by a donut-proxy worker"
+      );
+    }
+
+    // The "resolve at the exit" spellings mean the same thing to the worker,
+    // which hands the target hostname to the SOCKS server rather than resolving
+    // it here, but `dial_upstream` matches the scheme literally, so they have
+    // to arrive spelled the way it matches.
+    assert_eq!(
+      WayfernManager::worker_upstream_url("socks5h://user:pass@gw.example.com:1080").as_deref(),
+      Some("socks5://user:pass@gw.example.com:1080")
+    );
+    assert_eq!(
+      WayfernManager::worker_upstream_url("socks4a://1.2.3.4:1080").as_deref(),
+      Some("socks4://1.2.3.4:1080")
+    );
+    // An uppercase scheme is still the same scheme; `Url::parse` lowercases it
+    // anyway, so normalizing here keeps the allow-list from rejecting it.
+    assert_eq!(
+      WayfernManager::worker_upstream_url("SS://aes-256-gcm:pw@1.2.3.4:8388").as_deref(),
+      Some("ss://aes-256-gcm:pw@1.2.3.4:8388")
+    );
+  }
+
+  #[test]
+  fn vless_is_probed_through_xray_or_not_at_all_but_never_through_a_worker() {
+    // A complete VLESS URI: an Xray-core sidecar carries the hop, exactly as
+    // browser_runner does for a VLESS launch.
+    let uri = valid_vless_uri();
+    assert_eq!(
+      WayfernManager::probe_route(&uri),
+      ProbeRoute::Xray(uri.clone())
+    );
+
+    // A `vless://host:port` is what a stored VLESS proxy collapses to when it
+    // is rendered as `type://host:port`: no id, no flow, no REALITY key. Xray
+    // cannot dial it and neither can a worker, so the probe is skipped and the
+    // location is left ungenerated rather than defaulted.
+    for lossy in [
+      "vless://vpn.example.com:443",
+      "vless://uuid@vpn.example.com:443",
+      // Right shape, unsupported transport, still nothing that can carry it.
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@a.com:443?security=tls&type=ws",
+    ] {
+      assert_eq!(
+        WayfernManager::probe_route(lossy),
+        ProbeRoute::Unroutable,
+        "{lossy} has no transport and must not start a worker"
+      );
+    }
+
+    // And no VLESS shape may EVER resolve to a plain donut-proxy worker: that
+    // worker answers every request with "Unsupported upstream proxy scheme",
+    // which used to land as a default America/New_York in the fingerprint.
+    for any_vless in [
+      uri.as_str(),
+      "vless://vpn.example.com:443",
+      "vless://uuid@127.0.0.1:443",
+      "VLESS://vpn.example.com:443",
+    ] {
+      assert!(
+        !matches!(
+          WayfernManager::probe_route(any_vless),
+          ProbeRoute::Worker(_) | ProbeRoute::Reqwest(_)
+        ),
+        "{any_vless} must never be handed to a donut-proxy worker or to reqwest"
+      );
+    }
+  }
+
+  #[test]
+  fn probe_route_sends_each_upstream_to_something_that_carries_it() {
+    // reqwest proxies these itself; `httpstls` arrives already rewritten to the
+    // `https` spelling reqwest understands.
+    assert_eq!(
+      WayfernManager::probe_route("http://gw.example.com:8080"),
+      ProbeRoute::Reqwest("http://gw.example.com:8080".into())
+    );
+    assert_eq!(
+      WayfernManager::probe_route("httpstls://user:pass@gw.example.com:443"),
+      ProbeRoute::Reqwest("https://user:pass@gw.example.com:443".into())
+    );
+    // A loopback socks upstream IS the local worker the browser already uses,
+    // so it needs no second one. This is the launch-time path.
+    assert_eq!(
+      WayfernManager::probe_route("socks5://127.0.0.1:24001"),
+      ProbeRoute::Reqwest("socks5://127.0.0.1:24001".into())
+    );
+
+    // Remote SOCKS and Shadowsocks go through a worker, which speaks both.
+    assert_eq!(
+      WayfernManager::probe_route("socks5://user:pass@gw.example.com:1080"),
+      ProbeRoute::Worker("socks5://user:pass@gw.example.com:1080".into())
+    );
+    assert_eq!(
+      WayfernManager::probe_route("ss://aes-256-gcm:pw@1.2.3.4:8388"),
+      ProbeRoute::Worker("ss://aes-256-gcm:pw@1.2.3.4:8388".into())
+    );
+    // The worker matches `socks5`, not `socks5h`, so the route carries the
+    // spelling it dials rather than the stored one.
+    assert_eq!(
+      WayfernManager::probe_route("socks5h://1.2.3.4:1080"),
+      ProbeRoute::Worker("socks5://1.2.3.4:1080".into())
+    );
+
+    // Schemes nothing here speaks. `proxy_type` is free text through the REST
+    // API and MCP, so these are reachable without a code change, and each one
+    // must end in a skipped probe rather than a fabricated location.
+    for unroutable in [
+      "trojan://gw.example.com:443",
+      "hysteria2://gw.example.com:443",
+      "wireguard://gw.example.com:51820",
+      "not a url",
+    ] {
+      assert_eq!(
+        WayfernManager::probe_route(unroutable),
+        ProbeRoute::Unroutable,
+        "{unroutable} has no transport that carries it"
+      );
+    }
+  }
+
+  #[test]
+  fn a_pinned_geoip_ip_still_resolves_on_a_routed_profile() {
+    // The probe is skipped only when it would actually leave this machine with
+    // nothing to carry it. A routed profile whose location comes from a pinned
+    // geoip IP resolves it locally, so it must not be skipped for want of a
+    // transport it never needed.
+    assert!(!WayfernManager::must_skip_probe(true, false, false));
+    // Geolocation genuinely going out over a routed profile's upstream, with no
+    // transport built: this is the case that must never probe.
+    assert!(WayfernManager::must_skip_probe(true, true, false));
+    // Transport built, or nothing routed: probe away.
+    assert!(!WayfernManager::must_skip_probe(true, true, true));
+    assert!(!WayfernManager::must_skip_probe(false, true, false));
+  }
+
+  #[tokio::test]
+  async fn a_failed_geolocation_probe_leaves_the_location_ungenerated() {
+    // A geoip string skips the network fetch entirely and fails in the local
+    // MaxMind lookup, so this drives apply_geolocation's Err branch with no
+    // network, no proxy and no worker.
+    let mut fingerprint = json!({ "platform": "Win32" });
+    let applied =
+      WayfernManager::apply_geolocation(&mut fingerprint, None, Some(&json!("not-an-ip"))).await;
+
+    assert!(!applied, "a failed lookup must not report success");
+    let obj = fingerprint
+      .as_object()
+      .expect("fingerprint stays an object");
+    for invented in [
+      "timezone",
+      "timezoneOffset",
+      "latitude",
+      "longitude",
+      "language",
+      "languages",
+    ] {
+      assert!(
+        !obj.contains_key(invented),
+        "a failed probe must not invent {invented}: {obj:?}"
+      );
+    }
+    assert_eq!(obj.get("platform"), Some(&json!("Win32")));
+  }
+
+  #[tokio::test]
+  async fn a_failed_geolocation_probe_does_not_overwrite_a_real_location() {
+    // The other half: a fingerprint that already carries a resolved location
+    // keeps it verbatim when a later probe fails.
+    let mut fingerprint = json!({
+      "timezone": "Europe/Berlin",
+      "timezoneOffset": -60,
+      "latitude": 52.52,
+    });
+    let applied =
+      WayfernManager::apply_geolocation(&mut fingerprint, None, Some(&json!("not-an-ip"))).await;
+
+    assert!(!applied);
+    assert_eq!(fingerprint["timezone"], json!("Europe/Berlin"));
+    assert_eq!(fingerprint["timezoneOffset"], json!(-60));
+    assert_eq!(fingerprint["latitude"], json!(52.52));
   }
 
   fn obj(json: &str) -> serde_json::Map<String, serde_json::Value> {
     serde_json::from_str(json).expect("test fixture must be an object")
+  }
+
+  fn identity_config(timezone: Option<&str>) -> WayfernConfig {
+    let mut location = serde_json::Map::new();
+    if let Some(tz) = timezone {
+      location.insert("timezone".into(), json!(tz));
+      location.insert("timezoneOffset".into(), json!(60));
+    }
+    location.insert("language".into(), json!("de-DE"));
+    location.insert("languages".into(), json!(["de-DE", "de"]));
+    location.insert("latitude".into(), json!(52.52));
+    location.insert("longitude".into(), json!(13.405));
+    WayfernConfig {
+      identity_id: Some("3fa85f64-5717-4562-b3fc-2c963f66afa6".into()),
+      os: Some("windows".into()),
+      location: Some(serde_json::Value::Object(location).to_string()),
+      identity_overrides: Some(r#"{"hardwareConcurrency":8}"#.into()),
+      ..Default::default()
+    }
+  }
+
+  #[test]
+  fn the_launch_identity_document_carries_exactly_what_the_browser_reads() {
+    let document =
+      WayfernManager::launch_identity_document(&identity_config(Some("Europe/Berlin")))
+        .expect("a complete identity profile yields a document");
+    assert_eq!(
+      document,
+      json!({
+        "identityId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "operatingSystem": "windows",
+        "timezone": "Europe/Berlin",
+        "language": "de-DE",
+        "latitude": 52.52,
+        "longitude": 13.405,
+        "overrides": {"hardwareConcurrency": 8}
+      })
+    );
+  }
+
+  #[test]
+  fn the_launch_identity_document_needs_a_timezone_and_an_identity() {
+    // The browser refuses a document without a timezone, and does not resolve
+    // one itself, so no document is written at all.
+    assert!(WayfernManager::launch_identity_document(&identity_config(None)).is_none());
+    // No claim means the host, which is what an omitted `operatingSystem`
+    // means over CDP as well.
+    let mut no_os = identity_config(Some("Europe/Berlin"));
+    no_os.os = None;
+    assert_eq!(
+      WayfernManager::launch_identity_document(&no_os).unwrap()["operatingSystem"],
+      json!(crate::profile::types::get_host_os())
+    );
+    let mut no_identity = identity_config(Some("Europe/Berlin"));
+    no_identity.identity_id = Some("  ".into());
+    assert!(WayfernManager::launch_identity_document(&no_identity).is_none());
+    // A legacy device payload is only reproducible through setFingerprint.
+    let mut legacy = identity_config(Some("Europe/Berlin"));
+    legacy.fingerprint = Some("{}".into());
+    assert!(WayfernManager::launch_identity_document(&legacy).is_none());
+  }
+
+  #[test]
+  fn the_launch_identity_document_omits_what_the_location_lacks() {
+    let mut config = identity_config(Some("Asia/Tokyo"));
+    config.location = Some(r#"{"timezone":"Asia/Tokyo","latitude":35.6}"#.into());
+    config.identity_overrides = None;
+    let document = WayfernManager::launch_identity_document(&config).unwrap();
+    assert_eq!(
+      document,
+      json!({
+        "identityId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "operatingSystem": "windows",
+        "timezone": "Asia/Tokyo"
+      }),
+      "a lone latitude, an absent language and empty overrides must not travel"
+    );
+  }
+
+  #[test]
+  fn session_restore_is_only_for_a_person_on_a_device_committed_at_launch() {
+    let config = WayfernConfig::default();
+    let interactive = |c: &WayfernConfig| {
+      session_restore_verdict(c, LaunchKind::Interactive, false, false, false, true)
+    };
+    assert_eq!(interactive(&config), Ok(()));
+    assert!(
+      session_restore_verdict(&config, LaunchKind::Automation, false, false, false, true).is_err()
+    );
+    assert!(
+      session_restore_verdict(&config, LaunchKind::Interactive, true, false, false, true).is_err()
+    );
+    assert!(
+      session_restore_verdict(&config, LaunchKind::Interactive, false, true, false, true).is_err()
+    );
+    assert!(
+      session_restore_verdict(&config, LaunchKind::Interactive, false, false, true, true).is_err()
+    );
+    assert!(
+      session_restore_verdict(&config, LaunchKind::Interactive, false, false, false, false)
+        .is_err(),
+      "a device applied after the window opens loses the race with a restored tab"
+    );
+    let off = WayfernConfig {
+      restore_session: Some(false),
+      ..Default::default()
+    };
+    assert!(interactive(&off).is_err());
+    let randomized = WayfernConfig {
+      randomize_fingerprint_on_launch: Some(true),
+      ..Default::default()
+    };
+    assert!(interactive(&randomized).is_err());
+    let explicit_on = WayfernConfig {
+      restore_session: Some(true),
+      ..Default::default()
+    };
+    assert_eq!(interactive(&explicit_on), Ok(()));
+  }
+
+  #[test]
+  fn the_webrtc_mode_reads_the_new_field_then_the_legacy_flag() {
+    assert_eq!(
+      WebRtcMode::from_config(&WayfernConfig::default()),
+      WebRtcMode::Auto
+    );
+    let legacy = WayfernConfig {
+      block_webrtc: Some(true),
+      ..Default::default()
+    };
+    assert_eq!(WebRtcMode::from_config(&legacy), WebRtcMode::Block);
+    let both = WayfernConfig {
+      block_webrtc: Some(true),
+      webrtc_mode: Some("tcp_only".into()),
+      ..Default::default()
+    };
+    assert_eq!(WebRtcMode::from_config(&both), WebRtcMode::TcpOnly);
+    let unknown = WayfernConfig {
+      webrtc_mode: Some("sideways".into()),
+      ..Default::default()
+    };
+    assert_eq!(WebRtcMode::from_config(&unknown), WebRtcMode::Auto);
+    assert_eq!(WebRtcMode::parse("TCP-ONLY"), Some(WebRtcMode::TcpOnly));
+  }
+
+  #[test]
+  fn the_webrtc_switches_carry_the_exit_only_when_it_can_be_used() {
+    assert!(webrtc_switches("151.0.7922.76", WebRtcMode::Block, Some("8.8.8.8")).is_empty());
+    assert_eq!(
+      webrtc_switches("152.0.7977.64", WebRtcMode::Block, Some("8.8.8.8")),
+      vec!["--wayfern-webrtc-mode=block".to_string()]
+    );
+    assert_eq!(
+      webrtc_switches("152.0.7977.64", WebRtcMode::TcpOnly, Some(" 8.8.8.8 ")),
+      vec![
+        "--wayfern-webrtc-mode=tcp_only".to_string(),
+        "--wayfern-webrtc-exit-ip=8.8.8.8".to_string()
+      ]
+    );
+    assert_eq!(
+      webrtc_switches("152.0.7977.64", WebRtcMode::Auto, Some("not an ip")),
+      vec!["--wayfern-webrtc-mode=auto".to_string()],
+      "a literal the browser would refuse is not passed at all"
+    );
+    assert_eq!(
+      webrtc_switches("152.0.7977.64", WebRtcMode::Auto, None),
+      vec!["--wayfern-webrtc-mode=auto".to_string()]
+    );
+  }
+
+  #[test]
+  fn the_entitlement_cache_lives_under_the_app_cache_and_only_on_152() {
+    let root = tempfile::tempdir().unwrap();
+    assert_eq!(entitlement_cache_switch("151.0.7922.76", root.path()), None);
+    let switch = entitlement_cache_switch("152.0.7977.64", root.path()).unwrap();
+    let expected = root.path().join("wayfern-entitlements");
+    assert_eq!(
+      switch,
+      format!("--wayfern-entitlement-cache-dir={}", expected.display())
+    );
+    assert!(
+      expected.is_dir(),
+      "the directory exists before the browser starts"
+    );
+  }
+
+  #[test]
+  fn the_window_badge_is_a_decodable_png_in_the_profile_colour() {
+    assert_eq!(badge_initial("  donut shop"), "D");
+    assert_eq!(badge_initial("42 things"), "4");
+    assert_eq!(badge_initial("!!!"), "");
+    assert!(badge_wants_dark_ink("#f5e6a0"));
+    assert!(!badge_wants_dark_ink("#2b4c7e"));
+    assert_eq!(render_profile_icon("Any", "not a colour"), None);
+
+    let png = render_profile_icon("Donut", "#2b4c7e").expect("the badge renders");
+    let image = image::load_from_memory(&png)
+      .expect("a decodable PNG")
+      .into_rgba8();
+    assert_eq!((image.width(), image.height()), (256, 256));
+    // Inside the rounded square, away from the initial: the profile colour.
+    assert_eq!(image.get_pixel(40, 128).0, [0x2b, 0x4c, 0x7e, 0xff]);
+    // The corners stay transparent so the badge reads as a tile, not a sheet.
+    assert_eq!(image.get_pixel(2, 2).0[3], 0);
+    // The initial is drawn in white ink somewhere in the middle third when the
+    // machine has any font at all. Not sampled at the exact centre: that is
+    // the counter of a "D", which stays the fill colour.
+    if !badge_fonts().is_empty() {
+      let ink = (80..176)
+        .flat_map(|y| (80..176).map(move |x| (x, y)))
+        .any(|(x, y)| {
+          let p = image.get_pixel(x, y).0;
+          p[0] > 0xc0 && p[1] > 0xc0 && p[2] > 0xc0
+        });
+      assert!(ink, "the initial must be drawn in the middle of the badge");
+    }
+  }
+
+  #[test]
+  fn the_profile_icon_switch_writes_the_badge_beside_the_data_dir() {
+    let root = tempfile::tempdir().unwrap();
+    let data_dir = root.path().join("profile");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    let data_dir = data_dir.to_string_lossy().to_string();
+    assert_eq!(
+      profile_icon_switch("151.0.7922.76", &data_dir, "Donut", "ebb5ad"),
+      None
+    );
+    let switch = profile_icon_switch("152.0.7977.64", &data_dir, "Donut", "ebb5ad").unwrap();
+    let expected = root.path().join("window-icon.png").canonicalize().unwrap();
+    assert_eq!(
+      switch,
+      format!("--wayfern-profile-icon={}", expected.display())
+    );
+    assert!(image::load_from_memory(&std::fs::read(expected).unwrap()).is_ok());
+  }
+
+  #[test]
+  fn the_persona_document_is_written_per_profile_and_only_on_152() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().to_string_lossy().to_string();
+    let seed = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+    assert_eq!(persona_switch("151.0.7922.76", &dir, seed, None), None);
+    let switch = persona_switch("152.0.7977.64", &dir, seed, None).unwrap();
+    let path = root
+      .path()
+      .join("wayfern-persona.json")
+      .canonicalize()
+      .unwrap();
+    assert_eq!(
+      switch,
+      format!("--wayfern-profile-persona={}", path.display())
+    );
+    let document: serde_json::Value =
+      serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(
+      document["fields"].as_array().unwrap().len(),
+      crate::wayfern_persona::FIELD_IDS.len()
+    );
+
+    // An edit lands, and a malformed edit blob is ignored rather than fatal.
+    persona_switch(
+      "152.0.7977.64",
+      &dir,
+      seed,
+      Some(r#"[{"id":"email","label":"Email","value":"me@example.com"}]"#),
+    )
+    .unwrap();
+    let edited: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert!(edited["fields"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .any(|f| f["id"] == "email" && f["value"] == "me@example.com"));
+    assert!(persona_switch("152.0.7977.64", &dir, seed, Some("not json")).is_some());
+  }
+
+  #[test]
+  fn the_camera_switches_need_a_file_that_exists_and_a_sane_crop() {
+    let root = tempfile::tempdir().unwrap();
+    let file = root.path().join("frame.png");
+    std::fs::write(&file, b"not really a png").unwrap();
+    let path = file.to_string_lossy().to_string();
+    let config = |file: Option<&str>, crop: Option<&str>| WayfernConfig {
+      camera_file: file.map(str::to_string),
+      camera_crop: crop.map(str::to_string),
+      ..Default::default()
+    };
+    assert!(camera_switches("151.0.7922.76", &config(Some(&path), None)).is_empty());
+    assert!(camera_switches("152.0.7977.64", &config(None, Some("0,0,10,10"))).is_empty());
+    assert!(camera_switches("152.0.7977.64", &config(Some("/nope/frame.png"), None)).is_empty());
+    assert_eq!(
+      camera_switches("152.0.7977.64", &config(Some(&path), Some("0,0,640,480"))),
+      vec![
+        format!("--wayfern-camera-file={path}"),
+        "--wayfern-camera-crop=0,0,640,480".to_string()
+      ]
+    );
+    assert_eq!(
+      camera_switches("152.0.7977.64", &config(Some(&path), Some("0,0,0,480"))),
+      vec![format!("--wayfern-camera-file={path}")],
+      "a crop with no area is dropped, the source is not"
+    );
+    assert!(!valid_camera_crop("1,2,3"));
+    assert!(!valid_camera_crop("-1,0,10,10"));
+    assert!(valid_camera_crop(" 1, 2, 30, 40 "));
+  }
+
+  #[test]
+  fn widevine_travels_only_when_a_cdm_has_been_provisioned() {
+    let root = tempfile::tempdir().unwrap();
+    assert_eq!(widevine_switch("152.0.7977.64", root.path()), None);
+    let dir = root.path().join("WidevineCdm");
+    std::fs::create_dir_all(&dir).unwrap();
+    assert_eq!(
+      widevine_switch("152.0.7977.64", root.path()),
+      None,
+      "an empty directory is not a provisioned CDM"
+    );
+    std::fs::write(dir.join("manifest.json"), b"{}").unwrap();
+    assert_eq!(widevine_switch("151.0.7922.76", root.path()), None);
+    assert_eq!(
+      widevine_switch("152.0.7977.64", root.path()),
+      Some(format!("--wayfern-widevine-cdm-dir={}", dir.display())),
+      "a provisioned directory is passed even when its payload is missing, so the browser reports it"
+    );
+  }
+
+  #[test]
+  fn a_screen_claim_is_only_reported_when_it_is_bigger_than_the_display() {
+    let device = |w: u32, h: u32| format!(r#"{{"screenWidth":{w},"screenHeight":{h}}}"#);
+    assert_eq!(
+      screen_claim_over_host(Some(&device(3840, 2160)), Some((2560, 1440))),
+      Some((3840, 2160, 2560, 1440))
+    );
+    // Taller but not wider still cannot be shown.
+    assert_eq!(
+      screen_claim_over_host(Some(&device(1920, 2160)), Some((2560, 1440))),
+      Some((1920, 2160, 2560, 1440))
+    );
+    assert_eq!(
+      screen_claim_over_host(Some(&device(1920, 1080)), Some((2560, 1440))),
+      None
+    );
+    assert_eq!(
+      screen_claim_over_host(Some(&device(2560, 1440)), Some((2560, 1440))),
+      None,
+      "an exact fit is not a mismatch"
+    );
+    // Nothing to compare: no device, no host, a device with no screen, or a
+    // display that reports nothing.
+    assert_eq!(screen_claim_over_host(None, Some((2560, 1440))), None);
+    assert_eq!(
+      screen_claim_over_host(Some(&device(3840, 2160)), None),
+      None
+    );
+    assert_eq!(
+      screen_claim_over_host(Some(r#"{"platform":"MacIntel"}"#), Some((2560, 1440))),
+      None
+    );
+    assert_eq!(
+      screen_claim_over_host(Some(&device(3840, 2160)), Some((0, 0))),
+      None
+    );
+  }
+
+  #[test]
+  fn the_session_switches_follow_the_verdict() {
+    assert!(session_switches(false, None).is_empty());
+    assert_eq!(
+      session_switches(true, None),
+      vec!["--restore-last-session".to_string()]
+    );
+    let file = Path::new("/tmp/p/wayfern-identity.json");
+    assert_eq!(
+      session_switches(true, Some(file)),
+      vec![
+        "--wayfern-identity-file=/tmp/p/wayfern-identity.json".to_string(),
+        "--restore-last-session".to_string()
+      ]
+    );
+  }
+
+  #[test]
+  fn the_identity_verdict_trusts_the_browser_log_first() {
+    let document = json!({
+      "identityId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "operatingSystem": "macos",
+      "timezone": "Europe/Berlin",
+      "language": "de-DE"
+    });
+    let tap = BrowserLogTap::default();
+    tap.push("[1:2:0908/173819.393301:ERROR:wayfern_launch_identity.cc(58)] Wayfern launch identity refused: the identity file carries no `timezone`".into());
+    let observed = json!({"identityId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "identity": {}});
+    assert_eq!(
+      WayfernManager::launch_identity_verdict(&document, Some(&observed), None, &tap),
+      Err("the identity file carries no `timezone`".to_string()),
+      "a logged refusal wins even over a matching id"
+    );
+
+    let tap = BrowserLogTap::default();
+    assert!(
+      WayfernManager::launch_identity_verdict(&document, Some(&observed), None, &tap).is_ok()
+    );
+
+    // 152 reports no identityId for a launch identity; the applied line
+    // settles it.
+    let tap = BrowserLogTap::default();
+    tap.push("[1:2:0908/173819.393301:INFO:wayfern_launch_identity.cc(300)] Wayfern launch identity applied before the first navigation: os=macos timezone=Europe/Berlin language=de-DE version=1".into());
+    let anonymous = json!({"identity": {"timezone": "Europe/Berlin", "language": "de-DE", "platform": "MacIntel"}});
+    assert!(
+      WayfernManager::launch_identity_verdict(&document, Some(&anonymous), None, &tap).is_ok()
+    );
+
+    // No log line at all: the running device is compared with the document.
+    let tap = BrowserLogTap::default();
+    assert!(
+      WayfernManager::launch_identity_verdict(&document, Some(&anonymous), None, &tap).is_ok()
+    );
+    let host = json!({"identity": {"timezone": "America/New_York", "language": "en-US", "platform": "MacIntel"}});
+    let error =
+      WayfernManager::launch_identity_verdict(&document, Some(&host), None, &tap).unwrap_err();
+    assert!(error.contains("America/New_York"), "{error}");
+    assert!(error.contains("Europe/Berlin"), "{error}");
+    assert_eq!(
+      WayfernManager::launch_identity_verdict(&document, None, Some("boom"), &tap),
+      Err("Wayfern.getIdentity failed: boom".to_string())
+    );
+  }
+
+  #[test]
+  fn the_log_tap_keeps_the_newest_lines() {
+    let tap = BrowserLogTap::default();
+    for i in 0..40 {
+      tap.push(format!("line {i}"));
+    }
+    let lines = tap.lines();
+    assert_eq!(lines.len(), BrowserLogTap::CAPACITY);
+    assert_eq!(lines.first().map(String::as_str), Some("line 8"));
+    assert_eq!(lines.last().map(String::as_str), Some("line 39"));
+    assert!(!tap.has_identity_verdict());
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn a_termination_request_ends_a_process_and_the_wait_notices() {
+    let mut child = std::process::Command::new("sleep")
+      .arg("30")
+      .spawn()
+      .expect("sleep spawns");
+    let pid = child.id();
+    assert!(!wait_for_exit(pid, Duration::from_millis(200)).await);
+    terminate_process(pid);
+    let _ = child.wait();
+    assert!(wait_for_exit(pid, Duration::from_secs(5)).await);
   }
 
   #[test]
@@ -2117,6 +4244,9 @@ mod tests {
     // whereas the legacy pair still exists on every version that ever shipped.
     assert!(!supports_identity_api(""));
     assert!(!supports_identity_api("not a version"));
+    assert!(!supports_wayfern_152("151.0.7922.76"));
+    assert!(supports_wayfern_152("152.0.7977.64"));
+    assert!(!supports_wayfern_152("garbage"));
   }
 
   #[test]
@@ -2211,7 +4341,10 @@ mod tests {
     };
 
     assert!(!WayfernManager::migrate_identity_config(&mut config));
-    assert_eq!(config.fingerprint.as_deref(), Some(r#"{"platform":"Win32"}"#));
+    assert_eq!(
+      config.fingerprint.as_deref(),
+      Some(r#"{"platform":"Win32"}"#)
+    );
     assert!(config.identity_id.is_none());
     assert!(config.identity_overrides.is_none());
   }
@@ -2350,8 +4483,8 @@ mod tests {
 
   #[test]
   fn platform_strings_map_the_way_the_browser_maps_them() {
-    // Mirrors WayfernHandler::IsCrossOSFromPlatform, including armv8l/aarch64
-    // reading as android rather than linux.
+    // Mirrors the browser's own platform-to-OS mapping, including armv8l and
+    // aarch64 reading as android rather than linux.
     assert_eq!(WayfernManager::os_from_platform("Win32"), Some("windows"));
     assert_eq!(WayfernManager::os_from_platform("MacIntel"), Some("macos"));
     assert_eq!(WayfernManager::os_from_platform("iPhone"), Some("ios"));
@@ -2372,7 +4505,7 @@ mod tests {
 
   #[test]
   fn a_refused_apply_is_translated_to_a_code_the_frontend_knows() {
-    // The exact literals WayfernHandler emits.
+    // The exact literals the browser emits.
     let cross_os = WayfernManager::apply_failure_error(
       "CDP error: Cross-OS fingerprinting requires a paid plan. Provide a wayfernToken parameter.",
       Some("macos"),
@@ -2390,6 +4523,54 @@ mod tests {
     let other = WayfernManager::apply_failure_error("CDP error: No response received", None);
     assert!(other.contains("WAYFERN_FINGERPRINT_APPLY_FAILED"));
     assert!(other.contains("No response received"));
+  }
+
+  #[test]
+  fn the_launch_payload_never_invents_a_location() {
+    // The regression, and the whole reason the gate is allowed to say "nothing
+    // was compared": the launcher used to insert `America/New_York` and offset
+    // 300 into any fingerprint that declared no timezone. The browser then
+    // presented a US clock behind whatever exit the profile routed through,
+    // while the app told the user the timezone had never been compared, the
+    // exact mismatch `fingerprint_consistency` exists to surface, manufactured
+    // by the launcher and then hidden by it.
+    for stored in [
+      r#"{"platform": "Win32"}"#,
+      // The legacy wrapper takes the same path.
+      r#"{"fingerprint": {"platform": "Win32"}}"#,
+    ] {
+      let payload =
+        WayfernManager::launch_fingerprint_payload(stored).expect("a stored fingerprint parses");
+      let obj = payload.as_object().expect("stays an object");
+      for invented in ["timezone", "timezoneOffset", "latitude", "longitude"] {
+        assert!(
+          !obj.contains_key(invented),
+          "the launch payload invented {invented} for {stored}: {obj:?}"
+        );
+      }
+      assert_eq!(obj.get("platform"), Some(&json!("Win32")));
+    }
+  }
+
+  #[test]
+  fn the_launch_payload_unwraps_the_legacy_shape_and_keeps_a_declared_location() {
+    let payload = WayfernManager::launch_fingerprint_payload(
+      r#"{"fingerprint": {"timezone": "Europe/Berlin", "timezoneOffset": -60,
+                          "languages": "de-DE, de"}}"#,
+    )
+    .expect("the legacy wrapper parses");
+
+    assert_eq!(payload["timezone"], json!("Europe/Berlin"));
+    assert_eq!(payload["timezoneOffset"], json!(-60));
+    // A comma-separated ladder still becomes the array the browser expects.
+    assert_eq!(payload["languages"], json!(["de-DE", "de"]));
+    // The wrapper itself must never reach the browser.
+    assert!(payload.get("fingerprint").is_none());
+  }
+
+  #[test]
+  fn the_launch_payload_refuses_unparsable_json() {
+    assert!(WayfernManager::launch_fingerprint_payload("not json").is_err());
   }
 
   #[test]

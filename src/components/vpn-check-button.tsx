@@ -1,10 +1,9 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { FiCheck } from "react-icons/fi";
+import { FiCheck, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +12,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatRelativeTime } from "@/lib/flag-utils";
-import { MOTION_EASE_OUT } from "@/lib/motion";
 import type { ProxyCheckResult } from "@/types";
 
 interface VpnCheckButtonProps {
@@ -32,7 +30,6 @@ export function VpnCheckButton({
   disabled = false,
 }: VpnCheckButtonProps) {
   const { t } = useTranslation();
-  const reduceMotion = useReducedMotion();
   const [result, setResult] = React.useState<ProxyCheckResult | undefined>();
 
   const handleCheck = React.useCallback(async () => {
@@ -66,13 +63,6 @@ export function VpnCheckButton({
   }, [vpnId, vpnName, checkingVpnId, setCheckingVpnId, t]);
 
   const isCurrentlyChecking = checkingVpnId === vpnId;
-  const statusKey = isCurrentlyChecking
-    ? "checking"
-    : result?.is_valid
-      ? "valid"
-      : result && !result.is_valid
-        ? "invalid"
-        : "idle";
 
   return (
     <Tooltip>
@@ -83,40 +73,27 @@ export function VpnCheckButton({
           className="size-7 p-0"
           onClick={handleCheck}
           disabled={isCurrentlyChecking || disabled}
+          aria-busy={isCurrentlyChecking}
+          aria-label={t(
+            isCurrentlyChecking
+              ? "vpnCheck.tooltipChecking"
+              : "vpnCheck.tooltipDefault",
+          )}
         >
-          <AnimatePresence initial={false} mode="wait">
-            <motion.span
-              key={statusKey}
-              initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.9 }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-                transition: {
-                  duration: reduceMotion ? 0.15 : 0.16,
-                  ease: MOTION_EASE_OUT,
-                },
-              }}
-              exit={{
-                opacity: 0,
-                scale: reduceMotion ? 1 : 0.9,
-                transition: {
-                  duration: reduceMotion ? 0.15 : 0.1,
-                  ease: MOTION_EASE_OUT,
-                },
-              }}
-              className="inline-flex size-3 items-center justify-center"
-            >
-              {isCurrentlyChecking ? (
-                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-              ) : result?.is_valid ? (
-                <FiCheck className="size-3 text-success-text" />
-              ) : result && !result.is_valid ? (
-                <span className="text-sm text-destructive-text">✕</span>
-              ) : (
-                <FiCheck className="size-3" />
-              )}
-            </motion.span>
-          </AnimatePresence>
+          <span
+            aria-hidden="true"
+            className="inline-flex size-3 items-center justify-center"
+          >
+            {isCurrentlyChecking ? (
+              <span className="size-3 animate-spin rounded-full border border-current border-t-transparent motion-reduce:animate-none" />
+            ) : result?.is_valid ? (
+              <FiCheck className="size-3 text-success-text" />
+            ) : result && !result.is_valid ? (
+              <FiX className="size-3 text-destructive-text" />
+            ) : (
+              <FiCheck className="size-3" />
+            )}
+          </span>
         </Button>
       </TooltipTrigger>
       <TooltipContent>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getRemoteHandoffStates,
   onRemoteHandoffChanged,
@@ -21,10 +21,19 @@ import {
  */
 export function useRemoteHandoff() {
   const [states, setStates] = useState<Record<string, RemoteHandoffState>>({});
+  const [ready, setReady] = useState(false);
+  const revision = useRef(0);
+  const mounted = useRef(false);
 
   const refresh = useCallback(async () => {
+    const requestedRevision = ++revision.current;
     try {
-      setStates(await getRemoteHandoffStates());
+      const snapshot = await getRemoteHandoffStates();
+      // An older command response must never replace a newer handoff event.
+      if (mounted.current && revision.current === requestedRevision) {
+        setStates(snapshot);
+        setReady(true);
+      }
     } catch (error) {
       // Not signed in, or the app is still starting. The backend gate still
       // applies; the button is simply not pre-disabled.
@@ -33,12 +42,32 @@ export function useRemoteHandoff() {
   }, []);
 
   useEffect(() => {
-    void refresh();
-    const unlisten = onRemoteHandoffChanged(setStates);
-    return () => {
-      void unlisten.then((off) => {
-        off();
+    mounted.current = true;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void onRemoteHandoffChanged((snapshot) => {
+      if (cancelled) return;
+      ++revision.current;
+      setStates(snapshot);
+      setReady(true);
+    })
+      .then((off) => {
+        if (cancelled) {
+          off();
+          return;
+        }
+        unlisten = off;
+        void refresh();
+      })
+      .catch((error) => {
+        console.warn("Could not listen for remote handoffs:", error);
+        if (!cancelled) void refresh();
       });
+    return () => {
+      cancelled = true;
+      mounted.current = false;
+      ++revision.current;
+      unlisten?.();
     };
   }, [refresh]);
 
@@ -47,5 +76,10 @@ export function useRemoteHandoff() {
     [states],
   );
 
-  return { handoffStates: states, handoffFor, refreshHandoff: refresh };
+  return {
+    handoffStates: states,
+    handoffFor,
+    handoffStatesReady: ready,
+    refreshHandoff: refresh,
+  };
 }

@@ -4,38 +4,87 @@ use std::path::Path;
 use std::process::Command;
 
 /// True if a process command line refers to `profile_path` as a real browser
-/// profile/data-dir argument, NOT merely a substring. A bare `contains` match
-/// force-killed unrelated processes that happened to mention the path (editors,
-/// `tail`, a terminal that `cd`'d there, or another profile whose path has this
-/// one as a prefix). Mirrors the precise matching in browser_runner/wayfern_manager.
+/// profile/data-dir argument. Only the `--user-data-dir=<path>` /
+/// `-profile=<path>` flag form counts, because the results feed a SIGKILL loop:
+/// a substring match, or the path accepted as a standalone argv token, also
+/// caught unrelated processes that legitimately name the directory (`du -sh
+/// <profile>`, `tar czf backup.tgz <profile>`, an editor, a sibling profile
+/// whose path has this one as a prefix). `browser.rs` only ever emits the flag
+/// form, so nothing Donut launches is missed.
 ///
 /// Only the macOS and Linux process-kill paths use this; Windows has no
 /// `find_processes_by_profile_path`, so gate it to avoid a dead-code error there.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn cmd_matches_profile_path(cmd: &[std::ffi::OsString], profile_path: &str) -> bool {
-  let args: Vec<&str> = cmd.iter().filter_map(|a| a.to_str()).collect();
-  for (i, arg) in args.iter().enumerate() {
-    // Exact argument equality (some launchers pass the path as its own arg).
-    if *arg == profile_path {
-      return true;
-    }
-    // `--user-data-dir=<path>` (Chromium/Wayfern) or `-profile=<path>`.
-    if let Some(val) = arg
+  cmd.iter().filter_map(|a| a.to_str()).any(|arg| {
+    arg
       .strip_prefix("--user-data-dir=")
       .or_else(|| arg.strip_prefix("-profile="))
-    {
-      if val == profile_path {
-        return true;
-      }
-    }
-    // Flag followed by the path as the next argument.
-    if (*arg == "-profile" || *arg == "--user-data-dir")
-      && args.get(i + 1).is_some_and(|next| *next == profile_path)
-    {
-      return true;
-    }
+      .is_some_and(|val| val == profile_path)
+  })
+}
+
+/// The profile sweep only ever wants browser processes. Every other sweep in
+/// the app (`wayfern_manager`, `profile::manager`) already filters on the
+/// executable name; without it a stray match here becomes a SIGKILL on an
+/// unrelated process.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn is_browser_process_name(name: &std::ffi::OsStr) -> bool {
+  let exe_name = name.to_string_lossy().to_lowercase();
+  exe_name.contains("wayfern") || exe_name.contains("chromium") || exe_name.contains("chrome")
+}
+
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
+mod profile_path_match_tests {
+  use super::{cmd_matches_profile_path, is_browser_process_name};
+  use std::ffi::{OsStr, OsString};
+
+  fn cmd(args: &[&str]) -> Vec<OsString> {
+    args.iter().map(OsString::from).collect()
   }
-  false
+
+  #[test]
+  fn bare_path_argument_does_not_match() {
+    let profile = "/tmp/donut/profiles/work";
+    assert!(!cmd_matches_profile_path(
+      &cmd(&["du", "-sh", profile]),
+      profile
+    ));
+    assert!(!cmd_matches_profile_path(
+      &cmd(&["tar", "czf", "backup.tgz", profile]),
+      profile
+    ));
+  }
+
+  #[test]
+  fn user_data_dir_flag_matches() {
+    let profile = "/tmp/donut/profiles/work";
+    assert!(cmd_matches_profile_path(
+      &cmd(&["wayfern", &format!("--user-data-dir={profile}")]),
+      profile
+    ));
+    assert!(cmd_matches_profile_path(
+      &cmd(&["wayfern", &format!("-profile={profile}")]),
+      profile
+    ));
+  }
+
+  #[test]
+  fn a_sibling_profile_prefix_does_not_match() {
+    let profile = "/tmp/donut/profiles/work";
+    assert!(!cmd_matches_profile_path(
+      &cmd(&["wayfern", "--user-data-dir=/tmp/donut/profiles/work-2"]),
+      profile
+    ));
+  }
+
+  #[test]
+  fn only_browser_executables_are_swept() {
+    assert!(is_browser_process_name(OsStr::new("Wayfern Helper")));
+    assert!(is_browser_process_name(OsStr::new("chromium")));
+    assert!(!is_browser_process_name(OsStr::new("du")));
+    assert!(!is_browser_process_name(OsStr::new("rsync")));
+  }
 }
 
 // Platform-specific modules
@@ -194,6 +243,10 @@ pub mod macos {
     for (pid, process) in system.processes() {
       let cmd = process.cmd();
       if cmd.is_empty() {
+        continue;
+      }
+
+      if !is_browser_process_name(process.name()) {
         continue;
       }
 
@@ -701,6 +754,10 @@ pub mod linux {
     for (pid, process) in system.processes() {
       let cmd = process.cmd();
       if cmd.is_empty() {
+        continue;
+      }
+
+      if !is_browser_process_name(process.name()) {
         continue;
       }
 

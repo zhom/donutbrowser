@@ -2,10 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /**
- * Remote sessions: a profile opened on a leased Windows or macOS host.
+ * Remote sessions: a profile opened on a leased Windows, macOS or Linux host.
  *
  * The desktop holds no part of the session's life. It asks the backend to
- * start or stop one and is told what happened; the fleet, the two-hour cap,
+ * start or stop one and is told what happened; the hosts, the session cap,
  * the profile lock and the billing all live server-side.
  */
 
@@ -22,7 +22,7 @@ export interface RemoteSessionState {
   session_id: string;
   profile_id?: string | null;
   platform?: string | null;
-  /** Named to match the server's `RemoteSessionView.state`. */
+  /** Named to match the field the API returns. */
   state: RemoteSessionPhase;
   /** The relay is up, so the session can actually be driven. */
   cdp_ready: boolean;

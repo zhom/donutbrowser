@@ -2,20 +2,20 @@
 //! machine.
 //!
 //! Remote execution — an interactive remote session or a Cookie Bot night — runs
-//! the browser on a leased fleet host, but the PROFILE (and its proxy, and its
-//! VPN config) is pulled from the user's sync namespace. Nothing in that
-//! handover rewrites addresses, so a proxy recorded as `127.0.0.1:8080` arrives
-//! on the fleet host meaning *the fleet host's own loopback*.
+//! the browser on a remote host, but the PROFILE (and its proxy, and its VPN
+//! config) is pulled from the user's sync namespace. Addresses are not rewritten
+//! in transit, so a proxy recorded as `127.0.0.1:8080` arrives meaning *that
+//! machine's own loopback*.
 //!
-//! That is the whole bug this module exists to prevent. The server already
-//! refuses a profile with NO exit (`proxy_required`), because a night browsed
-//! from the fleet's datacenter address damages an identity rather than building
-//! it — but it was asking whether an exit was *configured*, never whether it was
-//! *reachable*. A local proxy satisfied the first question and failed the
-//! second, so the run was accepted, dispatched, and burned a leased host either
-//! erroring out or (worse) egressing direct from the datacenter: exactly the
-//! outcome `proxy_required` exists to stop, reached by the one route it did not
-//! check.
+//! That is the whole bug this module exists to prevent. A profile with NO exit
+//! is already refused (`proxy_required`), because a night browsed without the
+//! user's own exit damages an identity rather than building it — but "an exit is
+//! configured" and "that exit is reachable from somewhere else" are different
+//! questions, and only the first was ever asked. A local proxy satisfied it and
+//! failed the second, so the run was accepted, dispatched, and burned an hour
+//! either erroring out or (worse) egressing from the remote host's own address:
+//! exactly the outcome `proxy_required` exists to stop, reached by the one route
+//! it did not check.
 //!
 //! Local proxies are not an exotic case. A local MITM proxy, an SSH tunnel, a
 //! locally-run SOCKS client and Donut's own VLESS support all present to the
@@ -24,11 +24,11 @@
 //! This module is the single answer, shared by every caller, and it FAILS
 //! CLOSED: anything it cannot parse is reported as unreachable. Refusing a
 //! working setup costs the user one support question; accepting a broken one
-//! costs a burned hour and a damaged profile identity.
+//! costs an hour of quota and a damaged profile identity.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-/// Whether a leased fleet host could dial this profile's exit.
+/// Whether a remote host could dial this profile's exit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExitReachability {
   /// No proxy and no VPN. The caller's existing "no exit" refusal applies.
@@ -39,6 +39,19 @@ pub enum ExitReachability {
   LocalOnly {
     /// The offending host, for a message the user can act on.
     host: String,
+    /// Which part of the config it came from: "proxy" or "VPN".
+    source: &'static str,
+  },
+  /// A protocol a remote host has no way to speak, whatever address it names.
+  ///
+  /// Reachability is the wrong question for these: the server in a VLESS URI is
+  /// as publicly routable as any other, so the host check passes and the run is
+  /// accepted, dispatched, and then refused remotely, because dialling VLESS
+  /// needs a sidecar that is not available there. That is a permanent refusal
+  /// wearing a transient one's clothes, and every nightly retry pays for it.
+  UnsupportedKind {
+    /// The protocol, as the user would name it: "VLESS".
+    kind: String,
     /// Which part of the config it came from: "proxy" or "VPN".
     source: &'static str,
   },
@@ -65,6 +78,11 @@ impl ExitReachability {
       ExitReachability::LocalOnly { host, source } => Some(format!(
         "The {source} for this profile points at {host}, which only exists on this computer. \
          Remote runs happen on our hosts and cannot reach it."
+      )),
+      ExitReachability::UnsupportedKind { kind, source } => Some(format!(
+        "The {source} for this profile is {kind}, which needs the Xray sidecar our hosts do not \
+         run, so the fleet cannot dial it however reachable its server is. An HTTP, HTTPS, SOCKS \
+         or WireGuard exit works."
       )),
       ExitReachability::Unknown { reason, source } => Some(format!(
         "The {source} for this profile could not be read ({reason}), so we cannot confirm a \
@@ -99,7 +117,7 @@ pub fn host_is_remote_reachable(host: &str) -> bool {
   }
 
   // Suffixes reserved for local/private name resolution (RFC 6762 mDNS, RFC
-  // 8375, and the names router vendors hand out on a LAN). A fleet host
+  // 8375, and the names router vendors hand out on a LAN). A remote host
   // resolving one of these gets its own network's answer, not the user's.
   const LOCAL_SUFFIXES: [&str; 7] = [
     ".local",
@@ -115,7 +133,7 @@ pub fn host_is_remote_reachable(host: &str) -> bool {
   }
 
   // A bare single-label name ("my-proxy", "router") is only resolvable through
-  // a local search domain, so it is no more use to a fleet host than `.local`.
+  // a local search domain, so it is no more use to a remote host than `.local`.
   if !lower.contains('.') {
     return false;
   }
@@ -257,8 +275,39 @@ pub fn proxy_exit_host(settings: &crate::browser::ProxySettings) -> Result<Strin
   Ok(host)
 }
 
+/// Whether a stored proxy speaks a protocol no remote host can dial.
+///
+/// Reads the two facts that both mean VLESS, because either one alone is a real
+/// record: the picker writes `proxy_type = "vless"`, and a config pasted as a
+/// bare URI carries the protocol in `vless_uri` before the type is normalised.
+/// Taking only the first would let the second through to the host that refuses
+/// it.
+fn unsupported_remote_kind(settings: &crate::browser::ProxySettings) -> Option<String> {
+  let has_uri = settings
+    .vless_uri
+    .as_deref()
+    .is_some_and(|uri| !uri.trim().is_empty());
+  if settings.proxy_type.eq_ignore_ascii_case("vless") || has_uri {
+    return Some("VLESS".to_string());
+  }
+  None
+}
+
 /// Classify a stored proxy.
+///
+/// Protocol first, address second. A VLESS config names a perfectly routable
+/// server, so asking the address question first answers `Remote` for an exit no
+/// remote host can use; the kind has to disqualify it before the host is looked
+/// at. (`proxy_exit_host` still resolves a VLESS server, because "which machine
+/// does this dial" remains a real question for a log line.)
 pub fn classify_proxy(settings: &crate::browser::ProxySettings) -> ExitReachability {
+  if let Some(kind) = unsupported_remote_kind(settings) {
+    return ExitReachability::UnsupportedKind {
+      kind,
+      source: "proxy",
+    };
+  }
+
   match proxy_exit_host(settings) {
     Err(reason) => ExitReachability::Unknown {
       reason,
@@ -380,7 +429,7 @@ mod tests {
 
   #[test]
   fn lan_only_names_are_local() {
-    // A fleet host resolving these gets ITS network's answer, not the user's —
+    // A remote host resolving these gets ITS network's answer, not the user's —
     // which is worse than failing, because it may well succeed against
     // something unrelated.
     for host in [
@@ -408,27 +457,62 @@ mod tests {
   }
 
   #[test]
-  fn a_vless_proxy_is_judged_by_its_server_not_its_local_port() {
-    // THE asymmetry. Donut points the browser at a local xray worker, so the
-    // browser-facing address of every VLESS proxy is 127.0.0.1 — but the stored
-    // config names a real server, and that is what a fleet host would dial.
-    // Classifying VLESS off `settings.host` would refuse every VLESS profile.
+  fn a_vless_proxy_is_refused_however_public_its_server_is() {
+    // This URI names a routable server, so the address check says Remote and
+    // the enrolment is accepted; every night after that the run is refused
+    // remotely, because dialling VLESS needs a sidecar that is not available
+    // there. The protocol has to disqualify the exit here, where no remote hour
+    // has been spent yet.
     let mut settings = proxy("vless", "127.0.0.1");
     settings.vless_uri =
       Some("vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@vpn.example.com:443?type=tcp#node".into());
 
-    assert_eq!(classify_proxy(&settings), ExitReachability::Remote);
+    assert_eq!(
+      classify_proxy(&settings),
+      ExitReachability::UnsupportedKind {
+        kind: "VLESS".to_string(),
+        source: "proxy",
+      }
+    );
+    assert!(!classify_proxy(&settings).is_remote());
+    // The refusal has to name the protocol and the exits that do work, or it
+    // reads as "your proxy is broken" for a proxy that is fine everywhere else.
+    let detail = classify_proxy(&settings).refusal_detail().unwrap();
+    assert!(detail.contains("VLESS"), "{detail}");
+    assert!(detail.contains("Xray"), "{detail}");
+    assert!(detail.contains("SOCKS"), "{detail}");
   }
 
   #[test]
-  fn a_vless_uri_pointing_at_loopback_is_still_local() {
+  fn a_vless_uri_is_refused_even_when_the_type_field_disagrees() {
+    // A config pasted as a bare URI can land with the type still unnormalised.
+    // Reading only `proxy_type` would classify this one on `settings.host` —
+    // which for VLESS is the local xray worker, so it would come back LocalOnly
+    // and tell the user to swap a proxy whose real problem is its protocol.
+    let mut settings = proxy("socks5", "1.2.3.4");
+    settings.vless_uri = Some("vless://uuid@vpn.example.com:443?type=tcp".into());
+
+    assert_eq!(
+      classify_proxy(&settings),
+      ExitReachability::UnsupportedKind {
+        kind: "VLESS".to_string(),
+        source: "proxy",
+      }
+    );
+  }
+
+  #[test]
+  fn a_vless_uri_pointing_at_loopback_is_refused_on_its_kind() {
+    // Local AND unsupported. Either verdict blocks the run, but the kind is the
+    // one the user has to act on: fixing the address still leaves an exit no
+    // remote host can dial.
     let mut settings = proxy("vless", "127.0.0.1");
     settings.vless_uri = Some("vless://uuid@127.0.0.1:443?type=tcp".into());
 
     assert_eq!(
       classify_proxy(&settings),
-      ExitReachability::LocalOnly {
-        host: "127.0.0.1".to_string(),
+      ExitReachability::UnsupportedKind {
+        kind: "VLESS".to_string(),
         source: "proxy",
       }
     );
@@ -452,9 +536,7 @@ mod tests {
     // Unknown must never be treated as usable: the point of the check is that
     // we could not confirm reachability, and guessing "yes" reintroduces the
     // exact failure it prevents.
-    let mut settings = proxy("vless", "");
-    settings.vless_uri = None;
-    let verdict = classify_proxy(&settings);
+    let verdict = classify_proxy(&proxy("socks5", "   "));
 
     assert!(matches!(verdict, ExitReachability::Unknown { .. }));
     assert!(!verdict.is_remote());
@@ -501,6 +583,11 @@ mod tests {
     assert!(!ExitReachability::None.is_remote());
     assert!(!ExitReachability::LocalOnly {
       host: "127.0.0.1".into(),
+      source: "proxy"
+    }
+    .is_remote());
+    assert!(!ExitReachability::UnsupportedKind {
+      kind: "VLESS".into(),
       source: "proxy"
     }
     .is_remote());

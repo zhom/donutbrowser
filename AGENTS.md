@@ -43,11 +43,14 @@ donutbrowser/
 │   │   ├── browser_runner.rs         # Profile launch/kill orchestration
 │   │   ├── browser.rs               # Browser trait & launch logic
 │   │   ├── profile/                  # Profile CRUD (manager.rs, types.rs)
-│   │   ├── proxy_manager.rs         # Proxy lifecycle & connection testing
+│   │   ├── proxy_manager.rs         # Proxy lifecycle, connection testing, per-proxy check history
+│   │   ├── proxy_udp.rs             # SOCKS5 UDP ASSOCIATE probe (yes/no/unknown UDP verdict)
 │   │   ├── proxy_server.rs          # Local proxy binary (donut-proxy)
 │   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
-│   │   ├── mcp_server.rs            # MCP protocol server
+│   │   ├── mcp_server.rs            # MCP protocol server (tool engine + local loopback listener)
+│   │   ├── mcp_remote.rs            # Remote MCP bridge: outbound websocket to Donut cloud (Enterprise remote control)
+│   │   ├── mcp_integrations.rs      # 20-client MCP installer: local URL or remote endpoint with bearer, format-preserving JSONC/TOML edits
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
@@ -58,14 +61,16 @@ donutbrowser/
 │   │   ├── downloader.rs           # Browser binary downloader
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)
 │   │   ├── settings_manager.rs     # App settings persistence
+│   │   ├── data_root.rs            # Moving the data directory (copy, verify, then delete) + the pointer read at startup
 │   │   ├── cookie_manager.rs       # Cookie import/export
 │   │   ├── profile_importer.rs     # Bulk profile import (Chromium-family detection, ZIP, batch)
 │   │   ├── fingerprint_consistency.rs # Launch-time proxy exit vs fingerprint timezone/language check
 │   │   ├── dns_blocklist.rs         # Hagezi DNS blocklists + user custom lists/allowlist
 │   │   ├── traffic_stats.rs         # Per-profile traffic stats + secure history erase
 │   │   ├── extension_manager.rs    # Browser extension management
+│   │   ├── extension_fetch.rs      # Web Store link/id and direct .crx/.zip import, CRX3 unwrapping
 │   │   ├── group_manager.rs        # Profile group management
-│   │   ├── synchronizer.rs         # Real-time profile synchronizer
+│   │   ├── synchronizer.rs         # Real-time profile synchronizer (pause/resume, hold a follower out, window layouts)
 │   │   ├── daemon/                 # Background daemon + tray icon (currently disabled)
 │   │   └── cloud_auth.rs           # Cloud authentication
 │   ├── tests/                      # Integration tests
@@ -75,7 +80,11 @@ donutbrowser/
 ├── e2e/                            # Isolated native UI/sync/Wayfern E2E system
 │   ├── app/                        # Test-only Tauri harness that injects the private driver
 │   ├── lib/                        # WebDriver, CDP, fixtures, app-session helpers
-│   └── tests/                      # Smoke, UI, entity, integration, sync, browser suites
+│   └── tests/                      # Smoke, UI/motion, entity, network, integration, sync, browser suites
+├── sdk/                            # Standalone Python + Node clients for the local REST API
+│   ├── api-paths.json              # Snapshot of every published operation; drift check for both SDKs
+│   ├── python/                     # `donutbrowser` (stdlib only, pytest)
+│   └── node/                       # `@donutbrowser/sdk` (ESM TypeScript, node --test)
 ├── patches/                        # pnpm compatibility patches for secured dependencies
 ├── flake.nix                       # Nix development environment
 └── .github/workflows/              # CI/CD pipelines
@@ -101,6 +110,9 @@ The native suites use the published `tauri-wd` driver (pinned in `e2e/app/Cargo.
 into the ignored `e2e/.driver` root) and launch an `e2e`-feature build.
 Every session gets its own temporary Donut data/cache/log root, home directory,
 WebView store, ports, and sync bucket. Never point a suite at production or development data.
+Every suite runs the Donut window headless (`DONUT_E2E_HEADLESS=1`, forwarded as the tauri-wd
+`headless` capability), so a run never pops a window or steals focus. `DONUT_E2E_HEADED=1` shows
+the window when a failure needs watching.
 
 `e2e/app/Cargo.lock` is generated, gitignored, and never edited by hand. `e2e/run.mjs` seeds it
 from `src-tauri/Cargo.lock` whenever that file is newer, so the harness always links the exact

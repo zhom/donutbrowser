@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
+import { effectivePlanOf } from "@/lib/entitlements";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { SyncServerCheck, SyncSettings } from "@/types";
 
@@ -304,7 +305,7 @@ export function SyncConfigDialog({
                   {t("sync.cloud.plan")}
                 </span>
                 <span className="capitalize">
-                  {user.plan}
+                  {effectivePlanOf(user)}
                   {user.planPeriod ? ` (${user.planPeriod})` : ""}
                 </span>
               </div>

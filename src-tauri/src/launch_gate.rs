@@ -1,4 +1,10 @@
-//! The pre-spawn launch gate.
+//! The pre-spawn gate.
+//!
+//! Runs on every real browser spawn, after the upstream has been normalized
+//! and before any worker, decrypted copy or browser process exists. It answers
+//! one question — may this launch proceed — and changes nothing else; the
+//! launch path does its own preparation (the group's bookmarks, the blocklist)
+//! around it.
 //!
 //! Two findings can stop a launch being what the user expects:
 //!
@@ -126,9 +132,44 @@ fn mismatch_error(result: &ConsistencyResult, token: &str) -> String {
       "fingerprintTimezone": result.fingerprint_timezone.clone().unwrap_or_default(),
       "fingerprintLanguage": result.fingerprint_language.clone().unwrap_or_default(),
       "mismatches": result.mismatches.join(","),
+      "unverified": result.unverified.join(","),
     }
   })
   .to_string()
+}
+
+/// Say which of the three states a non-blocking check landed in.
+///
+/// Only a measured disagreement stops a launch. The other two both continue -
+/// and telling them apart is the whole point, because "the exit and the
+/// fingerprint agree" and "nothing was compared" are different claims and the
+/// second used to be reported as the first.
+///
+/// Reaching an exit and finding nothing to compare is deliberately not a block:
+/// a fingerprint whose geolocation probe failed carries no location at all,
+/// since generation stopped inventing one, and refusing to start those profiles
+/// would break profiles that are legitimately in that state. It is not a pass
+/// either, so the launch says what it could not check.
+fn report_consistency(profile: &BrowserProfile, result: &ConsistencyResult) {
+  if result.is_verified() {
+    log::debug!(
+      "Fingerprint gate: {} agrees with its exit on every dimension",
+      profile.name
+    );
+    return;
+  }
+  if result.unverified.is_empty() {
+    return;
+  }
+  log::warn!(
+    "Fingerprint gate: {} reached its exit but could not verify {}; \
+     the fingerprint declares no value to compare against",
+    profile.name,
+    result.unverified.join(", ")
+  );
+  if let Err(e) = crate::events::emit("fingerprint-consistency-unverified", result) {
+    log::warn!("Failed to emit fingerprint consistency notice: {e}");
+  }
 }
 
 fn gate_disabled() -> bool {
@@ -180,7 +221,8 @@ async fn enforce_direct_exit(
       return Ok(());
     }
   };
-  if !result.checked || result.consistent {
+  if !result.is_mismatch() {
+    report_consistency(profile, &result);
     return Ok(());
   }
 
@@ -188,8 +230,7 @@ async fn enforce_direct_exit(
   Err(mismatch_error(&result, &token))
 }
 
-/// The enforcing gate. Called from the launch pipeline once the upstream is
-/// normalized and before anything expensive or user-visible happens.
+/// The pre-spawn stage: prepare the profile, then gate the launch.
 ///
 /// Fails **open** on every degradation — probe failure, timeout, missing geo
 /// database, private exit IP. The gate blocks only on a positively measured
@@ -260,7 +301,10 @@ pub async fn enforce_fingerprint_gate(
     }
   };
 
-  if !result.checked || result.consistent {
+  if !result.is_mismatch() {
+    // A mismatch carries its own report, and the dialog it opens already lists
+    // whatever went uncompared alongside it.
+    report_consistency(profile, &result);
     return Ok(());
   }
 
@@ -294,9 +338,15 @@ pub struct PreLaunchChecks {
   pub scan_state: String,
   /// Cache-only; `checked` is false when the exit has not been measured yet.
   pub consistency: ConsistencyResult,
-  /// True when the enforcing gate will still probe during the launch, so the
-  /// UI can say the check is not finished rather than implying it passed.
+  /// True when the enforcing gate will still probe during the launch AND that
+  /// probe can actually compare something, so the UI can say the check is not
+  /// finished rather than implying it passed.
   pub exit_probe_pending: bool,
+  /// Dimensions no probe can ever verify for this profile, because its
+  /// fingerprint declares no value to compare. Answered locally, with no
+  /// measurement. Informational and never a block, but the launch must not
+  /// read as verified on a dimension nothing will compare.
+  pub exit_unverified: Vec<String>,
   /// An extension holding the `proxy` permission is present, so any exit
   /// measurement describes a route the browser may not take. Informational
   /// only — it never relaxes the block.
@@ -357,10 +407,20 @@ pub async fn get_profile_pre_launch_checks(profile_id: String) -> Result<PreLaun
     .as_ref()
     .is_some_and(|k| crate::launch_gate_prefs::fingerprint_ack_matches(&profile, &k.identity));
 
-  let blocking = consistency.checked && !consistency.consistent && !already_acked;
+  let blocking = consistency.is_mismatch() && !already_acked;
   let consent_token = match (&key, blocking) {
     (Some(k), true) => Some(mint_consent(&profile, &k.identity)),
     _ => None,
+  };
+
+  // Only meaningful when an exit check is going to happen at all: an
+  // acknowledged profile, a disabled gate, or a profile with no route never
+  // measures an exit, so there is nothing it failed to verify.
+  let gate_will_measure = !disabled && !already_acked && key.is_some();
+  let exit_unverified = if gate_will_measure {
+    fingerprint_consistency::unverifiable_dimensions(&profile)
+  } else {
+    Vec::new()
   };
 
   Ok(PreLaunchChecks {
@@ -371,7 +431,14 @@ pub async fn get_profile_pre_launch_checks(profile_id: String) -> Result<PreLaun
     } else {
       ConsistencyResult::skip()
     },
-    exit_probe_pending: !disabled && !already_acked && key.is_some() && !blocking,
+    // A probe that can compare nothing is not pending work. Reporting it as
+    // pending promises the user Donut "will check it while starting and stop if
+    // it doesn't match", which is the same unearned assurance in a second
+    // costume.
+    exit_probe_pending: gate_will_measure
+      && !blocking
+      && fingerprint_consistency::can_verify_anything(&profile),
+    exit_unverified,
     exit_measurement_unreliable,
     consent_token,
   })
@@ -484,6 +551,7 @@ mod tests {
       fingerprint_timezone: Some("America/New_York".into()),
       fingerprint_language: Some("en-US".into()),
       mismatches: vec!["timezone".into(), "language".into()],
+      unverified: Vec::new(),
     };
     let encoded = mismatch_error(&result, "tok");
     let parsed: serde_json::Value = serde_json::from_str(&encoded).unwrap();
@@ -493,6 +561,69 @@ mod tests {
     assert_eq!(parsed["params"]["fingerprintTimezone"], "America/New_York");
     // params values must be strings for the frontend's interpolation.
     assert_eq!(parsed["params"]["mismatches"], "timezone,language");
+    assert_eq!(parsed["params"]["unverified"], "");
+  }
+
+  #[test]
+  fn mismatch_error_carries_what_it_could_not_verify_too() {
+    // One dimension disagreed and the other was never compared. The dialog
+    // rebuilds its finding from these params, so dropping `unverified` here
+    // would make the rebuilt result claim a clean bill on a dimension nothing
+    // looked at.
+    let result = ConsistencyResult {
+      consistent: false,
+      checked: true,
+      exit_ip: Some("1.2.3.4".into()),
+      exit_country_code: Some("DE".into()),
+      exit_timezone: Some("Europe/Berlin".into()),
+      fingerprint_timezone: Some("America/New_York".into()),
+      fingerprint_language: None,
+      mismatches: vec!["timezone".into()],
+      unverified: vec!["language".into()],
+    };
+    let parsed: serde_json::Value = serde_json::from_str(&mismatch_error(&result, "tok")).unwrap();
+    assert_eq!(parsed["params"]["mismatches"], "timezone");
+    assert_eq!(parsed["params"]["unverified"], "language");
+  }
+
+  #[test]
+  fn an_unverified_dimension_is_never_a_mismatch_and_never_blocks() {
+    // The N7 shape at the gate: an exit was reached, the fingerprint declares
+    // no timezone, so nothing was compared. That must not stop a launch...
+    let result = ConsistencyResult {
+      consistent: true,
+      checked: false,
+      exit_ip: Some("1.2.3.4".into()),
+      exit_country_code: Some("DE".into()),
+      exit_timezone: Some("Europe/Berlin".into()),
+      fingerprint_timezone: None,
+      fingerprint_language: None,
+      mismatches: Vec::new(),
+      unverified: vec!["timezone".into(), "language".into()],
+    };
+    assert!(
+      !result.is_mismatch(),
+      "an unverified dimension must not block"
+    );
+    // ...and must not be reported as a clean check either.
+    assert!(!result.is_verified());
+  }
+
+  #[test]
+  fn a_profile_that_can_verify_nothing_reports_no_pending_probe() {
+    // `exit_probe_pending` promises the user the launch "will check it while
+    // starting and stop if it doesn't match". A fingerprint with no locale at
+    // all leaves the probe nothing to compare, so that promise cannot be kept.
+    let bare = profile_with(r#"{"platform":"Win32"}"#);
+    assert!(!fingerprint_consistency::can_verify_anything(&bare));
+    assert_eq!(
+      fingerprint_consistency::unverifiable_dimensions(&bare),
+      vec!["timezone", "language"]
+    );
+
+    let located = profile_with(r#"{"timezone":"Europe/Berlin","language":"de-DE"}"#);
+    assert!(fingerprint_consistency::can_verify_anything(&located));
+    assert!(fingerprint_consistency::unverifiable_dimensions(&located).is_empty());
   }
 
   #[tokio::test]

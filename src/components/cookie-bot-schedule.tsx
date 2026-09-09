@@ -1,5 +1,6 @@
 "use client";
 
+import { motion, useReducedMotion } from "motion/react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { LuPencil, LuTrash2 } from "react-icons/lu";
@@ -18,18 +19,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useInputModality } from "@/hooks/use-input-modality";
 import type { CookieBotSchedule } from "@/lib/cookie-bot";
+import { MOTION_EASE_OUT } from "@/lib/motion";
+import { scheduleLanes } from "@/lib/schedule-layout";
 import { cn } from "@/lib/utils";
-
-/** A slot holding this many enrolments is worth flagging: the fleet leases a
- * handful of machines per platform, so a pile-up at one minute is a real
- * capacity fact, not a decoration. */
-const CROWDED_SLOT = 4;
-
-interface Slot {
-  hour: number;
-  entries: CookieBotSchedule[];
-}
 
 interface CookieBotScheduleTabProps {
   schedules: CookieBotSchedule[];
@@ -40,11 +34,6 @@ interface CookieBotScheduleTabProps {
   onRemove: (schedule: CookieBotSchedule) => void;
 }
 
-/**
- * The night, drawn as a night. Every enrolment the caller can see sits under
- * the hour it starts, so two operators aiming at the same profile — or twelve
- * profiles aiming at 02:00 — is visible before it becomes a 409 at 02:00.
- */
 export function CookieBotScheduleTab({
   schedules,
   isLoading,
@@ -54,103 +43,156 @@ export function CookieBotScheduleTab({
   onRemove,
 }: CookieBotScheduleTabProps) {
   const { t } = useTranslation();
-
-  const rows = useMemo(() => buildRows(schedules), [schedules]);
-
-  if (isLoading && schedules.length === 0) {
+  const reduced = useReducedMotion();
+  const modality = useInputModality();
+  const groups = useMemo(() => scheduleLanes(schedules), [schedules]);
+  if (isLoading && !schedules.length)
+    return <Skeleton className="h-32 w-full" />;
+  if (!schedules.length)
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-3 pt-2">
-        {Array.from({ length: 5 }, (_, i) => (
-          <div key={`slot-skeleton-${i}`} className="flex items-center gap-3">
-            <Skeleton className="h-3 w-10" />
-            <Skeleton
-              className="h-3"
-              style={{ width: `${30 + ((i * 17) % 40)}%` }}
-            />
-          </div>
-        ))}
-      </div>
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        {t("cookieBot.schedule.empty")}
+      </p>
     );
-  }
-
-  if (schedules.length === 0) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center py-16">
-        <p className="text-sm text-muted-foreground">
-          {t("cookieBot.schedule.empty")}
-        </p>
-      </div>
-    );
-  }
 
   return (
-    <FadingScrollArea
-      className="min-h-0 flex-1"
-      style={{ "--scroll-fade-top-offset": "16px" } as React.CSSProperties}
-    >
-      <div className="flex flex-col pr-1">
-        {rows.map((row) =>
-          row.kind === "gap" ? (
-            <div
-              key={`gap-${row.from}`}
-              className="flex h-6 items-center gap-2 pl-14 text-[10px] uppercase tracking-wide text-muted-foreground"
-            >
-              <span>
-                {t("cookieBot.schedule.quietHours", { count: row.count })}
-              </span>
-              <span className="h-px flex-1 rounded-full bg-border" />
-            </div>
-          ) : (
-            <div key={`slot-${row.slot.hour}`} className="flex gap-3 pb-4">
-              <span className="w-14 shrink-0 pt-1 text-right text-xs tabular-nums text-muted-foreground">
-                {minutesToClock(row.slot.hour * 60)}
-              </span>
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5 border-l border-border pl-3">
-                {row.slot.entries.map((schedule) => {
-                  const mine =
-                    !schedule.owner_user_id ||
-                    schedule.owner_user_id === currentUserId;
-                  const editable = mine || canEditOthers;
-                  const blocked = scheduleBlockedReason(t, schedule);
-                  return (
-                    <div
-                      key={`${schedule.owner_user_id ?? "me"}-${schedule.profile_id}`}
-                      className="group flex h-7 items-center gap-2 rounded-md px-2 text-xs transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <StatusDot
-                        tone={scheduleTone(schedule)}
-                        className="size-1.5"
-                      />
-                      <span className="min-w-0 flex-1 truncate">
-                        {schedule.profile_name}
+    <FadingScrollArea className="min-h-0 flex-1">
+      <div data-slot="schedule-timeline" className="space-y-8 pr-2 pb-4">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t("appFeedback.requestedSchedule")}
+        </p>
+        {[...groups].map(([timezone, lanes]) => {
+          const start = Math.max(
+            0,
+            Math.floor(
+              (Math.min(...lanes.map((lane) => lane.minute)) - 30) / 60,
+            ) * 60,
+          );
+          const end = Math.max(
+            start + 120,
+            Math.ceil(
+              (Math.max(...lanes.map((lane) => lane.minute + lane.duration)) +
+                30) /
+                60,
+            ) * 60,
+          );
+          const span = end - start;
+          return (
+            <section key={timezone} aria-label={timezone} className="min-w-0">
+              <h3 className="mb-3 text-sm font-medium">
+                {timezone || t("common.labels.default")}
+              </h3>
+              <div
+                className="grid grid-cols-[minmax(0,1fr)_minmax(100px,2fr)_4rem] gap-x-3 text-[11px] tabular-nums text-muted-foreground"
+                aria-hidden="true"
+              >
+                <span />
+                <div className="flex justify-between gap-2 pb-2">
+                  {[start, Math.round((start + span / 2) / 15) * 15, end].map(
+                    (minute) => (
+                      <span key={minute}>
+                        {minutesToClock(minute)}
+                        {minute >= 1440 ? " +1" : ""}
                       </span>
-                      {/* "This cannot run" beats "it runs nightly": an
-                          enrolment the server will refuse should not read as a
-                          cadence it is about to keep. */}
-                      <span
-                        className={cn(
-                          "shrink-0 text-[10px] uppercase tracking-wide",
-                          blocked
-                            ? "text-warning-text"
-                            : "text-muted-foreground",
-                        )}
+                    ),
+                  )}
+                </div>
+              </div>
+              {lanes.map((lane) => {
+                const { schedule } = lane;
+                const editable =
+                  !schedule.owner_user_id ||
+                  schedule.owner_user_id === currentUserId ||
+                  canEditOthers;
+                const blocked = scheduleBlockedReason(t, schedule);
+                return (
+                  <div
+                    key={lane.id}
+                    data-slot="schedule-lane"
+                    data-profile-id={schedule.profile_id}
+                    data-minute={lane.minute}
+                    data-overlaps={lane.overlaps}
+                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(100px,2fr)_4rem] items-center gap-x-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        disabled={!editable}
+                        onClick={() => onEdit(schedule)}
+                        className="flex w-full items-start gap-2 rounded-sm text-left text-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-default"
                       >
-                        {blocked ?? describeCadence(t, schedule.days_mask)}
-                      </span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">
-                        {minutesToClock(schedule.run_at_minute)}
-                      </span>
-                      {!mine && schedule.owner_email && (
-                        <span className="hidden max-w-40 shrink-0 truncate text-[10px] uppercase tracking-wide text-muted-foreground @2xl:inline">
-                          {schedule.owner_email}
+                        <StatusDot
+                          tone={scheduleTone(schedule)}
+                          className="mt-1.5 shrink-0"
+                        />
+                        <span className="min-w-0 break-words font-medium">
+                          {schedule.profile_name}
                         </span>
+                      </button>
+                      {schedule.owner_email &&
+                        schedule.owner_user_id !== currentUserId && (
+                          <p className="mt-1 break-words text-xs text-muted-foreground">
+                            {schedule.owner_email}
+                          </p>
+                        )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {describeCadence(t, lane.days)}
+                      </p>
+                      <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                        {minutesToClock(lane.minute)} ·{" "}
+                        {t("cookieBot.chart.minutes", {
+                          minutes: lane.duration,
+                        })}
+                      </p>
+                      {blocked && (
+                        <p className="mt-1 text-xs text-warning-text">
+                          {blocked}
+                        </p>
                       )}
+                      {lane.overlaps > 0 && (
+                        <p className="mt-1 text-xs text-warning-text">
+                          {t("appFeedback.overlappingBookings", {
+                            count: lane.overlaps,
+                          })}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!editable}
+                      onClick={() => onEdit(schedule)}
+                      aria-label={`${t("cookieBot.enrolled.edit")}: ${schedule.profile_name}, ${minutesToClock(lane.minute)}, ${timezone}`}
+                      className="relative h-10 min-w-0 rounded-md focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-default"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-border"
+                      />
+                      <motion.span
+                        aria-hidden="true"
+                        initial={false}
+                        animate={{
+                          left: `${((lane.minute - start) / span) * 100}%`,
+                          width: `${(lane.duration / span) * 100}%`,
+                        }}
+                        transition={{
+                          duration:
+                            reduced || modality === "keyboard" ? 0 : 0.22,
+                          ease: MOTION_EASE_OUT,
+                        }}
+                        className={cn(
+                          "pointer-events-none absolute top-3 h-4 min-w-0.5 rounded-sm bg-foreground",
+                          (!schedule.enabled || blocked) &&
+                            "bg-muted-foreground",
+                          lane.overlaps > 0 && "bg-warning",
+                        )}
+                      />
+                    </button>
+                    <div className="flex items-center justify-end">
                       <SlotAction
                         label={t("cookieBot.enrolled.edit")}
                         forbidden={!editable}
-                        onClick={() => {
-                          onEdit(schedule);
-                        }}
+                        onClick={() => onEdit(schedule)}
                       >
                         <LuPencil className="size-3.5" />
                       </SlotAction>
@@ -158,26 +200,17 @@ export function CookieBotScheduleTab({
                         label={t("cookieBot.schedule.unenrol")}
                         forbidden={!editable}
                         destructive
-                        onClick={() => {
-                          onRemove(schedule);
-                        }}
+                        onClick={() => onRemove(schedule)}
                       >
                         <LuTrash2 className="size-3.5" />
                       </SlotAction>
                     </div>
-                  );
-                })}
-                {row.slot.entries.length >= CROWDED_SLOT && (
-                  <span className="px-2 pt-1 text-[11px] text-warning-text">
-                    {t("cookieBot.schedule.crowded", {
-                      count: row.slot.entries.length,
-                    })}
-                  </span>
-                )}
-              </div>
-            </div>
-          ),
-        )}
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })}
       </div>
     </FadingScrollArea>
   );
@@ -221,44 +254,4 @@ function SlotAction({
       </TooltipContent>
     </Tooltip>
   );
-}
-
-type Row =
-  | { kind: "slot"; slot: Slot }
-  | { kind: "gap"; from: number; count: number };
-
-/**
- * Groups enrolments into the hour they start and collapses the empty stretches
- * between them. A 24-row skeleton of empty hours would be a grid pretending to
- * be information.
- */
-function buildRows(schedules: CookieBotSchedule[]): Row[] {
-  const byHour = new Map<number, CookieBotSchedule[]>();
-  for (const schedule of schedules) {
-    const hour = Math.floor(schedule.run_at_minute / 60) % 24;
-    const bucket = byHour.get(hour);
-    if (bucket) bucket.push(schedule);
-    else byHour.set(hour, [schedule]);
-  }
-
-  const hours = [...byHour.keys()].sort((a, b) => a - b);
-  const rows: Row[] = [];
-  let previous: number | null = null;
-  for (const hour of hours) {
-    if (previous !== null && hour - previous > 1) {
-      rows.push({
-        kind: "gap",
-        from: previous + 1,
-        count: hour - previous - 1,
-      });
-    }
-    const entries = (byHour.get(hour) ?? []).sort(
-      (a, b) =>
-        a.run_at_minute - b.run_at_minute ||
-        a.profile_name.localeCompare(b.profile_name),
-    );
-    rows.push({ kind: "slot", slot: { hour, entries } });
-    previous = hour;
-  }
-  return rows;
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -195,4 +196,116 @@ test("tray labels, hide-to-tray, and confirmed quit follow the native lifecycle"
   } finally {
     await app.close();
   }
+});
+
+test("the data directory can be moved to another folder and the choice survives a restart", async () => {
+  await withApp(
+    "smoke-data-root",
+    async (app) => {
+      // Every path below is inside this session's own temporary root. The
+      // real installation is never a source or a destination here.
+      const defaultRoot = path.join(app.dataRoot, "data");
+      const pointerFile = path.join(app.dataRoot, "data-root.json");
+      const destination = path.join(app.root, "moved-donut-data");
+
+      const before = await app.invoke("get_data_root_info");
+      assert.equal(before.active_path, defaultRoot);
+      assert.equal(before.configured_path, null);
+      assert.equal(before.restart_required, false);
+      assert.equal(before.active_path_missing, false);
+      assert.equal(before.overridden_by_environment, false);
+      assert.ok(before.file_count > 0, "the seeded settings file is counted");
+      assert.ok(before.size_bytes > 0, "the directory reports a real size");
+      assert.equal(typeof before.app_directory_name, "string");
+
+      const profile = await app.invoke("create_browser_profile_new", {
+        name: "Carried Across",
+        browserStr: "wayfern",
+        version: "150.0.7871.100",
+        releaseType: "stable",
+        proxyId: null,
+        vpnId: null,
+        wayfernConfig: { fingerprint: "{}" },
+        groupId: null,
+        ephemeral: false,
+        dnsBlocklist: null,
+        launchHook: null,
+      });
+
+      // Each refusal is its own code, because each one has a different fix.
+      assert.match(
+        await app.invokeError("move_data_root", { destination: defaultRoot }),
+        /DATA_ROOT_SAME_AS_CURRENT/,
+      );
+      assert.match(
+        await app.invokeError("move_data_root", {
+          destination: path.join(defaultRoot, "profiles", "elsewhere"),
+        }),
+        /DATA_ROOT_DESTINATION_INSIDE_SOURCE/,
+      );
+      assert.match(
+        await app.invokeError("move_data_root", {
+          destination: "not/absolute",
+        }),
+        /DATA_ROOT_DESTINATION_NOT_WRITABLE/,
+      );
+      assert.equal(
+        existsSync(destination),
+        false,
+        "a refused move must not create the destination",
+      );
+
+      const moved = await app.invoke("move_data_root", { destination });
+      assert.equal(moved.configured_path, destination);
+      assert.equal(moved.restart_required, true);
+      // The move takes effect at the next start: this process keeps every
+      // path it resolved when it started.
+      assert.equal(moved.active_path, defaultRoot);
+
+      // Copy, then verify, then delete: the old directory only goes once the
+      // copy has been proven whole.
+      assert.equal(existsSync(defaultRoot), false, "the source is removed");
+      assert.ok(
+        existsSync(path.join(destination, "settings", "app_settings.json")),
+        "settings travelled with the move",
+      );
+      assert.ok(
+        existsSync(path.join(destination, "profiles")),
+        "profiles travelled with the move",
+      );
+
+      // The pointer lives beside the data directory, never inside it, or the
+      // delete above would have taken it and the next start would forget.
+      const pointer = JSON.parse(await readFile(pointerFile, "utf8"));
+      assert.equal(pointer.path, destination);
+
+      await app.restart();
+
+      const after = await app.invoke("get_data_root_info");
+      assert.equal(after.active_path, destination);
+      assert.equal(after.configured_path, destination);
+      assert.equal(after.restart_required, false);
+      assert.equal(after.active_path_missing, false);
+
+      const profiles = await app.invoke("list_browser_profiles");
+      assert.ok(
+        profiles.some((entry) => entry.id === profile.id),
+        "the moved directory still holds the profile",
+      );
+      const settings = await app.invoke("get_app_settings");
+      assert.equal(settings.onboarding_completed, true);
+
+      // Forgetting the choice is the escape hatch for a drive that is gone
+      // for good; it moves nothing, so it too only lands on the next start.
+      const cleared = await app.invoke("clear_data_root_choice");
+      assert.equal(cleared.configured_path, null);
+      assert.equal(existsSync(pointerFile), false);
+
+      await app.restart();
+      const restored = await app.invoke("get_data_root_info");
+      assert.equal(restored.active_path, defaultRoot);
+      assert.equal(restored.configured_path, null);
+    },
+    { seedDownloadedBrowser: true },
+  );
 });

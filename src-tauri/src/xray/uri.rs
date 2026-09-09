@@ -55,7 +55,16 @@ pub fn parse_vless_uri(input: &str) -> XrayResult<ParsedVlessUri> {
     })?
     .to_string();
   let address = match url.host().ok_or(XrayError::MissingField("address"))? {
-    Host::Domain(value) => value.to_string(),
+    // `vless` is not a special scheme, so `Url` keeps the host exactly as
+    // written, percent-escapes included, and that string is what the sidecar
+    // dials. Re-parsing canonicalizes an internationalized host into the
+    // punycode form that actually resolves.
+    Host::Domain(value) => Host::parse(value)
+      .map_err(|_| XrayError::InvalidField {
+        field: "address",
+        reason: "must be a valid hostname or IP address",
+      })?
+      .to_string(),
     Host::Ipv4(value) => value.to_string(),
     Host::Ipv6(value) => value.to_string(),
   };
@@ -415,6 +424,32 @@ mod tests {
     assert_eq!(parsed.config.address, "2001:db8::1");
     assert_eq!(parsed.config.reality.spider_x, "/search?q=hello world");
     assert_eq!(parsed.name.as_deref(), Some("Home server"));
+  }
+
+  #[test]
+  fn an_internationalized_host_is_stored_as_punycode() {
+    let input = uri(&[]).replace("vpn.example.com", "café.example.com");
+    let parsed = parse_vless_uri(&input).unwrap();
+    assert_eq!(parsed.config.address, "xn--caf-dma.example.com");
+
+    // And the canonical form survives an export/import round trip.
+    let exported = export_vless_uri(&parsed.config, None).unwrap();
+    assert_eq!(
+      parse_vless_uri(&exported).unwrap().config.address,
+      "xn--caf-dma.example.com"
+    );
+  }
+
+  #[test]
+  fn rejects_a_host_that_percent_decodes_into_something_undialable() {
+    let input = uri(&[]).replace("vpn.example.com", "vpn%2Fexample.com");
+    assert!(matches!(
+      parse_vless_uri(&input),
+      Err(XrayError::InvalidField {
+        field: "address",
+        ..
+      })
+    ));
   }
 
   #[test]

@@ -1,17 +1,16 @@
 //! Key material for profile import.
 //!
-//! Wayfern deliberately does not use the OS keyring. Every `os_crypt_async`
-//! key provider is patched to read (or mint) `<user-data-dir>/os_crypt_key`
-//! instead, so a profile directory is self-contained and portable. See
-//! `wayfern/patches/extra/fingerprint/components-os_crypt-async-browser-*`.
+//! Wayfern keeps os_crypt key material in `<user-data-dir>/os_crypt_key`
+//! rather than the OS keyring, so a profile directory is self-contained and
+//! portable.
 //!
 //! That portability is exactly why an imported Chrome profile carries nothing:
 //! its secrets are sealed with a key held in the macOS Keychain / Windows DPAPI
 //! / the Freedesktop secret service, and Wayfern never looks there. Import has
 //! to open the source's lock and re-seal everything with Wayfern's.
 //!
-//! The on-disk format is per-platform and NOT interchangeable, matching the
-//! provider that owns each tag in the patched Chromium 151 tree:
+//! The on-disk format is per-platform and NOT interchangeable. The tag in each
+//! record selects the derivation:
 //!
 //! | Host    | `os_crypt_key`      | Derivation                          | Cipher       | Tag   |
 //! |---------|---------------------|-------------------------------------|--------------|-------|
@@ -248,10 +247,10 @@ impl TargetKey {
   /// Read the existing `os_crypt_key`, or mint and persist one.
   ///
   /// Writing eagerly at import time — rather than letting the first launch do
-  /// it — is deliberate. The mac and Linux patches have no `else` branch when
-  /// the write fails, so the browser would run on an in-memory key that dies
-  /// with the process and orphans everything it wrote. Failing here instead
-  /// turns that silent data loss into a visible import error.
+  /// it — is deliberate: a key the browser cannot persist would live only in
+  /// memory, die with the process, and orphan everything written with it.
+  /// Failing here instead turns that silent data loss into a visible import
+  /// error.
   pub fn ensure(user_data_dir: &Path) -> Result<Self, String> {
     let key_file = user_data_dir.join(KEY_FILE_NAME);
 
@@ -476,7 +475,7 @@ mod tests {
 
     #[cfg(not(target_os = "windows"))]
     {
-      // Wayfern writes base64(16 random bytes) = 24 ASCII chars.
+      // The non-Windows key file is base64(16 random bytes) = 24 ASCII chars.
       assert_eq!(contents.len(), 24);
       let text = String::from_utf8(contents).expect("ascii");
       assert!(

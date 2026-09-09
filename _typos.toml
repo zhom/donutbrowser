@@ -10,6 +10,10 @@ extend-exclude = [
 ]
 
 [default.extend-words]
+# The IDN test fixtures in src-tauri/src/xray encode "cafe" as punycode
+# ("xn--caf-dma") and as percent-escapes ("caf%C3%A9"). Both leave a bare "caf"
+# token that is an encoding artefact, never a misspelling of "calf".
+caf = "caf"
 DBE = "DBE"
 nd = "nd"
 

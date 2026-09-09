@@ -135,7 +135,13 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
       current_section = Some("interface");
       continue;
     }
+    // Start a fresh map on every [Peer]. This config models exactly one peer,
+    // so without the reset a second block overwrites only the keys it declares
+    // and leaves the first peer's remaining values in place, yielding a peer
+    // (one endpoint, another peer's preshared key) that appears nowhere in the
+    // file. The last block listed wins, as it did before for the keys it sets.
     if line == "[Peer]" {
+      peer.clear();
       current_section = Some("peer");
       continue;
     }
@@ -205,6 +211,19 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
     persistent_keepalive,
     preshared_key,
   })
+}
+
+/// Count the `[Peer]` sections in a WireGuard config.
+///
+/// `parse_wireguard_config` resolves a multi-peer file to its last peer, which
+/// is not the tunnel the user described. Paths that take a config in use this
+/// to refuse one; paths that read an already-stored config keep parsing it.
+pub fn wireguard_peer_count(content: &str) -> usize {
+  let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+  content
+    .lines()
+    .filter(|line| line.trim() == "[Peer]")
+    .count()
 }
 
 /// Validate that a WireGuard key is a base64-encoded 32-byte value.
@@ -324,6 +343,50 @@ Endpoint = 1.2.3.4:51820
       "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
     );
     assert_eq!(config.peer_endpoint, "1.2.3.4:51820");
+  }
+
+  #[test]
+  fn test_parse_wireguard_config_takes_the_last_peer_whole() {
+    // Peer A carries a preshared key and a split-tunnel AllowedIPs, peer B
+    // carries neither. The parsed peer must be B alone: before the per-section
+    // reset, B's identity inherited A's preshared key and the tunnel handshook
+    // against a peer that existed in no input block.
+    let content = r#"
+[Interface]
+PrivateKey = YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+Address = 10.0.0.2/24
+
+[Peer]
+PublicKey = YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI=
+Endpoint = a.example.com:51820
+AllowedIPs = 10.0.0.0/24
+PresharedKey = ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ=
+
+[Peer]
+PublicKey = Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M=
+Endpoint = b.example.com:51820
+"#;
+
+    let config = parse_wireguard_config(content).unwrap();
+    assert_eq!(
+      config.peer_public_key,
+      "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+    );
+    assert_eq!(config.peer_endpoint, "b.example.com:51820");
+    assert!(config.preshared_key.is_none());
+    assert_eq!(config.allowed_ips, vec!["0.0.0.0/0"]);
+  }
+
+  #[test]
+  fn test_wireguard_peer_count() {
+    let single = "[Interface]\nPrivateKey = k\n\n[Peer]\nPublicKey = p\n";
+    let multi = "[Interface]\nPrivateKey = k\n\n[Peer]\nPublicKey = p\n\n[Peer]\nPublicKey = q\n";
+
+    assert_eq!(wireguard_peer_count(single), 1);
+    assert_eq!(wireguard_peer_count(multi), 2);
+    assert_eq!(wireguard_peer_count("[Interface]\nPrivateKey = k\n"), 0);
+    // A commented-out header is not a section.
+    assert_eq!(wireguard_peer_count("# [Peer]\n"), 0);
   }
 
   #[test]

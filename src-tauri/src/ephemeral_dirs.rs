@@ -432,6 +432,7 @@ mod tests {
       last_sync: None,
       host_os: None,
       ephemeral,
+      temporary: false,
       extension_group_id: None,
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,

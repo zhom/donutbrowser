@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,6 +32,10 @@ import {
   weeklyRuns,
 } from "@/components/cookie-bot-shared";
 import {
+  AnimatedDisclosureChevron,
+  AnimatedDisclosureContent,
+} from "@/components/ui/animated-disclosure";
+import {
   AnimatedTabs,
   AnimatedTabsList,
   AnimatedTabsTrigger,
@@ -60,7 +63,6 @@ import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import {
   type CookieBotConflict,
-  type CookieBotPlatform,
   type CookieBotPreset,
   type CookieBotPresetList,
   type CookieBotSchedule,
@@ -73,13 +75,13 @@ import {
   deleteCookieBotUserTemplate,
   getCookieBotPresets,
   getCookieBotUserTemplates,
+  isCookieBotPlatform,
   isUserTemplateId,
   saveCookieBotSchedule,
   updateCookieBotUserTemplate,
 } from "@/lib/cookie-bot";
 import { SCHEDULE_BOUNDS } from "@/lib/cookie-bot-limits";
 import { canUseCookieBot } from "@/lib/entitlements";
-import { MOTION_EASE_OUT } from "@/lib/motion";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile } from "@/types";
@@ -201,7 +203,6 @@ export function CookieBotEnrolDialog({
   onAssignProxy,
 }: CookieBotEnrolDialogProps) {
   const { t } = useTranslation();
-  const reduceMotion = useReducedMotion();
   const { user } = useCloudAuth();
   // The same entitlement answer every other consumer of the shared store
   // passes; see the note in cookie-bot-page.tsx.
@@ -472,10 +473,18 @@ export function CookieBotEnrolDialog({
   const buildInput = useCallback(
     (profile: BrowserProfile): CookieBotScheduleInput | null => {
       const platform = resolvedOs(profile);
-      if (wireSlots.length === 0 || !platform) return null;
+      // The preflight already refuses a profile whose OS no fleet host runs;
+      // the guard here keeps that refusal in the type instead of behind a cast.
+      if (
+        wireSlots.length === 0 ||
+        platform === null ||
+        !isCookieBotPlatform(platform)
+      ) {
+        return null;
+      }
       return {
         profile_name: profile.name,
-        platform: platform as CookieBotPlatform,
+        platform,
         enabled: true,
         // The pair is the mirror of the first slot, sent for a server that
         // predates multi-slot scheduling: it stores the first time rather than
@@ -776,60 +785,49 @@ export function CookieBotEnrolDialog({
                 isLoadingTemplates,
               ]}
             >
-              <AnimatePresence initial={false} mode="wait">
-                <motion.div
-                  key={source}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{
-                    duration: reduceMotion ? 0 : 0.12,
-                    ease: MOTION_EASE_OUT,
-                  }}
-                >
-                  {source === "own" && (
-                    <OwnSitesPanel
-                      value={sitesText}
-                      onChange={setSitesText}
-                      sites={sites}
-                      tooMany={sitesTooMany}
-                      tooFew={sitesTooFew}
-                      maxNameLength={maxNameLength}
-                      onSaved={(created) => {
-                        setUserTemplates((current) => [
-                          created,
-                          ...(current ?? []),
-                        ]);
-                      }}
-                    />
-                  )}
-                  {source === "template" && (
-                    <CuratedPanel
-                      templates={templateList}
-                      selectedId={templateId}
-                      onSelect={setTemplateId}
-                    />
-                  )}
-                  {source === "saved" && (
-                    <SavedPanel
-                      templates={userTemplates}
-                      isLoading={isLoadingTemplates}
-                      failed={templatesFailed}
-                      selectedId={templateId}
-                      missing={savedMissing}
-                      maxNameLength={maxNameLength}
-                      onSelect={setTemplateId}
-                      onRetry={() => {
-                        void loadUserTemplates();
-                      }}
-                      onChanged={setUserTemplates}
-                      onDeselect={() => {
-                        setTemplateId("");
-                      }}
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
+              <div key={source}>
+                {source === "own" && (
+                  <OwnSitesPanel
+                    value={sitesText}
+                    onChange={setSitesText}
+                    sites={sites}
+                    tooMany={sitesTooMany}
+                    tooFew={sitesTooFew}
+                    maxNameLength={maxNameLength}
+                    onSaved={(created) => {
+                      setUserTemplates((current) => [
+                        created,
+                        ...(current ?? []),
+                      ]);
+                    }}
+                  />
+                )}
+                {source === "template" && (
+                  <CuratedPanel
+                    templates={templateList}
+                    selectedId={templateId}
+                    onSelect={setTemplateId}
+                  />
+                )}
+                {source === "saved" && (
+                  <SavedPanel
+                    templates={userTemplates}
+                    isLoading={isLoadingTemplates}
+                    failed={templatesFailed}
+                    selectedId={templateId}
+                    missing={savedMissing}
+                    maxNameLength={maxNameLength}
+                    onSelect={setTemplateId}
+                    onRetry={() => {
+                      void loadUserTemplates();
+                    }}
+                    onChanged={setUserTemplates}
+                    onDeselect={() => {
+                      setTemplateId("");
+                    }}
+                  />
+                )}
+              </div>
             </AutoHeight>
           </Field>
 
@@ -842,129 +840,111 @@ export function CookieBotEnrolDialog({
               aria-expanded={adjustOpen}
               className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
             >
-              <motion.span
-                aria-hidden="true"
-                animate={{ rotate: adjustOpen ? 90 : 0 }}
-                transition={{
-                  duration: reduceMotion ? 0 : 0.16,
-                  ease: MOTION_EASE_OUT,
-                }}
-                className="inline-flex shrink-0"
-              >
+              <AnimatedDisclosureChevron open={adjustOpen}>
                 <LuChevronRight className="size-3.5" />
-              </motion.span>
+              </AnimatedDisclosureChevron>
               {t("cookieBot.enrol.adjust")}
             </button>
 
             <AutoHeight deps={[adjustOpen, presetList.length, slots]}>
-              <AnimatePresence initial={false}>
-                {adjustOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                    transition={{
-                      duration: reduceMotion ? 0.15 : 0.16,
-                      ease: MOTION_EASE_OUT,
-                    }}
-                    className="flex flex-col gap-3 border-t border-border px-3 py-3"
-                  >
-                    <Field label={t("cookieBot.enrol.calendarLabel")}>
-                      <div className="flex flex-col gap-1.5">
-                        {slots.map((slot, index) => (
-                          <SlotRow
-                            key={slot.key}
-                            slot={slot}
-                            duplicate={duplicateSlotKeys.has(slot.key)}
-                            canRemove={slots.length > 1}
-                            onChange={(next) => {
-                              setSlots((current) =>
-                                current.map((item, at) =>
-                                  at === index ? { ...item, ...next } : item,
-                                ),
-                              );
-                            }}
-                            onRemove={() => {
-                              setSlots((current) =>
-                                current.filter((_, at) => at !== index),
-                              );
-                            }}
-                          />
-                        ))}
-                      </div>
-                      {slots.length < maxSlots ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="mt-1 h-6 w-fit gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            // The new row copies the last one's days and lands
-                            // an hour later: a second run at the same minute as
-                            // the first is the one thing it must not default to.
-                            const last = slots[slots.length - 1];
-                            const minute = clockToMinutes(last?.runAt ?? "");
-                            setSlots((current) => [
-                              ...current,
-                              makeSlot(
-                                last?.daysMask ?? DAYS_NIGHTLY,
-                                minutesToClock((minute ?? 0) + 60),
-                              ),
-                            ]);
-                          }}
-                        >
-                          <LuPlus className="size-3" />
-                          {t("cookieBot.enrol.addSlot")}
-                        </Button>
-                      ) : (
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {t("cookieBot.enrol.slotsFull", { max: maxSlots })}
-                        </p>
-                      )}
-                      <p className="text-[11px] text-muted-foreground">
-                        {t("cookieBot.enrol.timeHint")}
-                      </p>
-                    </Field>
-
-                    <Field label={t("cookieBot.enrol.maxMinutesLabel")}>
-                      <Input
-                        type="number"
-                        min={MIN_MAX_MINUTES}
-                        max={MAX_MAX_MINUTES}
-                        value={String(maxMinutes)}
-                        onChange={(event) => {
-                          setMaxMinutesTouched(true);
-                          setMaxMinutes(Number(event.target.value));
+              <AnimatedDisclosureContent
+                open={adjustOpen}
+                className="flex flex-col gap-3 border-t border-border px-3 py-3"
+              >
+                <Field label={t("cookieBot.enrol.calendarLabel")}>
+                  <div className="flex flex-col gap-1.5">
+                    {slots.map((slot, index) => (
+                      <SlotRow
+                        key={slot.key}
+                        slot={slot}
+                        duplicate={duplicateSlotKeys.has(slot.key)}
+                        canRemove={slots.length > 1}
+                        onChange={(next) => {
+                          setSlots((current) =>
+                            current.map((item, at) =>
+                              at === index ? { ...item, ...next } : item,
+                            ),
+                          );
                         }}
-                        className="h-8 w-24 tabular-nums"
+                        onRemove={() => {
+                          setSlots((current) =>
+                            current.filter((_, at) => at !== index),
+                          );
+                        }}
                       />
-                    </Field>
+                    ))}
+                  </div>
+                  {slots.length < maxSlots ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 h-6 w-fit gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        // The new row copies the last one's days and lands
+                        // an hour later: a second run at the same minute as
+                        // the first is the one thing it must not default to.
+                        const last = slots[slots.length - 1];
+                        const minute = clockToMinutes(last?.runAt ?? "");
+                        setSlots((current) => [
+                          ...current,
+                          makeSlot(
+                            last?.daysMask ?? DAYS_NIGHTLY,
+                            minutesToClock((minute ?? 0) + 60),
+                          ),
+                        ]);
+                      }}
+                    >
+                      <LuPlus className="size-3" />
+                      {t("cookieBot.enrol.addSlot")}
+                    </Button>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {t("cookieBot.enrol.slotsFull", { max: maxSlots })}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("cookieBot.enrol.timeHint")}
+                  </p>
+                </Field>
 
-                    {presetList.length > 0 && (
-                      <Field label={t("cookieBot.enrol.intensityLabel")}>
-                        <AnimatedTabs
-                          value={preset}
-                          onValueChange={(value) => {
-                            setPreset(value);
-                            setMaxMinutesTouched(false);
-                          }}
-                        >
-                          <AnimatedTabsList>
-                            {presetList.map((item) => (
-                              <AnimatedTabsTrigger
-                                key={item.id}
-                                value={item.id}
-                                className="h-7 px-2.5 text-xs"
-                              >
-                                {presetLabel(t, item)}
-                              </AnimatedTabsTrigger>
-                            ))}
-                          </AnimatedTabsList>
-                        </AnimatedTabs>
-                      </Field>
-                    )}
-                  </motion.div>
+                <Field label={t("cookieBot.enrol.maxMinutesLabel")}>
+                  <Input
+                    type="number"
+                    min={MIN_MAX_MINUTES}
+                    max={MAX_MAX_MINUTES}
+                    value={String(maxMinutes)}
+                    onChange={(event) => {
+                      setMaxMinutesTouched(true);
+                      setMaxMinutes(Number(event.target.value));
+                    }}
+                    className="h-8 w-24 tabular-nums"
+                  />
+                </Field>
+
+                {presetList.length > 0 && (
+                  <Field label={t("cookieBot.enrol.intensityLabel")}>
+                    <AnimatedTabs
+                      value={preset}
+                      onValueChange={(value) => {
+                        setPreset(value);
+                        setMaxMinutesTouched(false);
+                      }}
+                    >
+                      <AnimatedTabsList>
+                        {presetList.map((item) => (
+                          <AnimatedTabsTrigger
+                            key={item.id}
+                            value={item.id}
+                            className="h-7 px-2.5 text-xs"
+                          >
+                            {presetLabel(t, item)}
+                          </AnimatedTabsTrigger>
+                        ))}
+                      </AnimatedTabsList>
+                    </AnimatedTabs>
+                  </Field>
                 )}
-              </AnimatePresence>
+              </AnimatedDisclosureContent>
             </AutoHeight>
           </div>
 
@@ -1655,8 +1635,8 @@ function SavedPanel({
 
 /**
  * Why a proxy is not optional, at the point where the refusal happens. A run
- * without one leaves the fleet's own datacenter address, and hours of traffic
- * from a hosting ASN costs the profile more than never warming it.
+ * without one leaves the remote host's own datacenter address, and hours of
+ * traffic from a hosting ASN costs the profile more than never warming it.
  */
 function ExitNodeHint() {
   const { t } = useTranslation();

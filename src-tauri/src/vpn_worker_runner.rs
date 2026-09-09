@@ -5,7 +5,9 @@ use crate::vpn_worker_storage::{
   get_vpn_worker_config, list_vpn_worker_configs, save_vpn_worker_config, vpn_worker_config_path,
   VpnWorkerConfig,
 };
+use std::collections::HashMap;
 use std::process::Stdio;
+use std::sync::{LazyLock, Mutex};
 
 const VPN_WORKER_POLL_INTERVAL_MS: u64 = 100;
 const VPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 30_000;
@@ -31,6 +33,23 @@ async fn vpn_worker_accepting_connections(config: &VpnWorkerConfig) -> bool {
     .await,
     Ok(Ok(_))
   )
+}
+
+/// Is this worker's recorded process still the same live process?
+///
+/// Identity-checked whenever a start time was recorded, so a PID the OS has
+/// since recycled reads as dead instead of as a live tunnel. Configs written
+/// before `pid_start_time` existed fall back to a bare existence check, so the
+/// first run after an upgrade does not declare every surviving worker dead.
+/// Mirrors `proxy_storage::browser_owner_is_alive`.
+pub fn vpn_worker_alive(config: &VpnWorkerConfig) -> bool {
+  let Some(pid) = config.pid else {
+    return false;
+  };
+  match config.pid_start_time {
+    Some(start_time) => crate::proxy_storage::process_identity_matches(pid, Some(start_time)),
+    None => is_process_running(pid),
+  }
 }
 
 fn worker_log_path(id: &str) -> std::path::PathBuf {
@@ -61,7 +80,7 @@ async fn wait_for_vpn_worker_ready(
     .await;
 
     if let Some(updated_config) = get_vpn_worker_config(id) {
-      let process_running = updated_config.pid.map(is_process_running).unwrap_or(false);
+      let process_running = vpn_worker_alive(&updated_config);
 
       if !process_running && attempts > 2 {
         let log_output = read_worker_log(id);
@@ -77,7 +96,7 @@ async fn wait_for_vpn_worker_ready(
     attempts += 1;
     if tokio::time::Instant::now() >= startup_deadline {
       if let Some(config) = get_vpn_worker_config(id) {
-        let process_running = config.pid.map(is_process_running).unwrap_or(false);
+        let process_running = vpn_worker_alive(&config);
         let log_output = read_worker_log(id);
         delete_vpn_worker_config(id);
         return Err(
@@ -106,12 +125,66 @@ async fn wait_for_vpn_worker_ready(
 /// `xray_worker_runner::XRAY_START_LOCK`.
 static VPN_START_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+/// How many in-flight launches currently hold a worker for each vpn_id.
+///
+/// A launch is invisible to `vpn_id_in_use_by_running_browser` until its
+/// browser PID is persisted, which happens seconds after the worker is adopted:
+/// past the fingerprint gate, the local proxy worker, the decrypted profile
+/// copy and the browser spawn. Without this, a sibling launch failing inside
+/// that window stopped the shared worker out from under the adopter.
+static VPN_LAUNCH_CLAIMS: LazyLock<Mutex<HashMap<String, usize>>> =
+  LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// The critical section is a map bump that cannot panic, so a poisoned lock
+/// carries no torn state worth refusing.
+fn launch_claims() -> std::sync::MutexGuard<'static, HashMap<String, usize>> {
+  VPN_LAUNCH_CLAIMS
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// One launch's hold on a VPN worker, taken while `VPN_START_LOCK` is held and
+/// released only when the launch scope ends. Strictly RAII: nothing increments
+/// the count outside `start_vpn_worker_tracked`, so a panicking launch cannot
+/// pin a worker up for good.
+pub struct VpnLaunchClaim {
+  vpn_id: String,
+}
+
+impl VpnLaunchClaim {
+  fn take(vpn_id: &str) -> Self {
+    *launch_claims().entry(vpn_id.to_string()).or_insert(0) += 1;
+    Self {
+      vpn_id: vpn_id.to_string(),
+    }
+  }
+}
+
+impl Drop for VpnLaunchClaim {
+  fn drop(&mut self) {
+    let mut claims = launch_claims();
+    if let Some(count) = claims.get_mut(&self.vpn_id) {
+      *count = count.saturating_sub(1);
+      if *count == 0 {
+        claims.remove(&self.vpn_id);
+      }
+    }
+  }
+}
+
+fn vpn_id_is_claimed_by_launch(vpn_id: &str) -> bool {
+  launch_claims().get(vpn_id).is_some_and(|count| *count > 0)
+}
+
 /// A started VPN worker plus whether *this* call spawned it.
 pub struct VpnWorkerStart {
   pub config: VpnWorkerConfig,
   /// False when an already-running worker was adopted. Only the creator may
   /// stop it while unwinding a failed launch.
   pub created: bool,
+  /// Held for the rest of the launch, so a sibling launch failing before this
+  /// one publishes its browser PID cannot stop the worker underneath it.
+  pub claim: VpnLaunchClaim,
 }
 
 /// Whether any profile with a live browser process is routing through this VPN.
@@ -119,6 +192,11 @@ pub struct VpnWorkerStart {
 /// Extracted from the startup sweep so the launch guard and the sweep agree on
 /// what "in use" means instead of each carrying its own copy.
 pub fn vpn_id_in_use_by_running_browser(vpn_id: &str) -> bool {
+  // A launch that has taken the worker but has not yet persisted its browser
+  // PID is invisible to the profile scan below, so consult the claims first.
+  if vpn_id_is_claimed_by_launch(vpn_id) {
+    return true;
+  }
   let Ok(profiles) = crate::profile::ProfileManager::instance().list_profiles() else {
     // Unable to tell — assume in use rather than tear down a live tunnel.
     return true;
@@ -146,33 +224,29 @@ pub async fn start_vpn_worker_tracked(
   crate::proxy_runner::ensure_sidecar_version().await?;
 
   for config in list_vpn_worker_configs() {
-    if let Some(pid) = config.pid {
-      if !is_process_running(pid) {
-        delete_vpn_worker_config(&config.id);
-      }
-    } else {
+    if !vpn_worker_alive(&config) {
       delete_vpn_worker_config(&config.id);
     }
   }
 
   // Check if a VPN worker for this vpn_id already exists and is running
   if let Some(existing) = find_vpn_worker_by_vpn_id(vpn_id) {
-    if let Some(pid) = existing.pid {
-      if is_process_running(pid) {
-        if vpn_worker_accepting_connections(&existing).await {
-          return Ok(VpnWorkerStart {
-            config: existing,
-            created: false,
-          });
-        }
-
-        return wait_for_vpn_worker_ready(&existing.id)
-          .await
-          .map(|config| VpnWorkerStart {
-            config,
-            created: false,
-          });
+    if vpn_worker_alive(&existing) {
+      if vpn_worker_accepting_connections(&existing).await {
+        return Ok(VpnWorkerStart {
+          config: existing,
+          created: false,
+          claim: VpnLaunchClaim::take(vpn_id),
+        });
       }
+
+      return wait_for_vpn_worker_ready(&existing.id)
+        .await
+        .map(|config| VpnWorkerStart {
+          config,
+          created: false,
+          claim: VpnLaunchClaim::take(vpn_id),
+        });
     }
     // Worker config exists but process is dead, clean up
     delete_vpn_worker_config(&existing.id);
@@ -266,6 +340,7 @@ pub async fn start_vpn_worker_tracked(
 
     let mut config_with_pid = config.clone();
     config_with_pid.pid = Some(pid);
+    config_with_pid.pid_start_time = crate::proxy_storage::resolve_process_start_time(pid);
     config_with_pid.local_port = Some(local_port);
     save_vpn_worker_config(&config_with_pid)?;
 
@@ -308,6 +383,7 @@ pub async fn start_vpn_worker_tracked(
 
     let mut config_with_pid = config.clone();
     config_with_pid.pid = Some(pid);
+    config_with_pid.pid_start_time = crate::proxy_storage::resolve_process_start_time(pid);
     config_with_pid.local_port = Some(local_port);
     save_vpn_worker_config(&config_with_pid)?;
 
@@ -319,6 +395,7 @@ pub async fn start_vpn_worker_tracked(
     .map(|config| VpnWorkerStart {
       config,
       created: true,
+      claim: VpnLaunchClaim::take(vpn_id),
     })
 }
 
@@ -327,26 +404,40 @@ pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error
 
   if let Some(config) = config {
     if let Some(pid) = config.pid {
-      #[cfg(unix)]
-      {
-        use std::process::Command;
-        let _ = Command::new("kill")
-          .arg("-TERM")
-          .arg(pid.to_string())
-          .output();
-      }
-      #[cfg(windows)]
-      {
-        use std::os::windows::process::CommandExt;
-        use std::process::Command;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let _ = Command::new("taskkill")
-          .args(["/F", "/PID", &pid.to_string()])
-          .creation_flags(CREATE_NO_WINDOW)
-          .output();
-      }
+      // Only a PID still pinned to the process this record was written for is
+      // ours to signal. A record with no start time predates the pinning and
+      // came from an earlier app run, so its PID cannot be verified either.
+      if crate::proxy_storage::process_identity_matches(pid, config.pid_start_time) {
+        #[cfg(unix)]
+        {
+          use std::process::Command;
+          let _ = Command::new("kill")
+            .arg("-TERM")
+            .arg(pid.to_string())
+            .output();
+        }
+        #[cfg(windows)]
+        {
+          use std::os::windows::process::CommandExt;
+          use std::process::Command;
+          const CREATE_NO_WINDOW: u32 = 0x08000000;
+          let _ = Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        }
 
-      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+      } else if is_process_running(pid) {
+        // Whatever holds the PID now is either an unrelated process or an
+        // unverifiable pre-upgrade worker; the record is forgotten instead. A
+        // real worker in the second case lingers until reboot, which beats
+        // terminating a stranger.
+        log::warn!(
+          "Not signalling VPN worker {id}: PID {pid} cannot be pinned to the recorded process (start time {:?}); forgetting the record",
+          config.pid_start_time
+        );
+      }
     }
 
     // Clean up temp config file
@@ -372,4 +463,68 @@ pub async fn stop_all_vpn_workers() -> Result<(), Box<dyn std::error::Error>> {
     let _ = stop_vpn_worker(&config.id).await;
   }
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn worker(pid: Option<u32>, pid_start_time: Option<u64>) -> VpnWorkerConfig {
+    VpnWorkerConfig {
+      id: "vpnw_test".to_string(),
+      vpn_id: "vpn_test".to_string(),
+      vpn_type: "wireguard".to_string(),
+      config_file_path: String::new(),
+      local_port: None,
+      local_url: None,
+      pid,
+      pid_start_time,
+    }
+  }
+
+  #[test]
+  fn a_recycled_pid_does_not_read_as_a_live_worker() {
+    let pid = std::process::id();
+    let start_time =
+      crate::proxy_storage::process_start_time(pid).expect("current process should be visible");
+
+    assert!(vpn_worker_alive(&worker(Some(pid), Some(start_time))));
+
+    // The same PID with a start time it cannot have: the worker that recorded
+    // it is gone and the OS handed its PID to something else.
+    assert!(!vpn_worker_alive(&worker(
+      Some(pid),
+      Some(start_time.saturating_add(1))
+    )));
+
+    // Written before the field existed, so bare existence is all the
+    // information the record carries. Upgrading must not reap live workers.
+    assert!(vpn_worker_alive(&worker(Some(pid), None)));
+
+    assert!(!vpn_worker_alive(&worker(None, None)));
+    assert!(!vpn_worker_alive(&worker(None, Some(start_time))));
+  }
+
+  #[test]
+  fn a_launch_claim_covers_the_worker_until_every_launch_ends() {
+    // A vpn_id private to this test, so a parallel test's claims are neither
+    // observed here nor disturbed by it.
+    let vpn_id = format!("vpn_claim_test_{}", rand::random::<u32>());
+
+    assert!(!vpn_id_is_claimed_by_launch(&vpn_id));
+
+    let creator = VpnLaunchClaim::take(&vpn_id);
+    assert!(vpn_id_is_claimed_by_launch(&vpn_id));
+
+    // An adopter joins, then the creator's launch fails: the worker is still
+    // covered, which is what stops the creator's guard tearing it down.
+    let adopter = VpnLaunchClaim::take(&vpn_id);
+    drop(creator);
+    assert!(vpn_id_is_claimed_by_launch(&vpn_id));
+
+    // With no launch left holding it, nothing keeps the worker up. A creator
+    // whose launch fails alone must still be able to stop what it started.
+    drop(adopter);
+    assert!(!vpn_id_is_claimed_by_launch(&vpn_id));
+  }
 }

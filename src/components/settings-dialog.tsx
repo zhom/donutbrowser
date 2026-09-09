@@ -7,6 +7,7 @@ import Color from "color";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
+import { DataRootSetting } from "@/components/data-root-setting";
 import { DnsBlocklistDialog } from "@/components/dns-blocklist-dialog";
 import { LoadingButton } from "@/components/loading-button";
 import { useTheme } from "@/components/theme-provider";
@@ -23,6 +24,7 @@ import {
   ColorPickerOutput,
   ColorPickerSelection,
 } from "@/components/ui/color-picker";
+import { ConfirmationMark } from "@/components/ui/confirmation-mark";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +52,8 @@ import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { translateBackendError } from "@/lib/backend-errors";
+import { effectivePlanOf } from "@/lib/entitlements";
 import {
   applyThemeColors,
   clearThemeColors,
@@ -76,6 +80,17 @@ interface AppSettings {
   keep_decrypted_profiles_in_ram?: boolean;
   fingerprint_gate_disabled?: boolean;
   vpn_extension_warning_disabled?: boolean;
+  trash_retention_days?: number;
+}
+
+/** Retention choices offered for the trash, in days. The backend clamps to 1..=365. */
+const TRASH_RETENTION_OPTIONS = [7, 14, 30, 90, 365];
+const DEFAULT_TRASH_RETENTION_DAYS = 30;
+
+/** The offered choices, plus the stored value when it is not one of them. */
+function trashRetentionOptions(current: number): number[] {
+  if (TRASH_RETENTION_OPTIONS.includes(current)) return TRASH_RETENTION_OPTIONS;
+  return [...TRASH_RETENTION_OPTIONS, current].sort((a, b) => a - b);
 }
 
 interface CustomThemeState {
@@ -125,8 +140,13 @@ export function SettingsDialog({
     colors: {},
   });
   const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [search, setSearch] = useState("");
+  const [jumpTo, setJumpTo] = useState<string | null>(null);
+  const sectionsRef = useRef<HTMLFieldSetElement>(null);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [isClearingTraffic, setIsClearingTraffic] = useState(false);
@@ -172,7 +192,7 @@ export function SettingsDialog({
   // Encryption is available to everyone except team members who aren't owners
   const canUseEncryption =
     cloudUser == null ||
-    cloudUser.plan !== "team" ||
+    effectivePlanOf(cloudUser) !== "team" ||
     cloudUser.teamRole === "owner";
   const {
     currentLanguage,
@@ -507,6 +527,7 @@ export function SettingsDialog({
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       // Update settings with current custom theme state
       let settingsToSave: AppSettings = {
@@ -540,6 +561,8 @@ export function SettingsDialog({
       // Update settings with any generated tokens
       setSettings(savedSettings);
       settingsToSave = savedSettings;
+      setOriginalSettings(savedSettings);
+      originalSettingsRef.current = savedSettings;
       // Pass the actual theme value through. Calling setTheme("dark") here
       // when the user is on "custom" pushes the provider state to "dark",
       // which triggers its clear-custom-vars effect and wipes the CSS
@@ -589,9 +612,13 @@ export function SettingsDialog({
       // just-SAVED theme, not the pre-save one (which reverted the theme
       // until app restart).
       originalSettingsRef.current = settingsToSave;
-      onClose();
+      setSaved(true);
+      if (!subPage) onClose();
     } catch (error) {
       console.error("Failed to save settings:", error);
+      const message = translateBackendError(t, error);
+      setSaveError(message);
+      showErrorToast(t("appFeedback.saveFailed"), { description: message });
     } finally {
       setIsSaving(false);
     }
@@ -603,19 +630,22 @@ export function SettingsDialog({
     selectedLanguage,
     originalLanguage,
     changeLanguage,
+    subPage,
+    t,
   ]);
 
   const updateSetting = useCallback(
     (
       key: keyof AppSettings,
-      value: boolean | string | Record<string, string> | undefined,
+      value: boolean | number | string | Record<string, string> | undefined,
     ) => {
+      setSaveError(null);
       setSettings((prev) => ({ ...prev, [key]: value as unknown as never }));
     },
     [],
   );
 
-  const handleClose = useCallback(() => {
+  const discardChanges = useCallback(() => {
     // Restore original theme when closing without saving
     // Only a revert the user can see is worth animating.
     const changed = originalSettings.theme !== settings.theme;
@@ -626,25 +656,29 @@ export function SettingsDialog({
       setTheme(originalSettings.theme, { animate: changed });
     }
 
-    // Reset custom theme state to original
-    if (originalSettings.theme === "custom" && originalSettings.custom_theme) {
-      const matchingTheme = getThemeByColors(originalSettings.custom_theme);
-      setCustomThemeState({
-        selectedThemeId: matchingTheme?.id ?? null,
-        colors: originalSettings.custom_theme,
-      });
-    }
-
-    onClose();
+    setSettings(originalSettings);
+    setSelectedLanguage(originalLanguage);
+    setCustomThemeState({
+      selectedThemeId: originalSettings.custom_theme
+        ? (getThemeByColors(originalSettings.custom_theme)?.id ?? null)
+        : null,
+      colors: originalSettings.custom_theme ?? {},
+    });
+    setSaveError(null);
+    setSaved(false);
   }, [
-    originalSettings.theme,
-    originalSettings.custom_theme,
     applyCustomTheme,
     clearCustomTheme,
-    onClose,
+    originalSettings,
+    originalLanguage,
     setTheme,
     settings.theme,
   ]);
+
+  const handleClose = useCallback(() => {
+    discardChanges();
+    onClose();
+  }, [discardChanges, onClose]);
 
   // Only clear custom theme when switching away from custom, don't apply live
   // changes. Gated on the async settings load: before it resolves the state
@@ -758,22 +792,108 @@ export function SettingsDialog({
     getPermissionDescription,
   ]);
 
-  // Check if settings have changed (excluding default browser setting)
-  const hasChanges =
+  const draftColors =
+    settings.theme === "custom"
+      ? customThemeState.colors
+      : (settings.custom_theme ?? {});
+  const savedColors = originalSettings.custom_theme ?? {};
+  const themeChanged =
     settings.theme !== originalSettings.theme ||
-    settings.api_enabled !== originalSettings.api_enabled ||
-    selectedLanguage !== originalLanguage ||
-    (settings.theme === "custom" &&
-      JSON.stringify(customThemeState.colors) !==
-        JSON.stringify(originalSettings.custom_theme ?? {})) ||
-    (settings.theme !== "custom" &&
-      JSON.stringify(settings.custom_theme ?? {}) !==
-        JSON.stringify(originalSettings.custom_theme ?? {})) ||
-    settings.disable_auto_updates !== originalSettings.disable_auto_updates ||
-    settings.fingerprint_gate_disabled !==
-      originalSettings.fingerprint_gate_disabled ||
-    settings.vpn_extension_warning_disabled !==
-      originalSettings.vpn_extension_warning_disabled;
+    Object.keys(draftColors).length !== Object.keys(savedColors).length ||
+    Object.entries(draftColors).some(
+      ([key, value]) => savedColors[key] !== value,
+    );
+  const pendingChanges = [
+    ...(themeChanged ? [t("settings.appearance.title")] : []),
+    ...(selectedLanguage !== originalLanguage
+      ? [t("settings.language.title")]
+      : []),
+    ...(
+      [
+        ["api_enabled", "settings.integrations.title"],
+        ["disable_auto_updates", "settings.disableAutoUpdates"],
+        [
+          "keep_decrypted_profiles_in_ram",
+          "settings.keepDecryptedProfilesInRam",
+        ],
+        ["fingerprint_gate_disabled", "settings.privacy.consistencyWarning"],
+        [
+          "vpn_extension_warning_disabled",
+          "settings.privacy.vpnExtensionWarning",
+        ],
+      ] as const
+    )
+      .filter(
+        ([key]) => Boolean(settings[key]) !== Boolean(originalSettings[key]),
+      )
+      .map(([, key]) => t(key)),
+    ...((settings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS) !==
+    (originalSettings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS)
+      ? [t("settings.trashRetention")]
+      : []),
+  ];
+  const hasChanges = pendingChanges.length > 0;
+  const sections = [
+    ["appearance", "settings.appearance.title", ["settings.appearance"]],
+    ["language", "settings.language.title", ["settings.language"]],
+    ...(!systemInfo?.portable
+      ? [
+          [
+            "default",
+            "settings.defaultBrowser.title",
+            ["settings.defaultBrowser"],
+          ],
+        ]
+      : []),
+    ...(isMacOS
+      ? [
+          [
+            "permissions",
+            "settings.permissions.title",
+            ["settings.permissions"],
+          ],
+        ]
+      : []),
+    ["integrations", "settings.integrations.title", ["settings.integrations"]],
+    ["dns", "dnsBlocklist.title", ["dnsBlocklist"]],
+    ["encryption", "settings.encryption.title", ["settings.encryption"]],
+    ["commercial", "settings.commercial.title", ["settings.commercial"]],
+    ["dataRoot", "settings.dataRoot.title", ["settings.dataRoot"]],
+    [
+      "advanced",
+      "settings.advanced.title",
+      [
+        "settings.advanced",
+        "settings.disableAutoUpdates",
+        "settings.disableAutoUpdatesDescription",
+        "settings.keepDecryptedProfilesInRam",
+        "settings.keepDecryptedProfilesInRamDescription",
+        "settings.trashRetention",
+        "settings.trashRetentionDescription",
+        "settings.privacy",
+      ],
+    ],
+  ] as Array<[string, string, string[]]>;
+  const needle = search.trim().toLocaleLowerCase();
+  const matchingSections = sections.filter(([, , keys]) => {
+    const text = keys
+      .map((key) => JSON.stringify(t(key, { returnObjects: true })))
+      .join(" ")
+      .toLocaleLowerCase();
+    return needle.split(/\s+/).every((word) => text.includes(word));
+  });
+  const sectionVisible = (id: string) =>
+    matchingSections.some(([key]) => key === id);
+
+  useEffect(() => {
+    if (!jumpTo) return;
+    const section = sectionsRef.current?.querySelector<HTMLElement>(
+      `[data-settings-section="${jumpTo}"]`,
+    );
+    section?.scrollIntoView({ block: "start" });
+    section?.focus({ preventScroll: true });
+    setJumpTo(null);
+  }, [jumpTo]);
 
   return (
     <>
@@ -785,6 +905,43 @@ export function SettingsDialog({
             </DialogHeader>
           )}
 
+          <div className="mx-auto flex w-full max-w-4xl shrink-0 flex-col gap-2 pb-3">
+            <Input
+              data-slot="settings-search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                // Escape empties the filter before it can close the page.
+                if (event.key === "Escape" && search) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSearch("");
+                }
+              }}
+              placeholder={t("appFeedback.searchSettings")}
+              aria-label={t("appFeedback.searchSettings")}
+              className="h-8"
+            />
+            <nav
+              aria-label={t("settings.title")}
+              className="flex flex-wrap gap-x-3 gap-y-1"
+            >
+              {sections.map(([id, label]) => (
+                <button
+                  type="button"
+                  key={id}
+                  onClick={() => {
+                    setSearch("");
+                    setJumpTo(id);
+                  }}
+                  className="rounded-sm py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {t(label)}
+                </button>
+              ))}
+            </nav>
+          </div>
+
           {/* The scroller spans the full width (so the wheel works over the
               side gutters); the width cap lives on the inner column. Fusing
               them was the dead-wheel-zone bug. */}
@@ -794,14 +951,21 @@ export function SettingsDialog({
               subPage ? "py-2" : "py-4",
             )}
           >
-            <div
+            <fieldset
+              ref={sectionsRef}
+              disabled={isSaving || isLoading}
               className={cn(
-                "grid gap-6",
+                "grid min-w-0 gap-6 pb-4",
                 subPage && "mx-auto w-full max-w-4xl",
               )}
             >
               {/* Appearance Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="appearance"
+                tabIndex={-1}
+                hidden={!sectionVisible("appearance")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("settings.appearance.title")}
                 </Label>
@@ -973,7 +1137,12 @@ export function SettingsDialog({
               </div>
 
               {/* Language Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="language"
+                tabIndex={-1}
+                hidden={!sectionVisible("language")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("settings.language.title")}
                 </Label>
@@ -1014,7 +1183,12 @@ export function SettingsDialog({
 
               {/* Default Browser Section - hidden in portable mode */}
               {!systemInfo?.portable && (
-                <div className="space-y-4">
+                <div
+                  data-settings-section="default"
+                  tabIndex={-1}
+                  hidden={!sectionVisible("default")}
+                  className="scroll-mt-2 space-y-4 focus:outline-none"
+                >
                   <div className="flex items-center justify-between">
                     <Label className="text-base font-medium">
                       {t("settings.defaultBrowser.title")}
@@ -1025,6 +1199,9 @@ export function SettingsDialog({
                         : t("common.status.inactive")}
                     </Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("appFeedback.appliesImmediately")}
+                  </p>
 
                   <LoadingButton
                     isLoading={isSettingDefault}
@@ -1050,10 +1227,18 @@ export function SettingsDialog({
 
               {/* Permissions Section - Only show on macOS */}
               {isMacOS && (
-                <div className="space-y-4">
+                <div
+                  data-settings-section="permissions"
+                  tabIndex={-1}
+                  hidden={!sectionVisible("permissions")}
+                  className="scroll-mt-2 space-y-4 focus:outline-none"
+                >
                   <Label className="text-base font-medium">
                     {t("settings.permissions.title")}
                   </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("appFeedback.appliesImmediately")}
+                  </p>
 
                   {isLoadingPermissions ? (
                     <div className="text-sm text-muted-foreground">
@@ -1112,7 +1297,12 @@ export function SettingsDialog({
               )}
 
               {/* Integrations Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="integrations"
+                tabIndex={-1}
+                hidden={!sectionVisible("integrations")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("settings.integrations.title")}
                 </Label>
@@ -1129,7 +1319,12 @@ export function SettingsDialog({
               </div>
 
               {/* DNS Blocklist Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="dns"
+                tabIndex={-1}
+                hidden={!sectionVisible("dns")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("dnsBlocklist.title")}
                 </Label>
@@ -1146,10 +1341,18 @@ export function SettingsDialog({
               </div>
 
               {/* Sync Encryption Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="encryption"
+                tabIndex={-1}
+                hidden={!sectionVisible("encryption")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("settings.encryption.title")}
                 </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("appFeedback.appliesImmediately")}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {t("settings.encryption.description")}
                 </p>
@@ -1311,13 +1514,19 @@ export function SettingsDialog({
               </div>
 
               {/* Commercial License Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="commercial"
+                tabIndex={-1}
+                hidden={!sectionVisible("commercial")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("settings.commercial.title")}
                 </Label>
 
                 <div className="flex items-center justify-between rounded-md border bg-muted/40 p-3">
-                  {cloudUser != null && cloudUser.plan !== "free" ? (
+                  {cloudUser != null &&
+                  effectivePlanOf(cloudUser) !== "free" ? (
                     // Paid Donut plan supersedes the local commercial trial —
                     // the trial only exists to gate commercial use until the
                     // user subscribes. Showing "Trial expired" to a paying
@@ -1326,7 +1535,7 @@ export function SettingsDialog({
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-success-text">
                         {t("settings.commercial.subscriptionActive", {
-                          plan: cloudUser.plan,
+                          plan: effectivePlanOf(cloudUser),
                         })}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -1358,8 +1567,26 @@ export function SettingsDialog({
                 </div>
               </div>
 
+              {/* Data directory Section */}
+              <div
+                data-settings-section="dataRoot"
+                tabIndex={-1}
+                hidden={!sectionVisible("dataRoot")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
+                <Label className="text-base font-medium">
+                  {t("settings.dataRoot.title")}
+                </Label>
+                <DataRootSetting />
+              </div>
+
               {/* Advanced Section */}
-              <div className="space-y-4">
+              <div
+                data-settings-section="advanced"
+                tabIndex={-1}
+                hidden={!sectionVisible("advanced")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
                 <Label className="text-base font-medium">
                   {t("settings.advanced.title")}
                 </Label>
@@ -1412,6 +1639,44 @@ export function SettingsDialog({
                       {t("settings.keepDecryptedProfilesInRamDescription")}
                     </p>
                   </div>
+                </div>
+
+                <div className="grid gap-2 rounded-lg border p-3">
+                  <Label
+                    htmlFor="trash-retention-select"
+                    className="text-sm font-medium"
+                  >
+                    {t("settings.trashRetention")}
+                  </Label>
+                  <Select
+                    value={String(
+                      settings.trash_retention_days ??
+                        DEFAULT_TRASH_RETENTION_DAYS,
+                    )}
+                    onValueChange={(value) => {
+                      updateSetting("trash_retention_days", Number(value));
+                    }}
+                  >
+                    <SelectTrigger
+                      id="trash-retention-select"
+                      data-slot="trash-retention-select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {trashRetentionOptions(
+                        settings.trash_retention_days ??
+                          DEFAULT_TRASH_RETENTION_DAYS,
+                      ).map((days) => (
+                        <SelectItem key={days} value={String(days)}>
+                          {t("settings.trashRetentionDays", { count: days })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.trashRetentionDescription")}
+                  </p>
                 </div>
 
                 <LoadingButton
@@ -1527,19 +1792,75 @@ export function SettingsDialog({
                 </div>
               </div>
 
+              {matchingSections.length === 0 && (
+                <p role="status" className="py-6 text-sm text-muted-foreground">
+                  {t("common.noResults")}
+                </p>
+              )}
               {/* System Info */}
-              {systemInfo && (
+              {systemInfo && !needle && (
                 <div className="border-t pt-2">
                   <p className="font-mono text-xs whitespace-pre-line text-muted-foreground select-all">
                     {`Donut Browser ${systemInfo.app_version}\n${systemInfo.os} ${systemInfo.arch}${systemInfo.portable ? " (portable)" : ""}`}
                   </p>
                 </div>
               )}
-            </div>
+            </fieldset>
           </div>
 
+          <div
+            data-slot="settings-feedback"
+            className="mx-auto w-full max-w-4xl shrink-0 py-2 text-xs"
+          >
+            {saveError ? (
+              <p role="alert" className="break-words text-destructive-text">
+                {saveError}
+              </p>
+            ) : (
+              <p
+                role="status"
+                className="flex min-h-5 items-center gap-2 text-muted-foreground"
+              >
+                {!hasChanges && saved && <ConfirmationMark />}
+                {isLoading
+                  ? t("common.buttons.loading")
+                  : isSaving
+                    ? t("common.buttons.saving")
+                    : hasChanges
+                      ? t("appFeedback.pendingChanges", {
+                          count: pendingChanges.length,
+                        })
+                      : saved
+                        ? t("common.buttons.saved")
+                        : t("appFeedback.noChanges")}
+              </p>
+            )}
+            {hasChanges && (
+              <details className="mt-1">
+                <summary className="cursor-pointer py-1 font-medium">
+                  {t("appFeedback.reviewChanges")}
+                </summary>
+                <ul className="max-h-28 overflow-y-auto py-1">
+                  {pendingChanges.map((label) => (
+                    <li key={label} className="py-0.5">
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
           {subPage ? (
-            <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 border-t border-border pt-2">
+            <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                data-slot="settings-discard"
+                onClick={discardChanges}
+                disabled={!hasChanges || isSaving}
+              >
+                {t("appFeedback.discardChanges")}
+              </Button>
               <LoadingButton
                 size="sm"
                 isLoading={isSaving}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -15,6 +15,10 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { crc32 } from "node:zlib";
+import {
+  WAYFERN_DOWNLOAD_CLIENT_TIMEOUT_MS,
+  WAYFERN_DOWNLOAD_TIMEOUT_MS,
+} from "./limits.mjs";
 
 export const TEST_BROWSER_VERSION = "150.0.7871.100";
 
@@ -29,6 +33,43 @@ export function defaultWayfernPath(projectRoot) {
         fixtureRoot,
         process.platform === "win32" ? "Wayfern.exe" : "wayfern",
       );
+}
+
+/**
+ * Where the cache fixture records which PUBLISHED version it was installed for.
+ *
+ * The bundle's own `CFBundleShortVersionString` cannot answer that question: a
+ * published version and the version stamped inside the bundle it serves do not
+ * always agree, and the app keys everything (download registry, profile
+ * `version`, release types) off the PUBLISHED string. Comparing the bundle's
+ * own version against the published one would therefore call an up-to-date
+ * fixture stale and re-download 1 GB on every single run.
+ */
+function fixtureStampPath(projectRoot) {
+  return path.join(
+    path.dirname(defaultWayfernPath(projectRoot)),
+    "published-version.txt",
+  );
+}
+
+/**
+ * The published version the cache fixture stands for, or `null` when there is
+ * no fixture.
+ *
+ * Falls back to the bundle's own version when no stamp is present, which is
+ * what a hand-installed fixture looks like: it is only right when the two
+ * agree, and when they do not the fixture is replaced, which is the safe way
+ * to be wrong.
+ */
+export function cachedFixtureVersion(projectRoot) {
+  const bundle = defaultWayfernPath(projectRoot);
+  if (!existsSync(bundle)) return null;
+  const stamp = fixtureStampPath(projectRoot);
+  if (existsSync(stamp)) {
+    const recorded = readFileSync(stamp, "utf8").trim();
+    if (recorded) return recorded;
+  }
+  return inspectWayfern(bundle).version;
 }
 
 export function wayfernExecutable(bundlePath) {
@@ -80,10 +121,57 @@ async function cloneAppBundle(source, destination) {
   }
 }
 
+/** Where the app itself resolves the current Wayfern build (api_client.rs). */
+const WAYFERN_RELEASE_URL = "https://donutbrowser.com/wayfern.json";
+
+/**
+ * The newest published Wayfern version, read from the same manifest the app
+ * reads.
+ *
+ * Deliberately NOT asked of a running app session. Seeding a browser into a
+ * session's data root only works before that session starts: a running app
+ * runs `cleanup_unused_binaries`, which deletes any binary directory no
+ * profile references, and a just-seeded fixture is exactly that. Resolving the
+ * version over plain HTTP keeps the seed ahead of app startup.
+ */
+async function publishedWayfernVersion() {
+  const response = await fetch(WAYFERN_RELEASE_URL, {
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert.ok(
+    response.ok,
+    `Could not read ${WAYFERN_RELEASE_URL}: HTTP ${response.status}`,
+  );
+  const manifest = await response.json();
+  assert.ok(
+    typeof manifest.version === "string" && manifest.version,
+    `No Wayfern version published at ${WAYFERN_RELEASE_URL}`,
+  );
+  return manifest.version;
+}
+
+async function downloadWayfern(app, version) {
+  await app.session.setTimeouts({ script: WAYFERN_DOWNLOAD_TIMEOUT_MS });
+  try {
+    await app.invoke(
+      "download_browser",
+      { browserStr: "wayfern", version },
+      WAYFERN_DOWNLOAD_CLIENT_TIMEOUT_MS,
+    );
+  } finally {
+    await app.session.setTimeouts();
+  }
+}
+
+/**
+ * Put the build this session just downloaded into the cache fixture, in place
+ * of whatever build the cache held before. The swap goes through a staging
+ * copy and renames, so a suite that dies mid-copy leaves the old fixture or
+ * the new one on disk, never a half-written bundle.
+ */
 async function cacheDownloadedWayfern(app, projectRoot, version) {
   if (process.env.DONUT_E2E_WAYFERN_PATH) return;
   const destination = defaultWayfernPath(projectRoot);
-  if (existsSync(destination)) return;
 
   const installDir = path.join(
     app.dataRoot,
@@ -100,7 +188,9 @@ async function cacheDownloadedWayfern(app, projectRoot, version) {
           process.platform === "win32" ? "wayfern.exe" : "wayfern",
         );
   const staging = `${destination}.tmp-${process.pid}`;
+  const retired = `${destination}.stale-${process.pid}`;
   await rm(staging, { recursive: true, force: true });
+  await rm(retired, { recursive: true, force: true });
   try {
     if (process.platform === "darwin") {
       await cloneAppBundle(source, staging);
@@ -109,10 +199,25 @@ async function cacheDownloadedWayfern(app, projectRoot, version) {
       await copyFile(source, staging);
       if (process.platform !== "win32") await chmod(staging, 0o755);
     }
+    if (existsSync(destination)) await rename(destination, retired);
     await rename(staging, destination);
+    // Stamped only after the bundle is in place, so an interrupted swap can
+    // never leave a stamp claiming a version the fixture does not hold.
+    await writeFile(fixtureStampPath(projectRoot), `${version}\n`);
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
+    if (!existsSync(destination) && existsSync(retired)) {
+      await rename(retired, destination);
+    }
     if (!existsSync(destination)) throw error;
+    // The session itself runs the build it downloaded; only the cache is
+    // behind, and the next run resolves the published version again and
+    // replaces it then.
+    console.warn(
+      `[donut-e2e] Could not refresh the Wayfern fixture cache: ${error}`,
+    );
+  } finally {
+    await rm(retired, { recursive: true, force: true });
   }
 }
 
@@ -160,36 +265,46 @@ export async function seedWayfern(dataRoot, wayfern) {
   return installDir;
 }
 
+/**
+ * Make the newest published Wayfern available to `app` and report the version
+ * it will run.
+ *
+ * `DONUT_E2E_WAYFERN_PATH` pins an explicit bundle and is used as given: that
+ * is how a locally built browser gets under test. Without it the suite runs
+ * the build the product would offer today, always. The ignored cache fixture
+ * only ever saves the download: it is used when it holds exactly that build
+ * and replaced when it holds any other, so a cache filled months ago can never
+ * quietly keep an old browser under test.
+ */
 export async function prepareWayfern(app, projectRoot) {
   const localBundle = defaultWayfernPath(projectRoot);
-  if (existsSync(localBundle)) {
+  if (process.env.DONUT_E2E_WAYFERN_PATH) {
     const wayfern = inspectWayfern(localBundle);
     await seedWayfern(app.dataRoot, wayfern);
-    return { version: wayfern.version, source: "local fixture" };
+    return { version: wayfern.version, source: "pinned fixture" };
+  }
+
+  const version = await publishedWayfernVersion();
+  const cachedVersion = cachedFixtureVersion(projectRoot);
+  if (cachedVersion === version) {
+    // Seeded under the PUBLISHED version, not the bundle's own, because that
+    // is the string the app itself would have registered had it downloaded
+    // this build, and what every later `version` assertion compares against.
+    // Seeded BEFORE the app starts, or its unused-binary cleanup deletes it.
+    await seedWayfern(app.dataRoot, {
+      ...inspectWayfern(localBundle),
+      version,
+    });
+    return { version, source: "cached fixture" };
+  }
+  if (cachedVersion) {
+    console.log(
+      `[donut-e2e] Cached Wayfern fixture ${cachedVersion} is not the published ${version}; replacing it`,
+    );
   }
 
   if (!app.session) await app.start();
-  const current = await app.invoke("fetch_browser_versions_with_count", {
-    browserStr: "wayfern",
-  });
-  assert.ok(
-    current.versions.length > 0,
-    "No Wayfern build is published for this platform",
-  );
-  const version = current.versions[0];
-  await app.session.setTimeouts({ script: 600_000 });
-  try {
-    await app.invoke(
-      "download_browser",
-      {
-        browserStr: "wayfern",
-        version,
-      },
-      620_000,
-    );
-  } finally {
-    await app.session.setTimeouts();
-  }
+  await downloadWayfern(app, version);
   await cacheDownloadedWayfern(app, projectRoot, version);
   return { version, source: "published download" };
 }
@@ -525,4 +640,50 @@ export function writeChromiumHistory(dbPath, urls) {
     insert.run(url, url, visit++);
   }
   db.close();
+}
+
+/** The name and version the CRX fixture's own manifest declares. */
+export const CRX_EXTENSION_NAME = "Donut E2E Web Extension";
+export const CRX_EXTENSION_VERSION = "3.2.1";
+
+/**
+ * Wrap `zip` in a CRX3 container, the shape the Chrome Web Store actually
+ * serves: `Cr24`, a little-endian format version of 3, a little-endian header
+ * length, that many bytes of signature header, and only then the ZIP.
+ *
+ * The header bytes are filler — nothing in Donut verifies the signature, and a
+ * real one would need a packing key. What a test built on this proves is that
+ * the importer reads the ZIP at the offset the header declares instead of
+ * scanning the file for a `PK` marker, which is the bug the format invites.
+ */
+export function buildCrx3(zip, headerBytes = 137) {
+  const prefix = Buffer.alloc(12);
+  prefix.write("Cr24", 0, "ascii");
+  prefix.writeUInt32LE(3, 4);
+  prefix.writeUInt32LE(headerBytes, 8);
+  return Buffer.concat([prefix, Buffer.alloc(headerBytes, 0x42), zip]);
+}
+
+/** A CRX3 whose payload is a real Manifest V3 archive. */
+export function extensionCrx3({
+  name = CRX_EXTENSION_NAME,
+  version = CRX_EXTENSION_VERSION,
+} = {}) {
+  return buildCrx3(
+    buildStoredZip([
+      {
+        name: "manifest.json",
+        data: `${JSON.stringify(
+          {
+            manifest_version: 3,
+            name,
+            version,
+            description: "Isolated test extension served over a link",
+          },
+          null,
+          2,
+        )}\n`,
+      },
+    ]),
+  );
 }

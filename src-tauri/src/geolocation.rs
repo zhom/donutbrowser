@@ -261,6 +261,84 @@ fn normalize_locale(locale: &str) -> Locale {
   Locale { language, region }
 }
 
+/// What the bundled MaxMind data says about an exit address, beyond the
+/// city and country a check already reports.
+///
+/// Everything here is read from the databases already on disk. A proxy check
+/// must not hand the exit address to a third-party lookup service: that would
+/// tell an outside party which addresses this machine is testing, which is the
+/// opposite of what the proxy is for.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExitInsight {
+  pub timezone: Option<String>,
+  /// The ISP, the registered organisation, or the autonomous system's
+  /// organisation, whichever the installed databases carry. `None` means "not
+  /// known", never "none".
+  pub organization: Option<String>,
+}
+
+/// Read timezone and organisation for `ip` out of the local databases.
+///
+/// Never fails: a missing database, an unroutable address or a record without
+/// the field all resolve to `None`, because "unknown" is the honest answer and
+/// a check should still report everything else it learned.
+pub fn lookup_exit_insight(ip: &str) -> ExitInsight {
+  let Ok(ip_addr) = IpAddr::from_str(ip) else {
+    return ExitInsight::default();
+  };
+
+  let mut insight = ExitInsight::default();
+
+  if let Ok(path) = GeoIPDownloader::get_mmdb_file_path() {
+    if let Ok(reader) = Reader::open_readfile(&path) {
+      if let Ok(lookup) = reader.lookup(ip_addr) {
+        if let Ok(Some(city)) = lookup.decode::<geoip2::City>() {
+          insight.timezone = city.location.time_zone.map(|tz| tz.to_string());
+        }
+      }
+      // The City database carries no organisation, but the same reader decodes
+      // one when the file in place is an ISP or Enterprise database instead.
+      if let Ok(lookup) = reader.lookup(ip_addr) {
+        if let Ok(Some(isp)) = lookup.decode::<geoip2::Isp>() {
+          insight.organization = first_non_empty([
+            isp.isp,
+            isp.organization,
+            isp.autonomous_system_organization,
+          ]);
+        }
+      }
+    }
+  }
+
+  if insight.organization.is_none() {
+    insight.organization = lookup_asn_organization(ip_addr);
+  }
+
+  insight
+}
+
+/// The autonomous system's organisation, from the ASN database that ships
+/// alongside the city one. Absent on an install that has only ever fetched the
+/// city database, which is why the caller treats `None` as "unknown".
+fn lookup_asn_organization(ip_addr: IpAddr) -> Option<String> {
+  let path = GeoIPDownloader::get_asn_mmdb_file_path().ok()?;
+  if !path.exists() {
+    return None;
+  }
+  let reader = Reader::open_readfile(&path).ok()?;
+  let asn: geoip2::Asn = reader.lookup(ip_addr).ok()?.decode().ok()??;
+  first_non_empty([asn.autonomous_system_organization])
+}
+
+fn first_non_empty<const N: usize>(candidates: [Option<&str>; N]) -> Option<String> {
+  candidates
+    .into_iter()
+    .flatten()
+    .map(str::trim)
+    .find(|value| !value.is_empty())
+    .map(|value| value.to_string())
+}
+
 pub fn get_geolocation(ip: &str) -> Result<Geolocation, GeolocationError> {
   let mmdb_path =
     GeoIPDownloader::get_mmdb_file_path().map_err(|_| GeolocationError::DatabaseNotFound)?;

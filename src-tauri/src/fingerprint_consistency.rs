@@ -6,6 +6,12 @@
 //! language. A mismatch (e.g. a US fingerprint behind a German exit IP) is a
 //! strong anti-bot tell even though the real device never leaks.
 //!
+//! Every comparison has three outcomes, never two: the dimensions agree, they
+//! disagree, or nothing was compared because the fingerprint declares no value
+//! to compare against. That third state is reported, never folded into the
+//! first, "we checked and it matches" and "we checked nothing" are different
+//! claims, and only one of them has been earned.
+//!
 //! This module only measures. Deciding what a mismatch *means* for a launch —
 //! block, warn, or ignore — belongs to `launch_gate`, which calls
 //! `probe_and_check_consistency` before the browser is spawned. Launches never
@@ -89,12 +95,31 @@ lazy_static::lazy_static! {
   static ref EXIT_CACHE: Mutex<HashMap<String, CachedExit>> = Mutex::new(HashMap::new());
 }
 
+/// The dimensions an exit is compared on, in report order.
+pub const CHECKED_DIMENSIONS: [&str; 2] = ["timezone", "language"];
+
+/// The outcome of comparing a measured exit against a fingerprint.
+///
+/// Three states, deliberately distinct, because collapsing the third into the
+/// first is how a launch came to report a match it never made:
+///
+/// * **agree**, `checked`, `consistent`, nothing in `unverified`;
+/// * **disagree**, `checked`, not `consistent`, the offenders in `mismatches`;
+/// * **not compared**, the dimension is named in `unverified`, and if nothing
+///   at all could be compared then `checked` is false.
+///
+/// `consistent` alone never means "verified": it is also true when there was
+/// nothing to compare. Read it together with `checked` and `unverified`, or
+/// call [`ConsistencyResult::is_mismatch`] / [`ConsistencyResult::is_verified`].
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConsistencyResult {
-  /// True when everything we could check lines up (or there was nothing to
-  /// check — no proxy assigned).
+  /// True when no dimension that was actually compared disagreed. Also true
+  /// when nothing was compared at all, so this is a claim about what was
+  /// measured, never a claim that anything was.
   pub consistent: bool,
-  /// True when we actually reached an exit node and compared something.
+  /// True when we reached an exit node **and** compared at least one dimension
+  /// against it. False both when no exit was measured and when one was measured
+  /// but the fingerprint declared nothing to compare it against.
   pub checked: bool,
   pub exit_ip: Option<String>,
   pub exit_country_code: Option<String>,
@@ -103,6 +128,20 @@ pub struct ConsistencyResult {
   pub fingerprint_language: Option<String>,
   /// One of "timezone", "language" — the dimensions that disagree.
   pub mismatches: Vec<String>,
+  /// One of "timezone", "language", dimensions the exit supplied a value for
+  /// but that were never compared, because the fingerprint declares no value of
+  /// its own (or, for language, because the exit country has no CLDR data).
+  ///
+  /// Not a mismatch: a launch is never blocked on one, because a fingerprint
+  /// whose geolocation probe failed legitimately carries no location at all.
+  /// `wayfern_manager::apply_geolocation` writes nothing rather than inventing
+  /// `America/New_York`, and `wayfern_manager::launch_fingerprint_payload`
+  /// forwards that absence to the browser rather than filling it back in, so
+  /// "not compared" describes what the launch actually presents. But not a pass
+  /// either, these dimensions are unverified and must never be reported to the
+  /// user as agreeing.
+  #[serde(default)]
+  pub unverified: Vec<String>,
 }
 
 impl ConsistencyResult {
@@ -116,8 +155,48 @@ impl ConsistencyResult {
       fingerprint_timezone: None,
       fingerprint_language: None,
       mismatches: Vec::new(),
+      unverified: Vec::new(),
     }
   }
+
+  /// A positively measured disagreement, the only state that may stop a
+  /// launch.
+  pub fn is_mismatch(&self) -> bool {
+    self.checked && !self.consistent
+  }
+
+  /// Every dimension the exit offered was compared and agreed. The only state
+  /// that has earned the word "consistent" in front of a user.
+  pub fn is_verified(&self) -> bool {
+    self.checked && self.consistent && self.unverified.is_empty()
+  }
+}
+
+/// Dimensions this profile can never be verified on, whatever exit it turns out
+/// to use, because its stored fingerprint declares no value to compare.
+///
+/// Pure and local: no exit measurement, no I/O, so the pre-launch report can
+/// state it before a single worker starts. A lower bound on what a real probe
+/// will report as unverified, the exit's own country can also leave the
+/// language uncomparable, and that is not knowable from here.
+pub fn unverifiable_dimensions(profile: &BrowserProfile) -> Vec<String> {
+  let (fp_tz, fp_lang) = fingerprint_locale(profile);
+  let mut out = Vec::new();
+  if fp_tz.is_none() {
+    out.push("timezone".to_string());
+  }
+  if fp_lang.is_none() {
+    out.push("language".to_string());
+  }
+  out
+}
+
+/// True when measuring the exit can still verify at least one dimension of this
+/// profile's fingerprint. False means a probe would compare nothing, so telling
+/// the user "Donut will check it while starting" would be a promise it cannot
+/// keep.
+pub fn can_verify_anything(profile: &BrowserProfile) -> bool {
+  unverifiable_dimensions(profile).len() < CHECKED_DIMENSIONS.len()
 }
 
 /// Whether this upstream can carry a probe request at all.
@@ -126,7 +205,7 @@ impl ConsistencyResult {
 /// rather than guessed at.
 fn probe_url(settings: &crate::browser::ProxySettings) -> Option<String> {
   match settings.proxy_type.to_lowercase().as_str() {
-    "http" | "https" | "socks4" | "socks5" => Some(
+    "http" | "https" | "httpstls" | "socks4" | "socks5" => Some(
       crate::proxy_manager::ProxyManager::build_probe_proxy_url(settings),
     ),
     _ => None,
@@ -141,32 +220,35 @@ fn probe_url(settings: &crate::browser::ProxySettings) -> Option<String> {
 /// any table naming one "expected" language per country flags fingerprints
 /// Donut itself produced — roughly 10% of US profiles legitimately get `es-US`
 /// and ~23% of Canadian ones get `fr-CA`. `None` means the country has no CLDR
-/// data and the check is skipped.
+/// data, so the language cannot be judged either way, the caller reports that
+/// dimension as unverified rather than counting it as a match.
 fn language_matches_country(cc: &str, language: &str) -> Option<bool> {
   crate::geolocation::locale_selector()?.region_speaks(cc, language)
 }
 
 /// Extract (timezone, language) from a profile's stored location, or from its
 /// legacy fingerprint payload when it still stores one.
+///
+/// Read through `WayfernManager::fingerprint_object`, the same accessor the
+/// launcher uses to build the device it hands the browser, so both stored
+/// shapes, the bare object and the legacy `{ "fingerprint": {...} }` wrapper
+/// old profiles carry, are read identically on both sides. Reading only the
+/// top level here made a wrapped fingerprint report "declares no timezone",
+/// which sent the check down the not-compared path on exactly the profiles old
+/// enough to have the wrapper, while the launch presented the timezone nested
+/// one level down. Sharing the accessor is what keeps the two from drifting
+/// apart again.
 fn fingerprint_locale(profile: &BrowserProfile) -> (Option<String>, Option<String>) {
-  let Some(config) = &profile.wayfern_config else {
+  let Some(fp) = profile
+    .wayfern_config
+    .as_ref()
+    .and_then(|config| config.location.as_deref().or(config.fingerprint.as_deref()))
+    .and_then(crate::wayfern_manager::WayfernManager::fingerprint_object)
+  else {
     return (None, None);
   };
-  let Some(fp_str) = config.location.as_ref().or(config.fingerprint.as_ref()) else {
-    return (None, None);
-  };
-  let Ok(fp) = serde_json::from_str::<serde_json::Value>(fp_str) else {
-    return (None, None);
-  };
-  let timezone = fp
-    .get("timezone")
-    .and_then(|v| v.as_str())
-    .map(str::to_string);
-  let language = fp
-    .get("language")
-    .and_then(|v| v.as_str())
-    .map(str::to_string);
-  (timezone, language)
+  let read = |key: &str| fp.get(key).and_then(|v| v.as_str()).map(str::to_string);
+  (read("timezone"), read("language"))
 }
 
 /// A mutex whose poison is not fatal.
@@ -187,28 +269,58 @@ pub fn compare_exit_to_fingerprint(
 ) -> ConsistencyResult {
   let (fp_tz, fp_lang) = fingerprint_locale(profile);
   let mut mismatches = Vec::new();
+  let mut unverified = Vec::new();
+  let mut compared = 0usize;
 
-  if let (Some(exit), Some(fp)) = (&exit_timezone, &fp_tz) {
-    if !exit.eq_ignore_ascii_case(fp) {
-      mismatches.push("timezone".to_string());
+  // Three outcomes per dimension, never two. An exit whose timezone the
+  // fingerprint does not declare is NOT agreement: nothing was compared, and
+  // folding that into "consistent" is a green light this check has not earned.
+  // "Not compared" is also a claim about the launch, not just about this
+  // function: it is only honest because the launcher hands the browser no
+  // timezone either (`wayfern_manager::launch_fingerprint_payload`). If it ever
+  // starts supplying one again, that value is what this must compare against -
+  // reporting "nothing was compared" while a location ships is the one outcome
+  // neither side may produce.
+  if let Some(exit) = &exit_timezone {
+    match &fp_tz {
+      Some(fp) => {
+        compared += 1;
+        if !exit.eq_ignore_ascii_case(fp) {
+          mismatches.push("timezone".to_string());
+        }
+      }
+      None => unverified.push("timezone".to_string()),
     }
   }
 
-  if let (Some(cc), Some(lang)) = (&exit_country_code, &fp_lang) {
-    if language_matches_country(cc, lang) == Some(false) {
-      mismatches.push("language".to_string());
+  // Language has one extra way to be uncomparable: a country CLDR has no data
+  // for answers `None`, which is no more a match than a missing fingerprint
+  // language is.
+  if let Some(cc) = &exit_country_code {
+    match fp_lang
+      .as_ref()
+      .and_then(|lang| language_matches_country(cc, lang))
+    {
+      Some(plausible) => {
+        compared += 1;
+        if !plausible {
+          mismatches.push("language".to_string());
+        }
+      }
+      None => unverified.push("language".to_string()),
     }
   }
 
   ConsistencyResult {
     consistent: mismatches.is_empty(),
-    checked: true,
+    checked: compared > 0,
     exit_ip,
     exit_country_code,
     exit_timezone,
     fingerprint_timezone: fp_tz,
     fingerprint_language: fp_lang,
     mismatches,
+    unverified,
   }
 }
 
@@ -221,6 +333,14 @@ fn cached_exit(key: &ExitCacheKey) -> Option<CachedExit> {
       c.identity == key.identity && now.saturating_sub(c.fetched_at) < EXIT_CACHE_TTL_SECS
     })
     .cloned()
+}
+
+/// The exit IP the launch gate last measured for this profile's route, while
+/// it is still fresh. Cache-only: the gate probes on an interactive launch and
+/// an automation launch never probes, so a miss here is "unknown", not "direct".
+pub fn cached_exit_ip(profile: &BrowserProfile) -> Option<String> {
+  let key = exit_cache_key(profile)?;
+  cached_exit(&key).and_then(|cached| cached.ip)
 }
 
 /// Cache-only check. Never performs I/O, so it is safe to call before a launch
@@ -593,8 +713,252 @@ mod tests {
       Some("DE".into()),
       None,
     );
-    assert!(result.consistent);
+    assert!(!result.is_mismatch());
     assert!(result.mismatches.is_empty());
+    // ...but skipping every dimension is not a pass, and must not be dressed
+    // as one.
+    assert!(!result.is_verified());
+    assert!(!result.checked);
+    assert_eq!(result.unverified, vec!["timezone", "language"]);
+  }
+
+  fn profile_with_raw_fingerprint(fingerprint: serde_json::Value) -> BrowserProfile {
+    let mut profile = BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: "p".into(),
+      browser: "wayfern".into(),
+      ..Default::default()
+    };
+    profile.wayfern_config = Some(crate::wayfern_manager::WayfernConfig {
+      fingerprint: Some(fingerprint.to_string()),
+      ..Default::default()
+    });
+    profile
+  }
+
+  #[test]
+  fn a_fingerprint_with_no_timezone_is_unverified_never_a_match() {
+    // The regression. Generation no longer invents `America/New_York` when the
+    // geolocation probe fails, so a fingerprint can legitimately carry no
+    // timezone. The comparison then has nothing to compare, and reporting that
+    // as agreement is a green light the check never earned, on the one
+    // dimension that carries the real signal.
+    let profile = profile_with_raw_fingerprint(serde_json::json!({ "language": "de-DE" }));
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+
+    assert!(
+      result.unverified.contains(&"timezone".to_string()),
+      "an undeclared timezone must be reported as unverified, got {result:?}"
+    );
+    assert!(
+      !result.is_verified(),
+      "nothing compared the timezone, so this must not read as consistent"
+    );
+    // The language WAS compared and agreed, so the exit counts as checked...
+    assert!(result.checked);
+    assert!(result.mismatches.is_empty());
+    // ...but a dimension nobody compared is never a reason to stop a launch.
+    assert!(!result.is_mismatch());
+  }
+
+  #[test]
+  fn a_fingerprint_with_no_locale_at_all_is_not_checked() {
+    // Both dimensions undeclared: the exit was reached, and still nothing was
+    // compared. `checked` has to say so, because every consumer reads it as
+    // "there is a measurement here worth acting on".
+    let profile = profile_with_raw_fingerprint(serde_json::json!({ "platform": "Win32" }));
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+    assert!(!result.checked);
+    assert!(!result.is_verified());
+    assert!(!result.is_mismatch());
+    assert_eq!(result.unverified, vec!["timezone", "language"]);
+  }
+
+  #[test]
+  fn a_legacy_wrapped_fingerprint_is_read_the_way_the_launcher_reads_it() {
+    // The launcher accepts `{"fingerprint": {...}}` as well as the bare object,
+    // so reading only the top level here answered "this profile declares no
+    // timezone" for a profile whose launch presents one. The check then skipped
+    // the dimension carrying the real signal, on exactly the profiles old
+    // enough to still have the wrapper.
+    let profile = profile_with_raw_fingerprint(serde_json::json!({
+      "fingerprint": { "timezone": "America/New_York", "language": "en-US" }
+    }));
+
+    assert_eq!(
+      unverifiable_dimensions(&profile),
+      Vec::<String>::new(),
+      "a wrapped fingerprint declares both dimensions"
+    );
+    assert!(can_verify_anything(&profile));
+
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+    assert_eq!(
+      result.fingerprint_timezone.as_deref(),
+      Some("America/New_York"),
+      "the nested timezone must be the one compared, got {result:?}"
+    );
+    assert_eq!(result.fingerprint_language.as_deref(), Some("en-US"));
+    assert!(result.checked);
+    assert!(
+      result.mismatches.contains(&"timezone".to_string()),
+      "a US timezone behind a German exit must flag, got {result:?}"
+    );
+    assert!(result.is_mismatch());
+    assert!(
+      result.unverified.is_empty(),
+      "both dimensions were declared, so nothing is unverified: {result:?}"
+    );
+  }
+
+  #[test]
+  fn a_wrapped_fingerprint_with_no_timezone_is_still_unverified() {
+    // The other half: unwrapping must not turn "declares nothing" into a pass.
+    let profile = profile_with_raw_fingerprint(serde_json::json!({
+      "fingerprint": { "language": "de-DE" }
+    }));
+    assert_eq!(unverifiable_dimensions(&profile), vec!["timezone"]);
+
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      None,
+    );
+    assert_eq!(result.unverified, vec!["timezone"]);
+    assert!(!result.is_verified());
+    assert!(!result.is_mismatch());
+  }
+
+  #[test]
+  fn a_language_the_country_has_no_cldr_data_for_is_unverified() {
+    // The other way a comparison can silently not happen. `ZZ` has no CLDR
+    // entry, so the language was never judged; the timezone still was.
+    let profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("ZZ".into()),
+      None,
+    );
+    assert!(result.checked, "the timezone was compared");
+    assert_eq!(result.unverified, vec!["language"]);
+    assert!(!result.is_verified());
+    assert!(!result.is_mismatch());
+  }
+
+  #[test]
+  fn only_a_fully_compared_agreement_reads_as_verified() {
+    let profile = profile_with_fingerprint("Europe/Berlin", "de-DE");
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+    assert!(result.is_verified());
+    assert!(result.unverified.is_empty());
+    assert!(!result.is_mismatch());
+  }
+
+  #[test]
+  fn a_measured_mismatch_is_still_the_only_blocking_state() {
+    let profile = profile_with_fingerprint("America/New_York", "en-US");
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      Some("1.2.3.4".into()),
+    );
+    assert!(result.is_mismatch());
+    assert!(!result.is_verified());
+    // A verdict that blocks must not be diluted into "unverified".
+    assert!(result.unverified.is_empty());
+  }
+
+  #[test]
+  fn skip_reads_as_neither_verified_nor_mismatched() {
+    let result = ConsistencyResult::skip();
+    assert!(!result.is_verified());
+    assert!(!result.is_mismatch());
+    assert!(result.unverified.is_empty());
+  }
+
+  #[test]
+  fn unverifiable_dimensions_are_answered_without_measuring_anything() {
+    // Pure and local, so the pre-launch report can say "this cannot be checked"
+    // before a single worker starts.
+    assert_eq!(
+      unverifiable_dimensions(&profile_with_fingerprint("Europe/Berlin", "de-DE")),
+      Vec::<String>::new()
+    );
+    assert_eq!(
+      unverifiable_dimensions(&profile_with_raw_fingerprint(
+        serde_json::json!({ "language": "de-DE" })
+      )),
+      vec!["timezone"]
+    );
+    assert_eq!(
+      unverifiable_dimensions(&profile_with_raw_fingerprint(
+        serde_json::json!({ "platform": "Win32" })
+      )),
+      CHECKED_DIMENSIONS.to_vec()
+    );
+  }
+
+  #[test]
+  fn a_probe_that_could_compare_nothing_is_not_pending_work() {
+    assert!(can_verify_anything(&profile_with_fingerprint(
+      "Europe/Berlin",
+      "de-DE"
+    )));
+    // One dimension left is still worth probing for.
+    assert!(can_verify_anything(&profile_with_raw_fingerprint(
+      serde_json::json!({ "language": "de-DE" })
+    )));
+    // Nothing left: promising the user the launch will check it would be a
+    // promise the gate cannot keep.
+    assert!(!can_verify_anything(&profile_with_raw_fingerprint(
+      serde_json::json!({ "platform": "Win32" })
+    )));
+  }
+
+  #[test]
+  fn an_unverified_dimension_survives_serialization_to_the_ui() {
+    let profile = profile_with_raw_fingerprint(serde_json::json!({ "language": "de-DE" }));
+    let result = compare_exit_to_fingerprint(
+      &profile,
+      Some("Europe/Berlin".into()),
+      Some("DE".into()),
+      None,
+    );
+    let encoded = serde_json::to_value(&result).expect("serializable");
+    assert_eq!(encoded["unverified"], serde_json::json!(["timezone"]));
+    // Older payloads without the field must still decode, defaulting to "we
+    // were told nothing", not to a silent pass.
+    let legacy: ConsistencyResult = serde_json::from_str(
+      r#"{"consistent":true,"checked":false,"exit_ip":null,"exit_country_code":null,
+          "exit_timezone":null,"fingerprint_timezone":null,"fingerprint_language":null,
+          "mismatches":[]}"#,
+    )
+    .expect("legacy payloads stay decodable");
+    assert!(legacy.unverified.is_empty());
+    assert!(!legacy.is_verified());
   }
 
   #[test]

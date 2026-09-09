@@ -37,9 +37,11 @@ export type ShortcutId =
   | "goExtensions"
   | "goGroups"
   | "goCookieBot"
+  | "goAgent"
   | "goIntegrations"
   | "goAccount"
-  | "goSettings";
+  | "goSettings"
+  | "goTrash";
 
 export const SHORTCUTS: ShortcutDef[] = [
   // Actions
@@ -102,6 +104,16 @@ export const SHORTCUTS: ShortcutDef[] = [
     mod: true,
   },
   {
+    // Mod+J: the agent has no free mnemonic left — b is the cookie bot, a is
+    // the account, g is groups — so an unclaimed key it is, rather than
+    // stealing a chord the platform already means something by.
+    id: "goAgent",
+    labelKey: "shortcuts.goAgent",
+    group: "navigation",
+    key: "j",
+    mod: true,
+  },
+  {
     id: "goIntegrations",
     labelKey: "shortcuts.goIntegrations",
     group: "navigation",
@@ -124,6 +136,16 @@ export const SHORTCUTS: ShortcutDef[] = [
     group: "navigation",
     key: ",",
     mod: true,
+  },
+  {
+    // Mod+Shift+T, the "reopen what I just closed" chord: the trash is where
+    // a deleted profile comes back from. Plain Mod+T stays free.
+    id: "goTrash",
+    labelKey: "shortcuts.goTrash",
+    group: "navigation",
+    key: "t",
+    mod: true,
+    shift: true,
   },
 ];
 

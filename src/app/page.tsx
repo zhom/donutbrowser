@@ -3,12 +3,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { motion } from "motion/react";
+import { useReducedMotion } from "motion/react";
 import { useOnborda } from "onborda";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AboutDialog } from "@/components/about-dialog";
 import { AccountPage } from "@/components/account-page";
+import { AgentPage, type AgentTab } from "@/components/agent-page";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CloseConfirmDialog } from "@/components/close-confirm-dialog";
 import { CommandPalette } from "@/components/command-palette";
@@ -34,6 +35,7 @@ import {
   PreLaunchGateDialog,
 } from "@/components/pre-launch-gate-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
+import { ProfileGroupDragProvider } from "@/components/profile-group-drag";
 import {
   type PasswordDialogMode,
   ProfilePasswordDialog,
@@ -41,6 +43,7 @@ import {
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
+import { ProxyDistributionDialog } from "@/components/proxy-distribution-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { type AppPage, RailNav } from "@/components/rail-nav";
 import { SettingsDialog } from "@/components/settings-dialog";
@@ -48,7 +51,9 @@ import { ShortcutsPage } from "@/components/shortcuts-page";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
+import { SynchronizerPanel } from "@/components/synchronizer-panel";
 import { ThankYouDialog } from "@/components/thank-you-dialog";
+import { TrashPage } from "@/components/trash-page";
 import { WayfernConfigDialog } from "@/components/wayfern-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { WelcomeDialog } from "@/components/welcome-dialog";
@@ -58,6 +63,7 @@ import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { useGroupEvents } from "@/hooks/use-group-events";
+import { useKonamiCode } from "@/hooks/use-konami-code";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
@@ -68,8 +74,12 @@ import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
-import { canUseCookieBot, getEntitlements } from "@/lib/entitlements";
-import { MOTION_EASE_OUT } from "@/lib/motion";
+import { fireSprinkleConfetti } from "@/lib/confetti";
+import {
+  canUseCookieBot,
+  canUseRemoteControl,
+  getEntitlements,
+} from "@/lib/entitlements";
 import {
   ONBOARDING_TOUR_CLOSED_EVENT,
   ONBOARDING_TOUR_FINISHED_EVENT,
@@ -128,6 +138,9 @@ function consistencyFromErrorParams(
     fingerprint_timezone: params?.fingerprintTimezone || null,
     fingerprint_language: params?.fingerprintLanguage || null,
     mismatches: (params?.mismatches ?? "").split(",").filter(Boolean),
+    // Carried through rather than defaulted to empty: a dimension nothing
+    // compared must not be rebuilt here as a dimension that passed.
+    unverified: (params?.unverified ?? "").split(",").filter(Boolean),
   };
 }
 
@@ -140,6 +153,7 @@ interface PendingUrl {
 
 export default function Home() {
   const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
   // Mount global version update listener/toasts
   useVersionUpdater();
 
@@ -149,6 +163,7 @@ export default function Home() {
     runningProfiles,
     isLoading: profilesLoading,
     error: profilesError,
+    loadProfiles,
   } = useProfileEvents();
 
   // First-run onboarding tour (Onborda).
@@ -262,6 +277,7 @@ export default function Home() {
     groups: groupsData,
     isLoading: groupsLoading,
     error: groupsError,
+    loadGroups,
   } = useGroupEvents();
 
   const {
@@ -303,7 +319,11 @@ export default function Home() {
   }, []);
 
   // Synchronizer sessions
-  const { getProfileSyncInfo } = useSyncSessions();
+  const {
+    sessions: syncSessions,
+    getProfileSyncInfo,
+    applySession,
+  } = useSyncSessions();
   const [syncLeaderProfile, setSyncLeaderProfile] =
     useState<BrowserProfile | null>(null);
 
@@ -367,13 +387,16 @@ export default function Home() {
   const [extensionManagementInitialTab, setExtensionManagementInitialTab] =
     useState<"extensions" | "groups">("extensions");
   const [integrationsInitialTab, setIntegrationsInitialTab] = useState<
-    "api" | "mcp"
+    "api" | "mcp" | "remote"
   >("api");
   const [cookieBotDialogOpen, setCookieBotDialogOpen] = useState(false);
   const [cookieBotInitialTab, setCookieBotInitialTab] =
     useState<CookieBotTab>("overview");
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [agentInitialTab, setAgentInitialTab] = useState<AgentTab>("run");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [trashPageOpen, setTrashPageOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
@@ -412,6 +435,10 @@ export default function Home() {
   const [selectedProfilesForProxy, setSelectedProfilesForProxy] = useState<
     string[]
   >([]);
+  const [proxyDistributionDialogOpen, setProxyDistributionDialogOpen] =
+    useState(false);
+  const [selectedProfilesForDistribution, setSelectedProfilesForDistribution] =
+    useState<string[]>([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
@@ -479,6 +506,9 @@ export default function Home() {
   // info dialog. ProfilesDataTable consumes it through controlled props.
   const [profileInfoDialog, setProfileInfoDialog] =
     useState<BrowserProfile | null>(null);
+  const [profileInfoOpenMethod, setProfileInfoOpenMethod] = useState<
+    "pointer" | "keyboard"
+  >("pointer");
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
@@ -499,6 +529,8 @@ export default function Home() {
     setImportProfileDialogOpen(false);
     setAccountDialogOpen(false);
     setCookieBotDialogOpen(false);
+    setAgentDialogOpen(false);
+    setTrashPageOpen(false);
 
     setCurrentPage(page);
     switch (page) {
@@ -520,6 +552,9 @@ export default function Home() {
       case "cookieBot":
         setCookieBotDialogOpen(true);
         break;
+      case "agent":
+        setAgentDialogOpen(true);
+        break;
       case "integrations":
         setIntegrationsDialogOpen(true);
         break;
@@ -534,6 +569,9 @@ export default function Home() {
         break;
       case "account":
         setAccountDialogOpen(true);
+        break;
+      case "trash":
+        setTrashPageOpen(true);
         break;
       case "shortcuts":
         // Plain page render — nothing else to open.
@@ -598,10 +636,29 @@ export default function Home() {
           }
           break;
         }
+        case "goAgent": {
+          // Mod+J: navigate first time; flip run↔history while already there,
+          // matching how Mod+B flips the Cookie Bot tabs.
+          if (currentPage === "agent") {
+            setAgentInitialTab((cur) => (cur === "run" ? "history" : "run"));
+          } else {
+            setAgentInitialTab("run");
+            handleRailNavigate("agent");
+          }
+          break;
+        }
         case "goIntegrations": {
-          // Mod+I: flip api↔mcp tab when already on integrations.
+          // Mod+I: cycle the tabs when already on integrations, in the order
+          // the dialog lists them. The Remote MCP tab only exists for a user
+          // entitled to remote control, so everyone else flips api and mcp.
           if (currentPage === "integrations") {
-            setIntegrationsInitialTab((cur) => (cur === "api" ? "mcp" : "api"));
+            setIntegrationsInitialTab((cur) =>
+              cur === "api"
+                ? "mcp"
+                : cur === "mcp" && canUseRemoteControl(cloudUser)
+                  ? "remote"
+                  : "api",
+            );
           } else {
             handleRailNavigate("integrations");
           }
@@ -613,9 +670,12 @@ export default function Home() {
         case "goSettings":
           handleRailNavigate("settings");
           break;
+        case "goTrash":
+          handleRailNavigate("trash");
+          break;
       }
     },
-    [handleRailNavigate, currentPage, proxyManagementInitialTab],
+    [handleRailNavigate, currentPage, proxyManagementInitialTab, cloudUser],
   );
 
   // Ordered list the digit shortcuts and palette consume. "__all__" is index 1
@@ -675,6 +735,19 @@ export default function Home() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [runShortcut, selectGroupByDigit, orderedGroupTargets.length]);
+
+  // The classic cheat code pays out in sprinkles. Nothing else changes: it
+  // touches no profile, setting, or file, so it is safe anywhere in the app.
+  useKonamiCode(
+    useCallback(() => {
+      showSuccessToast(t("easterEgg.konami.title"), {
+        id: "cheat-code",
+        description: t("easterEgg.konami.description"),
+      });
+      window.dispatchEvent(new CustomEvent("donut-cheat-code"));
+      if (!reducedMotion) fireSprinkleConfetti();
+    }, [reducedMotion, t]),
+  );
 
   // Check for missing binaries and offer to download them
   const checkMissingBinaries = useCallback(async () => {
@@ -1066,6 +1139,37 @@ export default function Home() {
     };
   }, [t]);
 
+  // The third state. The gate reached the exit but the fingerprint declares no
+  // value to compare it against, so nothing was verified, which is not a
+  // mismatch and never blocks, but is not the clean bill of health that
+  // reporting nothing would imply.
+  useEffect(() => {
+    const unlisten = listen<ConsistencyResult>(
+      "fingerprint-consistency-unverified",
+      (event) => {
+        const { unverified, exit_timezone, exit_country_code } = event.payload;
+        if (unverified.length === 0) {
+          return;
+        }
+        showErrorToast(t("consistencyWarning.unverifiedTitle"), {
+          description: unverified.includes("timezone")
+            ? t("consistencyWarning.unverifiedTimezoneDetail", {
+                exit: exit_timezone ?? exit_country_code ?? "?",
+              })
+            : t("consistencyWarning.unverifiedLanguageDetail", {
+                country: exit_country_code ?? "?",
+              }),
+          id: `fingerprint-unverified-${unverified.join("-")}`,
+        });
+      },
+    );
+    return () => {
+      void unlisten.then((fn) => {
+        fn();
+      });
+    };
+  }, [t]);
+
   // Show the queue's head, and how many are waiting behind it.
   const syncGateUi = useCallback(() => {
     const queue = gateQueueRef.current;
@@ -1269,6 +1373,7 @@ export default function Home() {
                 fingerprint: blocked ? checks.consistency : null,
                 measurementUnreliable: checks.exit_measurement_unreliable,
                 probePending: checks.exit_probe_pending,
+                unverified: checks.exit_unverified,
               },
             },
             opts?.bulkRunId,
@@ -1312,6 +1417,7 @@ export default function Home() {
                 measurementUnreliable:
                   localChecks?.exit_measurement_unreliable ?? false,
                 probePending: false,
+                unverified: localChecks?.exit_unverified ?? [],
               },
             },
             opts?.bulkRunId,
@@ -1392,9 +1498,10 @@ export default function Home() {
         console.log("Profile deleted successfully");
       } catch (err: unknown) {
         console.error("Failed to delete profile:", err);
-        const errorMessage = err instanceof Error ? err.message : String(err);
         showErrorToast(
-          t("errors.deleteProfileFailed", { error: errorMessage }),
+          t("errors.deleteProfileFailed", {
+            error: translateBackendError(t, err),
+          }),
         );
       }
     },
@@ -1458,6 +1565,48 @@ export default function Home() {
     setGroupAssignmentDialogOpen(true);
   }, []);
 
+  const handleDropProfilesToGroup = useCallback(
+    async (profileIds: string[], groupId: string | null) => {
+      const targets = profiles.filter((profile) =>
+        profileIds.includes(profile.id),
+      );
+      if (
+        targets.length !== profileIds.length ||
+        targets.some(
+          (profile) =>
+            profile.process_id != null || runningProfiles.has(profile.id),
+        ) ||
+        (groupId !== null && !groupsData.some((group) => group.id === groupId))
+      ) {
+        showErrorToast(t("profileMotion.dragUnavailable"));
+        return false;
+      }
+      try {
+        await invoke("assign_profiles_to_group", { profileIds, groupId });
+        setSelectedProfiles((selected) =>
+          selected.filter((id) => !profileIds.includes(id)),
+        );
+        showSuccessToast(
+          t("groups.assignSuccess", {
+            count: profileIds.length,
+            group:
+              groupsData.find((group) => group.id === groupId)?.name ??
+              t("groups.noGroup"),
+          }),
+        );
+        return true;
+      } catch (error) {
+        showErrorToast(translateBackendError(t, error));
+        return false;
+      } finally {
+        // The backend can reject after writing an earlier member of the batch.
+        // Refresh both views even on failure so counts and placement stay true.
+        await Promise.allSettled([loadProfiles(), loadGroups()]);
+      }
+    },
+    [profiles, runningProfiles, groupsData, loadProfiles, loadGroups, t],
+  );
+
   const handleBulkDelete = useCallback(() => {
     if (selectedProfiles.length === 0) return;
     setShowBulkDeleteConfirmation(true);
@@ -1518,6 +1667,12 @@ export default function Home() {
     handleAssignProfilesToProxy(selectedProfiles);
     setSelectedProfiles([]);
   }, [selectedProfiles, handleAssignProfilesToProxy]);
+
+  const handleBulkProxyDistribution = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    setSelectedProfilesForDistribution(selectedProfiles);
+    setProxyDistributionDialogOpen(true);
+  }, [selectedProfiles]);
 
   const handleBulkCopyCookies = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -1831,6 +1986,8 @@ export default function Home() {
     let unlistenProgress: (() => void) | undefined;
     let unlistenCompleted: (() => void) | undefined;
     let unlistenWayfernBlocked: (() => void) | undefined;
+    let unlistenMcpLocalDeprecated: (() => void) | undefined;
+    let unlistenMcpLocalMigrated: (() => void) | undefined;
 
     void (async () => {
       unlistenRequired = await listen(
@@ -1903,6 +2060,36 @@ export default function Home() {
         });
       });
 
+      // Local MCP is removed in favour of remote MCP. Something tried to reach
+      // the removed local server (a client still pointing at the old port, or
+      // an in-app attempt): tell the user plainly, once, where to go instead.
+      unlistenMcpLocalDeprecated = await listen("mcp-local-deprecated", () => {
+        showToast({
+          id: "mcp-local-deprecated",
+          type: "error",
+          title: t("mcpLocalDeprecated.title"),
+          description: t("mcpLocalDeprecated.description"),
+          duration: 15000,
+        });
+      });
+
+      // Their clients were moved to remote MCP for them (paid accounts). A
+      // success note so the change is visible rather than silent.
+      unlistenMcpLocalMigrated = await listen<{ migrated?: number }>(
+        "mcp-local-migrated",
+        (event) => {
+          const migrated = event.payload?.migrated ?? 0;
+          if (migrated <= 0) return;
+          showToast({
+            id: "mcp-local-migrated",
+            type: "success",
+            title: t("mcpLocalMigrated.title"),
+            description: t("mcpLocalMigrated.description", { count: migrated }),
+            duration: 12000,
+          });
+        },
+      );
+
       // If the effect was torn down mid-setup, the cleanup below already ran
       // before these handles existed — unlisten them now so nothing leaks.
       if (disposed) {
@@ -1911,6 +2098,8 @@ export default function Home() {
         unlistenProgress?.();
         unlistenCompleted?.();
         unlistenWayfernBlocked?.();
+        unlistenMcpLocalDeprecated?.();
+        unlistenMcpLocalMigrated?.();
       }
     })();
 
@@ -1921,6 +2110,8 @@ export default function Home() {
       unlistenProgress?.();
       unlistenCompleted?.();
       unlistenWayfernBlocked?.();
+      unlistenMcpLocalDeprecated?.();
+      unlistenMcpLocalMigrated?.();
     };
   }, [t]);
 
@@ -2002,566 +2193,610 @@ export default function Home() {
         : t(`pageTitle.${currentPage}`);
 
   return (
-    <div className="flex h-dvh flex-col bg-background font-(family-name:--font-geist-sans)">
-      <CloseConfirmDialog />
-      <HomeHeader
-        onCreateProfileDialogOpen={setCreateProfileDialogOpen}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        groups={groupsData}
-        totalProfiles={profiles.length}
-        selectedGroupId={selectedGroupId}
-        onGroupSelect={handleSelectGroup}
-        pageTitle={subPageTitle}
-      />
-      <div className="flex min-h-0 flex-1">
-        <RailNav
-          currentPage={currentPage}
-          onNavigate={handleRailNavigate}
+    <ProfileGroupDragProvider
+      enabled={currentPage === "profiles"}
+      onAssign={handleDropProfilesToGroup}
+    >
+      <div className="flex h-dvh flex-col bg-background font-(family-name:--font-geist-sans)">
+        <CloseConfirmDialog />
+        <HomeHeader
+          onCreateProfileDialogOpen={setCreateProfileDialogOpen}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          groups={groupsData}
+          totalProfiles={profiles.length}
+          selectedGroupId={selectedGroupId}
+          onGroupSelect={handleSelectGroup}
+          pageTitle={subPageTitle}
+        />
+        <div className="flex min-h-0 flex-1">
+          <RailNav
+            currentPage={currentPage}
+            onNavigate={handleRailNavigate}
+            onOpenAbout={() => {
+              setAboutDialogOpen(true);
+            }}
+            cookieBotRunning={Object.keys(cookieBotLiveSessions).length > 0}
+          />
+          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            {currentPage === "profiles" && (
+              <div className="flex min-h-0 flex-1 flex-col px-3 pt-2.5">
+                <SynchronizerPanel
+                  sessions={syncSessions}
+                  onSessionChanged={applySession}
+                />
+                <ProfilesDataTable
+                  isLoading={isLoading && profiles.length === 0}
+                  showOnboardingEmptyState={profiles.length === 0}
+                  profiles={filteredProfiles}
+                  allProfiles={profiles}
+                  infoDialogProfile={profileInfoDialog}
+                  infoOpenMethod={profileInfoOpenMethod}
+                  onInfoOpenMethodChange={setProfileInfoOpenMethod}
+                  onInfoDialogProfileChange={setProfileInfoDialog}
+                  onLaunchProfile={launchProfile}
+                  onKillProfile={handleKillProfile}
+                  onCloneProfile={handleCloneProfile}
+                  onSetPassword={handleSetPassword}
+                  onChangePassword={handleChangePassword}
+                  onRemovePassword={handleRemovePassword}
+                  onDeleteProfile={handleDeleteProfile}
+                  onRenameProfile={handleRenameProfile}
+                  onConfigureWayfern={handleConfigureWayfern}
+                  onCopyCookiesToProfile={handleCopyCookiesToProfile}
+                  onOpenCookieManagement={handleOpenCookieManagement}
+                  runningProfiles={runningProfiles}
+                  extensionGroups={extensionGroups}
+                  isUpdating={isUpdating}
+                  onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
+                  onAssignProfilesToGroup={handleAssignProfilesToGroup}
+                  onAssignProfilesToProxy={handleAssignProfilesToProxy}
+                  selectedGroupId={selectedGroupId}
+                  selectedProfiles={selectedProfiles}
+                  onSelectedProfilesChange={setSelectedProfiles}
+                  onBulkDelete={handleBulkDelete}
+                  onBulkGroupAssignment={handleBulkGroupAssignment}
+                  onBulkProxyAssignment={handleBulkProxyAssignment}
+                  onBulkProxyDistribution={handleBulkProxyDistribution}
+                  onBulkCopyCookies={handleBulkCopyCookies}
+                  onBulkRun={handleBulkRun}
+                  onBulkStop={handleBulkStop}
+                  bulkActionsUnlocked={automationUnlocked}
+                  onBulkExtensionGroupAssignment={
+                    handleBulkExtensionGroupAssignment
+                  }
+                  onAssignExtensionGroup={handleAssignExtensionGroup}
+                  onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
+                  onToggleProfileSync={handleToggleProfileSync}
+                  crossOsUnlocked={crossOsUnlocked}
+                  syncUnlocked={syncUnlocked}
+                  getProfileSyncInfo={getProfileSyncInfo}
+                  onLaunchWithSync={(profile) => {
+                    setSyncLeaderProfile(profile);
+                  }}
+                  onCreateProfile={() => {
+                    setCreateProfileDialogOpen(true);
+                  }}
+                  onImportProfiles={() => {
+                    handleRailNavigate("import");
+                  }}
+                />
+              </div>
+            )}
+
+            {currentPage === "shortcuts" && (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <ShortcutsPage groupTargets={orderedGroupTargets} />
+              </div>
+            )}
+
+            {settingsDialogOpen && (
+              <SettingsDialog
+                isOpen={settingsDialogOpen}
+                onClose={() => {
+                  setSettingsDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                onIntegrationsOpen={() => {
+                  setSettingsDialogOpen(false);
+                  setIntegrationsDialogOpen(true);
+                  setCurrentPage("integrations");
+                }}
+                subPage={currentPage === "settings"}
+              />
+            )}
+
+            {integrationsDialogOpen && (
+              <IntegrationsDialog
+                isOpen={integrationsDialogOpen}
+                onClose={() => {
+                  setIntegrationsDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "integrations"}
+                initialTab={integrationsInitialTab}
+              />
+            )}
+
+            {proxyManagementDialogOpen && (
+              <ProxyManagementDialog
+                isOpen={proxyManagementDialogOpen}
+                onClose={() => {
+                  setProxyManagementDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "proxies" || currentPage === "vpns"}
+                initialTab={proxyManagementInitialTab}
+              />
+            )}
+
+            {groupManagementDialogOpen && (
+              <GroupManagementDialog
+                isOpen={groupManagementDialogOpen}
+                onClose={() => {
+                  setGroupManagementDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                onGroupManagementComplete={handleGroupManagementComplete}
+                subPage={currentPage === "groups"}
+              />
+            )}
+
+            {extensionManagementDialogOpen && (
+              <ExtensionManagementDialog
+                isOpen={extensionManagementDialogOpen}
+                onClose={() => {
+                  setExtensionManagementDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                limitedMode={false}
+                subPage={currentPage === "extensions"}
+                initialTab={extensionManagementInitialTab}
+              />
+            )}
+
+            {importProfileDialogOpen && (
+              <ImportProfileDialog
+                isOpen={importProfileDialogOpen}
+                onClose={() => {
+                  setImportProfileDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                crossOsUnlocked={crossOsUnlocked}
+                subPage={currentPage === "import"}
+              />
+            )}
+
+            {cookieBotDialogOpen && (
+              <CookieBotPage
+                isOpen={cookieBotDialogOpen}
+                onClose={() => {
+                  setCookieBotDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "cookieBot"}
+                initialTab={cookieBotInitialTab}
+                profiles={profiles}
+                cloudUser={cloudUser}
+                onOpenProfileSync={handleOpenProfileSyncDialog}
+                onAssignProxy={handleAssignProfilesToProxy}
+              />
+            )}
+
+            {agentDialogOpen && (
+              <AgentPage
+                isOpen={agentDialogOpen}
+                onClose={() => {
+                  setAgentDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "agent"}
+                initialTab={agentInitialTab}
+                profiles={profiles}
+                cloudUser={cloudUser}
+              />
+            )}
+
+            {accountDialogOpen && (
+              <AccountPage
+                isOpen={accountDialogOpen}
+                onClose={() => {
+                  setAccountDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "account"}
+                onOpenSignIn={() => {
+                  setAccountDialogOpen(false);
+                  setCurrentPage("profiles");
+                  setDeviceCodeDialogOpen(true);
+                }}
+              />
+            )}
+
+            {trashPageOpen && (
+              <TrashPage
+                isOpen={trashPageOpen}
+                onClose={() => {
+                  setTrashPageOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "trash"}
+              />
+            )}
+          </main>
+        </div>
+
+        <CreateProfileDialog
+          isOpen={createProfileDialogOpen}
+          onClose={() => {
+            setCreateProfileDialogOpen(false);
+          }}
+          onCreateProfile={handleCreateProfile}
+          selectedGroupId={selectedGroupId}
+          crossOsUnlocked={crossOsUnlocked}
+        />
+
+        <CommandPalette
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+          onAction={runShortcut}
+          groupTargets={orderedGroupTargets}
+          onSelectGroup={(id) => {
+            handleRailNavigate("profiles");
+            handleSelectGroup(id);
+          }}
+          profiles={profiles}
+          runningProfileIds={runningProfiles}
+          onLaunchProfile={(profile) => {
+            void launchProfile(profile);
+          }}
+          onKillProfile={(profile) => {
+            void handleKillProfile(profile);
+          }}
+          onShowProfileInfo={(profile) => {
+            handleRailNavigate("profiles");
+            setProfileInfoOpenMethod("keyboard");
+            setProfileInfoDialog(profile);
+          }}
+          onCreateProfile={() => {
+            setCreateProfileDialogOpen(true);
+          }}
           onOpenAbout={() => {
             setAboutDialogOpen(true);
           }}
-          cookieBotRunning={Object.keys(cookieBotLiveSessions).length > 0}
         />
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {currentPage === "profiles" && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: MOTION_EASE_OUT }}
-              className="flex min-h-0 flex-1 flex-col px-3 pt-2.5"
-            >
-              <ProfilesDataTable
-                isLoading={isLoading && profiles.length === 0}
-                showOnboardingEmptyState={profiles.length === 0}
-                profiles={filteredProfiles}
-                infoDialogProfile={profileInfoDialog}
-                onInfoDialogProfileChange={setProfileInfoDialog}
-                onLaunchProfile={launchProfile}
-                onKillProfile={handleKillProfile}
-                onCloneProfile={handleCloneProfile}
-                onSetPassword={handleSetPassword}
-                onChangePassword={handleChangePassword}
-                onRemovePassword={handleRemovePassword}
-                onDeleteProfile={handleDeleteProfile}
-                onRenameProfile={handleRenameProfile}
-                onConfigureWayfern={handleConfigureWayfern}
-                onCopyCookiesToProfile={handleCopyCookiesToProfile}
-                onOpenCookieManagement={handleOpenCookieManagement}
-                runningProfiles={runningProfiles}
-                extensionGroups={extensionGroups}
-                isUpdating={isUpdating}
-                onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
-                onAssignProfilesToGroup={handleAssignProfilesToGroup}
-                onAssignProfilesToProxy={handleAssignProfilesToProxy}
-                selectedGroupId={selectedGroupId}
-                selectedProfiles={selectedProfiles}
-                onSelectedProfilesChange={setSelectedProfiles}
-                onBulkDelete={handleBulkDelete}
-                onBulkGroupAssignment={handleBulkGroupAssignment}
-                onBulkProxyAssignment={handleBulkProxyAssignment}
-                onBulkCopyCookies={handleBulkCopyCookies}
-                onBulkRun={handleBulkRun}
-                onBulkStop={handleBulkStop}
-                bulkActionsUnlocked={automationUnlocked}
-                onBulkExtensionGroupAssignment={
-                  handleBulkExtensionGroupAssignment
-                }
-                onAssignExtensionGroup={handleAssignExtensionGroup}
-                onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
-                onToggleProfileSync={handleToggleProfileSync}
-                crossOsUnlocked={crossOsUnlocked}
-                syncUnlocked={syncUnlocked}
-                getProfileSyncInfo={getProfileSyncInfo}
-                onLaunchWithSync={(profile) => {
-                  setSyncLeaderProfile(profile);
-                }}
-                onCreateProfile={() => {
-                  setCreateProfileDialogOpen(true);
-                }}
-                onImportProfiles={() => {
-                  handleRailNavigate("import");
-                }}
-              />
-            </motion.div>
-          )}
 
-          {currentPage === "shortcuts" && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: MOTION_EASE_OUT }}
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <ShortcutsPage groupTargets={orderedGroupTargets} />
-            </motion.div>
-          )}
-
-          {settingsDialogOpen && (
-            <SettingsDialog
-              isOpen={settingsDialogOpen}
-              onClose={() => {
-                setSettingsDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              onIntegrationsOpen={() => {
-                setSettingsDialogOpen(false);
-                setIntegrationsDialogOpen(true);
-                setCurrentPage("integrations");
-              }}
-              subPage={currentPage === "settings"}
-            />
-          )}
-
-          {integrationsDialogOpen && (
-            <IntegrationsDialog
-              isOpen={integrationsDialogOpen}
-              onClose={() => {
-                setIntegrationsDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              subPage={currentPage === "integrations"}
-              initialTab={integrationsInitialTab}
-            />
-          )}
-
-          {proxyManagementDialogOpen && (
-            <ProxyManagementDialog
-              isOpen={proxyManagementDialogOpen}
-              onClose={() => {
-                setProxyManagementDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              subPage={currentPage === "proxies" || currentPage === "vpns"}
-              initialTab={proxyManagementInitialTab}
-            />
-          )}
-
-          {groupManagementDialogOpen && (
-            <GroupManagementDialog
-              isOpen={groupManagementDialogOpen}
-              onClose={() => {
-                setGroupManagementDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              onGroupManagementComplete={handleGroupManagementComplete}
-              subPage={currentPage === "groups"}
-            />
-          )}
-
-          {extensionManagementDialogOpen && (
-            <ExtensionManagementDialog
-              isOpen={extensionManagementDialogOpen}
-              onClose={() => {
-                setExtensionManagementDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              limitedMode={false}
-              subPage={currentPage === "extensions"}
-              initialTab={extensionManagementInitialTab}
-            />
-          )}
-
-          {importProfileDialogOpen && (
-            <ImportProfileDialog
-              isOpen={importProfileDialogOpen}
-              onClose={() => {
-                setImportProfileDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              crossOsUnlocked={crossOsUnlocked}
-              subPage={currentPage === "import"}
-            />
-          )}
-
-          {cookieBotDialogOpen && (
-            <CookieBotPage
-              isOpen={cookieBotDialogOpen}
-              onClose={() => {
-                setCookieBotDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              subPage={currentPage === "cookieBot"}
-              initialTab={cookieBotInitialTab}
-              profiles={profiles}
-              cloudUser={cloudUser}
-              onOpenProfileSync={handleOpenProfileSyncDialog}
-              onAssignProxy={handleAssignProfilesToProxy}
-            />
-          )}
-
-          {accountDialogOpen && (
-            <AccountPage
-              isOpen={accountDialogOpen}
-              onClose={() => {
-                setAccountDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              subPage={currentPage === "account"}
-              onOpenSignIn={() => {
-                setAccountDialogOpen(false);
-                setCurrentPage("profiles");
-                setDeviceCodeDialogOpen(true);
-              }}
-            />
-          )}
-        </main>
-      </div>
-
-      <CreateProfileDialog
-        isOpen={createProfileDialogOpen}
-        onClose={() => {
-          setCreateProfileDialogOpen(false);
-        }}
-        onCreateProfile={handleCreateProfile}
-        selectedGroupId={selectedGroupId}
-        crossOsUnlocked={crossOsUnlocked}
-      />
-
-      <CommandPalette
-        open={commandPaletteOpen}
-        onOpenChange={setCommandPaletteOpen}
-        onAction={runShortcut}
-        groupTargets={orderedGroupTargets}
-        onSelectGroup={(id) => {
-          handleRailNavigate("profiles");
-          handleSelectGroup(id);
-        }}
-        profiles={profiles}
-        runningProfileIds={runningProfiles}
-        onLaunchProfile={(profile) => {
-          void launchProfile(profile);
-        }}
-        onKillProfile={(profile) => {
-          void handleKillProfile(profile);
-        }}
-        onShowProfileInfo={(profile) => {
-          handleRailNavigate("profiles");
-          setProfileInfoDialog(profile);
-        }}
-        onCreateProfile={() => {
-          setCreateProfileDialogOpen(true);
-        }}
-        onOpenAbout={() => {
-          setAboutDialogOpen(true);
-        }}
-      />
-
-      <AboutDialog
-        isOpen={aboutDialogOpen}
-        onClose={() => {
-          setAboutDialogOpen(false);
-        }}
-      />
-
-      <PreLaunchGateDialog
-        isOpen={gateState !== null}
-        profileName={gateState?.req.profile.name ?? ""}
-        profileId={gateState?.req.profile.id ?? ""}
-        requestId={gateState?.id ?? 0}
-        findings={gateState?.req.findings ?? null}
-        remainingCount={gateState?.remaining ?? 0}
-        onResult={settleGate}
-      />
-
-      {pendingUrls.map((pendingUrl) => (
-        <ProfileSelectorDialog
-          key={pendingUrl.id}
-          isOpen={true}
+        <AboutDialog
+          isOpen={aboutDialogOpen}
           onClose={() => {
-            setPendingUrls((prev) =>
-              prev.filter((u) => u.id !== pendingUrl.id),
-            );
+            setAboutDialogOpen(false);
           }}
-          url={pendingUrl.url}
-          isUpdating={isUpdating}
-          runningProfiles={runningProfiles}
         />
-      ))}
 
-      <PermissionDialog
-        isOpen={permissionDialogOpen}
-        onClose={() => {
-          setPermissionDialogOpen(false);
-        }}
-        permissionType={currentPermissionType}
-        onPermissionGranted={checkNextPermission}
-      />
+        <PreLaunchGateDialog
+          isOpen={gateState !== null}
+          profileName={gateState?.req.profile.name ?? ""}
+          profileId={gateState?.req.profile.id ?? ""}
+          requestId={gateState?.id ?? 0}
+          findings={gateState?.req.findings ?? null}
+          remainingCount={gateState?.remaining ?? 0}
+          onResult={settleGate}
+        />
 
-      <WelcomeDialog
-        isOpen={welcomeOpen}
-        needsSetup={profiles.length === 0}
-        onComplete={handleWelcomeComplete}
-      />
-      <ThankYouDialog
-        isOpen={thankYouOpen}
-        onClose={() => setThankYouOpen(false)}
-      />
+        {pendingUrls.map((pendingUrl) => (
+          <ProfileSelectorDialog
+            key={pendingUrl.id}
+            isOpen={true}
+            onClose={() => {
+              setPendingUrls((prev) =>
+                prev.filter((u) => u.id !== pendingUrl.id),
+              );
+            }}
+            url={pendingUrl.url}
+            isUpdating={isUpdating}
+            runningProfiles={runningProfiles}
+          />
+        ))}
 
-      <CloneProfileDialog
-        isOpen={!!cloneProfile}
-        onClose={() => {
-          setCloneProfile(null);
-        }}
-        profile={cloneProfile}
-      />
+        <PermissionDialog
+          isOpen={permissionDialogOpen}
+          onClose={() => {
+            setPermissionDialogOpen(false);
+          }}
+          permissionType={currentPermissionType}
+          onPermissionGranted={checkNextPermission}
+        />
 
-      <ProfilePasswordDialog
-        isOpen={!!passwordDialogProfile}
-        onClose={() => {
-          pendingLaunchAfterUnlockRef.current = null;
-          setPasswordDialogProfile(null);
-        }}
-        profile={passwordDialogProfile}
-        mode={passwordDialogMode}
-        onSuccess={(p) => {
-          // Resume pending launch after unlock.
-          if (
-            passwordDialogMode === "unlock" &&
-            pendingLaunchAfterUnlockRef.current?.id === p.id
-          ) {
-            const target = pendingLaunchAfterUnlockRef.current;
+        <WelcomeDialog
+          isOpen={welcomeOpen}
+          needsSetup={profiles.length === 0}
+          onComplete={handleWelcomeComplete}
+        />
+        <ThankYouDialog
+          isOpen={thankYouOpen}
+          onClose={() => setThankYouOpen(false)}
+        />
+
+        <CloneProfileDialog
+          isOpen={!!cloneProfile}
+          onClose={() => {
+            setCloneProfile(null);
+          }}
+          profile={cloneProfile}
+        />
+
+        <ProfilePasswordDialog
+          isOpen={!!passwordDialogProfile}
+          onClose={() => {
             pendingLaunchAfterUnlockRef.current = null;
-            void launchProfile(target);
+            setPasswordDialogProfile(null);
+          }}
+          profile={passwordDialogProfile}
+          mode={passwordDialogMode}
+          onSuccess={(p) => {
+            // Resume pending launch after unlock.
+            if (
+              passwordDialogMode === "unlock" &&
+              pendingLaunchAfterUnlockRef.current?.id === p.id
+            ) {
+              const target = pendingLaunchAfterUnlockRef.current;
+              pendingLaunchAfterUnlockRef.current = null;
+              void launchProfile(target);
+            }
+            // On set/change/remove, the profile's encryption state changed.
+            // Push that state to the sync server immediately so other devices
+            // see the new envelope before they next pull. Skip if the profile
+            // is currently running — its files would be in flux.
+            if (
+              (passwordDialogMode === "set" ||
+                passwordDialogMode === "change" ||
+                passwordDialogMode === "remove") &&
+              !runningProfiles.has(p.id) &&
+              p.sync_mode !== "Disabled"
+            ) {
+              void invoke("request_profile_sync", { profileId: p.id }).catch(
+                (err: unknown) => {
+                  console.error("post-password sync failed", err);
+                },
+              );
+            }
+          }}
+        />
+
+        <WayfernConfigDialog
+          isOpen={wayfernConfigDialogOpen}
+          onClose={() => {
+            setWayfernConfigDialogOpen(false);
+          }}
+          profile={currentProfileForWayfernConfig}
+          onSave={handleSaveWayfernConfig}
+          isRunning={
+            currentProfileForWayfernConfig
+              ? runningProfiles.has(currentProfileForWayfernConfig.id)
+              : false
           }
-          // On set/change/remove, the profile's encryption state changed.
-          // Push that state to the sync server immediately so other devices
-          // see the new envelope before they next pull. Skip if the profile
-          // is currently running — its files would be in flux.
-          if (
-            (passwordDialogMode === "set" ||
-              passwordDialogMode === "change" ||
-              passwordDialogMode === "remove") &&
-            !runningProfiles.has(p.id) &&
-            p.sync_mode !== "Disabled"
-          ) {
-            void invoke("request_profile_sync", { profileId: p.id }).catch(
-              (err: unknown) => {
-                console.error("post-password sync failed", err);
-              },
-            );
+          crossOsUnlocked={crossOsUnlocked}
+        />
+
+        <GroupAssignmentDialog
+          isOpen={groupAssignmentDialogOpen}
+          onClose={() => {
+            setGroupAssignmentDialogOpen(false);
+          }}
+          selectedProfiles={selectedProfilesForGroup}
+          onAssignmentComplete={handleGroupAssignmentComplete}
+          profiles={profiles}
+        />
+
+        <ExtensionGroupAssignmentDialog
+          isOpen={extensionGroupAssignmentDialogOpen}
+          onClose={() => {
+            setExtensionGroupAssignmentDialogOpen(false);
+          }}
+          selectedProfiles={selectedProfilesForExtensionGroup}
+          onAssignmentComplete={handleExtensionGroupAssignmentComplete}
+          profiles={profiles}
+        />
+
+        <ProxyAssignmentDialog
+          isOpen={proxyAssignmentDialogOpen}
+          onClose={() => {
+            setProxyAssignmentDialogOpen(false);
+          }}
+          selectedProfiles={selectedProfilesForProxy}
+          onAssignmentComplete={handleProxyAssignmentComplete}
+          profiles={profiles}
+          storedProxies={storedProxies}
+          vpnConfigs={vpnConfigs}
+        />
+
+        <ProxyDistributionDialog
+          isOpen={proxyDistributionDialogOpen}
+          onClose={() => {
+            setProxyDistributionDialogOpen(false);
+          }}
+          selectedProfiles={selectedProfilesForDistribution}
+          profiles={profiles}
+          storedProxies={storedProxies}
+          onDistributionComplete={() => {
+            // useProfileEvents refreshes the table; only the selection needs
+            // clearing, and only once the assignments actually landed.
+            setSelectedProfiles([]);
+          }}
+        />
+
+        <CookieCopyDialog
+          isOpen={cookieCopyDialogOpen}
+          onClose={() => {
+            setCookieCopyDialogOpen(false);
+            setSelectedProfilesForCookies([]);
+          }}
+          selectedProfiles={selectedProfilesForCookies}
+          profiles={profiles}
+          runningProfiles={runningProfiles}
+          onCopyComplete={() => {
+            setSelectedProfilesForCookies([]);
+          }}
+        />
+
+        <CookieManagementDialog
+          isOpen={cookieManagementDialogOpen}
+          onClose={() => {
+            setCookieManagementDialogOpen(false);
+            setCurrentProfileForCookieManagement(null);
+          }}
+          profile={currentProfileForCookieManagement}
+        />
+
+        <DeleteConfirmationDialog
+          isOpen={pendingBulkAction !== null}
+          onClose={() => {
+            setPendingBulkAction(null);
+          }}
+          onConfirm={() => {
+            if (!pendingBulkAction) return;
+            if (pendingBulkAction.action === "run") {
+              void executeBulkRun(pendingBulkAction.profiles);
+            } else {
+              void executeBulkStop(pendingBulkAction.profiles);
+            }
+          }}
+          title={
+            pendingBulkAction?.action === "stop"
+              ? t("profiles.bulkStop.confirmTitle", {
+                  count: pendingBulkAction?.profiles.length ?? 0,
+                })
+              : t("profiles.bulkRun.confirmTitle", {
+                  count: pendingBulkAction?.profiles.length ?? 0,
+                })
           }
-        }}
-      />
-
-      <WayfernConfigDialog
-        isOpen={wayfernConfigDialogOpen}
-        onClose={() => {
-          setWayfernConfigDialogOpen(false);
-        }}
-        profile={currentProfileForWayfernConfig}
-        onSave={handleSaveWayfernConfig}
-        isRunning={
-          currentProfileForWayfernConfig
-            ? runningProfiles.has(currentProfileForWayfernConfig.id)
-            : false
-        }
-        crossOsUnlocked={crossOsUnlocked}
-      />
-
-      <GroupAssignmentDialog
-        isOpen={groupAssignmentDialogOpen}
-        onClose={() => {
-          setGroupAssignmentDialogOpen(false);
-        }}
-        selectedProfiles={selectedProfilesForGroup}
-        onAssignmentComplete={handleGroupAssignmentComplete}
-        profiles={profiles}
-      />
-
-      <ExtensionGroupAssignmentDialog
-        isOpen={extensionGroupAssignmentDialogOpen}
-        onClose={() => {
-          setExtensionGroupAssignmentDialogOpen(false);
-        }}
-        selectedProfiles={selectedProfilesForExtensionGroup}
-        onAssignmentComplete={handleExtensionGroupAssignmentComplete}
-        profiles={profiles}
-      />
-
-      <ProxyAssignmentDialog
-        isOpen={proxyAssignmentDialogOpen}
-        onClose={() => {
-          setProxyAssignmentDialogOpen(false);
-        }}
-        selectedProfiles={selectedProfilesForProxy}
-        onAssignmentComplete={handleProxyAssignmentComplete}
-        profiles={profiles}
-        storedProxies={storedProxies}
-        vpnConfigs={vpnConfigs}
-      />
-
-      <CookieCopyDialog
-        isOpen={cookieCopyDialogOpen}
-        onClose={() => {
-          setCookieCopyDialogOpen(false);
-          setSelectedProfilesForCookies([]);
-        }}
-        selectedProfiles={selectedProfilesForCookies}
-        profiles={profiles}
-        runningProfiles={runningProfiles}
-        onCopyComplete={() => {
-          setSelectedProfilesForCookies([]);
-        }}
-      />
-
-      <CookieManagementDialog
-        isOpen={cookieManagementDialogOpen}
-        onClose={() => {
-          setCookieManagementDialogOpen(false);
-          setCurrentProfileForCookieManagement(null);
-        }}
-        profile={currentProfileForCookieManagement}
-      />
-
-      <DeleteConfirmationDialog
-        isOpen={pendingBulkAction !== null}
-        onClose={() => {
-          setPendingBulkAction(null);
-        }}
-        onConfirm={() => {
-          if (!pendingBulkAction) return;
-          if (pendingBulkAction.action === "run") {
-            void executeBulkRun(pendingBulkAction.profiles);
-          } else {
-            void executeBulkStop(pendingBulkAction.profiles);
+          description={
+            pendingBulkAction?.action === "stop"
+              ? t("profiles.bulkStop.confirmDescription", {
+                  count: pendingBulkAction?.profiles.length ?? 0,
+                })
+              : t("profiles.bulkRun.confirmDescription", {
+                  count: pendingBulkAction?.profiles.length ?? 0,
+                })
           }
-        }}
-        title={
-          pendingBulkAction?.action === "stop"
-            ? t("profiles.bulkStop.confirmTitle", {
-                count: pendingBulkAction?.profiles.length ?? 0,
-              })
-            : t("profiles.bulkRun.confirmTitle", {
-                count: pendingBulkAction?.profiles.length ?? 0,
-              })
-        }
-        description={
-          pendingBulkAction?.action === "stop"
-            ? t("profiles.bulkStop.confirmDescription", {
-                count: pendingBulkAction?.profiles.length ?? 0,
-              })
-            : t("profiles.bulkRun.confirmDescription", {
-                count: pendingBulkAction?.profiles.length ?? 0,
-              })
-        }
-        confirmButtonText={
-          pendingBulkAction?.action === "stop"
-            ? t("profiles.bulkStop.confirmButton", {
-                count: pendingBulkAction?.profiles.length ?? 0,
-              })
-            : t("profiles.bulkRun.confirmButton", {
-                count: pendingBulkAction?.profiles.length ?? 0,
-              })
-        }
-        confirmButtonVariant="default"
-        isLoading={isBulkActing}
-      />
-      <DeleteConfirmationDialog
-        isOpen={showBulkDeleteConfirmation}
-        onClose={() => {
-          setShowBulkDeleteConfirmation(false);
-        }}
-        onConfirm={confirmBulkDelete}
-        title={t("profiles.bulkDelete.title")}
-        description={t("profiles.bulkDelete.description", {
-          count: selectedProfiles.length,
-        })}
-        confirmButtonText={t("profiles.bulkDelete.confirmButton", {
-          count: selectedProfiles.length,
-        })}
-        isLoading={isBulkDeleting}
-        profileIds={selectedProfiles}
-        profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
-      />
-
-      <SyncConfigDialog
-        isOpen={syncConfigDialogOpen}
-        onClose={(loginOccurred) => {
-          setSyncConfigDialogOpen(false);
-          void checkSelfHostedSync();
-          if (loginOccurred) {
-            setSyncAllDialogOpen(true);
+          confirmButtonText={
+            pendingBulkAction?.action === "stop"
+              ? t("profiles.bulkStop.confirmButton", {
+                  count: pendingBulkAction?.profiles.length ?? 0,
+                })
+              : t("profiles.bulkRun.confirmButton", {
+                  count: pendingBulkAction?.profiles.length ?? 0,
+                })
           }
-        }}
-        onLoginStarted={() => {
-          // Hand the verify step off to its own dialog. We close this one
-          // first so the verify dialog isn't stacked on top of it (and
-          // can't end up stacked on top of the profile selector either).
-          setSyncConfigDialogOpen(false);
-          setDeviceCodeDialogOpen(true);
-        }}
-      />
+          confirmButtonVariant="default"
+          isLoading={isBulkActing}
+        />
+        <DeleteConfirmationDialog
+          isOpen={showBulkDeleteConfirmation}
+          onClose={() => {
+            setShowBulkDeleteConfirmation(false);
+          }}
+          onConfirm={confirmBulkDelete}
+          title={t("profiles.bulkDelete.title")}
+          description={t("profiles.bulkDelete.description", {
+            count: selectedProfiles.length,
+          })}
+          confirmButtonText={t("profiles.bulkDelete.confirmButton", {
+            count: selectedProfiles.length,
+          })}
+          isLoading={isBulkDeleting}
+          profileIds={selectedProfiles}
+          profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
+        />
 
-      {/* Only render while no profile-selector flow is in progress, so the
-          verify dialog never lands on top of a deep-link-triggered selector. */}
-      {pendingUrls.length === 0 && (
-        <DeviceCodeVerifyDialog
-          isOpen={deviceCodeDialogOpen}
+        <SyncConfigDialog
+          isOpen={syncConfigDialogOpen}
           onClose={(loginOccurred) => {
-            setDeviceCodeDialogOpen(false);
+            setSyncConfigDialogOpen(false);
+            void checkSelfHostedSync();
             if (loginOccurred) {
               setSyncAllDialogOpen(true);
             }
           }}
+          onLoginStarted={() => {
+            // Hand the verify step off to its own dialog. We close this one
+            // first so the verify dialog isn't stacked on top of it (and
+            // can't end up stacked on top of the profile selector either).
+            setSyncConfigDialogOpen(false);
+            setDeviceCodeDialogOpen(true);
+          }}
         />
-      )}
 
-      <SyncAllDialog
-        isOpen={syncAllDialogOpen}
-        onClose={() => {
-          setSyncAllDialogOpen(false);
-        }}
-      />
+        {/* Only render while no profile-selector flow is in progress, so the
+          verify dialog never lands on top of a deep-link-triggered selector. */}
+        {pendingUrls.length === 0 && (
+          <DeviceCodeVerifyDialog
+            isOpen={deviceCodeDialogOpen}
+            onClose={(loginOccurred) => {
+              setDeviceCodeDialogOpen(false);
+              if (loginOccurred) {
+                setSyncAllDialogOpen(true);
+              }
+            }}
+          />
+        )}
 
-      <ProfileSyncDialog
-        isOpen={profileSyncDialogOpen}
-        onClose={() => {
-          setProfileSyncDialogOpen(false);
-          setCurrentProfileForSync(null);
-        }}
-        profile={currentProfileForSync}
-        onSyncConfigOpen={() => {
-          setSyncConfigDialogOpen(true);
-        }}
-      />
+        <SyncAllDialog
+          isOpen={syncAllDialogOpen}
+          onClose={() => {
+            setSyncAllDialogOpen(false);
+          }}
+        />
 
-      {/* Wayfern Terms and Conditions Dialog - shown if terms not accepted */}
-      <WayfernTermsDialog
-        isOpen={!termsLoading && termsAccepted === false}
-        onAccepted={checkTerms}
-      />
+        <ProfileSyncDialog
+          isOpen={profileSyncDialogOpen}
+          onClose={() => {
+            setProfileSyncDialogOpen(false);
+            setCurrentProfileForSync(null);
+          }}
+          profile={currentProfileForSync}
+          onSyncConfigOpen={() => {
+            setSyncConfigDialogOpen(true);
+          }}
+        />
 
-      {/* Commercial Trial Modal - shown once when trial expires (skip for paid users) */}
-      <CommercialTrialModal
-        isOpen={
-          !termsLoading &&
-          termsAccepted === true &&
-          trialStatus?.type === "Expired" &&
-          !trialAcknowledged &&
-          !crossOsUnlocked
-        }
-        onClose={checkTrialStatus}
-      />
+        {/* Wayfern Terms and Conditions Dialog - shown if terms not accepted */}
+        <WayfernTermsDialog
+          isOpen={!termsLoading && termsAccepted === false}
+          onAccepted={checkTerms}
+        />
 
-      <WindowResizeWarningDialog
-        isOpen={windowResizeWarningOpen}
-        onResult={(proceed) => {
-          setWindowResizeWarningOpen(false);
-          windowResizeWarningResolver.current?.(proceed);
-          windowResizeWarningResolver.current = null;
-        }}
-      />
+        {/* Commercial Trial Modal - shown once when trial expires (skip for paid users) */}
+        <CommercialTrialModal
+          isOpen={
+            !termsLoading &&
+            termsAccepted === true &&
+            trialStatus?.type === "Expired" &&
+            !trialAcknowledged &&
+            !crossOsUnlocked
+          }
+          onClose={checkTrialStatus}
+        />
 
-      <SyncFollowerDialog
-        isOpen={syncLeaderProfile !== null}
-        onClose={() => {
-          setSyncLeaderProfile(null);
-        }}
-        leaderProfile={syncLeaderProfile}
-        allProfiles={profiles}
-        runningProfiles={runningProfiles}
-      />
-    </div>
+        <WindowResizeWarningDialog
+          isOpen={windowResizeWarningOpen}
+          onResult={(proceed) => {
+            setWindowResizeWarningOpen(false);
+            windowResizeWarningResolver.current?.(proceed);
+            windowResizeWarningResolver.current = null;
+          }}
+        />
+
+        <SyncFollowerDialog
+          isOpen={syncLeaderProfile !== null}
+          onClose={() => {
+            setSyncLeaderProfile(null);
+          }}
+          leaderProfile={syncLeaderProfile}
+          allProfiles={profiles}
+          runningProfiles={runningProfiles}
+        />
+      </div>
+    </ProfileGroupDragProvider>
   );
 }

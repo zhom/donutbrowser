@@ -67,9 +67,7 @@ export function useAutoHeight<T extends HTMLElement = HTMLDivElement>(
 
     const ro = new ResizeObserver(() => {
       const next = measure();
-      requestAnimationFrame(() => {
-        setHeight(next);
-      });
+      setHeight((previous) => (previous === next ? previous : next));
     });
 
     ro.observe(el);

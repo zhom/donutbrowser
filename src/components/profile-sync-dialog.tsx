@@ -17,7 +17,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
-import { getEntitlements } from "@/lib/entitlements";
+import { effectivePlanOf, getEntitlements } from "@/lib/entitlements";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { BrowserProfile, SyncMode, SyncSettings } from "@/types";
 import { isSyncEnabled } from "@/types";
@@ -41,7 +41,7 @@ export function ProfileSyncDialog({
   // Encryption available to everyone except team members who aren't owners
   const canUseEncryption =
     cloudUser == null ||
-    cloudUser.plan !== "team" ||
+    effectivePlanOf(cloudUser) !== "team" ||
     cloudUser.teamRole === "owner";
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);

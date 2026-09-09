@@ -184,6 +184,10 @@ impl WayfernTermsManager {
     }
 
     log::info!("Wayfern terms and conditions accepted successfully");
+    // The frontend only re-reads the marker when it drove the acceptance
+    // itself. Anything else that accepts (the REST API, a WebDriver session)
+    // would leave the blocking dialog open, so the change is announced.
+    let _ = crate::events::emit_empty("wayfern-terms-accepted");
     Ok(())
   }
 }

@@ -27,6 +27,8 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createSafeDiagnostics } from "./lib/diagnostics.mjs";
+import { extensionCrx3 } from "./lib/fixtures.mjs";
+import { DRIVER_COMMAND_TIMEOUT_SECONDS } from "./lib/limits.mjs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(dirname, "..");
@@ -51,7 +53,7 @@ const donutLockfile = path.join(projectRoot, "src-tauri", "Cargo.lock");
 
 const suiteFiles = {
   smoke: ["diagnostics.test.mjs", "smoke.test.mjs", "coverage.test.mjs"],
-  ui: ["ui.test.mjs"],
+  ui: ["ui.test.mjs", "motion.test.mjs"],
   entities: ["entities.test.mjs"],
   network: ["network.test.mjs"],
   integrations: ["integrations.test.mjs"],
@@ -62,6 +64,7 @@ const suiteFiles = {
     "coverage.test.mjs",
     "smoke.test.mjs",
     "ui.test.mjs",
+    "motion.test.mjs",
     "entities.test.mjs",
     "network.test.mjs",
     "integrations.test.mjs",
@@ -246,7 +249,7 @@ function pinnedDriverVersion() {
   const match = manifest.match(/^tauri-wd\s*=\s*"=([^"]+)"$/m);
   if (!match) {
     throw new Error(
-      'e2e/app/Cargo.toml must pin tauri-wd to an exact version, e.g. tauri-wd = "=0.1.11"',
+      'e2e/app/Cargo.toml must pin tauri-wd to an exact version, e.g. tauri-wd = "=0.2.0"',
     );
   }
   return match[1];
@@ -310,7 +313,7 @@ function buildAll() {
   ensureDriver();
 }
 
-function startFixtureServer(geoIpFixture) {
+function startFixtureServer(geoIpFixture, geoIpAsnFixture) {
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
     if (url.pathname === "/health") {
@@ -344,12 +347,46 @@ function startFixtureServer(geoIpFixture) {
       response.end("ads.e2e.invalid\ntracker.e2e.invalid\n");
       return;
     }
+    // A CRX3 container, the shape the Chrome Web Store serves. The extension
+    // importer has to find the ZIP at the offset the header declares rather
+    // than scanning the file, so the fixture is a real container and not a
+    // renamed archive.
+    if (url.pathname === "/extension.crx") {
+      const crx = extensionCrx3();
+      response.writeHead(200, {
+        "content-type": "application/x-chrome-extension",
+        "content-length": String(crx.length),
+        "cache-control": "no-store",
+      });
+      response.end(crx);
+      return;
+    }
+    // Named like an archive, but not one. A link import must refuse this
+    // rather than storing a broken extension.
+    if (url.pathname === "/not-an-extension.zip") {
+      const body = Buffer.from("<!doctype html><html>not an archive</html>");
+      response.writeHead(200, {
+        "content-type": "application/zip",
+        "content-length": String(body.length),
+        "cache-control": "no-store",
+      });
+      response.end(body);
+      return;
+    }
     if (url.pathname === "/geoip.mmdb" && geoIpFixture) {
       response.writeHead(200, {
         "content-type": "application/octet-stream",
         "content-length": String(statSync(geoIpFixture).size),
       });
       createReadStream(geoIpFixture).pipe(response);
+      return;
+    }
+    if (url.pathname === "/geoip-asn.mmdb" && geoIpAsnFixture) {
+      response.writeHead(200, {
+        "content-type": "application/octet-stream",
+        "content-length": String(statSync(geoIpAsnFixture).size),
+      });
+      createReadStream(geoIpAsnFixture).pipe(response);
       return;
     }
     response.writeHead(200, {
@@ -376,19 +413,42 @@ function startFixtureServer(geoIpFixture) {
 }
 
 async function ensureGeoIpFixture() {
-  if (process.env.DONUT_E2E_GEOIP_FIXTURE) {
-    const fixture = path.resolve(process.env.DONUT_E2E_GEOIP_FIXTURE);
+  return ensureMmdbFixture("GeoLite2-City.mmdb", "-City.mmdb", {
+    override: process.env.DONUT_E2E_GEOIP_FIXTURE,
+    overrideName: "DONUT_E2E_GEOIP_FIXTURE",
+  });
+}
+
+/**
+ * The autonomous-system database. Separate from the city one because that is
+ * how MaxMind publishes them, and because the organisation a proxy check
+ * reports as the exit's ISP lives only in this file.
+ */
+async function ensureGeoIpAsnFixture() {
+  return ensureMmdbFixture("GeoLite2-ASN.mmdb", "-ASN.mmdb", {
+    override: process.env.DONUT_E2E_GEOIP_ASN_FIXTURE,
+    overrideName: "DONUT_E2E_GEOIP_ASN_FIXTURE",
+  });
+}
+
+async function ensureMmdbFixture(
+  fileName,
+  assetSuffix,
+  { override, overrideName },
+) {
+  if (override) {
+    const fixture = path.resolve(override);
     if (!existsSync(fixture)) {
-      throw new Error(`DONUT_E2E_GEOIP_FIXTURE does not exist: ${fixture}`);
+      throw new Error(`${overrideName} does not exist: ${fixture}`);
     }
     return fixture;
   }
   const toolsDir = path.join(os.tmpdir(), "donut-e2e-tools");
-  const fixture = path.join(toolsDir, "GeoLite2-City.mmdb");
+  const fixture = path.join(toolsDir, fileName);
   await mkdir(toolsDir, { recursive: true });
   if (existsSync(fixture)) return fixture;
 
-  log("Downloading GeoLite City E2E dependency");
+  log(`Downloading ${fileName} E2E dependency`);
   const releases = await fetch(
     "https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases",
     {
@@ -405,8 +465,8 @@ async function ensureGeoIpFixture() {
   });
   const url = releases
     .flatMap((release) => release.assets ?? [])
-    .find((asset) => asset.name.endsWith("-City.mmdb"))?.browser_download_url;
-  if (!url) throw new Error("No GeoLite City MMDB asset was found");
+    .find((asset) => asset.name.endsWith(assetSuffix))?.browser_download_url;
+  if (!url) throw new Error(`No GeoLite ${assetSuffix} asset was found`);
   const temporary = `${fixture}.${process.pid}.tmp`;
   await download(url, temporary);
   await rename(temporary, fixture);
@@ -913,8 +973,10 @@ async function main() {
         "4",
         "--startup-timeout",
         "120",
+        // Sized to the longest command the suites issue (a Wayfern download),
+        // so the driver never cuts a command shorter than the session asked.
         "--command-timeout",
-        "630",
+        String(DRIVER_COMMAND_TIMEOUT_SECONDS),
         "--log",
         options.verbose ? "debug" : "info",
       ],
@@ -936,7 +998,8 @@ async function main() {
       (options.suite === "network" || options.suite === "full") &&
       process.env.DONUT_E2E_SKIP_NETWORK_TEST !== "1";
     const geoIpFixture = needsBrowser ? await ensureGeoIpFixture() : null;
-    fixture = await startFixtureServer(geoIpFixture);
+    const geoIpAsnFixture = needsBrowser ? await ensureGeoIpAsnFixture() : null;
+    fixture = await startFixtureServer(geoIpFixture, geoIpAsnFixture);
     let sync = {};
     if (options.suite === "sync" || options.suite === "full") {
       sync = await startSyncInfrastructure(runRoot, options, records);
@@ -973,6 +1036,11 @@ async function main() {
       "--test",
       "--test-concurrency=1",
       "--test-reporter=spec",
+      // One test out of a suite, for iterating on a failure without paying
+      // for the rest of the file. Never set in CI.
+      ...(process.env.DONUT_E2E_TEST_NAME_PATTERN
+        ? [`--test-name-pattern=${process.env.DONUT_E2E_TEST_NAME_PATTERN}`]
+        : []),
       ...files,
     ];
     const child = spawn(process.execPath, testArgs, {
@@ -985,6 +1053,16 @@ async function main() {
         DONUT_E2E_DRIVER_URL: `http://127.0.0.1:${driverPort}`,
         DONUT_E2E_FIXTURE_URL: `http://127.0.0.1:${fixture.port}`,
         DONUT_E2E_GEOIP_FIXTURE_READY: geoIpFixture ? "1" : "0",
+        DONUT_E2E_GEOIP_ASN_FIXTURE_READY: geoIpAsnFixture ? "1" : "0",
+        // Every suite runs the Donut window headless so a local run never
+        // pops a window or steals focus: the app builds it hidden and the
+        // tauri-wd plugin keeps it off screen (on macOS transparent,
+        // click-through and never key, with the app as an accessory; hidden
+        // elsewhere). AppSession forwards this as the headless capability;
+        // only the driver's TAURI_WEBDRIVER_HEADLESS reaches the app.
+        // DONUT_E2E_HEADED=1 shows the window again when a failure needs
+        // watching. Wayfern itself is a separate process and unaffected.
+        DONUT_E2E_HEADLESS: process.env.DONUT_E2E_HEADED === "1" ? "0" : "1",
         WAYFERN_TEST_TOKEN: token,
         RESIDENTIAL_PROXY_URL_ONE_SOCKS:
           localValues.RESIDENTIAL_PROXY_URL_ONE_SOCKS ?? "",

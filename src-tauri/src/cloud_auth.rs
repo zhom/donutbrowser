@@ -2,7 +2,6 @@ use aes_gcm::{
   aead::{Aead, KeyInit},
   Aes256Gcm, Key, Nonce,
 };
-use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use chrono::Utc;
 use lazy_static::lazy_static;
 use rand::RngExt;
@@ -15,18 +14,18 @@ use tokio::sync::Mutex;
 
 use crate::browser::ProxySettings;
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::settings_manager::SettingsManager;
+use crate::settings_manager::{SettingsManager, StoredMcpRemoteKey};
 use crate::sync;
 
 pub const CLOUD_API_URL: &str = "https://api.donutbrowser.com";
 pub const CLOUD_SYNC_URL: &str = "https://sync.donutbrowser.com";
 
-/// Default per-hour cap on local automation API / MCP requests. Mirrors the
-/// backend's DEFAULT_REQUESTS_PER_HOUR.
+/// Default per-hour cap on local automation API / MCP requests, used when the
+/// cloud API has not sent one.
 const DEFAULT_REQUESTS_PER_HOUR: i64 = 100;
 
 /// Capability + limit set the account is entitled to, derived from its plan.
-/// Mirrors `apps/backend/src/plans/entitlements.ts`. Features are gated on these
+/// Mirrors the entitlement set the cloud API sends. Features are gated on these
 /// flags instead of a single "is paid?" boolean, so a plan like "solo" (cloud
 /// backup + nightly cookie bot, no automation, no fingerprint editing, no
 /// hands-on remote session) is just data here.
@@ -54,6 +53,23 @@ pub struct Entitlements {
   /// control must read THIS rather than `remote_browser_hours > 0`.
   #[serde(rename = "remoteInteractive", default)]
   pub remote_interactive: bool,
+  /// Whether the plan may drive THIS desktop from Donut cloud: the remote MCP
+  /// endpoint and the API in front of it.
+  ///
+  /// Read only by the UI. The bridge itself never gates on this: the relay
+  /// decides who may send work, and a cached entitlement that is a refresh
+  /// cycle out of date must not be what refuses a customer their own machine.
+  #[serde(rename = "remoteControl", default)]
+  pub remote_control: bool,
+  /// Whether the plan may run the browsing agent: a goal the cloud pursues on
+  /// one profile, on this desktop or on a leased host.
+  ///
+  /// Read only by the UI, and never back-filled from `browser_automation`. A
+  /// backend too old to send this key is a backend with no `api/agent` routes
+  /// to be entitled to, so `false` is the true answer rather than a gap to
+  /// guess at — the same reasoning `remote_control` is held to.
+  #[serde(rename = "agentAutomation", default)]
+  pub agent_automation: bool,
   #[serde(rename = "profileLimit", default)]
   pub profile_limit: i64,
   #[serde(rename = "requestsPerHour", default)]
@@ -83,17 +99,26 @@ fn derive_entitlements(
       team_collaboration: false,
       cookie_bot: false,
       remote_interactive: false,
+      remote_control: false,
+      agent_automation: false,
       profile_limit: 0,
       requests_per_hour: 0,
       remote_browser_hours: 0,
     };
   }
   // Tuple order: (browser_automation, cross_os_fingerprints, cloud_backup,
-  // team_collaboration, cookie_bot, remote_interactive).
+  // team_collaboration, cookie_bot, remote_interactive, remote_control,
+  // agent_automation).
   //
   // pro and any unrecognized paid plan -> pro-level (never team). Solo is the
   // one row where cookie_bot and browser_automation disagree, which is why
   // cookie_bot can no longer be derived from browser_automation below.
+  //
+  // remote_control is enterprise-only, and is withheld from the unrecognized
+  // row rather than granted with the rest. Everything else here defaults
+  // generous so a comped account is never locked out of what it is paying for;
+  // an internet-facing hook into this machine is the one capability where
+  // guessing "probably yes" is not the safe direction to guess in.
   let (
     browser_automation,
     cross_os_fingerprints,
@@ -101,10 +126,13 @@ fn derive_entitlements(
     team_collaboration,
     cookie_bot,
     remote_interactive,
+    remote_control,
+    agent_automation,
   ) = match plan {
-    "solo" => (false, false, true, false, true, false),
-    "team" | "enterprise" => (true, true, true, true, true, true),
-    _ => (true, true, true, false, true, true),
+    "solo" => (false, false, true, false, true, false, false, false),
+    "enterprise" => (true, true, true, true, true, true, true, true),
+    "team" => (true, true, true, true, true, true, false, true),
+    _ => (true, true, true, false, true, true, false, true),
   };
   Entitlements {
     active,
@@ -114,6 +142,8 @@ fn derive_entitlements(
     team_collaboration,
     cookie_bot,
     remote_interactive,
+    remote_control,
+    agent_automation,
     profile_limit,
     requests_per_hour: if browser_automation {
       DEFAULT_REQUESTS_PER_HOUR
@@ -151,10 +181,15 @@ pub struct CloudUser {
   pub team_name: Option<String>,
   #[serde(rename = "teamRole", default)]
   pub team_role: Option<String>,
+  /// The plan this account is served under. A team member's `plan` stays
+  /// `"free"` (the owner pays) while the backend resolves this to the owner's
+  /// tier. `default` keeps the login response and older backends deserializing;
+  /// read it through `effective_plan()`.
+  #[serde(rename = "effectivePlan", default)]
+  pub effective_plan: Option<String>,
   // This desktop session's position among the user's active devices, oldest
-  // first. Ordinal 1 is the primary device — the only one that can run browser
-  // automation. `default` keeps older login/state payloads (which lack these
-  // fields) deserializing cleanly.
+  // first, as the cloud API reports it. Shown in the UI. `default` keeps older
+  // login/state payloads (which lack these fields) deserializing cleanly.
   #[serde(rename = "deviceOrdinal", default)]
   pub device_ordinal: Option<i64>,
   #[serde(rename = "deviceCount", default)]
@@ -168,6 +203,13 @@ pub struct CloudUser {
 }
 
 impl CloudUser {
+  /// The plan the account is actually served under: `effectivePlan` when the
+  /// backend sent one, else the row's own `plan`. Gates that ask "is this a
+  /// paid / team account" read this; billing-only surfaces keep `plan`.
+  pub fn effective_plan(&self) -> &str {
+    self.effective_plan.as_deref().unwrap_or(&self.plan)
+  }
+
   /// Authoritative entitlements: the server-sent set when present, else derived
   /// locally from the plan fields (keeps older cached state / backends working).
   pub fn entitlements(&self) -> Entitlements {
@@ -225,6 +267,51 @@ struct RefreshTokenResponse {
 struct SyncTokenResponse {
   #[serde(rename = "syncToken")]
   sync_token: String,
+}
+
+/// Prefix of a remote MCP credential. Only a key carrying this prefix may ever
+/// be stored here; a credential of any other kind is rejected.
+pub const MCP_KEY_PREFIX: &str = "dmk_";
+
+/// A freshly minted remote MCP credential. The plaintext `key` is shown by the
+/// server exactly once, in this response.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpKeyGrant {
+  pub id: String,
+  pub token_prefix: String,
+  pub key: String,
+}
+
+/// What a key endpoint answered once the request itself went through.
+///
+/// `api_call_with_retry` reads a 401 out of the ERROR string and refreshes the
+/// session once, so only a 401 (and a transport failure) may be an `Err`. Every
+/// other refusal travels as a value, so it reaches the code mapping below
+/// instead of being mistaken for a dead session.
+enum McpKeyAnswer<T> {
+  Granted(T),
+  Refused { status: u16, body: String },
+}
+
+/// The `{"code"}` the UI shows for a refused credential mint.
+///
+/// A 409 on `POST /api/mcp/keys` is the per-account cap, whether or not the
+/// server bothered to name it; everything else is "not right now", carrying
+/// the server's message as the detail so the log says why.
+fn mcp_key_refusal(status: u16, body: &str) -> String {
+  if status == 409 {
+    return crate::backend_error("MCP_REMOTE_KEY_LIMIT");
+  }
+  let message = serde_json::from_str::<serde_json::Value>(body)
+    .ok()
+    .and_then(|v| {
+      v.get("message")
+        .and_then(|m| m.as_str())
+        .map(std::string::ToString::to_string)
+    })
+    .unwrap_or_else(|| body.to_string());
+  crate::backend_error_with_detail("MCP_REMOTE_KEY_UNAVAILABLE", format!("{status}: {message}"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -304,17 +391,9 @@ impl CloudAuthManager {
 
     let vault_password = Self::get_vault_password();
     let salt_bytes: [u8; 16] = rand::rng().random();
-    let salt =
-      SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {e}"))?;
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-      .hash_password(vault_password.as_bytes(), &salt)
-      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
-    let hash_value = password_hash.hash.unwrap();
-    let hash_bytes = hash_value.as_bytes();
-    let key_bytes: [u8; 32] = hash_bytes[..32]
-      .try_into()
-      .map_err(|_| "Invalid key length".to_string())?;
+    let salt = crate::sync::encryption::encode_salt(&salt_bytes);
+    let key_bytes =
+      crate::sync::encryption::derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
     let key = Key::<Aes256Gcm>::from(key_bytes);
     let cipher = Aes256Gcm::new(&key);
     let nonce_bytes: [u8; 12] = rand::rng().random();
@@ -366,7 +445,7 @@ impl CloudAuthManager {
     }
     let salt_bytes = &file_data[offset..offset + salt_len];
     let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
-    let salt = SaltString::from_b64(salt_str).map_err(|_| "Invalid salt format")?;
+    let salt_bytes = crate::sync::encryption::decode_salt(salt_str)?;
     offset += salt_len;
 
     if offset + 12 > file_data.len() {
@@ -395,15 +474,8 @@ impl CloudAuthManager {
     let ciphertext = &file_data[offset..offset + ciphertext_len];
 
     let vault_password = Self::get_vault_password();
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-      .hash_password(vault_password.as_bytes(), &salt)
-      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
-    let hash_value = password_hash.hash.unwrap();
-    let hash_bytes = hash_value.as_bytes();
-    let key_bytes: [u8; 32] = hash_bytes[..32]
-      .try_into()
-      .map_err(|_| "Invalid key length".to_string())?;
+    let key_bytes =
+      crate::sync::encryption::derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
     let key = Key::<Aes256Gcm>::from(key_bytes);
     let cipher = Aes256Gcm::new(&key);
     let plaintext = cipher
@@ -560,9 +632,9 @@ impl CloudAuthManager {
     if !response.status().is_success() {
       let status = response.status();
       let body = response.text().await.unwrap_or_default();
-      // The backend returns { message, code, … } for 4xx (e.g. the 3-device
-      // limit or a temporary security block). Surface the human-readable
-      // message rather than the raw JSON so the sign-in screen is clear.
+      // The cloud API returns { message, code, … } for 4xx. Surface the
+      // human-readable message rather than the raw JSON so the sign-in screen
+      // is clear.
       let message = serde_json::from_str::<serde_json::Value>(&body)
         .ok()
         .and_then(|v| {
@@ -672,8 +744,204 @@ impl CloudAuthManager {
   pub async fn invalidate_session(&self) {
     log::warn!("Invalidating session — clearing all auth state");
     PROXY_MANAGER.remove_cloud_proxy();
+    // Same reason `logout` does it: left running, the bridge reconnects with a
+    // credential that no longer exists, fails, and backs off into an
+    // "unauthorized" the account page shows to somebody whose session simply
+    // expired. This is the AUTOMATIC twin of logout, reached when the
+    // background refresh loop gives up, and it was the one teardown path that
+    // did not close the bridge.
+    crate::mcp_remote::stop(None);
+    // The stored `dmk_` key belongs to the account that just left this
+    // machine, and the agent configs would keep presenting it. There is no
+    // session left to revoke it with, so only the local copy goes; the key
+    // itself is retired from the account page.
+    Self::forget_mcp_key_locally("after the session expired");
     self.clear_auth().await;
     let _ = crate::events::emit_empty("cloud-auth-expired");
+  }
+
+  /// Ask the server whether this account may drive a desktop remotely.
+  ///
+  /// The AUTHORITATIVE answer, and the only one that is correct for a team
+  /// member: a team member's locally cached plan does not describe what their
+  /// seat is entitled to, so the server is asked rather than guessed at.
+  ///
+  /// It cannot be inferred from the socket either. A connected bridge only
+  /// proves the plan is active, and nothing about this capability.
+  pub async fn fetch_remote_control_entitlement(&self) -> Result<bool, String> {
+    self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/mcp/status");
+        let client = self.client.clone();
+        async move {
+          let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to read remote-control status: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            return Err(format!("Remote-control status failed ({status})"));
+          }
+
+          let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse remote-control status: {e}"))?;
+
+          Ok(
+            body
+              .get("entitled")
+              .and_then(serde_json::Value::as_bool)
+              .unwrap_or(false),
+          )
+        }
+      })
+      .await
+  }
+
+  /// Mint a remote MCP credential for this account.
+  ///
+  /// The server caps how many live keys one account may hold and answers a mint
+  /// past that cap with a 409; the rotation command handles that by retiring the
+  /// key it is replacing first. The plaintext in the answer is the only copy
+  /// there will ever be.
+  pub async fn create_mcp_key(&self, label: &str) -> Result<McpKeyGrant, String> {
+    let answer = self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/mcp/keys");
+        let client = self.client.clone();
+        let label = label.to_string();
+        async move {
+          let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .json(&serde_json::json!({ "label": label }))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to request an MCP credential: {e}"))?;
+          let status = response.status();
+          let body = response.text().await.unwrap_or_default();
+          if status.as_u16() == 401 {
+            // Worded so `api_call_with_retry` recognises it and refreshes once.
+            return Err(format!(
+              "MCP credential request failed (401 Unauthorized): {body}"
+            ));
+          }
+          if !status.is_success() {
+            return Ok(McpKeyAnswer::Refused {
+              status: status.as_u16(),
+              body,
+            });
+          }
+          serde_json::from_str::<McpKeyGrant>(&body)
+            .map(McpKeyAnswer::Granted)
+            .map_err(|e| format!("Failed to parse the MCP credential response: {e}"))
+        }
+      })
+      .await
+      .map_err(|e| crate::backend_error_with_detail("MCP_REMOTE_KEY_UNAVAILABLE", e))?;
+
+    match answer {
+      McpKeyAnswer::Granted(grant) if grant.key.starts_with(MCP_KEY_PREFIX) => Ok(grant),
+      // A credential of any other kind must never be stored as if it were ours,
+      // however well it would authenticate.
+      McpKeyAnswer::Granted(_) => Err(crate::backend_error_with_detail(
+        "MCP_REMOTE_KEY_UNAVAILABLE",
+        "the server issued a credential of an unexpected shape",
+      )),
+      McpKeyAnswer::Refused { status, body } => Err(mcp_key_refusal(status, &body)),
+    }
+  }
+
+  /// Revoke a remote MCP credential by id. A key the server no longer knows
+  /// (404) counts as revoked: that is the state the caller wanted.
+  pub async fn revoke_mcp_key(&self, key_id: &str) -> Result<(), String> {
+    let answer = self
+      .api_call_with_retry(|access_token| {
+        let url = format!(
+          "{CLOUD_API_URL}/api/mcp/keys/{}",
+          urlencoding::encode(key_id)
+        );
+        let client = self.client.clone();
+        async move {
+          let response = client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to revoke the MCP credential: {e}"))?;
+          let status = response.status();
+          if status.as_u16() == 401 {
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!(
+              "MCP credential revocation failed (401 Unauthorized): {body}"
+            ));
+          }
+          if status.is_success() || status.as_u16() == 404 {
+            return Ok(McpKeyAnswer::Granted(()));
+          }
+          Ok(McpKeyAnswer::Refused {
+            status: status.as_u16(),
+            body: response.text().await.unwrap_or_default(),
+          })
+        }
+      })
+      .await
+      .map_err(|e| crate::backend_error_with_detail("MCP_REMOTE_KEY_UNAVAILABLE", e))?;
+
+    match answer {
+      McpKeyAnswer::Granted(()) => Ok(()),
+      McpKeyAnswer::Refused { status, body } => Err(crate::backend_error_with_detail(
+        "MCP_REMOTE_KEY_UNAVAILABLE",
+        format!("{status}: {body}"),
+      )),
+    }
+  }
+
+  /// Retire the stored remote MCP credential on sign-out.
+  ///
+  /// Best effort, and the local copy goes regardless. The revoke needs the
+  /// session that is about to be deleted, so this runs before `clear_auth`;
+  /// if it fails the key stays live server-side and the account page can
+  /// revoke it, but a signed-out desktop must not keep a credential that
+  /// belongs to the account that just left it.
+  async fn retire_mcp_key_on_logout(&self) {
+    let settings = SettingsManager::instance();
+    // Stringified at once: the settings error is a `Box<dyn Error>`, which is
+    // not `Send`, and the command future this runs in has to be.
+    let stored = settings.get_mcp_remote_key().map_err(|e| e.to_string());
+    match stored {
+      Ok(Some(StoredMcpRemoteKey { id: Some(id), .. })) => {
+        if let Err(e) = self.revoke_mcp_key(&id).await {
+          log::warn!(
+            "Could not revoke the remote MCP credential on logout; revoke it from the account page: {e}"
+          );
+        }
+      }
+      Ok(Some(StoredMcpRemoteKey { id: None, .. })) => {
+        log::warn!(
+          "The remote MCP credential has no stored id, so it cannot be revoked from here; revoke it from the account page"
+        );
+      }
+      Ok(None) => return,
+      Err(e) => {
+        log::warn!("Could not read the remote MCP credential on logout: {e}");
+      }
+    }
+    Self::forget_mcp_key_locally("on logout");
+  }
+
+  /// Drop the local copy of the remote MCP credential: the storage half of
+  /// `retire_mcp_key_on_logout`, shared with the expiry path, which has no
+  /// session left to revoke with. Logs rather than fails, because the
+  /// credential is leaving with the session either way.
+  fn forget_mcp_key_locally(when: &str) {
+    if let Err(e) = SettingsManager::instance().remove_mcp_remote_key() {
+      log::warn!("Could not forget the remote MCP credential {when}: {e}");
+    }
   }
 
   pub async fn fetch_profile(&self) -> Result<CloudUser, String> {
@@ -764,6 +1032,16 @@ impl CloudAuthManager {
 
     // Disconnect profile lock manager
     crate::team_lock::PROFILE_LOCK.disconnect().await;
+
+    // Hang up the remote-control bridge before the credential it authenticated
+    // with is deleted. Left running it would reconnect, fail, and back off into
+    // an "unauthorized" the account page shows to somebody who has simply
+    // signed out, and it would hold the account's bridge slot meanwhile.
+    crate::mcp_remote::stop(None);
+
+    // Before the session is closed server-side and the tokens are deleted:
+    // both of those take away the only thing that can revoke it.
+    self.retire_mcp_key_on_logout().await;
 
     // Try to call the logout API (best-effort)
     if let Ok(Some(access_token)) = Self::load_access_token() {
@@ -1293,10 +1571,19 @@ impl CloudAuthManager {
 
       // Reconnect profile lock manager if needed
       if let Some(auth_state) = CLOUD_AUTH.get_user().await {
-        if auth_state.user.plan != "free" && !crate::team_lock::PROFILE_LOCK.is_connected().await {
+        if auth_state.user.effective_plan() != "free"
+          && !crate::team_lock::PROFILE_LOCK.is_connected().await
+        {
           crate::team_lock::PROFILE_LOCK.connect().await;
         }
       }
+
+      // And the remote-control bridge, for the same reason one tick below it
+      // reconnects the profile lock: a setting that says "on" and a bridge that
+      // is not running is a disagreement only something periodic can notice.
+      // `mcp_remote::start` is idempotent, so a healthy bridge costs a load of
+      // the settings file every ten minutes and nothing else.
+      ensure_remote_bridge(&app_handle).await;
 
       // Sync cloud proxy credentials
       CLOUD_AUTH.sync_cloud_proxy().await;
@@ -1323,11 +1610,10 @@ impl CloudAuthManager {
   }
 }
 
-/// Whether a rejected wayfern-token request was refused by one of the
-/// device-family rules (automation is pinned to the primary desktop session)
-/// rather than by the plan's capabilities.
+/// Whether a rejected wayfern-token request was refused by one of the device
+/// rules rather than by the plan's capabilities.
 ///
-/// Matches on the backend's message because that is the only thing that
+/// Matches on the server's message because that is the only thing that
 /// distinguishes them: both arrive as a bare 403. Only these two are a state
 /// the user can clear themselves, which is what the toast asks them to do.
 fn is_device_restriction(error: &str) -> bool {
@@ -1380,10 +1666,22 @@ pub async fn cloud_exchange_device_code(
 ) -> Result<CloudAuthState, String> {
   let mut state = CLOUD_AUTH.exchange_device_code(&code).await?;
 
+  // The login response carries the row's own plan and entitlements only: no
+  // team membership and no `effectivePlan`. For an invited member that reads
+  // as a free account, and it stayed that way until the ten-minute loop got
+  // round to `/api/auth/me`. Resolve the served plan here so the sync token,
+  // the wayfern token and the profile lock below all see the seat. Best
+  // effort: a failure leaves the login response in place.
+  match CLOUD_AUTH.fetch_profile().await {
+    Ok(user) => state.user = user,
+    Err(e) => log::warn!("Post-login profile refresh failed: {e}"),
+  }
+
   let has_subscription = CLOUD_AUTH.has_active_paid_subscription().await;
   log::info!(
-    "Post-login: plan={}, has_active_subscription={}",
+    "Post-login: plan={}, effective_plan={}, has_active_subscription={}",
     state.user.plan,
+    state.user.effective_plan(),
     has_subscription
   );
 
@@ -1406,15 +1704,60 @@ pub async fn cloud_exchange_device_code(
   CLOUD_AUTH.sync_cloud_proxy().await;
 
   // Connect profile lock manager for paid users
-  if state.user.plan != "free" {
+  if state.user.effective_plan() != "free" {
     crate::team_lock::PROFILE_LOCK.connect().await;
   }
+
+  // Reopen the remote-control bridge the user had switched on.
+  //
+  // Signing out stops the bridge but deliberately does NOT clear the setting:
+  // it is a preference, not a session. So without this, "sign out, sign back
+  // in" left remote control switched on in Settings and dead in fact until the
+  // app was restarted, which is the worst of both: the UI says yes and the
+  // account page says no desktop is connected.
+  ensure_remote_bridge(&app_handle).await;
 
   let _ = crate::events::emit_empty("cloud-auth-changed");
 
   let _ = &app_handle;
   state.user.entitlements = Some(state.user.entitlements());
   Ok(state)
+}
+
+/// Open the remote-control bridge if the user asked for it and is signed in.
+///
+/// Idempotent, and safe to call from anywhere: `mcp_remote::start` returns
+/// immediately when the bridge is already up.
+///
+/// The signed-in half matters as much as the setting. A bridge opened without a
+/// credential cannot authenticate, so it would spend its life in the terminal
+/// backoff band reporting "not signed in" on the account page: an error
+/// describing nothing the user did.
+pub(crate) async fn ensure_remote_bridge(app_handle: &tauri::AppHandle) {
+  if crate::mcp_remote::is_running() {
+    return;
+  }
+  // The same two gates as `start_mcp_remote_bridge`. This helper runs at
+  // boot, on sign-in and on the reconnect tick, and it used to check only the
+  // sign-in half: a desktop whose terms acceptance had been withdrawn (or
+  // never given, with the flag seeded on disk) opened an internet-facing
+  // bridge into a browser the user had not agreed to automate.
+  if !crate::wayfern_terms::WayfernTermsManager::instance().is_terms_accepted() {
+    return;
+  }
+  if !CLOUD_AUTH.is_logged_in().await {
+    return;
+  }
+  let enabled = crate::settings_manager::SettingsManager::instance()
+    .load_settings()
+    .map(|settings| settings.mcp_remote_enabled)
+    .unwrap_or(false);
+  if enabled {
+    log::info!(
+      "[mcp-remote] Remote control is enabled and the account is signed in; opening the bridge"
+    );
+    crate::mcp_remote::start(app_handle.clone());
+  }
 }
 
 #[tauri::command]
@@ -1451,6 +1794,13 @@ pub async fn cloud_refresh_profile() -> Result<CloudUser, String> {
 #[tauri::command]
 pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
   CLOUD_AUTH.logout().await?;
+
+  // Stop the remote session-events stream. Its credential is now invalid, so
+  // the SSE connection would fail its next credential re-check anyway — but
+  // until it did, its reconnect loop keeps retrying every 1..60s against a
+  // signed-out account. The frontend store stops its own subscription on
+  // logout; nothing stopped the Rust stream, so a sign-out left it churning.
+  crate::remote_session::stop_session_events();
 
   // Always clear the stored sync URL and token on cloud logout. While the
   // user was signed in, the cloud auth flow populated these with the hosted
@@ -1522,10 +1872,32 @@ struct ProxyUsageResponse {
   limit_mb: i64,
   #[serde(rename = "remainingMb")]
   remaining_mb: i64,
-  #[serde(rename = "recurringLimitMb", default)]
-  recurring_limit_mb: i64,
-  #[serde(rename = "extraLimitMb", default)]
-  extra_limit_mb: i64,
+  // Optional rather than defaulted to 0 so an omitted half of the split stays
+  // distinguishable from a backend that genuinely reports zero for it.
+  #[serde(rename = "recurringLimitMb")]
+  recurring_limit_mb: Option<i64>,
+  #[serde(rename = "extraLimitMb")]
+  extra_limit_mb: Option<i64>,
+}
+
+/// Combine the live usage response with the cached account snapshot, each half
+/// of the recurring/extra split falling back on its own.
+///
+/// Gating both halves on `recurringLimitMb` made an omitted `extraLimitMb`
+/// report 0 against a total that included it, and threw away a live
+/// `extraLimitMb` whenever the recurring half happened to be 0.
+fn merge_proxy_usage(
+  usage: &ProxyUsageResponse,
+  cached_recurring: i64,
+  cached_extra: i64,
+) -> CloudProxyUsage {
+  CloudProxyUsage {
+    used_mb: usage.used_mb,
+    limit_mb: usage.limit_mb,
+    remaining_mb: usage.remaining_mb,
+    recurring_limit_mb: usage.recurring_limit_mb.unwrap_or(cached_recurring),
+    extra_limit_mb: usage.extra_limit_mb.unwrap_or(cached_extra),
+  }
 }
 
 #[tauri::command]
@@ -1578,21 +1950,11 @@ pub async fn cloud_get_proxy_usage() -> Result<Option<CloudProxyUsage>, String> 
     })
     .await
   {
-    Ok(usage) => Ok(Some(CloudProxyUsage {
-      used_mb: usage.used_mb,
-      limit_mb: usage.limit_mb,
-      remaining_mb: usage.remaining_mb,
-      recurring_limit_mb: if usage.recurring_limit_mb > 0 {
-        usage.recurring_limit_mb
-      } else {
-        cached_recurring
-      },
-      extra_limit_mb: if usage.recurring_limit_mb > 0 {
-        usage.extra_limit_mb
-      } else {
-        cached_extra
-      },
-    })),
+    Ok(usage) => Ok(Some(merge_proxy_usage(
+      &usage,
+      cached_recurring,
+      cached_extra,
+    ))),
     Err(e) => {
       log::warn!("Failed to fetch live proxy usage, falling back to cached: {e}");
       // Fallback to cached values
@@ -1652,6 +2014,32 @@ mod tests {
   }
 
   #[test]
+  fn the_agent_follows_browser_automation_and_is_never_derived_from_it() {
+    // Solo funds a nightly bot and nothing that drives a browser by hand, so
+    // it does not get the agent either.
+    assert!(!active_solo().agent_automation);
+    for plan in ["pro", "team", "enterprise", "some-comped-plan"] {
+      let derived = derive_entitlements(plan, Some("monthly"), "active", 50);
+      assert!(derived.agent_automation, "{plan} should get the agent");
+    }
+    // An inactive subscription buys nothing, whatever the plan says.
+    assert!(!derive_entitlements("pro", Some("monthly"), "canceled", 50).agent_automation);
+  }
+
+  #[test]
+  fn a_backend_that_never_heard_of_the_agent_reports_no_agent() {
+    // The whole point of `default` here: an older backend's entitlements object
+    // must decode, and the missing key must read as "no agent routes exist"
+    // rather than being back-filled from browser automation.
+    let older: Entitlements = serde_json::from_str(
+      r#"{"active":true,"browserAutomation":true,"cloudBackup":true,"profileLimit":50}"#,
+    )
+    .unwrap();
+    assert!(older.active && older.browser_automation);
+    assert!(!older.agent_automation);
+  }
+
+  #[test]
   fn wayfern_token_is_gated_on_automation_not_on_being_paid() {
     // The regression this guards: gating the mint on `active` asked for a token
     // on behalf of a Solo account, which the backend answers with a 403.
@@ -1660,6 +2048,109 @@ mod tests {
 
     let pro = derive_entitlements("pro", Some("monthly"), "active", 50);
     assert!(pro.active && pro.browser_automation);
+  }
+
+  #[test]
+  fn a_refused_credential_mint_maps_to_the_codes_the_ui_knows() {
+    let limit: serde_json::Value = serde_json::from_str(&mcp_key_refusal(
+      409,
+      r#"{"message":"Too many MCP keys","code":"MCP_KEY_LIMIT","statusCode":409}"#,
+    ))
+    .unwrap();
+    assert_eq!(limit["code"], "MCP_REMOTE_KEY_LIMIT");
+
+    // The cap is the only thing a 409 on that route means, named or not.
+    let unnamed: serde_json::Value = serde_json::from_str(&mcp_key_refusal(409, "")).unwrap();
+    assert_eq!(unnamed["code"], "MCP_REMOTE_KEY_LIMIT");
+
+    let other: serde_json::Value = serde_json::from_str(&mcp_key_refusal(
+      429,
+      r#"{"message":"Too many requests","statusCode":429}"#,
+    ))
+    .unwrap();
+    assert_eq!(other["code"], "MCP_REMOTE_KEY_UNAVAILABLE");
+    assert_eq!(other["params"]["detail"], "429: Too many requests");
+
+    // A body that is not JSON still reaches the log verbatim.
+    let plain: serde_json::Value =
+      serde_json::from_str(&mcp_key_refusal(502, "bad gateway")).unwrap();
+    assert_eq!(plain["params"]["detail"], "502: bad gateway");
+  }
+
+  #[test]
+  fn the_boot_and_sign_in_paths_require_the_terms_like_the_command_does() {
+    // `ensure_remote_bridge` is reached from boot, sign-in and the reconnect
+    // tick, none of which pass through `start_mcp_remote_bridge`, so the
+    // command's terms gate protects only the toggle. The helper must carry
+    // the same gate itself.
+    let source = include_str!("cloud_auth.rs");
+    let helper = source
+      .split("pub(crate) async fn ensure_remote_bridge(")
+      .nth(1)
+      .expect("ensure_remote_bridge must exist");
+    let body = &helper[..helper.find("\n}").unwrap_or(helper.len())];
+    let terms = body
+      .find("is_terms_accepted()")
+      .expect("ensure_remote_bridge must check the Wayfern terms");
+    let start = body
+      .find("crate::mcp_remote::start(")
+      .expect("ensure_remote_bridge must be what starts the bridge");
+    assert!(terms < start, "the terms gate must sit ahead of the start");
+  }
+
+  #[test]
+  fn logout_retires_the_remote_credential_before_the_session_is_gone() {
+    // The revoke needs the access token; `clear_auth` deletes it and the
+    // `/api/auth/logout` call may invalidate it server-side. Both must come
+    // after.
+    let source = include_str!("cloud_auth.rs");
+    let logout = source
+      .split("pub async fn logout(&self)")
+      .nth(1)
+      .expect("logout must exist");
+    let body = &logout[..logout.find("\n  }").unwrap_or(logout.len())];
+    let retire = body
+      .find("retire_mcp_key_on_logout()")
+      .expect("logout must retire the remote MCP credential");
+    let api_logout = body
+      .find("/api/auth/logout")
+      .expect("logout must still call the logout endpoint");
+    let clear = body
+      .find("clear_auth()")
+      .expect("logout must still clear the session");
+    assert!(
+      retire < api_logout,
+      "revoke before the server closes the session"
+    );
+    assert!(retire < clear, "revoke before the tokens are deleted");
+  }
+
+  #[test]
+  fn session_expiry_forgets_the_remote_credential_without_a_network_revoke() {
+    // The automatic twin of logout: the refresh loop gave up, so the session
+    // is already dead and there is nothing to revoke with. The local copy
+    // still has to go, or the agents keep presenting a key that belongs to an
+    // account this machine is no longer signed in to.
+    let source = include_str!("cloud_auth.rs");
+    let expiry = source
+      .split("pub async fn invalidate_session(&self)")
+      .nth(1)
+      .expect("invalidate_session must exist");
+    let body = &expiry[..expiry.find("\n  }").unwrap_or(expiry.len())];
+    let forget = body
+      .find("forget_mcp_key_locally(")
+      .expect("invalidate_session must forget the remote MCP credential");
+    let clear = body
+      .find("clear_auth()")
+      .expect("invalidate_session must still clear the session");
+    assert!(
+      forget < clear,
+      "forget the credential before the auth state is torn down"
+    );
+    assert!(
+      !body.contains("revoke_mcp_key("),
+      "a dead session has nothing to revoke with; the call could only fail"
+    );
   }
 
   #[test]
@@ -1678,5 +2169,46 @@ mod tests {
     assert!(!is_device_restriction(
       "Wayfern token request failed (500 Internal Server Error): "
     ));
+  }
+
+  fn usage_response(recurring: Option<i64>, extra: Option<i64>) -> ProxyUsageResponse {
+    ProxyUsageResponse {
+      used_mb: 40,
+      limit_mb: 600,
+      remaining_mb: 560,
+      recurring_limit_mb: recurring,
+      extra_limit_mb: extra,
+    }
+  }
+
+  #[test]
+  fn each_half_of_the_proxy_limit_falls_back_on_its_own() {
+    let both = merge_proxy_usage(&usage_response(Some(500), Some(100)), 400, 0);
+    assert_eq!(both.used_mb, 40);
+    assert_eq!(both.limit_mb, 600);
+    assert_eq!(both.remaining_mb, 560);
+    assert_eq!(both.recurring_limit_mb, 500);
+    assert_eq!(both.extra_limit_mb, 100);
+
+    // A backend that does not report the split at all keeps the cached one.
+    let neither = merge_proxy_usage(&usage_response(None, None), 500, 100);
+    assert_eq!(neither.recurring_limit_mb, 500);
+    assert_eq!(neither.extra_limit_mb, 100);
+
+    // An omitted extra half must not be read off the recurring half, which is
+    // how a cached 100 MB top-up used to vanish from the split.
+    let recurring_only = merge_proxy_usage(&usage_response(Some(500), None), 400, 100);
+    assert_eq!(recurring_only.recurring_limit_mb, 500);
+    assert_eq!(recurring_only.extra_limit_mb, 100);
+
+    // A fresh extra allowance survives a recurring half of zero.
+    let extra_only = merge_proxy_usage(&usage_response(Some(0), Some(250)), 500, 100);
+    assert_eq!(extra_only.recurring_limit_mb, 0);
+    assert_eq!(extra_only.extra_limit_mb, 250);
+
+    // And a spent top-up reported as a live zero is not resurrected from cache.
+    let spent_extra = merge_proxy_usage(&usage_response(Some(500), Some(0)), 500, 100);
+    assert_eq!(spent_extra.recurring_limit_mb, 500);
+    assert_eq!(spent_extra.extra_limit_mb, 0);
   }
 }

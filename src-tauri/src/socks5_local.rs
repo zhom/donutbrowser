@@ -188,7 +188,8 @@ fn udp_mode(upstream_url: Option<&str>) -> UdpMode {
     Some("DIRECT") => UdpMode::Direct,
     Some(url) => match Url::parse(url).ok().map(|u| u.scheme().to_lowercase()) {
       Some(scheme) if scheme == "socks5" => UdpMode::Socks5Upstream,
-      // http / https / socks4 / ss / shadowsocks / anything else: TCP-only.
+      // http / https / httpstls / socks4 / ss / shadowsocks / anything else:
+      // TCP-only. An HTTP CONNECT upstream carries no UDP, TLS-wrapped or not.
       _ => UdpMode::Refuse,
     },
   }

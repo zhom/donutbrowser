@@ -1,7 +1,7 @@
 "use client";
 
 import type { Table } from "@tanstack/react-table";
-import { AnimatePresence, motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useInputModality } from "@/hooks/use-input-modality";
+import { MOTION_EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 interface DataTableActionBarProps<TData>
@@ -29,6 +31,8 @@ function DataTableActionBar<TData>({
   className,
   ...props
 }: DataTableActionBarProps<TData>) {
+  const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => {
     setMounted(true);
@@ -36,7 +40,11 @@ function DataTableActionBar<TData>({
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !document.querySelector('[data-slot="dialog-content"]')
+      ) {
         table.toggleAllRowsSelected(false);
       }
     }
@@ -54,26 +62,26 @@ function DataTableActionBar<TData>({
   const visible =
     visibleProp ?? table.getFilteredSelectedRowModel().rows.length > 0;
 
+  if (!visible) return null;
+
   return ReactDOM.createPortal(
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          role="toolbar"
-          aria-orientation="horizontal"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.2, ease: "easeInOut" }}
-          className={cn(
-            "fixed inset-x-0 bottom-6 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center justify-center gap-2 rounded-md border bg-background p-2 text-foreground shadow-sm",
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </motion.div>
+    <motion.div
+      role="toolbar"
+      aria-orientation="horizontal"
+      initial={reduceMotion || inputModality === "keyboard" ? false : { y: 6 }}
+      animate={{ y: 0 }}
+      transition={{
+        duration: reduceMotion || inputModality === "keyboard" ? 0 : 0.16,
+        ease: MOTION_EASE_OUT,
+      }}
+      className={cn(
+        "fixed inset-x-0 bottom-6 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center justify-center gap-2 rounded-md border bg-background p-2 text-foreground shadow-sm",
+        className,
       )}
-    </AnimatePresence>,
+      {...props}
+    >
+      {children}
+    </motion.div>,
     portalContainer,
   );
 }

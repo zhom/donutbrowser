@@ -4,11 +4,16 @@ use std::fs;
 use std::sync::Mutex;
 
 use crate::events;
+use crate::group_bookmarks::GroupBookmark;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileGroup {
   pub id: String,
   pub name: String,
+  /// Bookmarks every profile in this group carries. Written into the profile's
+  /// Chromium `Bookmarks` file before each launch; see `group_bookmarks`.
+  #[serde(default)]
+  pub bookmarks: Vec<GroupBookmark>,
   #[serde(default)]
   pub sync_enabled: bool,
   #[serde(default)]
@@ -24,6 +29,8 @@ pub struct GroupWithCount {
   pub id: String,
   pub name: String,
   pub count: usize,
+  #[serde(default)]
+  pub bookmark_count: usize,
   #[serde(default)]
   pub sync_enabled: bool,
   #[serde(default)]
@@ -104,6 +111,7 @@ impl GroupManager {
     let group = ProfileGroup {
       id: uuid::Uuid::new_v4().to_string(),
       name,
+      bookmarks: Vec::new(),
       sync_enabled,
       last_sync: None,
       updated_at: Some(crate::proxy_manager::now_secs()),
@@ -195,6 +203,7 @@ impl GroupManager {
 
     if let Some(existing) = groups_data.groups.iter_mut().find(|g| g.id == group.id) {
       existing.name = group.name.clone();
+      existing.bookmarks = group.bookmarks.clone();
       existing.sync_enabled = group.sync_enabled;
       existing.last_sync = group.last_sync;
       existing.updated_at = group.updated_at;
@@ -212,6 +221,7 @@ impl GroupManager {
 
     if let Some(existing) = groups_data.groups.iter_mut().find(|g| g.id == group.id) {
       existing.name = group.name.clone();
+      existing.bookmarks = group.bookmarks.clone();
       existing.sync_enabled = group.sync_enabled;
       existing.last_sync = group.last_sync;
       existing.updated_at = group.updated_at;
@@ -294,6 +304,47 @@ impl GroupManager {
     Ok(())
   }
 
+  /// Replace a group's shared bookmark list.
+  ///
+  /// Bumps `updated_at` because this is a real user edit, which is what sync's
+  /// last-write-wins reconcile reads; `last_sync` is bookkeeping and must not
+  /// decide direction.
+  pub fn set_group_bookmarks(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    id: &str,
+    bookmarks: Vec<GroupBookmark>,
+  ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
+    let mut groups_data = self.load_groups_data()?;
+
+    let group = groups_data
+      .groups
+      .iter_mut()
+      .find(|g| g.id == id)
+      .ok_or_else(|| serde_json::json!({ "code": "GROUP_NOT_FOUND" }).to_string())?;
+
+    group.bookmarks = bookmarks;
+    group.updated_at = Some(crate::proxy_manager::now_secs());
+    let updated_group = group.clone();
+
+    self.save_groups_data(&groups_data)?;
+
+    if let Err(e) = events::emit_empty("groups-changed") {
+      log::error!("Failed to emit groups-changed event: {e}");
+    }
+
+    if updated_group.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = updated_group.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_group_sync(id).await;
+        });
+      }
+    }
+
+    Ok(updated_group)
+  }
+
   pub fn get_groups_with_profile_counts(
     &self,
     profiles: &[crate::profile::BrowserProfile],
@@ -318,6 +369,7 @@ impl GroupManager {
         id: group.id,
         name: group.name,
         count,
+        bookmark_count: group.bookmarks.len(),
         sync_enabled: group.sync_enabled,
         last_sync: group.last_sync,
       });

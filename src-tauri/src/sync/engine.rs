@@ -192,6 +192,31 @@ fn is_safe_manifest_path(path: &str) -> bool {
     .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
+/// Parse an S3 `lastModified` (RFC3339) into unix seconds.
+fn rfc3339_secs(value: &str) -> Option<u64> {
+  DateTime::parse_from_rfc3339(value)
+    .ok()
+    .and_then(|dt| u64::try_from(dt.timestamp()).ok())
+}
+
+/// Whether a config entity's tombstone must stop this reconcile, given when the
+/// tombstone was written and the local entity's own last edit (0 once the local
+/// copy is gone).
+///
+/// A tombstone at least as new as the local edit wins. That keeps last-write-wins
+/// intact: an edit made strictly after the delete still uploads. A tombstone
+/// with no readable write time is treated as newer, because a skipped sync is
+/// retried and a resurrection is not self-correcting.
+fn tombstone_outranks_local(exists: bool, written_at: Option<u64>, local_updated_at: u64) -> bool {
+  if !exists {
+    return false;
+  }
+  match written_at {
+    Some(secs) => secs >= local_updated_at,
+    None => true,
+  }
+}
+
 /// Checkpoint all SQLite WAL files in a profile directory.
 ///
 /// When a browser crashes or is killed, SQLite WAL files may contain
@@ -395,9 +420,9 @@ impl SyncProgressTracker {
 
 /// Check if sync is configured (cloud or self-hosted)
 pub fn is_sync_configured() -> bool {
-  // Cloud backup is a plan capability. Every paid plan (incl. the future
-  // "solo" tier) grants it, but gating on the capability — not just "is paid"
-  // — keeps this correct if a plan without cloud backup is ever added.
+  // Cloud backup is a plan capability. Gating on the capability — not just
+  // "is paid" — keeps this correct if a plan without cloud backup is ever
+  // added.
   if crate::cloud_auth::CLOUD_AUTH.can_use_cloud_backup_sync() {
     return true;
   }
@@ -528,6 +553,46 @@ impl SyncEngine {
     Ok(())
   }
 
+  /// Whether a remote tombstone forbids syncing this config entity right now.
+  ///
+  /// Every `sync_X` reconciles local against remote by presence alone, so
+  /// without this a device that has not yet drained its tombstone queue
+  /// re-uploads an entity another device just deleted, then downloads its own
+  /// resurrection back once the drain removes the local copy. The delete never
+  /// sticks on either side.
+  ///
+  /// A failed stat is propagated, not swallowed, so the pass is reported as
+  /// failed rather than as a silent success. A caller that cannot propagate
+  /// treats the error as blocking: a skipped pass is retried, a resurrection is
+  /// not self-correcting.
+  async fn tombstone_blocks(
+    &self,
+    kind: &str,
+    id: &str,
+    local_updated_at: u64,
+  ) -> SyncResult<bool> {
+    let tombstone_key = format!("tombstones/{}/{}.json", kind, id);
+    let stat = match self.client.stat(&tombstone_key).await {
+      Ok(stat) => stat,
+      Err(e) => {
+        log::warn!(
+          "Could not check {} before syncing {} {}; skipping this pass: {}",
+          tombstone_key,
+          kind,
+          id,
+          e
+        );
+        return Err(e);
+      }
+    };
+    let written_at = stat.last_modified.as_deref().and_then(rfc3339_secs);
+    let blocked = tombstone_outranks_local(stat.exists, written_at, local_updated_at);
+    if blocked {
+      log::info!("Skipping sync of {} {}: deleted remotely", kind, id);
+    }
+    Ok(blocked)
+  }
+
   pub async fn sync_profile(
     &self,
     app_handle: &tauri::AppHandle,
@@ -551,6 +616,18 @@ impl SyncEngine {
     app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
     bias: DiffBias,
+  ) -> SyncResult<ProfileSyncOutcome> {
+    self
+      .sync_profile_inner(app_handle, profile, bias, false)
+      .await
+  }
+
+  async fn sync_profile_inner(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile: &BrowserProfile,
+    bias: DiffBias,
+    reencrypt: bool,
   ) -> SyncResult<ProfileSyncOutcome> {
     if profile.is_cross_os() {
       log::info!(
@@ -694,14 +771,21 @@ impl SyncEngine {
 
     // Try to download remote manifest
     let remote_manifest_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
-    let remote_manifest = self
-      .download_manifest(&remote_manifest_key, encryption_key.as_ref())
-      .await?;
+    let remote_manifest = if reencrypt {
+      // Compare against an empty manifest locally so every file is rewritten.
+      // Deleting it remotely would let a device with the previous password
+      // race this upload and recreate a manifest we can no longer decrypt.
+      None
+    } else {
+      self
+        .download_manifest(&remote_manifest_key, encryption_key.as_ref())
+        .await?
+    };
 
     // Compute diff
     let diff = compute_diff_with_bias(&local_manifest, remote_manifest.as_ref(), bias);
 
-    if diff.is_empty() {
+    if diff.is_empty() && !reencrypt {
       log::info!("Profile {} is already in sync", profile_id);
       let _ = events::emit(
         "profile-sync-status",
@@ -1641,18 +1725,25 @@ impl SyncEngine {
     let proxies = proxy_manager.get_stored_proxies();
     let local_proxy = proxies.iter().find(|p| p.id == proxy_id).cloned();
 
+    let local_updated_at = local_proxy.as_ref().and_then(|p| p.updated_at).unwrap_or(0);
+    if self
+      .tombstone_blocks("proxies", proxy_id, local_updated_at)
+      .await?
+    {
+      return Ok(());
+    }
+
     let remote_key = format!("proxies/{}.json", proxy_id);
     let stat = self.client.stat(&remote_key).await?;
 
     match (local_proxy, stat.exists) {
       (Some(proxy), true) => {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
-        let local_updated = proxy.updated_at.unwrap_or(0);
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated {
+        if remote_updated > local_updated_at {
           self.download_proxy(proxy_id, app_handle).await?;
-        } else if local_updated > remote_updated {
+        } else if local_updated_at > remote_updated {
           self.upload_proxy(&proxy).await?;
         }
       }
@@ -1780,18 +1871,25 @@ impl SyncEngine {
       groups.into_iter().find(|g| g.id == group_id)
     };
 
+    let local_updated_at = local_group.as_ref().and_then(|g| g.updated_at).unwrap_or(0);
+    if self
+      .tombstone_blocks("groups", group_id, local_updated_at)
+      .await?
+    {
+      return Ok(());
+    }
+
     let remote_key = format!("groups/{}.json", group_id);
     let stat = self.client.stat(&remote_key).await?;
 
     match (local_group, stat.exists) {
       (Some(group), true) => {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
-        let local_updated = group.updated_at.unwrap_or(0);
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated {
+        if remote_updated > local_updated_at {
           self.download_group(group_id, app_handle).await?;
-        } else if local_updated > remote_updated {
+        } else if local_updated_at > remote_updated {
           self.upload_group(&group).await?;
         }
       }
@@ -1980,18 +2078,25 @@ impl SyncEngine {
       storage.load_config(vpn_id).ok()
     };
 
+    let local_updated_at = local_vpn.as_ref().and_then(|v| v.updated_at).unwrap_or(0);
+    if self
+      .tombstone_blocks("vpns", vpn_id, local_updated_at)
+      .await?
+    {
+      return Ok(());
+    }
+
     let remote_key = format!("vpns/{}.json", vpn_id);
     let stat = self.client.stat(&remote_key).await?;
 
     match (local_vpn, stat.exists) {
       (Some(vpn), true) => {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
-        let local_updated = vpn.updated_at.unwrap_or(0);
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated {
+        if remote_updated > local_updated_at {
           self.download_vpn(vpn_id, app_handle).await?;
-        } else if local_updated > remote_updated {
+        } else if local_updated_at > remote_updated {
           self.upload_vpn(&vpn).await?;
         }
       }
@@ -2052,6 +2157,12 @@ impl SyncEngine {
 
     let mut vpn: crate::vpn::VpnConfig = serde_json::from_slice(&data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse VPN JSON: {e}")))?;
+
+    // Sync is not a second way in for a config the import path refuses: a
+    // multi-peer file resolves to whichever peer is listed last at connect
+    // time, which is not the tunnel its author described.
+    crate::vpn::VpnStorage::ensure_single_peer(vpn.vpn_type, &vpn.config_data)
+      .map_err(|e| SyncError::InvalidData(format!("Rejected synced VPN {vpn_id}: {e}")))?;
 
     vpn.last_sync = Some(
       std::time::SystemTime::now()
@@ -2125,18 +2236,25 @@ impl SyncEngine {
       return Ok(());
     }
 
+    let local_updated_at = local_ext.as_ref().map_or(0, |e| e.updated_at);
+    if self
+      .tombstone_blocks("extensions", ext_id, local_updated_at)
+      .await?
+    {
+      return Ok(());
+    }
+
     let remote_key = format!("extensions/{}.json", ext_id);
     let stat = self.client.stat(&remote_key).await?;
 
     match (local_ext, stat.exists) {
       (Some(ext), true) => {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
-        let local_updated = ext.updated_at;
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated {
+        if remote_updated > local_updated_at {
           self.download_extension(ext_id, app_handle).await?;
-        } else if local_updated > remote_updated {
+        } else if local_updated_at > remote_updated {
           self.upload_extension(&ext).await?;
         }
       }
@@ -2317,18 +2435,25 @@ impl SyncEngine {
       manager.get_group(group_id).ok()
     };
 
+    let local_updated_at = local_group.as_ref().map_or(0, |g| g.updated_at);
+    if self
+      .tombstone_blocks("extension_groups", group_id, local_updated_at)
+      .await?
+    {
+      return Ok(());
+    }
+
     let remote_key = format!("extension_groups/{}.json", group_id);
     let stat = self.client.stat(&remote_key).await?;
 
     match (local_group, stat.exists) {
       (Some(group), true) => {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
-        let local_updated = group.updated_at;
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated {
+        if remote_updated > local_updated_at {
           self.download_extension_group(group_id, app_handle).await?;
-        } else if local_updated > remote_updated {
+        } else if local_updated_at > remote_updated {
           self.upload_extension_group(&group).await?;
         }
       }
@@ -2980,11 +3105,12 @@ impl SyncEngine {
           .iter()
           .any(|p| p.id == proxy_id);
         if !exists_locally {
-          let tombstone_key = format!("tombstones/proxies/{}.json", proxy_id);
-          if let Ok(stat) = self.client.stat(&tombstone_key).await {
-            if stat.exists {
-              continue;
-            }
+          if self
+            .tombstone_blocks("proxies", proxy_id, 0)
+            .await
+            .unwrap_or(true)
+          {
+            continue;
           }
           log::info!(
             "Proxy {} exists remotely but not locally, downloading...",
@@ -3014,11 +3140,12 @@ impl SyncEngine {
             .any(|g| g.id == group_id)
         };
         if !exists_locally {
-          let tombstone_key = format!("tombstones/groups/{}.json", group_id);
-          if let Ok(stat) = self.client.stat(&tombstone_key).await {
-            if stat.exists {
-              continue;
-            }
+          if self
+            .tombstone_blocks("groups", group_id, 0)
+            .await
+            .unwrap_or(true)
+          {
+            continue;
           }
           log::info!(
             "Group {} exists remotely but not locally, downloading...",
@@ -3044,11 +3171,12 @@ impl SyncEngine {
           storage.load_config(vpn_id).is_ok()
         };
         if !exists_locally {
-          let tombstone_key = format!("tombstones/vpns/{}.json", vpn_id);
-          if let Ok(stat) = self.client.stat(&tombstone_key).await {
-            if stat.exists {
-              continue;
-            }
+          if self
+            .tombstone_blocks("vpns", vpn_id, 0)
+            .await
+            .unwrap_or(true)
+          {
+            continue;
           }
           log::info!(
             "VPN {} exists remotely but not locally, downloading...",
@@ -3081,11 +3209,12 @@ impl SyncEngine {
             .any(|e| e.id == ext_id)
         };
         if !exists_locally {
-          let tombstone_key = format!("tombstones/extensions/{}.json", ext_id);
-          if let Ok(stat) = self.client.stat(&tombstone_key).await {
-            if stat.exists {
-              continue;
-            }
+          if self
+            .tombstone_blocks("extensions", ext_id, 0)
+            .await
+            .unwrap_or(true)
+          {
+            continue;
           }
           log::info!(
             "Extension {} exists remotely but not locally, downloading...",
@@ -3116,11 +3245,12 @@ impl SyncEngine {
             .any(|g| g.id == group_id)
         };
         if !exists_locally {
-          let tombstone_key = format!("tombstones/extension_groups/{}.json", group_id);
-          if let Ok(stat) = self.client.stat(&tombstone_key).await {
-            if stat.exists {
-              continue;
-            }
+          if self
+            .tombstone_blocks("extension_groups", group_id, 0)
+            .await
+            .unwrap_or(true)
+          {
+            continue;
           }
           log::info!(
             "Extension group {} exists remotely but not locally, downloading...",
@@ -3438,10 +3568,11 @@ pub async fn set_profile_sync_mode(
     .save_profile(&profile)
     .map_err(|e| format!("Failed to save profile: {e}"))?;
 
-  // The bot materialises the profile from donut-sync, so switching sync off (or
-  // to Encrypted, which the host cannot decrypt) is a refusal reason. The server
-  // holds only the copy this machine declared; without this, an enrolment keeps
-  // claiming a syncable profile every night after the user turned sync off.
+  // A remote run obtains the profile through sync, so a local-only profile has
+  // nothing there — and switching to Encrypted leaves a copy that cannot be
+  // decrypted remotely. Either is a refusal reason. The server holds only the
+  // copy this machine declared; without this, an enrolment keeps claiming a
+  // syncable profile every night after the user turned sync off.
   crate::cookie_bot::report_profile_state(&profile);
 
   let _ = events::emit("profiles-changed", ());
@@ -3697,6 +3828,22 @@ pub async fn pull_profile_after_remote_session(
     .map_err(|e| format!("Sync failed: {e}"))
 }
 
+/// Drop a stale tombstone for a config entity that is being (re-)enabled for
+/// sync.
+///
+/// `sync_X` refuses to touch an entity whose tombstone is newer than its last
+/// edit, so an id that was ever deleted could otherwise never be uploaded
+/// again, which matters when an import restores a previously-deleted id. The
+/// profile path clears its own tombstone on re-enable for the same reason.
+async fn clear_config_tombstone(app_handle: &tauri::AppHandle, kind: &str, id: &str) {
+  if let Ok(engine) = SyncEngine::create_from_settings(app_handle).await {
+    let tombstone_key = format!("tombstones/{}/{}.json", kind, id);
+    if let Err(e) = engine.client.delete(&tombstone_key, None).await {
+      log::warn!("Failed to clear tombstone {}: {}", tombstone_key, e);
+    }
+  }
+}
+
 #[tauri::command]
 pub async fn set_proxy_sync_enabled(
   app_handle: tauri::AppHandle,
@@ -3735,6 +3882,8 @@ pub async fn set_proxy_sync_enabled(
   let _ = events::emit("stored-proxies-changed", ());
 
   if enabled {
+    clear_config_tombstone(&app_handle, "proxies", &proxy_id).await;
+
     let _ = events::emit(
       "proxy-sync-status",
       serde_json::json!({
@@ -3805,6 +3954,8 @@ pub async fn set_group_sync_enabled(
   let _ = events::emit("groups-changed", ());
 
   if enabled {
+    clear_config_tombstone(&app_handle, "groups", &group_id).await;
+
     let _ = events::emit(
       "group-sync-status",
       serde_json::json!({
@@ -3877,6 +4028,8 @@ pub async fn set_vpn_sync_enabled(
   let _ = events::emit("vpn-configs-changed", ());
 
   if enabled {
+    clear_config_tombstone(&app_handle, "vpns", &vpn_id).await;
+
     let _ = events::emit(
       "vpn-sync-status",
       serde_json::json!({
@@ -4101,6 +4254,8 @@ pub async fn set_extension_sync_enabled(
   let _ = events::emit("extensions-changed", ());
 
   if enabled {
+    clear_config_tombstone(&app_handle, "extensions", &extension_id).await;
+
     if let Some(scheduler) = super::get_global_scheduler() {
       scheduler.queue_extension_sync(extension_id).await;
     }
@@ -4143,6 +4298,8 @@ pub async fn set_extension_group_sync_enabled(
   let _ = events::emit("extensions-changed", ());
 
   if enabled {
+    clear_config_tombstone(&app_handle, "extension_groups", &extension_group_id).await;
+
     if let Some(scheduler) = super::get_global_scheduler() {
       scheduler
         .queue_extension_group_sync(extension_group_id)
@@ -4196,10 +4353,9 @@ pub async fn rollover_encryption_for_all_entities(
   let total_profiles = synced_profiles.len();
   for (i, profile) in synced_profiles.iter().enumerate() {
     let id_str = profile.id.to_string();
-    // The remote manifest may be encrypted with the previous password. Delete
-    // only that manifest so the normal sync path treats every local file as an
-    // upload and rewrites it with the current password. Existing remote files
-    // remain available until their replacements have uploaded.
+    // Keep the old manifest present until the re-encrypted files are uploaded.
+    // Other devices must never interpret a missing manifest as an empty remote
+    // profile and repopulate it with files encrypted by the previous password.
     let key_prefix = SyncEngine::get_team_key_prefix(profile).await;
     engine
       .upload_profile_metadata(&id_str, profile, &key_prefix)
@@ -4209,14 +4365,8 @@ pub async fn rollover_encryption_for_all_entities(
           "Failed to roll over profile metadata {id_str}: {e}"
         ))
       })?;
-    let manifest_key = format!("{key_prefix}profiles/{id_str}/manifest.json");
     engine
-      .client
-      .delete(&manifest_key, None)
-      .await
-      .map_err(|e| internal_error(format!("Failed to reset profile manifest: {e}")))?;
-    engine
-      .sync_profile(&app_handle, profile)
+      .sync_profile_inner(&app_handle, profile, DiffBias::Auto, true)
       .await
       .map_err(|e| internal_error(format!("Failed to roll over profile {id_str}: {e}")))?;
     let _ = events::emit(
@@ -4495,6 +4645,42 @@ mod tests {
         "hint must not fire for: {cause}"
       );
     }
+  }
+
+  #[test]
+  fn test_tombstone_outranks_local() {
+    // No tombstone: the reconcile runs as before.
+    assert!(!tombstone_outranks_local(false, Some(500), 100));
+
+    // The delete happened after the local edit, so it wins and the entity is
+    // never re-uploaded. This is the resurrection loop's entry point.
+    assert!(tombstone_outranks_local(true, Some(500), 100));
+
+    // Local copy already gone (updated_at 0): nothing may be downloaded back.
+    assert!(tombstone_outranks_local(true, Some(500), 0));
+
+    // Same second resolves in favour of the delete.
+    assert!(tombstone_outranks_local(true, Some(500), 500));
+
+    // A local edit made strictly after the delete still wins (last-write-wins).
+    assert!(!tombstone_outranks_local(true, Some(500), 501));
+
+    // An unreadable write time fails closed.
+    assert!(tombstone_outranks_local(true, None, 501));
+  }
+
+  #[test]
+  fn test_rfc3339_secs() {
+    assert_eq!(rfc3339_secs("1970-01-01T00:00:00Z"), Some(0));
+    assert_eq!(rfc3339_secs("2024-01-01T00:00:00Z"), Some(1_704_067_200));
+    // S3 returns sub-second precision and offsets other than Z.
+    assert_eq!(
+      rfc3339_secs("2024-01-01T01:00:00.500+01:00"),
+      Some(1_704_067_200)
+    );
+    assert_eq!(rfc3339_secs("not a date"), None);
+    // Pre-epoch cannot be a tombstone write time; treat it as unreadable.
+    assert_eq!(rfc3339_secs("1969-12-31T23:59:59Z"), None);
   }
 
   #[test]

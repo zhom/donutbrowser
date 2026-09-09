@@ -6,6 +6,8 @@ import { useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuArrowLeft, LuExternalLink, LuSearch } from "react-icons/lu";
+import { DonutSnack } from "@/components/donut-snack";
+import { ProfileIsolationDemo } from "@/components/profile-isolation-demo";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,7 +36,7 @@ interface SystemInfo {
   portable: boolean;
 }
 
-type AboutView = "about" | "licenses";
+type AboutView = "about" | "licenses" | "isolation";
 
 // Flywheel: each click adds spin; past this speed the donut escapes the
 // dialog and bounces around the window (shared physics with the rail egg).
@@ -47,6 +49,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
   const reducedMotion = useReducedMotion();
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [logoFlown, setLogoFlown] = useState(false);
+  const [snackOpen, setSnackOpen] = useState(false);
   const [view, setView] = useState<AboutView>("about");
   const [licenseQuery, setLicenseQuery] = useState("");
 
@@ -57,6 +60,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
   const lastTimeRef = useRef(0);
   const cancelLaunchRef = useRef<(() => void) | null>(null);
   const restoreLicensesButtonFocusRef = useRef(false);
+  const restoreExampleButtonFocusRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -136,9 +140,11 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
 
   const handleClose = useCallback(() => {
     resetLogo();
+    setSnackOpen(false);
     setView("about");
     setLicenseQuery("");
     restoreLicensesButtonFocusRef.current = false;
+    restoreExampleButtonFocusRef.current = false;
     onClose();
   }, [onClose, resetLogo]);
 
@@ -159,10 +165,11 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
   }, [resetLogo]);
 
   const handleBackToAbout = useCallback(() => {
-    restoreLicensesButtonFocusRef.current = true;
+    restoreLicensesButtonFocusRef.current = view === "licenses";
+    restoreExampleButtonFocusRef.current = view === "isolation";
     setLicenseQuery("");
     setView("about");
-  }, []);
+  }, [view]);
 
   const filteredLicenses = useMemo(() => {
     const query = licenseQuery.trim().toLocaleLowerCase();
@@ -190,14 +197,16 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
     >
       <DialogContent
         className={
-          view === "licenses"
-            ? "flex h-[min(80dvh,40rem)] max-w-lg flex-col overflow-hidden"
-            : "max-w-sm"
+          view === "isolation"
+            ? "flex max-h-[calc(100dvh-3rem)] max-w-2xl flex-col overflow-y-auto"
+            : view === "licenses"
+              ? "flex h-[min(80dvh,40rem)] max-w-lg flex-col overflow-hidden"
+              : "max-w-sm"
         }
       >
         <StepTransition
           transitionKey={view}
-          direction={view === "licenses" ? 1 : -1}
+          direction={view === "about" ? -1 : 1}
           className={
             view === "licenses"
               ? "flex min-h-0 flex-1 flex-col gap-4"
@@ -211,16 +220,38 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
               </DialogHeader>
 
               <div className="flex flex-col items-center gap-3 py-4">
-                <button
-                  ref={logoRef}
-                  type="button"
-                  aria-label={t("header.donutLogo")}
-                  onClick={handleLogoClick}
-                  className="grid size-16 cursor-pointer place-items-center rounded-full bg-transparent text-foreground select-none will-change-transform"
-                  style={logoFlown ? { visibility: "hidden" } : undefined}
-                >
-                  <Logo className="size-14" />
-                </button>
+                {snackOpen ? (
+                  <DonutSnack />
+                ) : (
+                  <button
+                    ref={logoRef}
+                    type="button"
+                    data-slot="about-logo"
+                    aria-label={t("header.donutLogo")}
+                    onClick={(event) => {
+                      if (event.shiftKey) {
+                        resetLogo();
+                        setSnackOpen(true);
+                      } else {
+                        handleLogoClick();
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.shiftKey &&
+                        (event.key === "Enter" || event.key === " ")
+                      ) {
+                        event.preventDefault();
+                        resetLogo();
+                        setSnackOpen(true);
+                      }
+                    }}
+                    className="grid size-16 cursor-pointer place-items-center rounded-full bg-transparent text-foreground select-none will-change-transform"
+                    style={logoFlown ? { visibility: "hidden" } : undefined}
+                  >
+                    <Logo className="size-14" />
+                  </button>
+                )}
 
                 <div className="text-center">
                   <p className="text-lg font-semibold">Donut Browser</p>
@@ -273,6 +304,23 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
                     {t("about.licenses")}
                   </Button>
                 </div>
+                <Button
+                  data-slot="isolation-demo-replay"
+                  ref={(node) => {
+                    if (node && restoreExampleButtonFocusRef.current) {
+                      restoreExampleButtonFocusRef.current = false;
+                      node.focus();
+                    }
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    resetLogo();
+                    setView("isolation");
+                  }}
+                >
+                  {t("isolationDemo.replay")}
+                </Button>
               </div>
 
               <div className="flex justify-end">
@@ -280,6 +328,24 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
                   {t("common.buttons.close")}
                 </RippleButton>
               </div>
+            </>
+          ) : view === "isolation" ? (
+            <>
+              <DialogHeader className="flex-row items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-ml-2 size-8"
+                  aria-label={t("common.buttons.back")}
+                  onClick={handleBackToAbout}
+                  autoFocus
+                >
+                  <LuArrowLeft aria-hidden="true" />
+                </Button>
+                <DialogTitle>{t("isolationDemo.replay")}</DialogTitle>
+              </DialogHeader>
+              <ProfileIsolationDemo />
             </>
           ) : (
             <>

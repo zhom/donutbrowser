@@ -483,10 +483,54 @@ test("global config sealing and encrypted profile sync reject a wrong password, 
       "correct password decrypts profile browser file",
     );
 
+    const emptyProfile = await createProfile(source, "Encrypted Empty Profile");
+    await source.invoke("set_profile_sync_mode", {
+      profileId: emptyProfile.id,
+      syncMode: "Encrypted",
+    });
+    await waitFor(
+      source,
+      async () =>
+        (await listRemote(`profiles/${emptyProfile.id}/`)).some(
+          (object) =>
+            object.key === `profiles/${emptyProfile.id}/metadata.json`,
+        ),
+      "empty profile metadata uploaded before rollover",
+    );
+
     await source.invoke("set_e2e_password", {
       password: "rolled encryption password",
     });
-    await source.invoke("rollover_encryption_for_all_entities");
+    let rollingOver = true;
+    let manifestDisappeared = false;
+    await Promise.all([
+      source.invoke("rollover_encryption_for_all_entities").finally(() => {
+        rollingOver = false;
+      }),
+      (async () => {
+        while (rollingOver) {
+          const objects = await listRemote(`profiles/${encryptedProfile.id}/`);
+          manifestDisappeared ||= !objects.some(
+            (object) =>
+              object.key === `profiles/${encryptedProfile.id}/manifest.json`,
+          );
+          if (rollingOver) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+        }
+      })(),
+    ]);
+    assert.equal(
+      manifestDisappeared,
+      false,
+      "rollover must not let another device interpret a missing manifest as an empty remote profile",
+    );
+    assert.ok(
+      (await listRemote(`profiles/${emptyProfile.id}/`)).some(
+        (object) => object.key === `profiles/${emptyProfile.id}/manifest.json`,
+      ),
+      "rollover must publish a manifest even for an empty profile",
+    );
     await waitFor(
       source,
       async () => {
@@ -553,6 +597,10 @@ test("global config sealing and encrypted profile sync reject a wrong password, 
 
     await source.invoke("set_profile_sync_mode", {
       profileId: encryptedProfile.id,
+      syncMode: "Disabled",
+    });
+    await source.invoke("set_profile_sync_mode", {
+      profileId: emptyProfile.id,
       syncMode: "Disabled",
     });
     await source.invoke("delete_e2e_password");

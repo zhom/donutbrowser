@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Input } from "@/components/ui/input";
 
 import {
   formatGroupShortcut,
@@ -40,13 +42,30 @@ function ShortcutTokens({ shortcut }: { shortcut: ShortcutDef }) {
 
 export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
   const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const matches = (label: string, tokens: string[]) =>
+    search
+      .trim()
+      .toLocaleLowerCase()
+      .split(/\s+/)
+      .every((word) =>
+        `${label} ${tokens.join(" ")}`.toLocaleLowerCase().includes(word),
+      );
 
   const sections: Array<{ key: ShortcutDef["group"]; titleKey: string }> = [
     { key: "navigation", titleKey: "commandPalette.groups.navigation" },
     { key: "actions", titleKey: "commandPalette.groups.actions" },
   ];
 
-  const digitGroups = groupTargets.slice(0, 9);
+  const digitGroups = groupTargets
+    .slice(0, 9)
+    .map((target, index) => ({ ...target, index }))
+    .filter((target) =>
+      matches(target.name, formatGroupShortcut(target.index + 1)),
+    );
+  const visibleShortcuts = SHORTCUTS.filter((shortcut) =>
+    matches(t(shortcut.labelKey), formatShortcut(shortcut)),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-8">
@@ -58,8 +77,28 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
           </p>
         </header>
 
+        <Input
+          data-slot="shortcuts-search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            // Escape empties the filter before it can close the page.
+            if (event.key === "Escape" && search) {
+              event.preventDefault();
+              event.stopPropagation();
+              setSearch("");
+            }
+          }}
+          aria-label={t("appFeedback.searchShortcuts")}
+          placeholder={t("appFeedback.searchShortcuts")}
+        />
+        {!visibleShortcuts.length && !digitGroups.length && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t("common.noResults")}
+          </p>
+        )}
         {sections.map(({ key, titleKey }) => {
-          const items = SHORTCUTS.filter((s) => s.group === key);
+          const items = visibleShortcuts.filter((s) => s.group === key);
           if (items.length === 0) return null;
           return (
             <section key={key} className="flex flex-col gap-2">
@@ -73,7 +112,7 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
                     className="flex items-center justify-between gap-4 px-3 py-2"
                   >
                     <span
-                      className="min-w-0 truncate text-sm"
+                      className="min-w-0 break-words text-sm"
                       title={t(s.labelKey)}
                     >
                       {t(s.labelKey)}
@@ -92,18 +131,18 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
               {t("commandPalette.groups.profileGroups")}
             </h2>
             <div className="divide-y divide-border rounded-md border bg-card">
-              {digitGroups.map((target, i) => (
+              {digitGroups.map((target) => (
                 <div
                   key={target.id}
                   className="flex items-center justify-between gap-4 px-3 py-2"
                 >
                   <span
-                    className="min-w-0 truncate text-sm"
+                    className="min-w-0 break-words text-sm"
                     title={target.name}
                   >
                     {target.name}
                   </span>
-                  <Tokens tokens={formatGroupShortcut(i + 1)} />
+                  <Tokens tokens={formatGroupShortcut(target.index + 1)} />
                 </div>
               ))}
             </div>

@@ -17,7 +17,7 @@ use crate::sync::manifest::DEFAULT_EXCLUDE_PATTERNS;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 /// Build a JSON error payload with just a code.
@@ -53,6 +53,33 @@ lazy_static::lazy_static! {
 
   /// Per-profile failed unlock attempt tracking for rate-limiting.
   static ref FAILED_ATTEMPTS: Mutex<HashMap<uuid::Uuid, FailureRecord>> = Mutex::new(HashMap::new());
+
+  /// Per-profile lock serializing the whole check-lockout -> verify -> record
+  /// window. `check_lockout` and `record_failed_attempt` each take and release
+  /// `FAILED_ATTEMPTS` independently, with an Argon2 verification between them,
+  /// so without this a burst of concurrent attempts all read the same stale
+  /// count before any of them increments it and one lockout window admits as
+  /// many guesses as there are worker threads.
+  static ref ATTEMPT_LOCKS: Mutex<HashMap<uuid::Uuid, Arc<tokio::sync::Mutex<()>>>> =
+    Mutex::new(HashMap::new());
+}
+
+/// The attempt lock for one profile. The std map lock is released before the
+/// caller awaits the returned lock, so it is never held across an await.
+///
+/// A poisoned map degrades to serialized rather than silently unserialized.
+fn attempt_lock(profile_id: &uuid::Uuid) -> Arc<tokio::sync::Mutex<()>> {
+  let mut guard = ATTEMPT_LOCKS
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  // An entry only the map itself still references has no attempt in progress,
+  // so dropping it here keeps a long-lived process from accumulating one lock
+  // per profile ever touched. A live holder always keeps the count above 1.
+  guard.retain(|_, lock| Arc::strong_count(lock) > 1);
+  guard
+    .entry(*profile_id)
+    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+    .clone()
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -309,6 +336,10 @@ pub async fn verify_profile_password(profile_id: String, password: String) -> Re
   if !profile.password_protected {
     return Err(err_code("PROFILE_NOT_PROTECTED"));
   }
+  // Bound, never dropped early: it must cover check_lockout through the
+  // record/clear branches below. See `attempt_lock`.
+  let attempt = attempt_lock(&id);
+  let _attempt_guard = attempt.lock().await;
   if let Err(secs) = check_lockout(&id) {
     return Err(err_with("LOCKED_OUT", &[("seconds", secs.to_string())]));
   }
@@ -338,6 +369,10 @@ pub async fn unlock_profile(profile_id: String, password: String) -> Result<(), 
   if !profile.password_protected {
     return Err(err_code("PROFILE_NOT_PROTECTED"));
   }
+  // Bound, never dropped early: it must cover check_lockout through the
+  // record/clear branches below. See `attempt_lock`.
+  let attempt = attempt_lock(&id);
+  let _attempt_guard = attempt.lock().await;
   if let Err(secs) = check_lockout(&id) {
     return Err(err_with("LOCKED_OUT", &[("seconds", secs.to_string())]));
   }
@@ -399,6 +434,10 @@ pub async fn change_profile_password(
     return Err(err_code("PROFILE_RUNNING"));
   }
 
+  // Bound, never dropped early: it must cover check_lockout through the
+  // record/clear branches below. See `attempt_lock`.
+  let attempt = attempt_lock(&id);
+  let _attempt_guard = attempt.lock().await;
   if let Err(secs) = check_lockout(&id) {
     return Err(err_with("LOCKED_OUT", &[("seconds", secs.to_string())]));
   }
@@ -450,6 +489,10 @@ pub async fn remove_profile_password(profile_id: String, password: String) -> Re
     return Err(err_code("PROFILE_RUNNING"));
   }
 
+  // Bound, never dropped early: it must cover check_lockout through the
+  // record/clear branches below. See `attempt_lock`.
+  let attempt = attempt_lock(&id);
+  let _attempt_guard = attempt.lock().await;
   if let Err(secs) = check_lockout(&id) {
     return Err(err_with("LOCKED_OUT", &[("seconds", secs.to_string())]));
   }
@@ -1253,6 +1296,30 @@ mod tests {
 
     fresh_test_state(&profile.id);
     clear_failed_attempts(&profile.id);
+  }
+
+  #[tokio::test]
+  async fn attempt_lock_serializes_one_profile_without_blocking_others() {
+    let a = uuid::Uuid::new_v4();
+    let b = uuid::Uuid::new_v4();
+
+    // One lock per profile is what turns check-lockout -> verify -> record
+    // into a critical section instead of a check-then-act race.
+    assert!(Arc::ptr_eq(&attempt_lock(&a), &attempt_lock(&a)));
+    assert!(!Arc::ptr_eq(&attempt_lock(&a), &attempt_lock(&b)));
+
+    let held = attempt_lock(&a);
+    let guard = held.lock().await;
+    assert!(
+      attempt_lock(&a).try_lock().is_err(),
+      "a concurrent attempt on the same profile must wait for the window"
+    );
+    assert!(
+      attempt_lock(&b).try_lock().is_ok(),
+      "a different profile must not be serialized behind it"
+    );
+    drop(guard);
+    assert!(attempt_lock(&a).try_lock().is_ok());
   }
 
   #[test]

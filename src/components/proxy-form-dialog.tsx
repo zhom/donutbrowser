@@ -17,13 +17,16 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { translateBackendError } from "@/lib/backend-errors";
-import { pickParsedProxy } from "@/lib/proxy-string";
+import { isFirstHopEncrypted, pickParsedProxy } from "@/lib/proxy-string";
+import { canonicalProxyType } from "@/lib/proxy-type";
 import type { ProxyParseResult, StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -52,6 +55,46 @@ const DEFAULT_FORM: ProxyFormData = {
   password: "",
   vless_uri: "",
 };
+
+/**
+ * The type list, split by what the hop from this machine to the proxy actually
+ * does on the wire rather than presented as one flat menu.
+ *
+ * A flat list rendered `HTTPS` next to `HTTP` and let it read as "the encrypted
+ * one", which is not what Donut dials: `https` is a provider label on a
+ * plaintext CONNECT endpoint. The stored value is untouched, it is the URL
+ * scheme the Rust worker matches on, only the grouping and the label change.
+ *
+ * Shadowsocks has a heading of its own rather than sitting under the encrypted
+ * one. Its hop is only as encrypted as its cipher, and the cipher is empty the
+ * instant the type is picked, so "First hop encrypted" promised something the
+ * note directly below the Select then denied, both readable in one glance. A
+ * heading that says the cipher decides is the true one, and it stays true for
+ * the `none` cipher that the encrypted heading never covered either.
+ */
+const ALWAYS_ENCRYPTED_FIRST_HOP_TYPES = ["httpstls", "vless"] as const;
+const CIPHER_DEPENDENT_FIRST_HOP_TYPES = ["ss"] as const;
+const PLAINTEXT_FIRST_HOP_TYPES = [
+  "http",
+  "https",
+  "socks4",
+  "socks5",
+] as const;
+
+const TYPE_GROUPS = [
+  {
+    labelKey: "proxies.form.firstHopGroupEncrypted",
+    types: ALWAYS_ENCRYPTED_FIRST_HOP_TYPES,
+  },
+  {
+    labelKey: "proxies.form.firstHopGroupCipher",
+    types: CIPHER_DEPENDENT_FIRST_HOP_TYPES,
+  },
+  {
+    labelKey: "proxies.form.firstHopGroupPlaintext",
+    types: PLAINTEXT_FIRST_HOP_TYPES,
+  },
+] as const;
 
 interface VlessEndpoint {
   host: string;
@@ -128,7 +171,8 @@ export function ProxyFormDialog({
       return;
     }
 
-    const isVless = form.proxy_type === "vless";
+    const canonicalType = canonicalProxyType(form.proxy_type);
+    const isVless = canonicalType === "vless";
     const vlessEndpoint = isVless ? parseVlessEndpoint(form.vless_uri) : null;
 
     if (isVless && !form.vless_uri.trim()) {
@@ -152,7 +196,7 @@ export function ProxyFormDialog({
     }
 
     if (
-      form.proxy_type === "ss" &&
+      canonicalType === "ss" &&
       (!form.username.trim() || !form.password.trim())
     ) {
       toast.error(t("proxies.form.ssCipherRequired"));
@@ -245,8 +289,39 @@ export function ProxyFormDialog({
     [form.name],
   );
 
-  const isVless = form.proxy_type === "vless";
+  // The stored spelling is not the UI's to assume: a Shadowsocks proxy created
+  // through the REST API arrives as `shadowsocks`, and every branch that asked
+  // `=== "ss"` skipped it. Derive the type once and compare against that.
+  const canonicalType = canonicalProxyType(form.proxy_type);
+  const isVless = canonicalType === "vless";
+  const isShadowsocks = canonicalType === "ss";
   const vlessEndpoint = isVless ? parseVlessEndpoint(form.vless_uri) : null;
+  // The cipher decides for Shadowsocks, and this form keeps it in `username`.
+  // Asked with `canonicalType`, not the raw stored spelling, so the answer
+  // cannot disagree with the field labels two lines below: a REST-stored
+  // `"ss "` was trimmed for the labels and not for this, and the form called a
+  // proxy with a real cipher unencrypted while calling its field "Cipher".
+  const firstHopEncrypted = isFirstHopEncrypted(canonicalType, form.username);
+  // Shadowsocks is the one type whose hop is only as encrypted as its cipher,
+  // and the cipher is empty until the user fills it in. Saying "not encrypted"
+  // there states as settled something nobody has chosen yet, right under a
+  // heading about encryption. Nothing downstream reads this: `firstHopEncrypted`
+  // stays false, so every guard still fails closed on an empty cipher.
+  const cipherUndecided = isShadowsocks && form.username.trim().length === 0;
+  // What a filled field on a plaintext hop actually exposes, which is not the
+  // same thing for every protocol: for the credentialed types it is the
+  // username and password (see the payload built in handleSubmit), and for
+  // Shadowsocks, whose password never touches the wire and whose field here is
+  // the cipher, it is the destination and the payload. Same condition, two
+  // different truths, so the panel below picks its sentence from the type.
+  const showPlaintextExposure =
+    !isVless && !firstHopEncrypted && form.username.trim().length > 0;
+  // Radix matches an item by its value, so the item standing for this proxy
+  // carries the proxy's own spelling. Without it a stored `shadowsocks` left
+  // the trigger on its placeholder, and picking the visible Shadowsocks entry
+  // to clear that silently retyped the proxy to `ss`.
+  const typeItemValue = (type: string) =>
+    type === canonicalType ? form.proxy_type : type;
 
   const trimmedVlessUri = form.vless_uri.trim();
   useEffect(() => {
@@ -281,8 +356,7 @@ export function ProxyFormDialog({
       : form.host.trim() &&
         form.port > 0 &&
         form.port <= 65535 &&
-        (form.proxy_type !== "ss" ||
-          (form.username.trim() && form.password.trim())));
+        (!isShadowsocks || (form.username.trim() && form.password.trim())));
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -317,23 +391,51 @@ export function ProxyFormDialog({
               }}
               disabled={isSubmitting}
             >
-              <SelectTrigger id="proxy-type">
+              <SelectTrigger
+                id="proxy-type"
+                aria-describedby={
+                  canonicalType === "httpstls"
+                    ? "proxy-type-first-hop proxy-type-tls-hint"
+                    : "proxy-type-first-hop"
+                }
+              >
                 <SelectValue placeholder={t("proxies.form.selectType")} />
               </SelectTrigger>
               <SelectContent>
-                {["http", "https", "socks4", "socks5", "ss", "vless"].map(
-                  (type) => (
-                    <SelectItem key={type} value={type}>
-                      {type === "ss"
-                        ? "Shadowsocks"
-                        : type === "vless"
-                          ? t("proxies.form.vlessType")
-                          : type.toUpperCase()}
-                    </SelectItem>
-                  ),
-                )}
+                {TYPE_GROUPS.map((group) => (
+                  <SelectGroup key={group.labelKey}>
+                    <SelectLabel>{t(group.labelKey)}</SelectLabel>
+                    {group.types.map((type) => (
+                      <SelectItem key={type} value={typeItemValue(type)}>
+                        {t(`proxies.types.${type}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
               </SelectContent>
             </Select>
+            <p
+              id="proxy-type-first-hop"
+              className={
+                firstHopEncrypted
+                  ? "text-xs text-muted-foreground"
+                  : "text-xs text-warning-text"
+              }
+            >
+              {firstHopEncrypted
+                ? t("proxies.form.firstHopEncryptedNote")
+                : cipherUndecided
+                  ? t("proxies.form.firstHopCipherNote")
+                  : t("proxies.form.firstHopPlaintextNote")}
+            </p>
+            {canonicalType === "httpstls" && (
+              <p
+                id="proxy-type-tls-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {t("proxies.form.httpsTlsHint")}
+              </p>
+            )}
           </div>
 
           {isVless ? (
@@ -412,7 +514,7 @@ export function ProxyFormDialog({
               <div className="grid grid-cols-1 gap-4 @sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="proxy-username">
-                    {form.proxy_type === "ss"
+                    {isShadowsocks
                       ? t("proxies.form.cipher")
                       : t("proxies.form.username")}
                   </Label>
@@ -423,7 +525,7 @@ export function ProxyFormDialog({
                       setForm({ ...form, username: e.target.value });
                     }}
                     placeholder={
-                      form.proxy_type === "ss"
+                      isShadowsocks
                         ? t("proxies.form.cipherPlaceholder")
                         : t("proxies.form.usernamePlaceholder")
                     }
@@ -447,6 +549,21 @@ export function ProxyFormDialog({
                   />
                 </div>
               </div>
+
+              {showPlaintextExposure && (
+                <div className="space-y-2 rounded-md border border-warning/50 bg-warning/10 p-3">
+                  <p className="font-medium">
+                    {isShadowsocks
+                      ? t("proxies.form.nullCipherHeading")
+                      : t("proxies.form.credentialsInClearHeading")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {isShadowsocks
+                      ? t("proxies.form.nullCipherBody")
+                      : t("proxies.form.credentialsInClearBody")}
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

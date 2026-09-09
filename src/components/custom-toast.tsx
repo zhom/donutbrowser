@@ -1,4 +1,3 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
   LuCheckCheck,
@@ -8,7 +7,6 @@ import {
   LuX,
 } from "react-icons/lu";
 import type { ExternalToast } from "sonner";
-import { MOTION_EASE_OUT } from "@/lib/motion";
 import { RippleButton } from "./ui/ripple";
 
 interface BaseToastProps {
@@ -141,243 +139,194 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
 
     case "version-update":
       return (
-        <LuRefreshCw className="size-4 shrink-0 animate-spin text-foreground" />
+        <LuRefreshCw className="size-4 shrink-0 animate-spin text-foreground motion-reduce:animate-none" />
       );
     case "fetching":
       return (
-        <LuRefreshCw className="size-4 shrink-0 animate-spin text-foreground" />
+        <LuRefreshCw className="size-4 shrink-0 animate-spin text-foreground motion-reduce:animate-none" />
       );
     case "sync-progress":
       return (
-        <LuRefreshCw className="size-4 shrink-0 animate-spin text-foreground" />
+        <LuRefreshCw className="size-4 shrink-0 animate-spin text-foreground motion-reduce:animate-none" />
       );
     case "loading":
       return (
-        <div className="size-4 shrink-0 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+        <div className="size-4 shrink-0 animate-spin rounded-full border-2 border-foreground border-t-transparent motion-reduce:animate-none" />
       );
     default:
       return (
-        <div className="size-4 shrink-0 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+        <div className="size-4 shrink-0 animate-spin rounded-full border-2 border-foreground border-t-transparent motion-reduce:animate-none" />
       );
   }
 }
 
 export function UnifiedToast(props: ToastProps) {
   const { t } = useTranslation();
-  const reduceMotion = useReducedMotion();
   const { title, description, type, action, onCancel } = props;
   const stage = "stage" in props ? props.stage : undefined;
   const progress = "progress" in props ? props.progress : undefined;
-  const stateKey = `${type}:${stage ?? "default"}`;
 
   return (
     <div className="flex w-full max-w-md items-start rounded-lg border border-border bg-card p-3 text-card-foreground shadow-lg">
-      <div className="mt-0.5 mr-3">
-        <AnimatePresence initial={false} mode="wait">
-          <motion.div
-            key={`icon-${stateKey}`}
-            initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.92 }}
-            animate={{
-              opacity: 1,
-              scale: 1,
-              transition: {
-                duration: reduceMotion ? 0.15 : 0.16,
-                ease: MOTION_EASE_OUT,
-              },
-            }}
-            exit={{
-              opacity: 0,
-              scale: reduceMotion ? 1 : 0.92,
-              transition: {
-                duration: reduceMotion ? 0.15 : 0.12,
-                ease: MOTION_EASE_OUT,
-              },
-            }}
-          >
-            {getToastIcon(type, stage)}
-          </motion.div>
-        </AnimatePresence>
+      <div className="mt-0.5 mr-3" aria-hidden="true">
+        {getToastIcon(type, stage)}
       </div>
-      <AnimatePresence initial={false} mode="wait">
-        <motion.div
-          key={stateKey}
-          initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
-          animate={{
-            opacity: 1,
-            y: 0,
-            transition: {
-              duration: reduceMotion ? 0.15 : 0.16,
-              ease: MOTION_EASE_OUT,
-            },
-          }}
-          exit={{
-            opacity: 0,
-            y: reduceMotion ? 0 : -4,
-            transition: {
-              duration: reduceMotion ? 0.15 : 0.12,
-              ease: MOTION_EASE_OUT,
-            },
-          }}
-          className="min-w-0 flex-1"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-sm/tight font-semibold text-foreground">
-              {title}
-            </p>
-            {onCancel && (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label={t("common.buttons.cancel")}
-              >
-                <LuX className="size-3" />
-              </button>
-            )}
-          </div>
+      <div className="min-w-0 flex-1" data-slot="toast-content">
+        <div className="flex items-center justify-between">
+          <p className="text-sm/tight font-semibold text-foreground">{title}</p>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="ml-2 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label={t("common.buttons.cancel")}
+            >
+              <LuX className="size-3" />
+            </button>
+          )}
+        </div>
 
-          {/* Download progress */}
-          {type === "download" &&
-            progress &&
-            "percentage" in progress &&
-            stage === "downloading" && (
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-                    {progress.percentage.toFixed(1)}%
-                    {progress.speed && ` • ${progress.speed} MB/s`}
-                    {progress.eta &&
-                      ` • ${t("toasts.progress.remaining", { time: progress.eta })}`}
-                  </p>
-                </div>
-                <ProgressBar percentage={progress.percentage} />
+        {/* Download progress */}
+        {type === "download" &&
+          progress &&
+          "percentage" in progress &&
+          stage === "downloading" && (
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {progress.percentage.toFixed(1)}%
+                  {progress.speed && ` • ${progress.speed} MB/s`}
+                  {progress.eta &&
+                    ` • ${t("toasts.progress.remaining", { time: progress.eta })}`}
+                </p>
               </div>
-            )}
+              <ProgressBar percentage={progress.percentage} />
+            </div>
+          )}
 
-          {/* Extraction / verification progress. Extraction reports a real
+        {/* Extraction / verification progress. Extraction reports a real
             percentage for most archive formats; when none is available yet
             (or the format can't measure progress) show an indeterminate bar. */}
-          {type === "download" &&
-            (stage === "extracting" || stage === "verifying") && (
-              <div className="mt-2 space-y-1">
-                {stage === "extracting" &&
-                progress &&
-                "percentage" in progress &&
-                progress.percentage > 0 ? (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      {progress.percentage.toFixed(1)}%
-                    </p>
-                    <ProgressBar percentage={progress.percentage} />
-                  </>
-                ) : (
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div className="h-1.5 w-1/3 animate-progress-indeterminate rounded-full bg-foreground" />
-                  </div>
-                )}
-              </div>
-            )}
-
-          {/* Version update progress */}
-          {type === "version-update" &&
-            progress &&
-            "current_browser" in progress && (
-              <div className="mt-2 space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  {progress.current_browser &&
-                    t("versionUpdater.toast.lookingForUpdates", {
-                      browser: progress.current_browser,
-                    })}
-                </p>
-                <div className="flex items-center gap-x-2">
-                  <ProgressBar
-                    percentage={(progress.current / progress.total) * 100}
-                    className="min-w-0 flex-1"
-                  />
-                  <span className="w-8 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground">
-                    {progress.current}/{progress.total}
-                  </span>
-                </div>
-              </div>
-            )}
-
-          {/* Sync progress */}
-          {type === "sync-progress" &&
-            progress &&
-            "completed_files" in progress && (
-              <div className="mt-1">
-                <p className="text-xs text-muted-foreground">
-                  {progress.phase === "uploading"
-                    ? t("appUpdate.toast.uploading")
-                    : t("appUpdate.toast.downloading")}{" "}
-                  {t("toasts.progress.filesProgress", {
-                    completed: progress.completed_files,
-                    total: progress.total_files,
-                  })}
-                  {" \u2022 "}
-                  {formatBytesCompact(progress.completed_bytes)} /{" "}
-                  {formatBytesCompact(progress.total_bytes)}
-                  {progress.speed_bytes_per_sec > 0 && (
-                    <>
-                      {" \u2022 "}
-                      {formatSpeedCompact(progress.speed_bytes_per_sec)}
-                    </>
-                  )}
-                  {progress.eta_seconds > 0 &&
-                    progress.completed_files < progress.total_files &&
-                    ` \u2022 ${t("toasts.progress.remaining", {
-                      time: `~${formatEtaCompact(progress.eta_seconds)}`,
-                    })}`}
-                </p>
-                {progress.failed_count > 0 && (
-                  <p className="mt-0.5 text-xs text-destructive-text">
-                    {t("toasts.progress.filesFailed", {
-                      count: progress.failed_count,
-                    })}
+        {type === "download" &&
+          (stage === "extracting" || stage === "verifying") && (
+            <div className="mt-2 space-y-1">
+              {stage === "extracting" &&
+              progress &&
+              "percentage" in progress &&
+              progress.percentage > 0 ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    {progress.percentage.toFixed(1)}%
                   </p>
+                  <ProgressBar percentage={progress.percentage} />
+                </>
+              ) : (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-1.5 w-1/3 animate-progress-indeterminate rounded-full bg-foreground motion-reduce:animate-none" />
+                </div>
+              )}
+            </div>
+          )}
+
+        {/* Version update progress */}
+        {type === "version-update" &&
+          progress &&
+          "current_browser" in progress && (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                {progress.current_browser &&
+                  t("versionUpdater.toast.lookingForUpdates", {
+                    browser: progress.current_browser,
+                  })}
+              </p>
+              <div className="flex items-center gap-x-2">
+                <ProgressBar
+                  percentage={(progress.current / progress.total) * 100}
+                  className="min-w-0 flex-1"
+                />
+                <span className="w-8 shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground">
+                  {progress.current}/{progress.total}
+                </span>
+              </div>
+            </div>
+          )}
+
+        {/* Sync progress */}
+        {type === "sync-progress" &&
+          progress &&
+          "completed_files" in progress && (
+            <div className="mt-1">
+              <p className="text-xs text-muted-foreground">
+                {progress.phase === "uploading"
+                  ? t("appUpdate.toast.uploading")
+                  : t("appUpdate.toast.downloading")}{" "}
+                {t("toasts.progress.filesProgress", {
+                  completed: progress.completed_files,
+                  total: progress.total_files,
+                })}
+                {" \u2022 "}
+                {formatBytesCompact(progress.completed_bytes)} /{" "}
+                {formatBytesCompact(progress.total_bytes)}
+                {progress.speed_bytes_per_sec > 0 && (
+                  <>
+                    {" \u2022 "}
+                    {formatSpeedCompact(progress.speed_bytes_per_sec)}
+                  </>
                 )}
-              </div>
-            )}
-
-          {/* Description */}
-          {description && (
-            <p className="mt-1 text-xs/tight text-muted-foreground">
-              {description}
-            </p>
-          )}
-
-          {/* Stage-specific descriptions for downloads */}
-          {type === "download" && !description && (
-            <>
-              {stage === "extracting" && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("browserDownload.toast.extracting")}
+                {progress.eta_seconds > 0 &&
+                  progress.completed_files < progress.total_files &&
+                  ` \u2022 ${t("toasts.progress.remaining", {
+                    time: `~${formatEtaCompact(progress.eta_seconds)}`,
+                  })}`}
+              </p>
+              {progress.failed_count > 0 && (
+                <p className="mt-0.5 text-xs text-destructive-text">
+                  {t("toasts.progress.filesFailed", {
+                    count: progress.failed_count,
+                  })}
                 </p>
               )}
-              {stage === "verifying" && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("browserDownload.toast.verifying")}
-                </p>
-              )}
-            </>
+            </div>
           )}
-          {action &&
-            "onClick" in (action as { onClick?: () => void; label?: string }) &&
-            "label" in (action as { onClick?: () => void; label?: string }) && (
-              <div className="mt-2 w-full">
-                <RippleButton
-                  size="sm"
-                  className="ml-auto"
-                  onClick={
-                    (action as { onClick: () => void; label: string }).onClick
-                  }
-                >
-                  {(action as { onClick: () => void; label: string }).label}
-                </RippleButton>
-              </div>
+
+        {/* Description */}
+        {description && (
+          <p className="mt-1 text-xs/tight text-muted-foreground">
+            {description}
+          </p>
+        )}
+
+        {/* Stage-specific descriptions for downloads */}
+        {type === "download" && !description && (
+          <>
+            {stage === "extracting" && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("browserDownload.toast.extracting")}
+              </p>
             )}
-        </motion.div>
-      </AnimatePresence>
+            {stage === "verifying" && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("browserDownload.toast.verifying")}
+              </p>
+            )}
+          </>
+        )}
+        {action &&
+          "onClick" in (action as { onClick?: () => void; label?: string }) &&
+          "label" in (action as { onClick?: () => void; label?: string }) && (
+            <div className="mt-2 w-full">
+              <RippleButton
+                size="sm"
+                className="ml-auto"
+                onClick={
+                  (action as { onClick: () => void; label: string }).onClick
+                }
+              >
+                {(action as { onClick: () => void; label: string }).label}
+              </RippleButton>
+            </div>
+          )}
+      </div>
     </div>
   );
 }

@@ -24,6 +24,17 @@ fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
   fs::rename(&tmp, path)
 }
 
+/// Collapse an empty proxy/VPN id to `None`.
+///
+/// REST and MCP clients send `""` to detach a proxy or VPN, since omitting the
+/// field means "leave unchanged". Stored as `Some("")` it resolves to no
+/// upstream while every `proxy_id.is_some()` check still reads the profile as
+/// routed, so the launch gate probes a direct exit and can refuse the launch of
+/// a profile that has no proxy at all.
+fn normalize_network_id(id: Option<String>) -> Option<String> {
+  id.filter(|id| !id.is_empty())
+}
+
 pub struct ProfileManager {
   wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
 }
@@ -89,6 +100,12 @@ impl ProfileManager {
           .into(),
       );
     }
+
+    // Normalize before the mutual-exclusion check, not per caller: REST, MCP,
+    // the importer and the Tauri commands all funnel through here, and a client
+    // saying "neither" with two empty strings must not read as "both".
+    let proxy_id = normalize_network_id(proxy_id);
+    let vpn_id = normalize_network_id(vpn_id);
 
     if proxy_id.is_some() && vpn_id.is_some() {
       return Err("Cannot set both proxy_id and vpn_id".into());
@@ -208,7 +225,13 @@ impl ProfileManager {
           browser: browser.to_string(),
           version: version.to_string(),
           proxy_id: proxy_id.clone(),
-          vpn_id: None,
+          // Carried, not None. Fingerprint generation reads this to decide
+          // whether the profile routes its traffic at all; hardcoding None made
+          // a VPN profile look direct, so its geolocation probe went out from
+          // the user's real address and that location was baked into the
+          // fingerprint, which the launch-time gate then rejects as a mismatch
+          // the profile should never have had.
+          vpn_id: vpn_id.clone(),
           launch_hook: launch_hook.clone(),
           process_id: None,
           last_launch: None,
@@ -223,6 +246,7 @@ impl ProfileManager {
           last_sync: None,
           host_os: None,
           ephemeral: false,
+          temporary: false,
           extension_group_id: None,
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
@@ -332,6 +356,7 @@ impl ProfileManager {
       last_sync: None,
       host_os: Some(get_host_os()),
       ephemeral,
+      temporary: false,
       extension_group_id: None,
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,
@@ -506,70 +531,168 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Delete a profile the recoverable way: it is moved to the trash and can
+  /// be restored until it expires. Ephemeral profiles have nothing to keep
+  /// and are destroyed outright.
   pub fn delete_profile(
     &self,
     app_handle: &tauri::AppHandle,
     profile_id: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Attempting to delete profile with ID: {profile_id}");
+    self.remove_profile(app_handle, profile_id, false, true)
+  }
 
-    // Find the profile by ID
+  /// Destroy a profile and its data for good, bypassing the trash.
+  /// Mark a freshly created profile as belonging to one automation run.
+  ///
+  /// Set after creation rather than threaded through every creation signature:
+  /// only the REST and MCP paths can ask for it, and both already hold the
+  /// profile they just made. Implies `ephemeral`, because a disposable profile
+  /// must not leave a data directory on real disk either.
+  pub fn mark_profile_temporary(
+    &self,
+    profile_id: &str,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let mut profile = self.find_profile(profile_id)?;
+    profile.temporary = true;
+    profile.ephemeral = true;
+    self.save_profile(&profile)?;
+    Ok(profile)
+  }
+
+  /// Which temporary profiles a startup sweep should destroy.
+  ///
+  /// A temporary profile is destroyed when its browser stops, so one still
+  /// here at startup either outlived a crash or is being used by a browser
+  /// this app did not start. `is_running` decides between the two, and is a
+  /// parameter so the rule can be tested without a process table.
+  pub fn temporary_profiles_to_sweep(
+    profiles: &[BrowserProfile],
+    is_running: impl Fn(u32) -> bool,
+  ) -> Vec<String> {
+    profiles
+      .iter()
+      .filter(|profile| profile.temporary)
+      .filter(|profile| !profile.process_id.is_some_and(&is_running))
+      .map(|profile| profile.id.to_string())
+      .collect()
+  }
+
+  /// Destroy every temporary profile that no live browser is using.
+  ///
+  /// Runs at startup: a crash, a kill -9 or a power cut leaves a temporary
+  /// profile behind, and nothing else would ever remove it. Returns how many
+  /// were destroyed.
+  pub fn sweep_temporary_profiles(&self, app_handle: &tauri::AppHandle) -> usize {
+    let Ok(profiles) = self.list_profiles() else {
+      return 0;
+    };
+    let stale =
+      Self::temporary_profiles_to_sweep(&profiles, crate::proxy_storage::is_process_running);
+    let mut swept = 0;
+    for profile_id in stale {
+      match self.delete_profile_permanently(app_handle, &profile_id) {
+        Ok(()) => {
+          swept += 1;
+          log::info!("Swept temporary profile {profile_id} left by an earlier run");
+        }
+        Err(e) => log::warn!("Could not sweep temporary profile {profile_id}: {e}"),
+      }
+    }
+    swept
+  }
+
+  pub fn delete_profile_permanently(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile_id: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    self.remove_profile(app_handle, profile_id, true, true)
+  }
+
+  fn find_profile(&self, profile_id: &str) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     let profile_uuid =
       uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
-    let profiles = self.list_profiles()?;
-    let profile = profiles
+    self
+      .list_profiles()?
       .into_iter()
       .find(|p| p.id == profile_uuid)
-      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found").into())
+  }
 
-    // Check if browser is running (cross-OS profiles can't be running locally)
-    if profile.process_id.is_some() && !profile.is_cross_os() {
-      return Err(
-        "Cannot delete profile while browser is running. Please stop the browser first.".into(),
-      );
+  /// The one removal path. `permanent` destroys the directory; otherwise it
+  /// moves to the trash. Either way the cloud sees a delete (tombstone) and
+  /// any team lock is released, so a trashed profile is indistinguishable
+  /// from a deleted one for every other device.
+  fn remove_profile(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    permanent: bool,
+    emit_events: bool,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    log::info!("Attempting to delete profile with ID: {profile_id} (permanent: {permanent})");
+    let profile = self.find_profile(profile_id)?;
+
+    if crate::profile::trash::is_running_locally(&profile) {
+      return Err(crate::backend_error("PROFILE_RUNNING").into());
     }
 
-    // Launch-gate acknowledgements are keyed by profile id and are not synced,
-    // so nothing else would ever clean them up.
-    crate::launch_gate_prefs::forget_profile(profile_id);
+    // An ephemeral profile keeps its data in RAM; there is nothing to trash.
+    let permanent = permanent || profile.ephemeral;
 
-    // Deleting the profile never touched its ephemeral directory, so a
-    // decrypted or in-memory copy outlived the profile it belonged to with
-    // nothing left that knew to reap it. The running-browser guard above only
-    // rejects a live process_id, and the keep-decrypted path deliberately
-    // clears process_id while leaving the plaintext tree populated. No-ops
-    // when the profile has no ephemeral directory.
+    // A decrypted or in-memory copy must not outlive the profile it belonged
+    // to. The running-browser guard above only rejects a live process, and
+    // the keep-decrypted path deliberately clears process_id while leaving
+    // the plaintext tree populated. No-ops when there is no ephemeral dir.
     crate::ephemeral_dirs::remove_ephemeral_dir(profile_id);
+    if profile.password_protected {
+      crate::profile::encryption::drop_cached_key(&profile.id);
+    }
 
-    // Per-domain traffic history lives outside the profile directory, so it
-    // survives the delete otherwise. It is already zero-overwritten on removal.
-    crate::traffic_stats::delete_traffic_stats(profile_id);
-
-    // Remember sync mode before deleting local files
     let was_sync_enabled = profile.is_sync_enabled();
-
     let profiles_dir = self.get_profiles_dir();
     let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
 
-    // Delete the entire UUID directory (contains both metadata.json and profile data)
-    if profile_uuid_dir.exists() {
-      log::info!("Deleting profile directory: {}", profile_uuid_dir.display());
-      fs::remove_dir_all(&profile_uuid_dir)?;
-      log::info!("Profile directory deleted successfully");
-    }
-
-    // Verify deletion was successful
-    if profile_uuid_dir.exists() {
-      return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
+    if permanent {
+      self.forget_profile_side_state(profile_id);
+      if profile_uuid_dir.exists() {
+        log::info!("Deleting profile directory: {}", profile_uuid_dir.display());
+        fs::remove_dir_all(&profile_uuid_dir)?;
+      }
+      if profile_uuid_dir.exists() {
+        return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
+      }
+    } else {
+      let _guard = crate::profile::trash::mutation_lock();
+      crate::profile::trash::trash_profile(
+        &profiles_dir,
+        &crate::profile::trash::trash_dir(),
+        &profile,
+        crate::profile::trash::configured_retention_days(),
+        crate::proxy_manager::now_secs(),
+      )?;
     }
 
     log::info!(
-      "Profile '{}' (ID: {}) deleted successfully",
+      "Profile '{}' (ID: {}) {} successfully",
       profile.name,
-      profile_id
+      profile_id,
+      if permanent {
+        "deleted"
+      } else {
+        "moved to trash"
+      }
     );
 
-    // If sync was enabled, also delete from S3
+    // The browser is not running, so the team lock is normally released
+    // already; this only drops a lock a crash left behind.
+    let lock_profile = profile.clone();
+    tauri::async_runtime::spawn(async move {
+      crate::team_lock::release_team_lock_if_needed(&lock_profile).await;
+    });
+
+    // From the cloud's point of view a trashed profile is deleted.
     if was_sync_enabled {
       let profile_id_owned = profile_id.to_string();
       let app_handle_clone = app_handle.clone();
@@ -593,22 +716,130 @@ impl ProfileManager {
       });
     }
 
-    // Rebuild tag suggestions after deletion
+    if emit_events {
+      self.after_profiles_removed(!permanent);
+    }
+
+    Ok(())
+  }
+
+  /// State that lives outside the profile directory and only makes sense
+  /// while the profile can still come back. Dropped when it cannot.
+  fn forget_profile_side_state(&self, profile_id: &str) {
+    // Launch-gate acknowledgements are keyed by profile id and are not synced,
+    // so nothing else would ever clean them up.
+    crate::launch_gate_prefs::forget_profile(profile_id);
+    // Per-domain traffic history is zero-overwritten on removal.
+    crate::traffic_stats::delete_traffic_stats(profile_id);
+  }
+
+  /// Bookkeeping after one or more profiles left the live list.
+  fn after_profiles_removed(&self, trashed: bool) {
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
     });
 
-    // Always perform cleanup after profile deletion to remove unused binaries
     if let Err(e) = DownloadedBrowsersRegistry::instance().cleanup_unused_binaries() {
       log::warn!("Warning: Failed to cleanup unused binaries after profile deletion: {e}");
     }
 
-    // Emit profile deletion event
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
+    if trashed {
+      if let Err(e) = events::emit_empty("trash-changed") {
+        log::warn!("Warning: Failed to emit trash-changed event: {e}");
+      }
+    }
+  }
 
+  /// Move a trashed profile back into the live list under its original id.
+  ///
+  /// Sync is NOT re-enabled here: the caller (the Tauri command) routes the
+  /// restored profile through `set_profile_sync_mode`, which clears the
+  /// tombstone the trash wrote and queues the re-upload.
+  pub fn restore_trashed_profile(
+    &self,
+    profile_id: &str,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let _guard = crate::profile::trash::mutation_lock();
+    let live = self.list_profiles()?;
+    let groups: std::collections::HashSet<String> = crate::group_manager::GROUP_MANAGER
+      .lock()
+      .map(|gm| {
+        gm.get_all_groups()
+          .unwrap_or_default()
+          .into_iter()
+          .map(|g| g.id)
+          .collect()
+      })
+      .unwrap_or_default();
+
+    let profile = crate::profile::trash::restore_profile(
+      &self.get_profiles_dir(),
+      &crate::profile::trash::trash_dir(),
+      profile_id,
+      &live,
+      &|group_id| groups.contains(group_id),
+      crate::proxy_manager::now_secs(),
+    )?;
+    // The normal save path, so tag suggestions pick the profile up again.
+    self.save_profile(&profile)?;
+
+    log::info!(
+      "Profile '{}' (ID: {}) restored from trash",
+      profile.name,
+      profile_id
+    );
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+    if let Err(e) = events::emit_empty("trash-changed") {
+      log::warn!("Warning: Failed to emit trash-changed event: {e}");
+    }
+    Ok(profile)
+  }
+
+  pub fn purge_trashed_profile(&self, profile_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let _guard = crate::profile::trash::mutation_lock();
+    crate::profile::trash::purge_entry(&crate::profile::trash::trash_dir(), profile_id)?;
+    self.after_trash_purged(std::slice::from_ref(&profile_id.to_string()));
     Ok(())
+  }
+
+  /// Destroy every trashed profile. Returns how many were removed.
+  pub fn empty_trash(&self) -> Result<usize, Box<dyn std::error::Error>> {
+    let _guard = crate::profile::trash::mutation_lock();
+    let purged = crate::profile::trash::purge_all(&crate::profile::trash::trash_dir())?;
+    self.after_trash_purged(&purged);
+    Ok(purged.len())
+  }
+
+  /// Destroy every trashed profile whose retention has run out. Returns how
+  /// many were removed.
+  pub fn purge_expired_trash(&self) -> usize {
+    let _guard = crate::profile::trash::mutation_lock();
+    let purged = crate::profile::trash::purge_expired(
+      &crate::profile::trash::trash_dir(),
+      crate::proxy_manager::now_secs(),
+    );
+    self.after_trash_purged(&purged);
+    purged.len()
+  }
+
+  fn after_trash_purged(&self, purged_ids: &[String]) {
+    if purged_ids.is_empty() {
+      return;
+    }
+    for id in purged_ids {
+      self.forget_profile_side_state(id);
+    }
+    if let Err(e) = DownloadedBrowsersRegistry::instance().cleanup_unused_binaries() {
+      log::warn!("Warning: Failed to cleanup unused binaries after purging the trash: {e}");
+    }
+    if let Err(e) = events::emit_empty("trash-changed") {
+      log::warn!("Warning: Failed to emit trash-changed event: {e}");
+    }
   }
 
   /// Delete a profile from the local filesystem only, without triggering remote sync deletion.
@@ -1001,66 +1232,26 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Trash several profiles at once. Every profile is checked before any of
+  /// them moves, so one running browser blocks the whole batch instead of
+  /// leaving it half done.
   pub fn delete_multiple_profiles(
     &self,
     app_handle: &tauri::AppHandle,
     profile_ids: Vec<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    let profiles = self.list_profiles()?;
-    let mut sync_enabled_ids: Vec<String> = Vec::new();
-
-    for profile_id in profile_ids {
-      let profile_uuid = uuid::Uuid::parse_str(&profile_id)
-        .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
-      let profile = profiles
-        .iter()
-        .find(|p| p.id == profile_uuid)
-        .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
-
-      // Check if browser is running (cross-OS profiles can't be running locally)
-      if profile.process_id.is_some() && !profile.is_cross_os() {
-        return Err(
-          format!(
-            "Cannot delete profile '{}' while browser is running. Please stop the browser first.",
-            profile.name
-          )
-          .into(),
-        );
-      }
-
-      // Track sync-enabled profiles for remote deletion
-      if profile.is_sync_enabled() {
-        sync_enabled_ids.push(profile_id.clone());
-      }
-
-      // Delete the profile
-      let profiles_dir = self.get_profiles_dir();
-      let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
-
-      if profile_uuid_dir.exists() {
-        std::fs::remove_dir_all(&profile_uuid_dir)?;
+    for profile_id in &profile_ids {
+      let profile = self.find_profile(profile_id)?;
+      if crate::profile::trash::is_running_locally(&profile) {
+        return Err(crate::backend_error("PROFILE_RUNNING").into());
       }
     }
 
-    // Delete sync-enabled profiles from S3
-    if !sync_enabled_ids.is_empty() {
-      let app_handle_clone = app_handle.clone();
-      tauri::async_runtime::spawn(async move {
-        if let Ok(engine) = crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
-          for profile_id in sync_enabled_ids {
-            if let Err(e) = engine.delete_profile(&profile_id).await {
-              log::warn!("Failed to delete profile {} from sync: {}", profile_id, e);
-            }
-          }
-        }
-      });
+    for profile_id in &profile_ids {
+      self.remove_profile(app_handle, profile_id, false, false)?;
     }
 
-    // Emit profile deletion event
-    if let Err(e) = events::emit_empty("profiles-changed") {
-      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
-    }
-
+    self.after_profiles_removed(true);
     Ok(())
   }
 
@@ -1140,6 +1331,7 @@ impl ProfileManager {
       last_sync: None,
       host_os: Some(get_host_os()),
       ephemeral: false,
+      temporary: false,
       extension_group_id: source.extension_group_id,
       proxy_bypass_rules: source.proxy_bypass_rules,
       created_by_id: None,
@@ -1295,6 +1487,7 @@ impl ProfileManager {
     profile_id: &str,
     proxy_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    let proxy_id = normalize_network_id(proxy_id);
     // Find the profile by ID
     let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
       |_| -> Box<dyn std::error::Error + Send + Sync> {
@@ -1334,8 +1527,8 @@ impl ProfileManager {
 
     // The cookie bot refuses a run on a profile with no exit node, using the
     // copy of that fact the desktop last declared. Detaching a proxy has to
-    // move that copy, or tonight's run egresses from the leased host's own
-    // datacenter address.
+    // move that copy, or tonight's run egresses from the remote host's own
+    // address instead of the user's exit.
     crate::cookie_bot::report_profile_state(&profile);
 
     // Auto-enable sync for new proxy if profile has sync enabled
@@ -1367,6 +1560,7 @@ impl ProfileManager {
     profile_id: &str,
     vpn_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    let vpn_id = normalize_network_id(vpn_id);
     let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
       |_| -> Box<dyn std::error::Error + Send + Sync> {
         format!("Invalid profile ID: {profile_id}").into()
@@ -1747,6 +1941,48 @@ mod tests {
     (profile_manager, temp_dir)
   }
 
+  fn temporary_profile(name: &str, process_id: Option<u32>) -> BrowserProfile {
+    BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: name.to_string(),
+      browser: "wayfern".to_string(),
+      temporary: true,
+      ephemeral: true,
+      process_id,
+      ..BrowserProfile::default()
+    }
+  }
+
+  #[test]
+  fn a_startup_sweep_takes_the_temporary_profiles_nothing_is_running() {
+    let ordinary = BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: "Kept".to_string(),
+      ..BrowserProfile::default()
+    };
+    let crashed = temporary_profile("Crashed", Some(4242));
+    let never_started = temporary_profile("Never started", None);
+    let live = temporary_profile("Live", Some(4243));
+    let profiles = vec![
+      ordinary.clone(),
+      crashed.clone(),
+      never_started.clone(),
+      live.clone(),
+    ];
+
+    let swept = ProfileManager::temporary_profiles_to_sweep(&profiles, |pid| pid == 4243);
+    assert_eq!(
+      swept,
+      vec![crashed.id.to_string(), never_started.id.to_string()],
+      "a live browser keeps its profile; an ordinary profile is never swept"
+    );
+
+    // Nothing running at all: every temporary profile goes, and only those.
+    let swept = ProfileManager::temporary_profiles_to_sweep(&profiles, |_| false);
+    assert_eq!(swept.len(), 3);
+    assert!(!swept.contains(&ordinary.id.to_string()));
+  }
+
   #[test]
   fn test_profile_manager_creation() {
     let (_manager, _temp_dir) = create_test_profile_manager();
@@ -1782,6 +2018,26 @@ mod tests {
     assert!(
       path_str.contains("binaries"),
       "Binaries dir should contain binaries"
+    );
+  }
+
+  #[test]
+  fn empty_network_ids_normalize_to_none() {
+    assert_eq!(normalize_network_id(Some(String::new())), None);
+    assert_eq!(normalize_network_id(None), None);
+    assert_eq!(
+      normalize_network_id(Some("proxy-1".to_string())),
+      Some("proxy-1".to_string())
+    );
+
+    // A client saying "neither" with two empty strings must not trip the
+    // mutual-exclusion check in create_profile_with_group.
+    assert_eq!(
+      (
+        normalize_network_id(Some(String::new())),
+        normalize_network_id(Some(String::new()))
+      ),
+      (None, None)
     );
   }
 
@@ -2128,11 +2384,27 @@ pub fn clone_profile(profile_id: String, name: Option<String>) -> Result<Browser
     .map_err(|e| format!("Failed to clone profile: {e}"))
 }
 
+/// Move a profile to the trash. `permanent: true` destroys it instead.
 #[tauri::command]
-pub fn delete_profile(app_handle: tauri::AppHandle, profile_id: String) -> Result<(), String> {
-  ProfileManager::instance()
-    .delete_profile(&app_handle, &profile_id)
-    .map_err(|e| format!("Failed to delete profile: {e}"))
+pub fn delete_profile(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  permanent: Option<bool>,
+) -> Result<(), String> {
+  let manager = ProfileManager::instance();
+  let result = if permanent.unwrap_or(false) {
+    manager.delete_profile_permanently(&app_handle, &profile_id)
+  } else {
+    manager.delete_profile(&app_handle, &profile_id)
+  };
+  result.map_err(|e| {
+    let msg = e.to_string();
+    if msg.starts_with('{') {
+      msg
+    } else {
+      format!("Failed to delete profile: {msg}")
+    }
+  })
 }
 
 lazy_static::lazy_static! {

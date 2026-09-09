@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Logo } from "@/components/icons/logo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useInputModality } from "@/hooks/use-input-modality";
 
 const spring = { type: "spring", stiffness: 240, damping: 22 } as const;
 
@@ -21,11 +22,17 @@ export function ThankYouDialog({
 }) {
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
 
   useEffect(() => {
-    if (!isOpen || reduceMotion) return;
+    if (!isOpen || reduceMotion || document.hidden) return;
     const fire = (options: confetti.Options) => {
-      void confetti({ origin: { y: 0.7 }, ...options });
+      if (document.hidden) return;
+      void confetti({
+        origin: { y: 0.7 },
+        disableForReducedMotion: true,
+        ...options,
+      });
     };
     fire({ particleCount: 110, spread: 70, startVelocity: 48 });
     const t1 = setTimeout(
@@ -52,12 +59,17 @@ export function ThankYouDialog({
       <DialogContent className="p-4 sm:max-w-md sm:p-6">
         <div className="flex flex-col items-center gap-6 text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.6, rotate: -12 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={{
-              ...(reduceMotion ? { duration: 0.15 } : spring),
-              delay: reduceMotion ? 0 : 0.05,
-            }}
+            initial={
+              reduceMotion || inputModality === "keyboard"
+                ? false
+                : { scale: 0.92, rotate: -6 }
+            }
+            animate={{ scale: 1, rotate: 0 }}
+            transition={
+              reduceMotion || inputModality === "keyboard"
+                ? { duration: 0 }
+                : spring
+            }
             className="text-foreground"
           >
             <Logo className="size-14" />
@@ -67,17 +79,9 @@ export function ThankYouDialog({
             <DialogTitle className="text-2xl font-semibold tracking-tight text-balance">
               {t("onboarding.thankYou.title")}
             </DialogTitle>
-            <motion.p
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                ...(reduceMotion ? { duration: 0.15 } : spring),
-                delay: reduceMotion ? 0 : 0.15,
-              }}
-              className="mx-auto max-w-[46ch] text-base/7 text-pretty text-muted-foreground sm:text-sm/6"
-            >
+            <p className="mx-auto max-w-[46ch] text-base/7 text-pretty text-muted-foreground sm:text-sm/6">
               {t("onboarding.thankYou.body")}
-            </motion.p>
+            </p>
           </div>
 
           <Button size="sm" onClick={onClose}>

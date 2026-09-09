@@ -20,7 +20,11 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StepTransition } from "@/components/ui/step-transition";
 import { getCurrentOS } from "@/lib/browser-utils";
-import { resolveAmbiguousProxyLine } from "@/lib/proxy-string";
+import {
+  isFirstHopEncrypted,
+  resolveAmbiguousProxyLine,
+} from "@/lib/proxy-string";
+import { canonicalProxyType } from "@/lib/proxy-type";
 import type {
   ParsedProxyLine,
   ProxyImportResult,
@@ -31,6 +35,24 @@ import { RippleButton } from "./ui/ripple";
 interface ProxyImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+/**
+ * A Shadowsocks line that names no cipher at all.
+ *
+ * `parse_txt_proxies` reads `ss://host:8388`, no `@`, so no credentials, as
+ * username None, and Shadowsocks keeps its cipher in that field. With none
+ * recorded, whether the hop is encrypted is undecided, which is not the same
+ * claim as "in the clear": the add/edit form says the cipher decides, and this
+ * dialog counting the line as unencrypted made the two screens disagree about
+ * one proxy. Asked through `canonicalProxyType` so the `shadowsocks` spelling
+ * the REST API stores verbatim answers the same as `ss`.
+ */
+function isFirstHopCipherUndecided(proxy: ParsedProxyLine): boolean {
+  return (
+    canonicalProxyType(proxy.proxy_type) === "ss" &&
+    (proxy.username ?? "").trim().length === 0
+  );
 }
 
 type ImportStep = "dropzone" | "preview" | "ambiguous" | "result";
@@ -254,6 +276,23 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     }
   }, [parsedProxies, namePrefix, t]);
 
+  // A bare `host:port` line has no scheme and the parser defaults it to plain
+  // HTTP, so a long paste can mint hundreds of unencrypted-first-hop proxies
+  // with nothing said. This is the one place the whole batch is visible at once.
+  //
+  // The lines whose cipher is simply not recorded are counted apart rather than
+  // folded into that number, so the sentence stays true: a proxy nobody has
+  // chosen a cipher for is undecided, not unencrypted. Both counts still read
+  // as a warning, and `isFirstHopEncrypted`, the fail-closed guard, is
+  // untouched.
+  const notEncrypted = parsedProxies.filter(
+    (proxy) => !isFirstHopEncrypted(proxy.proxy_type, proxy.username),
+  );
+  const cipherUndecidedCount = notEncrypted.filter(
+    isFirstHopCipherUndecided,
+  ).length;
+  const plaintextFirstHopCount = notEncrypted.length - cipherUndecidedCount;
+
   const handleAmbiguousFormatSelect = useCallback(
     (index: number, format: string) => {
       setAmbiguousProxies((prev) =>
@@ -395,6 +434,20 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                     </span>
                   )}
                 </Label>
+                {plaintextFirstHopCount > 0 && (
+                  <p className="text-xs text-warning-text">
+                    {t("proxies.importDialog.plaintextFirstHopCount", {
+                      count: plaintextFirstHopCount,
+                    })}
+                  </p>
+                )}
+                {cipherUndecidedCount > 0 && (
+                  <p className="text-xs text-warning-text">
+                    {t("proxies.importDialog.cipherUndecidedCount", {
+                      count: cipherUndecidedCount,
+                    })}
+                  </p>
+                )}
                 <ScrollArea className="h-[clamp(120px,30vh,400px)] rounded-md border">
                   <div className="space-y-1 p-2">
                     {parsedProxies.map((proxy, i) => (
@@ -402,7 +455,25 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                         key={`${proxy.original_line}-${i}`}
                         className="rounded bg-muted/30 p-2 font-mono text-xs break-all"
                       >
-                        <span className="text-primary-text">
+                        {/*
+                          The warning tint means "not established as
+                          encrypted", which covers both a hop in the clear and
+                          a Shadowsocks line with no cipher recorded, the same
+                          treatment the add/edit form gives an undecided
+                          cipher. Which of the two a line is, the sentences
+                          above say; the line itself shows it too, since an
+                          undecided one renders with no `cipher:***@` segment.
+                        */}
+                        <span
+                          className={
+                            isFirstHopEncrypted(
+                              proxy.proxy_type,
+                              proxy.username,
+                            )
+                              ? "text-primary-text"
+                              : "text-warning-text"
+                          }
+                        >
                           {proxy.proxy_type}://
                         </span>
                         {proxy.username && (

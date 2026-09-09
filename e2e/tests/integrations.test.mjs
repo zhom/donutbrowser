@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { withApp } from "../lib/app.mjs";
@@ -63,6 +63,41 @@ async function invokeContract(app, command, args = {}) {
   }
 }
 
+/**
+ * Evidence that a command's BODY ran, not merely that it was invoked.
+ *
+ * `assert.ok(await invokeContract(...))` was the pattern here, and it cannot
+ * fail: `invokeContract` always resolves to an object, and every object is
+ * truthy. It passed whether the command succeeded, refused, or did not exist at
+ * all, so eight commands whose only coverage-map evidence was that line could
+ * have had their entire bodies deleted with every suite still green.
+ *
+ * Each caller now states which of the two outcomes it expects and pins it, so
+ * the assertion fails if the command stops reaching its real logic. The two
+ * outcomes are both legitimate here: these are cloud and update commands, and a
+ * hermetic E2E run has no session, so a refusal FOR THE RIGHT REASON is exactly
+ * as much proof that the body ran as a success is.
+ */
+async function assertContract(app, command, expected, args = {}) {
+  const result = await invokeContract(app, command, args);
+  if (expected.refusedWith) {
+    assert.equal(
+      result.ok,
+      false,
+      `${command} was expected to refuse, but returned ${JSON.stringify(result.value)}`,
+    );
+    assert.match(
+      result.error,
+      expected.refusedWith,
+      `${command} refused for a different reason than the one that proves its body ran`,
+    );
+    return result;
+  }
+  assert.equal(result.ok, true, `${command} failed: ${result.error}`);
+  expected.answers(result.value);
+  return result;
+}
+
 async function assertCommandErrorCode(app, command, code, args = {}) {
   const error = await app.invokeError(command, args);
   assert.match(error, new RegExp(`"code":"${code}"`));
@@ -84,6 +119,26 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
     assert.ok(saved.api_token?.length >= 32);
     const port = await app.invoke("start_api_server", { port: 0 });
     assert.equal(await app.invoke("get_api_server_status"), port);
+    const diagnostic = await app.invoke("check_integration_connection", {
+      target: "api",
+    });
+    assert.equal(diagnostic.configured, true);
+    assert.equal(diagnostic.reachable, true);
+    assert.equal(diagnostic.authorized, true);
+    assert.equal(diagnostic.http_status, 200);
+    assert.ok(diagnostic.checked_at > 0);
+    assert.deepEqual(Object.keys(diagnostic).sort(), [
+      "authorized",
+      "checked_at",
+      "configured",
+      "http_status",
+      "reachable",
+    ]);
+    const unconfigured = await app.invoke("check_integration_connection", {
+      target: "remote",
+    });
+    assert.equal(unconfigured.configured, false);
+    assert.equal(unconfigured.authorized, null);
     const base = `http://127.0.0.1:${port}`;
 
     const openapi = await jsonRequest(`${base}/openapi.json`);
@@ -719,313 +774,304 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
     );
     await app.invoke("stop_api_server");
     assert.equal(await app.invoke("get_api_server_status"), null);
+    const stoppedDiagnostic = await app.invoke("check_integration_connection", {
+      target: "api",
+    });
+    assert.equal(stoppedDiagnostic.configured, true);
+    assert.equal(stoppedDiagnostic.reachable, false);
+    assert.equal(stoppedDiagnostic.authorized, null);
   });
 });
 
-test("MCP Streamable HTTP initialization, auth, discovery, calls, and isolated agent install", async () => {
+test("local MCP is removed: enabling it and installing a local client are refused", async () => {
   await withApp("integrations-mcp", async (app) => {
     await seedTerms(app);
+    // Enabling the local server is refused with the removal code (it used to
+    // start a loopback MCP server), so nothing is left listening as a result.
+    await assertCommandErrorCode(app, "start_mcp_server", "MCP_LOCAL_REMOVED");
+    assert.equal(await app.invoke("get_mcp_server_status"), false);
+    // Nothing is configured for a server that no longer exists.
+    assert.equal(await app.invoke("get_mcp_config"), null);
+    // stop is a no-op when nothing is running.
     await assertCommandErrorCode(
       app,
       "stop_mcp_server",
       "MCP_SERVER_NOT_RUNNING",
     );
-    const port = await app.invoke("start_mcp_server");
-    await assertCommandErrorCode(
-      app,
-      "start_mcp_server",
-      "MCP_SERVER_ALREADY_RUNNING",
-    );
-    assert.equal(await app.invoke("get_mcp_server_status"), true);
-    const config = await app.invoke("get_mcp_config");
-    assert.equal(config.port, port);
-    assert.ok(config.token.length >= 32);
-    const base = `http://127.0.0.1:${port}`;
-    assert.equal((await fetch(`${base}/health`)).status, 200);
-    assert.equal(
-      (
-        await jsonRequest(`${base}/mcp`, {
-          method: "POST",
-          body: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
-        })
-      ).response.status,
-      401,
-    );
 
-    const initialized = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      body: {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: "2025-11-25",
-          capabilities: {},
-          clientInfo: { name: "donut-e2e", version: "1" },
-        },
-      },
-    });
-    assert.equal(initialized.response.status, 200);
-    assert.equal(initialized.value.result.serverInfo.name, "donut-browser");
-    const sessionId = initialized.response.headers.get("mcp-session-id");
-    assert.ok(sessionId);
-    const mcpHeaders = { "mcp-session-id": sessionId };
-    const notification = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      headers: mcpHeaders,
-      body: { jsonrpc: "2.0", method: "notifications/initialized" },
-    });
-    assert.equal(notification.response.status, 202);
-    const tools = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      headers: mcpHeaders,
-      body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
-    });
-    assert.equal(tools.response.status, 200);
-    const names = tools.value.result.tools.map((tool) => tool.name);
-    for (const name of [
-      "list_profiles",
-      "create_profile",
-      "run_profile",
-      "list_proxies",
-      "create_proxy",
-      "update_proxy",
-      "get_page_content",
-      "get_interactive_elements",
-      // The remote loop has to be complete from MCP alone: start a session,
-      // watch it become usable, drive it with the interaction tools above, stop
-      // it. Any one of these missing leaves an agent able to lease a host it
-      // cannot use, or unable to lease one at all.
-      "run_profile_remote",
-      "get_remote_session",
-      "stop_remote_session",
-      // Extension management is only usable from an agent if importing and
-      // grouping are reachable, not just listing and deleting.
-      "add_extension",
-      "update_extension",
-      "add_extension_to_group",
-      "remove_extension_from_group",
-      "update_extension_group",
-    ]) {
-      assert.ok(names.includes(name), `MCP is missing ${name}`);
-    }
-    const listed = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      headers: mcpHeaders,
-      body: {
-        jsonrpc: "2.0",
-        id: 3,
-        method: "tools/call",
-        params: { name: "list_profiles", arguments: {} },
-      },
-    });
-    assert.equal(listed.response.status, 200);
-    assert.equal(listed.value.error, undefined);
-    assert.ok(listed.value.result);
-
-    const createdVless = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      headers: mcpHeaders,
-      body: {
-        jsonrpc: "2.0",
-        id: 4,
-        method: "tools/call",
-        params: {
-          name: "create_proxy",
-          arguments: {
-            name: "MCP VLESS Reality",
-            proxy_type: "vless",
-            vless_uri: VLESS_URI,
-          },
-        },
-      },
-    });
-    assert.equal(createdVless.response.status, 200);
-    assert.equal(createdVless.value.error, undefined);
-    let vlessProxy = (await app.invoke("get_stored_proxies")).find(
-      (proxy) => proxy.name === "MCP VLESS Reality",
-    );
-    assert.ok(vlessProxy);
-    assert.equal(vlessProxy.proxy_settings.proxy_type, "vless");
-    assert.equal(vlessProxy.proxy_settings.vless_uri, VLESS_URI);
-
-    const updatedVless = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      headers: mcpHeaders,
-      body: {
-        jsonrpc: "2.0",
-        id: 5,
-        method: "tools/call",
-        params: {
-          name: "update_proxy",
-          arguments: {
-            proxy_id: vlessProxy.id,
-            name: "MCP VLESS Updated",
-            vless_uri: VLESS_URI,
-          },
-        },
-      },
-    });
-    assert.equal(updatedVless.value.error, undefined);
-    vlessProxy = (await app.invoke("get_stored_proxies")).find(
-      (proxy) => proxy.id === vlessProxy.id,
-    );
-    assert.equal(vlessProxy.name, "MCP VLESS Updated");
-
-    const invalidVless = await jsonRequest(`${base}/mcp/${config.token}`, {
-      method: "POST",
-      headers: mcpHeaders,
-      body: {
-        jsonrpc: "2.0",
-        id: 6,
-        method: "tools/call",
-        params: {
-          name: "update_proxy",
-          arguments: {
-            proxy_id: vlessProxy.id,
-            vless_uri: VLESS_URI.replace("security=reality", "security=tls"),
-          },
-        },
-      },
-    });
-    assert.match(invalidVless.value.error.message, /VLESS_CONFIG_INVALID/);
-    assert.equal(
-      (await app.invoke("get_stored_proxies")).find(
-        (proxy) => proxy.id === vlessProxy.id,
-      ).proxy_settings.vless_uri,
-      VLESS_URI,
-    );
-    await app.invoke("delete_stored_proxy", { proxyId: vlessProxy.id });
-
-    let toolCallId = 7;
-    const callTool = (name, args) =>
-      jsonRequest(`${base}/mcp/${config.token}`, {
-        method: "POST",
-        headers: mcpHeaders,
-        body: {
-          jsonrpc: "2.0",
-          id: toolCallId++,
-          method: "tools/call",
-          params: { name, arguments: args },
-        },
-      });
-
-    const unpackedDir = await writeUnpackedExtension(
-      path.join(app.root, "fixtures", "mcp-unpacked-extension"),
-      { name: "Donut MCP Unpacked", version: "1.0.0" },
-    );
-    const addedExtension = await callTool("add_extension", {
-      path: unpackedDir,
-      name: "MCP Folder Extension",
-    });
-    assert.equal(addedExtension.response.status, 200);
-    const subscriptionGated = /subscription/i.test(
-      addedExtension.value.error?.message ?? "",
-    );
-    // The e2e build overrides the paid-plan gate whenever a Wayfern test token
-    // is present, so with one in the environment a gated answer means the
-    // override stopped working and everything below it silently stopped
-    // running.
-    assert.ok(
-      !subscriptionGated || !process.env.WAYFERN_TEST_TOKEN,
-      `the e2e paid-plan override did not apply: ${addedExtension.value.error?.message}`,
-    );
-    if (subscriptionGated) {
-      // Every extension tool is gated on an active paid plan and this session
-      // is signed out, so the call path is unreachable here. The tool list
-      // above still proves the tools are published.
-      console.warn(
-        "Skipping the MCP extension tool calls: this session has no paid entitlement",
-      );
-    } else {
-      assert.equal(addedExtension.value.error, undefined);
-      const stored = (await app.invoke("list_extensions")).find(
-        (item) => item.name === "Donut MCP Unpacked",
-      );
-      assert.ok(stored, "the MCP import must produce a stored extension");
-      assert.equal(stored.source_kind, "unpacked");
-      assert.equal(stored.linked_path, null);
-
-      const renamedExtension = await callTool("update_extension", {
-        extension_id: stored.id,
-        name: "MCP Renamed Extension",
-      });
-      assert.equal(renamedExtension.value.error, undefined);
-      assert.equal(
-        (await app.invoke("list_extensions")).find(
-          (item) => item.id === stored.id,
-        ).name,
-        "MCP Renamed Extension",
-      );
-
-      const extensionGroup = await app.invoke("create_extension_group", {
-        name: "MCP Extension Group",
-      });
-      const joined = await callTool("add_extension_to_group", {
-        group_id: extensionGroup.id,
-        extension_id: stored.id,
-      });
-      assert.equal(joined.value.error, undefined);
-      const readGroup = async () =>
-        (await app.invoke("list_extension_groups")).find(
-          (item) => item.id === extensionGroup.id,
-        );
-      assert.deepEqual((await readGroup()).extension_ids, [stored.id]);
-
-      const renamedGroup = await callTool("update_extension_group", {
-        group_id: extensionGroup.id,
-        name: "MCP Extension Group Updated",
-      });
-      assert.equal(renamedGroup.value.error, undefined);
-      assert.equal((await readGroup()).name, "MCP Extension Group Updated");
-
-      const removed = await callTool("remove_extension_from_group", {
-        group_id: extensionGroup.id,
-        extension_id: stored.id,
-      });
-      assert.equal(removed.value.error, undefined);
-      assert.deepEqual((await readGroup()).extension_ids, []);
-
-      await app.invoke("delete_extension", { extensionId: stored.id });
-      await app.invoke("delete_extension_group", {
-        groupId: extensionGroup.id,
-      });
-    }
-
+    // The client roster still resolves, so the Integrations page can offer the
+    // remote endpoint and show which clients are still on the removed local one.
     const agents = await app.invoke("list_mcp_agents");
     assert.ok(agents.some((agent) => agent.id === "cursor"));
+    // fx cannot take the bearer from its config file, so the page tells the
+    // user which variable to export; that name travels with the row.
+    assert.equal(
+      agents.find((agent) => agent.id === "fx").token_env,
+      "DONUT_MCP_TOKEN",
+    );
+    assert.equal(agents.find((agent) => agent.id === "cursor").token_env, null);
+
+    // An unknown agent and an unknown target keep their own distinct errors.
     await assertCommandErrorCode(app, "add_mcp_to_agent", "MCP_AGENT_UNKNOWN", {
       agentId: "missing-e2e-agent",
+      target: "remote",
     });
-    await app.invoke("add_mcp_to_agent", { agentId: "cursor" });
-    assert.equal(
-      (await app.invoke("list_mcp_agents")).find(
-        (agent) => agent.id === "cursor",
-      ).connected,
-      true,
+    await assertCommandErrorCode(
+      app,
+      "remove_mcp_from_agent",
+      "MCP_AGENT_UNKNOWN",
+      { agentId: "missing-e2e-agent" },
     );
-    await app.invoke("remove_mcp_from_agent", { agentId: "cursor" });
+    await assertCommandErrorCode(app, "add_mcp_to_agent", "INTERNAL_ERROR", {
+      agentId: "cursor",
+      target: "bogus",
+    });
+
+    // Installing a client to the LOCAL endpoint is refused now (it used to
+    // write a local config), and nothing is written.
+    await assertCommandErrorCode(app, "add_mcp_to_agent", "MCP_LOCAL_REMOVED", {
+      agentId: "cursor",
+      target: "local",
+    });
     assert.equal(
       (await app.invoke("list_mcp_agents")).find(
         (agent) => agent.id === "cursor",
       ).connected,
       false,
+      "a refused local install must not have written an entry",
+    );
+
+    // Remote MCP with no stored `dmk_` credential is refused with a code the UI
+    // can explain, and writes nothing into the client's config.
+    await assertCommandErrorCode(
+      app,
+      "add_mcp_to_agent",
+      "MCP_REMOTE_KEY_MISSING",
+      { agentId: "cursor", target: "remote" },
     );
     assert.equal(
-      (
-        await jsonRequest(`${base}/mcp/${config.token}`, {
-          method: "DELETE",
-          headers: mcpHeaders,
-        })
-      ).response.status,
-      200,
+      (await app.invoke("list_mcp_agents")).find(
+        (agent) => agent.id === "cursor",
+      ).connected,
+      false,
+      "a refused remote install must not have written an entry",
     );
-    await app.invoke("stop_mcp_server");
+  });
+});
+
+test("the remote-control bridge refuses a signed-out desktop and stays off", async () => {
+  await withApp("integrations-mcp-remote", async (app) => {
+    await seedTerms(app);
+
+    // Off by default, and it must stay that way without an explicit opt-in: the
+    // bridge hands Donut cloud the ability to drive this browser, which is not
+    // something to switch on for somebody because their plan allows it.
+    const settings = await app.invoke("get_app_settings");
+    assert.equal(settings.mcp_remote_enabled, false);
+
+    const initial = await app.invoke("get_mcp_remote_status");
+    assert.equal(initial.enabled, false);
+    assert.equal(initial.connected, false);
+    assert.equal(initial.lastError, null);
+    assert.ok(initial.instanceId.length >= 8);
+
+    // Stable across calls, and persisted: the id is how this desktop reclaims
+    // its own connection after a blip, so a desktop that renamed itself on
+    // every read could never do so.
+    assert.equal(
+      (await app.invoke("get_mcp_remote_status")).instanceId,
+      initial.instanceId,
+    );
+
+    // A signed-out desktop has no credential to authenticate the socket with,
+    // so it is refused here rather than allowed to open one and be dropped.
+    assert.match(
+      await app.invokeError("start_mcp_remote_bridge"),
+      /"code":"MCP_REMOTE_REQUIRES_SIGN_IN"/,
+    );
+    // The bridge must not merely be un-enabled: it must not have been STARTED.
+    // The sign-in gate sits above `mcp_remote::start`, and `enabled` is the only
+    // half that says so: it is `is_running()`, which `start` flips synchronously
+    // before it spawns the reconnect loop. `connected` is not a substitute:
+    // it only goes true once the socket authenticates, which a signed-out
+    // desktop never manages, so it reads false whether or not the bridge was
+    // started and is dialling donutbrowser.com in the background.
+    const afterRefusedStart = await app.invoke("get_mcp_remote_status");
+    assert.equal(
+      afterRefusedStart.enabled,
+      false,
+      "a refused start must not have started the bridge task",
+    );
+    assert.equal(
+      afterRefusedStart.connected,
+      false,
+      "a refused start must not have opened a socket",
+    );
+    assert.equal(
+      (await app.invoke("get_app_settings")).mcp_remote_enabled,
+      false,
+      "a refused start must not leave the setting on, or the next launch dials a socket the user never enabled",
+    );
+
+    // Stopping something that is not running is a no-op, not an error: the
+    // desktop calls this on sign-out and on quit, and both must be safe.
+    const stoppedWhileOff = await app.invoke("stop_mcp_remote_bridge");
+    assert.equal(stoppedWhileOff.enabled, false);
+    assert.equal(stoppedWhileOff.connected, false);
+    assert.equal(stoppedWhileOff.instanceId, initial.instanceId);
+
+    // The no-op case says nothing about the PERSISTED effect, and that is the
+    // half that matters: `ensure_remote_bridge` re-opens the bridge on the next
+    // launch (and on the next sign-in, and on the ten-minute reconnect tick)
+    // from `mcp_remote_enabled` alone. So put the flag on disk the way a
+    // previously opted-in session would have left it, and stop again.
+    //
+    // Every field of the returned status is computed from in-memory bridge
+    // state (`enabled` is `is_running()`, `connected` is `is_connected()`), so
+    // dropping the settings write inside `stop_mcp_remote_bridge` leaves all
+    // three assertions above green while the internet-facing bridge comes back
+    // by itself. Only the on-disk flag tells a real stop from `Ok(status())`.
+    //
+    // `save_app_settings` is NOT how the flag gets there. It belongs to the
+    // start and stop commands alone: a settings save that carried it would
+    // switch the internet-facing bridge on for the next launch without ever
+    // passing the sign-in and terms gates those commands enforce. Prove the
+    // save cannot flip it, then seed the file directly.
+    const beforeSeed = await app.invoke("get_app_settings");
+    const saved = await app.invoke("save_app_settings", {
+      settings: { ...beforeSeed, mcp_remote_enabled: true },
+    });
+    assert.equal(
+      saved.mcp_remote_enabled,
+      false,
+      "a settings save must not be able to switch remote control on",
+    );
+    assert.equal(
+      (await app.invoke("get_app_settings")).mcp_remote_enabled,
+      false,
+      "nor may it reach disk through the save",
+    );
+
+    const settingsFile = path.join(
+      app.dataRoot,
+      "data",
+      "settings",
+      "app_settings.json",
+    );
+    const onDisk = JSON.parse(await readFile(settingsFile, "utf8"));
+    await writeFile(
+      settingsFile,
+      `${JSON.stringify({ ...onDisk, mcp_remote_enabled: true }, null, 2)}\n`,
+    );
+    assert.equal(
+      (await app.invoke("get_app_settings")).mcp_remote_enabled,
+      true,
+      "the seeded opt-in must reach disk, or the stop below proves nothing",
+    );
+
+    const stopped = await app.invoke("stop_mcp_remote_bridge");
+    assert.equal(stopped.enabled, false);
+    assert.equal(stopped.connected, false);
+    assert.equal(stopped.instanceId, initial.instanceId);
+    assert.equal(
+      (await app.invoke("get_app_settings")).mcp_remote_enabled,
+      false,
+      "stopping must clear the persisted opt-in, or the next launch re-opens the bridge the user just switched off",
+    );
+
+    // Entitlement is asked of the SERVER, because neither of the local answers
+    // is right: the cached entitlement is per-account, so an entitled
+    // enterprise team MEMBER reads as unentitled, and an open socket only
+    // proves the plan is active, not that remote control is allowed.
+    //
+    // Signed out there is no credential to ask with, and the honest outcome is
+    // a clean error the dialog swallows to leave the local cache in charge:
+    // never a crash, and never a fabricated `true`.
+    const entitlementError = await app.invokeError(
+      "get_remote_control_entitlement",
+    );
+    assert.match(entitlementError, /INTERNAL_ERROR|Not logged in/);
+
+    // The remote MCP credential, the `dmk_` key agents present to the remote
+    // endpoint. A fresh desktop holds none, and reports exactly that: the
+    // shape is `{ present, token_prefix }` with no plaintext anywhere in it.
+    assert.deepEqual(await app.invoke("get_mcp_remote_credential"), {
+      present: false,
+      token_prefix: null,
+    });
+
+    // Minting needs the session, so a signed-out desktop is refused with the
+    // same code as the bridge, and refused BEFORE anything is stored.
+    //
+    // Signed in, the answer is `{ token_prefix, failed_clients }`: the key is
+    // stored and its predecessor revoked before any client is rewritten, so a
+    // client that could not be rewritten is named there rather than turning
+    // the rotation into an error the dialog would answer by minting again.
+    assert.match(
+      await app.invokeError("rotate_mcp_remote_credential"),
+      /"code":"MCP_REMOTE_REQUIRES_SIGN_IN"/,
+    );
+    assert.equal(
+      (await app.invoke("get_mcp_remote_credential")).present,
+      false,
+      "a refused rotation must not have stored a credential",
+    );
+
+    // Forgetting nothing is a no-op, not an error: sign-out and the
+    // Integrations page both reach it without checking first.
+    await app.invoke("forget_mcp_remote_credential");
+    assert.deepEqual(await app.invoke("get_mcp_remote_credential"), {
+      present: false,
+      token_prefix: null,
+    });
+
+    // The local MCP server is a separate transport and is unaffected either way.
     assert.equal(await app.invoke("get_mcp_server_status"), false);
   });
 });
 
-test("REST and MCP share the browser automation rate limit", async () => {
+test("the remote-control bridge refuses before the terms are accepted", async () => {
+  // `start_mcp_remote_bridge` has TWO gates (the Wayfern terms, then the
+  // signed-in check), and every other test seeds the terms first, so only the
+  // second one was ever reached. The first could have been deleted with the
+  // whole suite green, which would let a desktop that never accepted the terms
+  // open an internet-facing hook into itself.
+  //
+  // `wayfernTermsAccepted: false` is what makes this session different: the
+  // harness seeds the acceptance file by DEFAULT, so merely omitting the
+  // explicit `seedTerms` call leaves the terms accepted and this test proves
+  // nothing (it first ran that way and hit the sign-in gate instead).
+  await withApp(
+    "integrations-mcp-remote-terms",
+    async (app) => {
+      assert.match(
+        await app.invokeError("start_mcp_remote_bridge"),
+        /"code":"WAYFERN_TERMS_REQUIRED"/,
+      );
+
+      const status = await app.invoke("get_mcp_remote_status");
+      // `enabled` first, for the same reason as the sign-in gate: it is
+      // `is_running()` and flips inside `mcp_remote::start`, so it is what
+      // catches a gate that stopped sitting above the start. `connected` alone
+      // would stay false on a bridge that was started and merely never got a
+      // socket up.
+      assert.equal(
+        status.enabled,
+        false,
+        "the bridge may not have been started",
+      );
+      assert.equal(status.connected, false, "no socket may have been opened");
+      assert.equal(
+        (await app.invoke("get_app_settings")).mcp_remote_enabled,
+        false,
+        "a terms refusal must not leave the setting on either",
+      );
+    },
+    { wayfernTermsAccepted: false },
+  );
+});
+
+test("REST browser automation requests hit the shared automation rate limit", async () => {
   await withApp(
     "integrations-rate-limit",
     async (app) => {
@@ -1042,97 +1088,34 @@ test("REST and MCP share the browser automation rate limit", async () => {
       });
 
       const apiPort = await app.invoke("start_api_server", { port: 0 });
-      const mcpPort = await app.invoke("start_mcp_server");
-      const mcpConfig = await app.invoke("get_mcp_config");
       const apiBase = `http://127.0.0.1:${apiPort}`;
-      const mcpUrl = `http://127.0.0.1:${mcpPort}/mcp/${mcpConfig.token}`;
-
-      const initialized = await jsonRequest(mcpUrl, {
-        method: "POST",
-        body: {
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: {
-            protocolVersion: "2025-11-25",
-            capabilities: {},
-            clientInfo: { name: "donut-e2e-rate-limit", version: "1" },
-          },
-        },
-      });
-      assert.equal(initialized.response.status, 200);
-      const mcpHeaders = {
-        "mcp-session-id": initialized.response.headers.get("mcp-session-id"),
-      };
-
       const missingProfileId = "00000000-0000-0000-0000-000000000000";
-      const first = await jsonRequest(
-        `${apiBase}/v1/profiles/${missingProfileId}/run`,
-        {
+
+      // The shared automation limiter sits innermost, past auth, so an
+      // authenticated automation call consumes a token even when the profile
+      // is missing (404). With the window set to 2/hour below the contract is
+      // exact: 404, 404, then 429 with a Retry-After. The limiter is shared
+      // with the MCP tool engine, whose branch has no automated coverage now
+      // that the loopback endpoint is gone: it needs the e2e-only override
+      // that `cargo test --lib` does not compile.
+      const run = () =>
+        jsonRequest(`${apiBase}/v1/profiles/${missingProfileId}/run`, {
           method: "POST",
           token: saved.api_token,
           body: {},
-        },
-      );
-      assert.equal(first.response.status, 404);
-
-      const second = await jsonRequest(mcpUrl, {
-        method: "POST",
-        headers: mcpHeaders,
-        body: {
-          jsonrpc: "2.0",
-          id: 2,
-          method: "tools/call",
-          params: {
-            name: "run_profile",
-            arguments: { profile_id: missingProfileId },
-          },
-        },
+        });
+      assert.equal((await run()).response.status, 404);
+      assert.equal((await run()).response.status, 404);
+      const limited = await run();
+      assert.equal(limited.response.status, 429);
+      assert.ok(Number(limited.response.headers.get("retry-after")) > 0);
+      // Only automation calls spend the budget: a plain read still answers.
+      const listed = await jsonRequest(`${apiBase}/v1/profiles`, {
+        method: "GET",
+        token: saved.api_token,
       });
-      assert.equal(second.response.status, 200);
-      assert.equal(second.value.error.code, -32000);
+      assert.equal(listed.response.status, 200);
 
-      const restLimited = await jsonRequest(
-        `${apiBase}/v1/profiles/${missingProfileId}/run`,
-        {
-          method: "POST",
-          token: saved.api_token,
-          body: {},
-        },
-      );
-      assert.equal(restLimited.response.status, 429);
-      assert.ok(Number(restLimited.response.headers.get("retry-after")) > 0);
-
-      const mcpLimited = await jsonRequest(mcpUrl, {
-        method: "POST",
-        headers: mcpHeaders,
-        body: {
-          jsonrpc: "2.0",
-          id: 3,
-          method: "tools/call",
-          params: {
-            name: "run_profile",
-            arguments: { profile_id: missingProfileId },
-          },
-        },
-      });
-      assert.equal(mcpLimited.response.status, 429);
-      assert.ok(Number(mcpLimited.response.headers.get("retry-after")) > 0);
-
-      const freeCall = await jsonRequest(mcpUrl, {
-        method: "POST",
-        headers: mcpHeaders,
-        body: {
-          jsonrpc: "2.0",
-          id: 4,
-          method: "tools/call",
-          params: { name: "list_profiles", arguments: {} },
-        },
-      });
-      assert.equal(freeCall.response.status, 200);
-      assert.equal(freeCall.value.error, undefined);
-
-      await app.invoke("stop_mcp_server");
       await app.invoke("stop_api_server");
     },
     {
@@ -1148,10 +1131,12 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
   await withApp(
     "integrations-contracts",
     async (app) => {
+      // Local MCP is removed: the enable command refuses uniformly with the
+      // removal code, regardless of whether the terms have been accepted.
       await assertCommandErrorCode(
         app,
         "start_mcp_server",
-        "WAYFERN_TERMS_REQUIRED",
+        "MCP_LOCAL_REMOVED",
       );
       assert.equal(await app.invoke("cloud_get_user"), null);
       assert.equal(await app.invoke("cloud_get_proxy_usage"), null);
@@ -1179,31 +1164,122 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       });
       assert.match(removeError, /not found|session/i);
 
-      assert.equal(await app.invoke("check_for_app_updates"), null);
-      assert.equal(await app.invoke("check_for_app_updates_manual"), null);
+      // The controls a person uses on a live session. Without one to act on,
+      // each has to refuse by its own code rather than pretend it worked: the
+      // panel reads these back, and a silent success would leave a button
+      // claiming a state the backend never entered.
+      assert.match(
+        await app.invokeError("set_sync_session_paused", {
+          sessionId: "missing",
+          paused: true,
+        }),
+        /SYNC_SESSION_NOT_FOUND/,
+      );
+      assert.match(
+        await app.invokeError("set_sync_follower_held", {
+          sessionId: "missing",
+          followerProfileId: "missing",
+          held: true,
+        }),
+        /SYNC_SESSION_NOT_FOUND/,
+      );
+      assert.match(
+        await app.invokeError("arrange_sync_windows", {
+          sessionId: "missing",
+          layout: "grid",
+        }),
+        /SYNC_SESSION_NOT_FOUND/,
+      );
+      // An unknown layout never reaches the display: it fails to deserialise.
       assert.ok(
-        await invokeContract(app, "cloud_exchange_device_code", {
-          code: "DONUT-E2E-INVALID-CODE",
+        await app.invokeError("arrange_sync_windows", {
+          sessionId: "missing",
+          layout: "diagonal",
         }),
       );
-      assert.ok(await invokeContract(app, "cloud_refresh_profile"));
-      assert.ok(await invokeContract(app, "cloud_get_countries"));
-      assert.ok(
-        await invokeContract(app, "create_cloud_location_proxy", {
+
+      assert.equal(await app.invoke("check_for_app_updates"), null);
+      assert.equal(await app.invoke("check_for_app_updates_manual"), null);
+      await assertContract(
+        app,
+        "cloud_exchange_device_code",
+        {
+          // Any of these proves the command's BODY ran and reached its network
+          // layer, which is what the evidence is for. Pinning only the server's
+          // "invalid or expired login code" sentence made a test named
+          // "offline ... deterministic" depend on a live round-trip to
+          // api.donutbrowser.com: red offline, behind a proxy, when the
+          // unauthenticated challenge is rate-limited, or the day the backend
+          // rewords it, with no signal that the desktop is fine.
+          refusedWith:
+            /invalid or expired login code|failed to fetch challenge|challenge request failed/i,
+        },
+        { code: "DONUT-E2E-INVALID-CODE" },
+      );
+      await assertContract(app, "cloud_refresh_profile", {
+        refusedWith: /not logged in/i,
+      });
+      await assertContract(app, "cloud_get_countries", {
+        refusedWith: /not logged in/i,
+      });
+      await assertContract(
+        app,
+        "create_cloud_location_proxy",
+        { refusedWith: /no cloud proxy available/i },
+        {
           name: "E2E unavailable cloud proxy",
           country: "ZZ",
           region: null,
           city: null,
           isp: null,
-        }),
+        },
       );
-      assert.ok(await invokeContract(app, "cloud_refresh_wayfern_token"));
+      await assertContract(app, "cloud_refresh_wayfern_token", {
+        // Compared against the value the harness injected, NOT matched against
+        // a hex shape. Under the `e2e` feature this command returns
+        // WAYFERN_TEST_TOKEN, so a /^[0-9a-f]{32,}$/ assertion only proved the
+        // harness's own env var looks like a token: it validated the fixture
+        // and would have passed with the command's body deleted. Equality
+        // proves the command actually reached the token and returned it.
+        answers: (token) =>
+          assert.equal(
+            String(token),
+            process.env.WAYFERN_TEST_TOKEN,
+            "the command must return the token it was given, not a different value",
+          ),
+      });
 
-      assert.ok(await invokeContract(app, "trigger_manual_version_update"));
-      assert.ok(
-        await invokeContract(app, "clear_all_version_cache_and_refetch"),
-      );
-      assert.ok(await invokeContract(app, "check_for_browser_updates"));
+      await assertContract(app, "trigger_manual_version_update", {
+        answers: (report) => {
+          assert.ok(
+            Array.isArray(report),
+            "the update run must report per browser",
+          );
+          // Non-empty, or the per-entry loop below asserts nothing at all: an
+          // `[]` satisfied every check while the command did no work.
+          assert.ok(
+            report.length > 0,
+            `the update run must report at least one browser, got ${JSON.stringify(report)}`,
+          );
+          for (const entry of report) {
+            assert.ok(
+              typeof entry.browser === "string" && entry.browser.length > 0,
+              `every entry names its browser: ${JSON.stringify(entry)}`,
+            );
+            assert.equal(typeof entry.updated_successfully, "boolean");
+          }
+        },
+      });
+      await assertContract(app, "clear_all_version_cache_and_refetch", {
+        answers: (value) => assert.equal(value, null),
+      });
+      await assertContract(app, "check_for_browser_updates", {
+        answers: (updates) =>
+          assert.ok(
+            Array.isArray(updates),
+            `the update check must answer with a list, got ${JSON.stringify(updates)}`,
+          ),
+      });
       await app.invoke("dismiss_update_notification", {
         notificationId: "missing-e2e-notification",
       });
@@ -1382,6 +1458,126 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         }),
         /"code":"PROFILE_NOT_FOUND"/,
       );
+
+      // The agent plane is brokered by the same cloud. Signed out, every read
+      // and write must refuse as a translatable code, and the two things the
+      // desktop can judge for itself — is this profile here, does the goal say
+      // anything — must be judged BEFORE any of that, so a bad request never
+      // becomes a model bill.
+      assert.match(
+        await app.invokeError("get_agent_runs", { limit: 5 }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("get_agent_run", { runId: "missing-e2e-run" }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("cancel_agent_run", { runId: "missing-e2e-run" }),
+        notSignedIn,
+      );
+      assert.match(await app.invokeError("get_agent_recipes"), notSignedIn);
+      assert.match(
+        await app.invokeError("create_agent_recipe", {
+          name: "E2E recipe",
+          steps: [{ type: "navigate", url: "https://example.com" }],
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("update_agent_recipe", {
+          id: "00000000-0000-0000-0000-000000000000",
+          name: "E2E recipe",
+          steps: [{ type: "navigate", url: "https://example.com" }],
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("delete_agent_recipe", {
+          id: "00000000-0000-0000-0000-000000000000",
+        }),
+        notSignedIn,
+      );
+
+      // A goal is judged before the profile is even looked up: an empty goal is
+      // the one refusal that costs nothing to make locally, and it must not
+      // depend on being signed in.
+      assert.match(
+        await app.invokeError("start_agent_run", {
+          input: {
+            profileId: missingProfileId,
+            target: "desktop",
+            goal: "   ",
+          },
+        }),
+        /"code":"AGENT_GOAL_INVALID"/,
+      );
+      assert.match(
+        await app.invokeError("start_agent_run", {
+          input: {
+            profileId: missingProfileId,
+            target: "desktop",
+            goal: "Open the dashboard and export last week's report",
+          },
+        }),
+        /"code":"PROFILE_NOT_FOUND"/,
+      );
+      // Recipes are validated the same way, and with the code the rest of the
+      // app already uses for a blank name rather than an agent-specific one.
+      assert.match(
+        await app.invokeError("create_agent_recipe", {
+          name: "  ",
+          steps: [{ type: "navigate", url: "https://example.com" }],
+        }),
+        /"code":"NAME_CANNOT_BE_EMPTY"/,
+      );
+      // A step is an object the API validates, never a line of prose: the old
+      // string shape is refused here rather than sent and rejected by the
+      // server. So is a step that names an element without saying which.
+      for (const steps of [
+        [],
+        ["open the dashboard"],
+        [{ url: "https://example.com" }],
+        [{ type: "teleport" }],
+        [{ type: "click" }],
+        [{ type: "click", selector: "#buy", locator: { role: "button" } }],
+      ]) {
+        assert.match(
+          await app.invokeError("create_agent_recipe", {
+            name: "E2E recipe",
+            steps,
+          }),
+          /"code":"AGENT_RECIPE_INVALID"/,
+          `${JSON.stringify(steps)} must be refused before any network call`,
+        );
+      }
+
+      // The step stream is how the run panel fills; without it a page opened
+      // during a run shows a goal and nothing else. It has to start, name the
+      // run it is watching, follow a switch to another run, and stop on demand.
+      assert.equal(await app.invoke("get_agent_run_events_status"), null);
+      await app.invoke("start_agent_run_events", { runId: "e2e-agent-run-1" });
+      assert.equal(
+        await app.invoke("get_agent_run_events_status"),
+        "e2e-agent-run-1",
+      );
+      // A second start for the same run is a no-op, not a second socket.
+      await app.invoke("start_agent_run_events", { runId: "e2e-agent-run-1" });
+      assert.equal(
+        await app.invoke("get_agent_run_events_status"),
+        "e2e-agent-run-1",
+      );
+      // Opening a different run replaces the stream: the panel shows one run.
+      await app.invoke("start_agent_run_events", { runId: "e2e-agent-run-2" });
+      assert.equal(
+        await app.invoke("get_agent_run_events_status"),
+        "e2e-agent-run-2",
+      );
+      await app.invoke("stop_agent_run_events");
+      assert.equal(await app.invoke("get_agent_run_events_status"), null);
+      // A second stop must not fail.
+      await app.invoke("stop_agent_run_events");
+      assert.equal(await app.invoke("get_agent_run_events_status"), null);
 
       const trial = await app.invoke("get_commercial_trial_status");
       assert.ok(trial && typeof trial === "object");

@@ -12,6 +12,11 @@ pub struct VpnWorkerConfig {
   pub local_port: Option<u16>,
   pub local_url: Option<String>,
   pub pid: Option<u32>,
+  /// Pins `pid` to one exact process, so a recycled PID cannot make a dead
+  /// worker look alive or get an unrelated process signalled. Defaulted
+  /// because configs written before this field existed must still deserialize.
+  #[serde(default)]
+  pub pid_start_time: Option<u64>,
 }
 
 impl VpnWorkerConfig {
@@ -24,6 +29,7 @@ impl VpnWorkerConfig {
       local_port: None,
       local_url: None,
       pid: None,
+      pid_start_time: None,
     }
   }
 }

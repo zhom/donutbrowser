@@ -1,10 +1,9 @@
 //! Launching a profile on a remote VM.
 //!
-//! The desktop app never talks to the Wayfern manager directly. It asks
-//! donutbrowser-infra, which holds the service-account credentials and is the
-//! only party that can mint a donut-sync token scoped to this user's namespace.
-//! That indirection is the point: a desktop client that could call the manager
-//! itself would need credentials capable of launching sessions for anyone.
+//! The desktop app never leases a remote host itself. It asks the Donut cloud
+//! API, which is the only party holding credentials that can do so. That
+//! indirection is the point: a desktop client able to lease directly would need
+//! credentials capable of launching sessions for anyone.
 
 use crate::cloud_errors::{self, FailureCodes};
 use crate::profile::types::BrowserProfile;
@@ -116,14 +115,35 @@ pub fn idempotency_key(profile_id: &str, attempt: &str) -> String {
   format!("run-remote:{profile_id}:{attempt}")
 }
 
+/// Connect timeout for every remote-session control call.
+const CONTROL_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// Total budget for the launch POST. A host is leased while this request is
+/// open, so it is the one call that legitimately takes tens of seconds; without
+/// a ceiling a hung server hangs the click for minutes.
+const LAUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+/// Total budget for the read, stop and list calls, which are quick or broken.
+const CONTROL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// An HTTP client for a control call, with a short connect timeout and a total
+/// ceiling, built the same way as the session-events client below rather than
+/// the bare `reqwest::Client::new()` these calls used to use — which inherited
+/// no timeout at all.
+fn control_client(total: std::time::Duration) -> reqwest::Client {
+  reqwest::Client::builder()
+    .connect_timeout(CONTROL_CONNECT_TIMEOUT)
+    .timeout(total)
+    .build()
+    .unwrap_or_else(|_| reqwest::Client::new())
+}
+
 /// Whether this profile's exit rules out running it on a leased host.
 ///
-/// A session runs on a fleet host that pulls the profile — and its proxy record
-/// — out of the user's sync namespace, rewriting no addresses along the way. A
-/// proxy stored as `127.0.0.1:8080` therefore arrives meaning THAT host's
-/// loopback: the browser either cannot connect and the leased hour is burned on
-/// a session that never worked, or it falls through and the user's identity
-/// egresses from our datacenter. The Cookie Bot has refused this since
+/// A session opens the profile — and its stored proxy — on a remote host
+/// exactly as this machine wrote them, addresses and all. A proxy stored as
+/// `127.0.0.1:8080` therefore arrives meaning THAT host's loopback: the browser
+/// either cannot connect and the leased hour is burned on a session that never
+/// worked, or it falls through and the user's identity egresses from a
+/// datacenter. The Cookie Bot has refused this since
 /// `remote_exit` existed; interactive sessions take the same profile onto the
 /// same hosts and did not, so the same mistake cost a leased hour here.
 ///
@@ -136,13 +156,69 @@ pub fn idempotency_key(profile_id: &str, attempt: &str) -> String {
 ///
 /// Split out from the launch because that is the only testable seam:
 /// `exit_reachability` reads this machine's proxy and VPN stores and the launch
-/// itself needs a fleet.
+/// itself needs a remote host.
+/// Local reasons a remote launch is refused, decided from the profile alone.
+///
+/// Split from the request and from `local_exit_refusal` so it is unit-testable
+/// without a network or a sync scheduler, and so both the REST and the MCP
+/// entry points get the identical answer from one place.
+///
+/// - The platform must be one a leased host serves. `resolved_os` can return a
+///   fingerprint OS like `android` for a profile with no recorded host OS, and
+///   no remote host runs that; refusing here gives a clear message instead of
+///   leasing a host and taking a generic failure back.
+/// - Sync must have completed at least once. A remote session opens the synced
+///   copy and hands it back when it stops, so a profile with sync enabled but
+///   `last_sync` still None (the first upload failed, or is only queued) would
+///   open EMPTY and then come back over the real local copy as emptiness.
+///   `remote_launch_precondition` catches sync being off and a sync in flight;
+///   this catches the gap between them.
+pub fn local_launch_refusal(
+  profile: &BrowserProfile,
+  platform: &str,
+) -> Option<RemoteSessionError> {
+  if !crate::profile::types::is_host_os(platform) {
+    return Some(RemoteSessionError::Other(
+      serde_json::json!({
+        "code": "REMOTE_PLATFORM_UNSUPPORTED",
+        "params": { "platform": platform },
+      })
+      .to_string(),
+    ));
+  }
+  if profile.is_sync_enabled() && profile.last_sync.is_none() {
+    return Some(RemoteSessionError::Other(
+      serde_json::json!({ "code": "REMOTE_PROFILE_NOT_SYNCED" }).to_string(),
+    ));
+  }
+  None
+}
+
 fn local_exit_refusal(verdict: &ExitReachability) -> Option<RemoteSessionError> {
   match verdict {
     // An address anyone can dial, so the leased host can dial it too.
     ExitReachability::Remote => None,
     // See the second paragraph above: allowed on purpose, not overlooked.
     ExitReachability::None => None,
+    // A protocol no remote host can dial, which is a different sentence from a
+    // local address: nothing about the ADDRESS is wrong, so "use a proxy with a
+    // public address" is advice the user cannot act on. VLESS needs a local
+    // sidecar that is not available remotely, and no retry changes that.
+    ExitReachability::UnsupportedKind { kind, .. } => {
+      log::warn!(
+        "Refusing an interactive remote session: {}",
+        verdict
+          .refusal_detail()
+          .unwrap_or_else(|| format!("the profile's exit is {kind}"))
+      );
+      Some(RemoteSessionError::Other(
+        serde_json::json!({
+          "code": "REMOTE_PROXY_KIND_UNSUPPORTED",
+          "params": { "kind": kind },
+        })
+        .to_string(),
+      ))
+    }
     // `LocalOnly`, plus `Unknown` — which `remote_exit` produces when it could
     // not read the config and which fails closed by design, because "we could
     // not confirm it" guessed as "yes" is the failure this whole check exists
@@ -164,7 +240,7 @@ fn local_exit_refusal(verdict: &ExitReachability) -> Option<RemoteSessionError> 
   }
 }
 
-/// Ask donutbrowser-infra to start a remote session for this profile.
+/// Ask the cloud API to start a remote session for this profile.
 ///
 /// Goes through `api_call_with_retry` so an expired access token is refreshed
 /// and the request retried once, rather than surfacing to the user as a
@@ -181,6 +257,10 @@ pub async fn start_remote_session(
     })?
     .to_string();
   let profile_id = profile.id.to_string();
+
+  if let Some(refusal) = local_launch_refusal(profile, &platform) {
+    return Err(refusal);
+  }
 
   // Checked here, before the request: the backend is told which profile to
   // start but never sees the proxy record, so it cannot derive this — and by
@@ -205,7 +285,7 @@ pub async fn start_remote_session(
         idempotency_key: key.clone(),
       };
       async move {
-        let response = reqwest::Client::new()
+        let response = control_client(LAUNCH_TIMEOUT)
           .post(&endpoint)
           .bearer_auth(token)
           .json(&body)
@@ -270,13 +350,12 @@ pub fn note_session_stopped(app: &AppHandle, session_id: &str) {
   }
 }
 
-/// Ask donutbrowser-infra to stop a remote session.
+/// Ask the cloud API to stop a remote session.
 ///
-/// Without this the only thing that ends a session is the fleet's own two-hour
-/// cap, so every launch bills the full 7200s however briefly it was used — a
-/// handful of runs exhausts an allowance meant for a hundred. The backend
-/// refuses to retire a row it could not stop on the fleet, so a successful
-/// return here means the browser is really down and the profile lock released.
+/// Without this a session runs to its maximum duration however briefly it was
+/// used, so a handful of runs exhausts an allowance meant for many. A stop the
+/// server reports as successful means the browser is really down and the
+/// profile lock released.
 pub async fn end_remote_session(
   session_id: &str,
 ) -> Result<EndRemoteSessionOutcome, RemoteSessionError> {
@@ -290,7 +369,7 @@ pub async fn end_remote_session(
     .api_call_with_retry(|token| {
       let endpoint = endpoint.clone();
       async move {
-        let response = reqwest::Client::new()
+        let response = control_client(CONTROL_TIMEOUT)
           .delete(&endpoint)
           .bearer_auth(token)
           .send()
@@ -327,8 +406,8 @@ pub fn classify_error_string(message: &str) -> RemoteSessionError {
 /// A session as the backend currently sees it.
 ///
 /// `POST /api/remote-sessions` hands back the literal string `provisioning`
-/// and nothing else, so until this type existed the only way anyone observed a
-/// session becoming usable was by reading the production database.
+/// and nothing else, so until this type existed the only way to observe a
+/// session becoming usable was to keep trying to drive it.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RemoteSessionState {
   pub session_id: String,
@@ -338,9 +417,9 @@ pub struct RemoteSessionState {
   pub platform: Option<String>,
   /// `provisioning` | `ready` | `live` | `closed` | `error`.
   ///
-  /// Named `state` because that is what `RemoteSessionView` in
-  /// donutbrowser-infra actually sends. It carried the name `status` until a
-  /// real payload was compared against it, and because the field had no
+  /// Named `state` because that is what the cloud API actually sends. It
+  /// carried the name `status` until a real payload was compared against it,
+  /// and because the field had no
   /// default, every list and single read failed at `missing field \`status\``
   /// and surfaced as CLOUD_UNREACHABLE. The alias keeps the launch reply —
   /// which predates the reconciled vocabulary and still says `status` —
@@ -410,7 +489,7 @@ async fn get_json<T: serde::de::DeserializeOwned>(
     .api_call_with_retry(|token| {
       let endpoint = endpoint.clone();
       async move {
-        let response = reqwest::Client::new()
+        let response = control_client(CONTROL_TIMEOUT)
           .get(&endpoint)
           .bearer_auth(token)
           .send()
@@ -805,8 +884,8 @@ fn is_heartbeat(kind: &str) -> bool {
 
 /// Turn one decoded frame into the Tauri event and payload it becomes.
 ///
-/// The discriminator lives INSIDE the JSON, not in the SSE `event:` line: Nest
-/// only sets `MessageEvent.type` for the heartbeat, so every real frame arrives
+/// The discriminator lives INSIDE the JSON, not in the SSE `event:` line: only
+/// the heartbeat arrives with an `event:` name, so every real frame arrives
 /// as the default `message` event carrying
 /// `{"type":"snapshot"|"state"|"progress"|"closed","at":…,"sessions"|"session":…}`.
 /// Routing on the event name alone emitted that whole envelope as a session, so
@@ -912,10 +991,10 @@ pub fn session_events_running() -> bool {
 async fn run_session_events(app: AppHandle) {
   let mut attempt = 0u32;
   // Echoed back on reconnect as `Last-Event-ID`, per the SSE spec, IF the
-  // backend ever labels its frames. It does not today — `stream()` emits no
-  // `id:` line and keeps no replay buffer — so this stays `None` and nothing is
-  // resumed. What bounds the loss instead is the stream opening with a full
-  // snapshot, which re-states every session the caller still owns.
+  // server ever labels its frames. It does not today — no `id:` line ever
+  // arrives — so this stays `None` and nothing is resumed. What bounds the loss
+  // instead is the stream opening with a full snapshot, which re-states every
+  // session the caller still owns.
   let mut last_event_id: Option<String> = None;
 
   while STREAM_RUNNING.load(Ordering::SeqCst) {
@@ -957,7 +1036,11 @@ async fn run_session_events(app: AppHandle) {
 
 /// Spread reconnects so every desktop that lost the same backend does not come
 /// back in the same millisecond.
-fn jittered(delay: Duration) -> Duration {
+///
+/// Shared with the MCP remote-control bridge: both reconnect to the same host,
+/// so a deployment restart would otherwise bring every desktop back on two
+/// synchronised timers instead of one spread one.
+pub(crate) fn jittered(delay: Duration) -> Duration {
   use rand::RngExt;
   let factor = rand::rng().random_range(0.8f64..1.2f64);
   delay.mul_f64(factor)
@@ -977,7 +1060,7 @@ async fn sleep_unless_stopped(total: Duration) {
 /// Deliberately not the shared one: a total request timeout would kill a
 /// healthy stream on schedule, so only the connect phase is bounded and
 /// liveness is enforced by the idle timeout instead.
-fn stream_client() -> &'static reqwest::Client {
+pub(crate) fn stream_client() -> &'static reqwest::Client {
   static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
   CLIENT.get_or_init(|| {
     reqwest::Client::builder()
@@ -1192,11 +1275,10 @@ mod tests {
 
   #[test]
   fn the_stop_response_parses_what_the_backend_actually_sends() {
-    // Pinned against EndRemoteSessionOutcome in donutbrowser-infra
-    // (apps/backend/src/remote-sessions/remote-sessions.service.ts). A field
-    // name that does not match makes every stop fail at the decode step, and
-    // the session then runs to the 2h cap and bills 7200s — the exact defect
-    // this endpoint exists to fix, reintroduced silently.
+    // Pinned against a real stop response from the cloud API. A field name that
+    // does not match makes every stop fail at the decode step, and the session
+    // then runs to its maximum duration — the exact defect this endpoint exists
+    // to fix, reintroduced silently.
     let outcome: EndRemoteSessionOutcome =
       serde_json::from_str(r#"{"session_id":"sess-1","status":"closed","billed_seconds":42}"#)
         .expect("the backend's stop payload must deserialize");
@@ -1239,9 +1321,9 @@ mod tests {
 
   #[test]
   fn a_local_only_exit_is_refused_before_a_host_is_leased() {
-    // The profile and its proxy record are copied onto the fleet unrewritten,
-    // so this loopback address would mean the FLEET's loopback. Accepting the
-    // launch bills an hour for a session that cannot reach the user's exit.
+    // The profile's stored proxy travels exactly as written, so this loopback
+    // address would mean the REMOTE host's loopback. Accepting the launch spends
+    // an hour on a session that cannot reach the user's exit.
     let refusal = local_exit_refusal(&ExitReachability::LocalOnly {
       host: "127.0.0.1".to_string(),
       source: "proxy",
@@ -1252,6 +1334,23 @@ mod tests {
       refusal.to_error_json(),
       r#"{"code":"REMOTE_REQUIRES_REMOTE_EXIT_NODE"}"#
     );
+  }
+
+  #[test]
+  fn a_proxy_kind_the_fleet_cannot_dial_is_refused_in_its_own_words() {
+    // Not REMOTE_REQUIRES_REMOTE_EXIT_NODE. A VLESS server is publicly
+    // routable, so telling this user to "use a proxy with a public address"
+    // points them at the one part of their config that is already correct.
+    let refusal = local_exit_refusal(&ExitReachability::UnsupportedKind {
+      kind: "VLESS".to_string(),
+      source: "proxy",
+    })
+    .expect("no fleet host runs the xray sidecar VLESS needs");
+
+    let json: serde_json::Value =
+      serde_json::from_str(&refusal.to_error_json()).expect("valid envelope");
+    assert_eq!(json["code"], "REMOTE_PROXY_KIND_UNSUPPORTED");
+    assert_eq!(json["params"]["kind"], "VLESS");
   }
 
   #[test]
@@ -1294,8 +1393,7 @@ mod tests {
     assert_eq!(json["params"]["granted"], "200");
   }
 
-  /// A verbatim `RemoteSessionView`, field for field, as `toView` in
-  /// donutbrowser-infra's `remote-sessions.service.ts` builds it.
+  /// A verbatim session payload, field for field, as the cloud API sends it.
   ///
   /// Hand-written JSON is what let this type declare `status`, `ready_at` and
   /// `closed_at` while the backend sent `state` and `ended_at`: the test agreed
@@ -1311,7 +1409,7 @@ mod tests {
   #[test]
   fn the_session_state_payload_matches_what_the_backend_sends() {
     // The desktop has been blind between launch and stop; every field here is
-    // one it could previously only learn by reading the production database.
+    // one it had no way to observe before.
     let state: RemoteSessionState = serde_json::from_str(SERVER_SESSION_VIEW)
       .expect("the backend's session payload must deserialize");
 
@@ -1431,7 +1529,7 @@ mod tests {
   #[test]
   fn a_heartbeat_is_not_forwarded_to_the_frontend() {
     // Emitting one would make every consumer re-render twice a minute for
-    // nothing. Nest names this one, so it arrives with an `event:` line.
+    // nothing. This is the one frame that arrives with an `event:` line.
     assert!(route_wire(b"event: ping\ndata: {}\n\n").is_empty());
     assert!(route_wire(b"event: heartbeat\ndata: {}\n\n").is_empty());
     // And the same frame with the discriminator inside the JSON instead.
@@ -1442,11 +1540,10 @@ mod tests {
 
   #[test]
   fn the_opening_snapshot_reaches_the_snapshot_event() {
-    // Byte-for-byte what Nest writes for `{type:'snapshot',at,sessions}`: no
-    // `event:` line, because the controller only sets MessageEvent.type for the
-    // ping. Routing on the event NAME sent this to `remote-session-state` as a
-    // raw envelope, so `remote-session-snapshot` was never emitted at all and
-    // the live view started empty and stayed empty.
+    // Byte-for-byte what the server sends for a snapshot: no `event:` line, so
+    // only the ping carries a name. Routing on the event NAME sent this to
+    // `remote-session-state` as a raw envelope, so `remote-session-snapshot` was
+    // never emitted at all and the live view started empty and stayed empty.
     let routed = route_wire(
       b"data: {\"type\":\"snapshot\",\"at\":\"2026-08-03T00:00:00.000Z\",\"sessions\":[{\"session_id\":\"s1\",\"profile_id\":\"p1\",\"state\":\"live\"}]}\n\n",
     );
@@ -1659,8 +1756,8 @@ mod tests {
       feed(&transition("sess-1", "p1", "closed", false));
       feed(&transition("sess-2", "p1", "live", true));
 
-      // Out-of-order frames are normal: the reconciler polls the fleet while
-      // the user is already starting the next session. A stale close arriving
+      // Out-of-order frames are normal: the server can report a stale session
+      // while the user is already starting the next one. A stale close arriving
       // after the new session went live must not make a working browser
       // unreachable.
       feed(&transition("sess-1", "p1", "closed", false));
@@ -1758,7 +1855,7 @@ mod tests {
 
   #[test]
   fn the_endpoint_descriptor_matches_what_the_backend_sends() {
-    // Pinned against `GET /api/remote-sessions/:id/cdp` in donutbrowser-infra.
+    // Pinned against a real `GET /api/remote-sessions/:id/cdp` response.
     // A field name that does not match makes every remote attach fail at the
     // decode step, and the desktop reports a live session as undrivable.
     let endpoint: CdpEndpoint = serde_json::from_str(
@@ -1818,5 +1915,72 @@ mod tests {
     session.cdp_ready = true;
     session.state = "ready".to_string();
     assert!(!is_drivable(&session));
+  }
+
+  fn remote_profile(
+    sync: crate::profile::types::SyncMode,
+    last_sync: Option<u64>,
+  ) -> BrowserProfile {
+    BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: "p".to_string(),
+      browser: "wayfern".to_string(),
+      version: "1.0".to_string(),
+      release_type: "stable".to_string(),
+      sync_mode: sync,
+      last_sync,
+      host_os: Some("macos".to_string()),
+      ..Default::default()
+    }
+  }
+
+  fn refusal_code(err: &RemoteSessionError) -> Option<String> {
+    let RemoteSessionError::Other(body) = err else {
+      return None;
+    };
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    Some(v.get("code")?.as_str()?.to_string())
+  }
+
+  #[test]
+  fn a_synced_profile_of_its_own_os_is_allowed_to_launch() {
+    let profile = remote_profile(crate::profile::types::SyncMode::Regular, Some(1));
+    assert!(local_launch_refusal(&profile, "macos").is_none());
+  }
+
+  #[test]
+  fn a_non_host_platform_is_refused_and_names_itself() {
+    let profile = remote_profile(crate::profile::types::SyncMode::Regular, Some(1));
+    let refusal = local_launch_refusal(&profile, "android").expect("android is refused");
+    assert_eq!(
+      refusal_code(&refusal).as_deref(),
+      Some("REMOTE_PLATFORM_UNSUPPORTED")
+    );
+    // The offending platform rides in params so the toast can name it.
+    let RemoteSessionError::Other(body) = &refusal else {
+      panic!("expected an Other refusal");
+    };
+    let v: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert_eq!(v["params"]["platform"], "android");
+  }
+
+  #[test]
+  fn a_profile_that_never_finished_a_sync_is_refused() {
+    // Sync enabled, but no upload ever completed: pulling it would be pulling
+    // emptiness, and the push-back would overwrite the real local profile.
+    let profile = remote_profile(crate::profile::types::SyncMode::Regular, None);
+    let refusal = local_launch_refusal(&profile, "macos").expect("never-synced is refused");
+    assert_eq!(
+      refusal_code(&refusal).as_deref(),
+      Some("REMOTE_PROFILE_NOT_SYNCED")
+    );
+  }
+
+  #[test]
+  fn a_profile_with_sync_off_is_not_refused_by_the_sync_gate_here() {
+    // Sync being off is `remote_launch_precondition`'s refusal, not this one's,
+    // so this gate stays silent for it rather than emitting a second message.
+    let profile = remote_profile(crate::profile::types::SyncMode::Disabled, None);
+    assert!(local_launch_refusal(&profile, "macos").is_none());
   }
 }

@@ -43,20 +43,12 @@ export function WayfernTermsDialog({
     }
   }, [onAccepted, t]);
 
+  // Accepting is the only way through, so the dialog offers no other exit:
+  // no close control, no Escape, no click-outside. It closes by itself once
+  // the backend confirms the marker (see useWayfernTerms).
   return (
     <Dialog open={isOpen}>
-      <DialogContent
-        className="sm:max-w-lg"
-        onEscapeKeyDown={(e) => {
-          e.preventDefault();
-        }}
-        onPointerDownOutside={(e) => {
-          e.preventDefault();
-        }}
-        onInteractOutside={(e) => {
-          e.preventDefault();
-        }}
-      >
+      <DialogContent className="sm:max-w-lg" dismissible={false}>
         <DialogHeader>
           <DialogTitle>{t("wayfernTerms.title")}</DialogTitle>
           <DialogDescription>{t("wayfernTerms.description")}</DialogDescription>

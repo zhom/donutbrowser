@@ -1,21 +1,24 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal } from "react-icons/go";
 import {
+  LuBot,
   LuCloud,
   LuCookie,
   LuInfo,
   LuKeyboard,
   LuPlug,
   LuPuzzle,
+  LuTrash2,
   LuUser,
   LuUsers,
 } from "react-icons/lu";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { launchDonutClone } from "@/lib/donut-physics";
 import { MOTION_SPRING_POSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -28,12 +31,14 @@ export type AppPage =
   | "extensions"
   | "groups"
   | "cookieBot"
+  | "agent"
   | "vpns"
   | "settings"
   | "integrations"
   | "account"
   | "import"
-  | "shortcuts";
+  | "shortcuts"
+  | "trash";
 
 const CLICK_THRESHOLD = 5;
 const CLICK_WINDOW_MS = 2000;
@@ -46,9 +51,14 @@ function useLogoEasterEgg({
   currentPage: AppPage;
   onNavigate: (page: AppPage) => void;
 }) {
+  const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const playfulMotion = !reduceMotion && inputModality === "pointer";
   const clickTimestamps = useRef<number[]>([]);
   const [isPressed, setIsPressed] = useState(false);
   const [wobbleKey, setWobbleKey] = useState(0);
+  /** Wiggles earned by the cheat code, which arrives by keyboard by nature. */
+  const [cheerKey, setCheerKey] = useState(0);
   const [isFalling, setIsFalling] = useState(false);
   /**
    * Click count toward the bounce trigger while the user is on the profiles
@@ -109,6 +119,8 @@ function useLogoEasterEgg({
       return;
     }
 
+    if (!playfulMotion) return;
+
     const now = Date.now();
     clickTimestamps.current = clickTimestamps.current.filter(
       (t) => now - t < CLICK_WINDOW_MS,
@@ -137,12 +149,19 @@ function useLogoEasterEgg({
         resetTimeoutRef.current = null;
       }, CLICK_WINDOW_MS);
     }
-  }, [currentPage, isFalling, isHidden, onNavigate, triggerFall]);
+  }, [
+    currentPage,
+    isFalling,
+    isHidden,
+    onNavigate,
+    triggerFall,
+    playfulMotion,
+  ]);
 
   // Leaving the profiles page mid-streak cancels growth so we never end up
   // with an outsized logo when the user returns later.
   useEffect(() => {
-    if (currentPage !== "profiles") {
+    if (currentPage !== "profiles" || !playfulMotion) {
       clickTimestamps.current = [];
       setGrowStep(0);
       if (resetTimeoutRef.current !== null) {
@@ -150,7 +169,28 @@ function useLogoEasterEgg({
         resetTimeoutRef.current = null;
       }
     }
-  }, [currentPage]);
+  }, [currentPage, playfulMotion]);
+
+  // The cheat code (see useKonamiCode) is received with the same wiggle a
+  // click earns, so the donut visibly takes the credit. It is typed, so the
+  // pointer-only gate on click wiggles cannot apply; only reduced motion does.
+  useEffect(() => {
+    if (reduceMotion) return;
+    const onCheatCode = () => setCheerKey((k) => k + 1);
+    window.addEventListener("donut-cheat-code", onCheatCode);
+    return () => {
+      window.removeEventListener("donut-cheat-code", onCheatCode);
+    };
+  }, [reduceMotion]);
+
+  useEffect(() => {
+    if (!reduceMotion) return;
+    cancelFallRef.current?.();
+    cancelFallRef.current = null;
+    setIsFalling(false);
+    setIsPressed(false);
+    if (logoRef.current) logoRef.current.style.visibility = "";
+  }, [reduceMotion]);
 
   useEffect(() => {
     return () => {
@@ -165,10 +205,12 @@ function useLogoEasterEgg({
     isPressed,
     setIsPressed,
     wobbleKey,
+    cheerKey,
     isFalling,
     isHidden,
     growStep,
     handleClick,
+    playfulMotion,
   };
 }
 
@@ -186,11 +228,15 @@ interface RailNavProps {
 
 /** Shared-element indicator that slides between the active rail items. */
 function ActiveIndicator() {
+  const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const animate = !reduceMotion && inputModality === "pointer";
   return (
     <motion.span
       aria-hidden="true"
-      layoutId="rail-indicator"
-      transition={MOTION_SPRING_POSITION}
+      initial={false}
+      layoutId={animate ? "rail-indicator" : undefined}
+      transition={animate ? MOTION_SPRING_POSITION : { duration: 0 }}
       className="absolute inset-y-1.5 left-[-7px] w-[2px] rounded-full bg-foreground"
     />
   );
@@ -208,6 +254,7 @@ const TOP_ITEMS: RailItem[] = [
   { page: "extensions", Icon: LuPuzzle, labelKey: "rail.extensions" },
   { page: "groups", Icon: LuUsers, labelKey: "rail.groups" },
   { page: "cookieBot", Icon: LuCookie, labelKey: "rail.cookieBot" },
+  { page: "agent", Icon: LuBot, labelKey: "rail.agent" },
   { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
@@ -232,6 +279,12 @@ const MORE_ITEMS: MoreMenuItem[] = [
     labelKey: "rail.more.keyboardShortcuts",
     hintKey: "rail.more.keyboardShortcutsHint",
   },
+  {
+    page: "trash",
+    Icon: LuTrash2,
+    labelKey: "rail.more.trash",
+    hintKey: "rail.more.trashHint",
+  },
 ];
 
 export function RailNav({
@@ -247,10 +300,12 @@ export function RailNav({
     isPressed,
     setIsPressed,
     wobbleKey,
+    cheerKey,
     isFalling,
     isHidden,
     growStep,
     handleClick,
+    playfulMotion,
   } = useLogoEasterEgg({ currentPage, onNavigate });
 
   useEffect(() => {
@@ -287,19 +342,21 @@ export function RailNav({
               animates smoothly across the wiggle layer's remounts. */}
           <span
             style={{
-              transform: isPressed
-                ? `scale(${(1 + growStep * 0.25) * 0.9})`
-                : `scale(${1 + growStep * 0.25})`,
+              transform: !playfulMotion
+                ? "none"
+                : isPressed
+                  ? `scale(${(1 + growStep * 0.25) * 0.9})`
+                  : `scale(${1 + growStep * 0.25})`,
             }}
-            className="inline-grid place-items-center transition-transform duration-300 ease-out will-change-transform"
+            className="inline-grid place-items-center transition-transform duration-300 ease-out motion-reduce:transition-none"
           >
             <span
-              key={wobbleKey}
+              key={`${wobbleKey}:${cheerKey}`}
               className={cn(
                 "inline-grid place-items-center",
                 !isFalling &&
                   !isPressed &&
-                  wobbleKey > 0 &&
+                  ((playfulMotion && wobbleKey > 0) || cheerKey > 0) &&
                   "animate-[wiggle_0.3s_ease-in-out]",
               )}
             >
@@ -413,7 +470,7 @@ export function RailNav({
           <div
             role="menu"
             aria-label={t("rail.more.label")}
-            className="surface-material-card absolute bottom-14 left-11 z-40 w-56 animate-in rounded-lg border border-border p-1 shadow-2xl duration-100 fade-in-0 slide-in-from-bottom-1"
+            className="absolute bottom-14 left-11 z-40 w-56 rounded-lg bg-card p-1 text-card-foreground shadow-sm"
           >
             {MORE_ITEMS.map(({ page, Icon, labelKey, hintKey }) => (
               <button
@@ -426,7 +483,7 @@ export function RailNav({
                 }}
                 className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
               >
-                <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+                <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
                   <Icon className="size-3" />
                 </span>
                 <span className="flex min-w-0 flex-col">
@@ -448,7 +505,7 @@ export function RailNav({
               }}
               className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
             >
-              <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+              <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
                 <LuInfo className="size-3" />
               </span>
               <span className="flex min-w-0 flex-col">

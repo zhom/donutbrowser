@@ -52,7 +52,12 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/LOCK",
   "**/*-journal",
   "**/*-wal",
+  "**/*-shm",
   "**/SingletonLock",
+  // Rewritten by donut before every launch from the profile metadata that
+  // already syncs; uploading it would only duplicate that state.
+  "**/wayfern-identity.json",
+  "**/wayfern-persona.json",
   "**/SingletonSocket",
   "**/SingletonCookie",
   "**/Secure Preferences",
@@ -423,7 +428,7 @@ pub enum DiffBias {
   /// Remote wins regardless of timestamps.
   ///
   /// Used for exactly one thing: the pull that follows a remote session. A
-  /// leased host has just written the authoritative copy of this profile, and
+  /// remote host has just written the authoritative copy of this profile, and
   /// the local directory is whatever it was before the session started. If the
   /// user launched locally in between, local mtimes are NEWER than the host's
   /// push, so `Auto` would upload the stale copy and put every file the host
@@ -671,6 +676,36 @@ mod tests {
     assert!(
       !paths.iter().any(|p| p.contains("Crashpad")),
       "Crashpad should be excluded: {paths:?}"
+    );
+  }
+
+  #[test]
+  fn test_generate_manifest_excludes_sqlite_shm_sidecars() {
+    let temp_dir = TempDir::new().unwrap();
+    let profile_dir = temp_dir.path().join("profile_root");
+    let default_dir = profile_dir.join("profile/Default");
+    fs::create_dir_all(&default_dir).unwrap();
+
+    fs::write(profile_dir.join("Cookies-shm"), "scratch").unwrap();
+    fs::write(default_dir.join("History-shm"), "scratch").unwrap();
+    fs::write(default_dir.join("History-wal"), "scratch").unwrap();
+    fs::write(default_dir.join("History"), "keep").unwrap();
+
+    let mut cache = HashCache::default();
+    let manifest = generate_manifest("test-profile", &profile_dir, &mut cache).unwrap();
+
+    let paths: Vec<&str> = manifest.files.iter().map(|f| f.path.as_str()).collect();
+    assert!(
+      !paths.iter().any(|p| p.ends_with("-shm")),
+      "SQLite -shm sidecars are scratch state and must not sync: {paths:?}"
+    );
+    assert!(
+      !paths.iter().any(|p| p.ends_with("-wal")),
+      "-wal sidecars stay excluded: {paths:?}"
+    );
+    assert!(
+      paths.contains(&"profile/Default/History"),
+      "the database itself must still sync: {paths:?}"
     );
   }
 

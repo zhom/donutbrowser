@@ -279,14 +279,13 @@ impl ProfileLockManager {
   }
 }
 
-/// Separator the backend puts between a user id and a non-desktop holder's
-/// sub-identity. Mirrors `HOLDER_SEPARATOR` in donutbrowser-infra's
-/// `profile-locks.service.ts`.
+/// Separator the cloud API puts between a user id and a non-desktop holder's
+/// sub-identity. Must match the server's holder format exactly.
 ///
 /// A remote VM session takes the lock under `<user id>:vm:<session id>` so it
 /// contends with this desktop instead of silently sharing its lock. That makes
 /// the holder string the one place a client can tell "a teammate has this open"
-/// apart from "this is my own profile, running on the fleet" — two refusals that
+/// apart from "this is my own profile, running remotely" — two refusals that
 /// need completely different words.
 const VM_HOLDER_SEPARATOR: &str = ":vm:";
 
@@ -381,7 +380,7 @@ mod tests {
 
   #[test]
   fn a_users_own_remote_session_is_not_reported_as_a_teammate() {
-    // The holder for a fleet session is `<user id>:vm:<session id>` and the row
+    // The holder for a remote session is `<user id>:vm:<session id>` and it
     // carries the OWNER's email, so the previous message read "Profile is in use
     // by you@example.com" — the user's own address, about their own profile.
     let err = lock_conflict_error(

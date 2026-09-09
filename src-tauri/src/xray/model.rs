@@ -170,11 +170,17 @@ fn validate_endpoint_address(address: &str) -> XrayResult<()> {
   if address.parse::<IpAddr>().is_ok() {
     return Ok(());
   }
-  Host::parse(address).map_err(|_| XrayError::InvalidField {
-    field: "address",
-    reason: "must be a valid hostname or IP address",
-  })?;
-  Ok(())
+  // Canonicality, not just parseability: `Host::parse` percent-decodes and
+  // punycodes before it validates, so `caf%C3%A9.example.com` parses fine while
+  // Xray dials the stored string verbatim and never resolves it. Case is the
+  // one difference that is safe, since parsing only lowercases.
+  match Host::parse(address) {
+    Ok(host) if host.to_string().eq_ignore_ascii_case(address) => Ok(()),
+    _ => Err(XrayError::InvalidField {
+      field: "address",
+      reason: "must be a valid hostname or IP address",
+    }),
+  }
 }
 
 fn validate_server_name(server_name: &str) -> XrayResult<()> {
@@ -297,6 +303,35 @@ mod tests {
           ..
         })
       ));
+    }
+  }
+
+  #[test]
+  fn endpoint_rejects_hosts_xray_would_dial_verbatim() {
+    // Both reach the sidecar unchanged, so accepting them buys a dead tunnel
+    // with no import-time error.
+    for address in ["caf%C3%A9.example.com", "café.example.com"] {
+      let mut config = valid_config();
+      config.address = address.to_string();
+      assert!(
+        matches!(
+          config.validate(),
+          Err(XrayError::InvalidField {
+            field: "address",
+            ..
+          })
+        ),
+        "{address}"
+      );
+    }
+  }
+
+  #[test]
+  fn endpoint_accepts_mixed_case_and_punycode_hosts() {
+    for address in ["VPN.Example.com", "xn--caf-dma.example.com"] {
+      let mut config = valid_config();
+      config.address = address.to_string();
+      assert_eq!(config.validate(), Ok(()), "{address}");
     }
   }
 

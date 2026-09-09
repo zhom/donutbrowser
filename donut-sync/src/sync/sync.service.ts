@@ -770,8 +770,7 @@ export class SyncService implements OnModuleInit {
    *   2. a write touched the scope and bumped its manifest ETag.
    *
    * This is *eventual* cross-device sync, gated by the poll interval.
-   * Real-time push is intentionally not provided here — that lives in the
-   * paid backend.
+   * Real-time push is intentionally not provided here.
    */
   subscribe(
     ctx: UserContext,

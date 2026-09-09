@@ -1,10 +1,8 @@
 //! Cookie-bot transport.
 //!
-//! The bot warms a profile's cookies overnight by driving it on a leased
-//! remote host. NONE of that lives here: the schedule, the calendar maths, the
-//! preset expansion, the site ordering, the dwell and scroll model, the pooled
-//! budget and the nightly dispatcher are all held by donutbrowser-infra and
-//! the Wayfern manager.
+//! The bot warms a profile's cookies overnight by driving it on a remote host.
+//! None of that behaviour lives here: the schedule and everything the bot
+//! actually does are owned by the cloud API.
 //!
 //! This module is the wire only. It sends the user's own scalars — when to
 //! run, for how long, which of their sites, which server-issued preset id —
@@ -19,10 +17,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-/// Operating systems the fleet can lease. Linux is refused by the manager, so
-/// refusing it here turns a nightly failure at 02:00 into a refusal at the
-/// moment the user picks the profile.
-pub const BOT_PLATFORMS: [&str; 2] = ["windows", "macos"];
+/// Operating systems a remote run can be scheduled on. Anything else (a mobile
+/// OS, a typo) has no host, so it is refused here rather than as a failed run
+/// at 02:00.
+pub const BOT_PLATFORMS: [&str; 3] = ["windows", "macos", "linux"];
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -139,7 +137,7 @@ pub struct CookieBotSchedule {
   #[serde(default)]
   pub slots: Vec<CookieBotSlot>,
   pub timezone: String,
-  /// Server-issued preset id. Opaque here — what it expands to is infra's.
+  /// Server-issued preset id. Opaque here — what it expands to is the server's.
   pub preset: String,
   /// The template the sites came from, or `None` for the user's own list.
   ///
@@ -164,9 +162,9 @@ pub struct CookieBotSchedule {
   pub encrypted_sync: bool,
   #[serde(default)]
   pub has_proxy: bool,
-  /// Whether that exit is one a leased fleet host could dial. Defaults to false
-  /// on an older server that does not send it, which reads as "not reachable"
-  /// and is the safe direction.
+  /// Whether that exit is one a remote host could dial. Defaults to false on an
+  /// older server that does not send it, which reads as "not reachable" and is
+  /// the safe direction.
   #[serde(default)]
   pub proxy_remote_reachable: bool,
   #[serde(default)]
@@ -252,7 +250,7 @@ pub struct CookieBotScheduleInput {
   // Defaulting is safe in exactly one direction: `bool::default()` is false, so
   // an unstamped input reads as "no sync, no proxy" and is REFUSED. The failure
   // this must never have is the opposite one, a defaulted `has_proxy: true`
-  // warming a profile out of the fleet's own datacenter address.
+  // warming a profile out of the remote host's own address.
   #[serde(default)]
   pub sync_enabled: bool,
   #[serde(default)]
@@ -344,8 +342,8 @@ pub struct CookieBotRun {
   #[serde(default)]
   pub max_minutes: u32,
   /// How many browser sessions this night is split into, and which one is
-  /// running. A night longer than one session's cap is checkpointed at each
-  /// boundary, and "chunk 2 of 3" is the only honest way to report that.
+  /// running. "chunk 2 of 3" is the only honest way to report a night the
+  /// server split.
   #[serde(default)]
   pub chunks_total: u32,
   #[serde(default)]
@@ -403,10 +401,8 @@ pub struct CookieBotPreset {
 /// A server-owned browsing template: a named answer to "what is this profile
 /// for", which the user picks INSTEAD of typing a site list.
 ///
-/// Carries no URLs, and must not gain any. The pool a template draws from is
-/// server-side for the same reason a preset's browsing model is: a published
-/// list is one a retailer can filter, and each profile is given its own sample
-/// so the template never becomes a fleet-wide fingerprint.
+/// Carries no URLs, and must not gain any: the site pool a template draws from
+/// is server-owned, and a published list is one a retailer can filter.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CookieBotTemplate {
   pub id: String,
@@ -506,8 +502,8 @@ pub struct RemoteHoursMember {
   pub bot_hours: f64,
 }
 
-/// The single pooled remote-hour budget. Bot and interactive hours share it;
-/// the breakdown is reporting, never a sub-cap.
+/// The remote-hour budget as the server reports it, with the bot/interactive
+/// breakdown it sends.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RemoteHoursQuota {
   pub granted_hours: f64,
@@ -606,15 +602,15 @@ pub struct CookieBotUsage {
 ///
 /// The server is authoritative — it re-checks all of this and owns the parts
 /// the client cannot see — but a profile that can never qualify should never
-/// reach a confirm dialog, an hour of quota or a leased host. Returns the
+/// reach a confirm dialog, an hour of quota or a remote host. Returns the
 /// `{"code":…}` string a Tauri command surfaces directly.
 pub fn bot_precondition(
   profile: &BrowserProfile,
   exit: &crate::remote_exit::ExitReachability,
 ) -> Result<(), String> {
   if !profile.is_sync_enabled() {
-    // The host materialises the profile by pulling it from donut-sync. A
-    // local-only profile has nothing there, so there is no path to a run.
+    // A remote run obtains the profile through sync, so a local-only profile
+    // has nothing there and there is no path to a run.
     return Err(error("COOKIE_BOT_REQUIRES_CLOUD_SYNC", &[]));
   }
   if profile.is_encrypted_sync() {
@@ -632,16 +628,16 @@ pub fn bot_precondition(
     ));
   }
   if profile.proxy_id.is_none() && profile.vpn_id.is_none() {
-    // Without one the run egresses from the fleet's own datacenter address.
-    // Hours of traffic from a hosting ASN is worse for the profile's identity
-    // than not warming it at all.
+    // Without one the run egresses from the remote host's own address instead
+    // of the user's exit, which is worse for the profile's identity than not
+    // warming it at all.
     return Err(error("COOKIE_BOT_REQUIRES_EXIT_NODE", &[]));
   }
-  // ...and the exit has to be one the leased host can reach. The profile and its
-  // proxy record are pulled onto the fleet with no address rewriting, so
-  // 127.0.0.1 arrives meaning THAT host's loopback — an ordinary mistake (an SSH
-  // tunnel, a local MITM proxy, a locally-run SOCKS client), and by the time the
-  // run fails an hour has been leased and billed.
+  // ...and the exit has to be one a remote host can reach. Addresses are not
+  // rewritten in transit, so a proxy recorded as 127.0.0.1 arrives meaning THAT
+  // machine's own loopback — an ordinary mistake (an SSH tunnel, a local MITM
+  // proxy, a locally-run SOCKS client) that costs the user an hour of quota
+  // before it fails.
   //
   // Taken as an ARGUMENT rather than resolved here, for the same reason
   // `ProfileState` is required rather than defaulted: resolving it needs the
@@ -649,6 +645,18 @@ pub fn bot_precondition(
   // no test can set up and every caller silently depends on. `exit_reachability`
   // is the one place that resolution happens; this stays a pure predicate over
   // facts it is handed.
+  // A protocol a remote host cannot speak is a PERMANENT refusal, and it has to
+  // say so in its own words. A VLESS server is publicly routable, so the
+  // reachability question answers "yes" and the older message ("use a proxy with
+  // a public address") sends the user to fix an address that was never wrong; an
+  // enrolment accepted on that answer then fails remotely, once per scheduled
+  // run, until someone notices.
+  if let crate::remote_exit::ExitReachability::UnsupportedKind { kind, .. } = exit {
+    return Err(error(
+      "COOKIE_BOT_PROXY_KIND_UNSUPPORTED",
+      &[("kind", kind.as_str())],
+    ));
+  }
   if !exit.is_remote() {
     return Err(error("COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE", &[]));
   }
@@ -660,8 +668,8 @@ pub fn bot_precondition(
 /// The server holds the schedule; the PROFILE lives in the user's sync
 /// namespace, so `sync_enabled`, `has_proxy` and the rest are only knowable
 /// here. It requires them on every write rather than defaulting them, because
-/// a defaulted `has_proxy` is a profile warmed out of the fleet's own
-/// datacenter address.
+/// a defaulted `has_proxy` is a profile warmed out of the remote host's own
+/// address.
 ///
 /// Derived in one place so the Tauri, REST and MCP call sites cannot drift into
 /// three different answers about the same profile.
@@ -674,21 +682,20 @@ pub fn profile_state(profile: &BrowserProfile) -> ProfileState {
     has_proxy: profile.proxy_id.is_some() || profile.vpn_id.is_some(),
     // ...and, separately, whether anyone OTHER than this machine could use it.
     // `has_proxy` answers "did the user bring an exit"; this answers "is that
-    // exit an address a leased host can dial". They disagree for every local
-    // proxy, which is the case that used to be accepted and then fail on the
-    // fleet. See `remote_exit`.
+    // exit an address a remote host can dial". They disagree for every local
+    // proxy, which is the case that used to be accepted and then fail remotely.
+    // See `remote_exit`.
     proxy_remote_reachable: exit_reachability(profile).is_remote(),
     // Always false: this data model has no mobile/touch profile. `resolved_os`
-    // yields only windows, macos or linux, and `bot_precondition` already
-    // refuses everything but the first two. Reported rather than omitted so the
-    // server keeps one required shape, and it stays authoritative — it sees the
-    // real fingerprint on the host and can still refuse a run this cannot know
-    // to reject.
+    // yields only windows, macos or linux, and all three are supported
+    // remotely. Reported rather than omitted so the server keeps one
+    // required shape, and it stays authoritative: it sees the real fingerprint
+    // on the host and can still refuse a run this cannot know to reject.
     touch_fingerprint: false,
     // A VPN is one persistent tunnel, so the night's chunks share an exit. A
     // stored proxy may rotate per connection, and claiming stickiness we cannot
-    // guarantee is worse than declining it: the server's fallback is to run the
-    // night as a single chunk, which is the safe answer either way.
+    // guarantee is worse than declining it, so the conservative answer is the
+    // safe one either way.
     sticky_exit: profile.vpn_id.is_some(),
   }
 }
@@ -700,7 +707,7 @@ pub struct ProfileState {
   pub sync_enabled: bool,
   pub encrypted_sync: bool,
   pub has_proxy: bool,
-  /// Whether that exit is an address a leased fleet host can dial.
+  /// Whether that exit is an address a remote host can dial.
   pub proxy_remote_reachable: bool,
   pub touch_fingerprint: bool,
   pub sticky_exit: bool,
@@ -713,7 +720,8 @@ pub struct ProfileState {
 /// even then would have to re-derive what the browser will actually dial.
 ///
 /// A profile carrying BOTH a proxy and a VPN is judged on the proxy: that is
-/// what the browser is pointed at, and it is the address the fleet has to reach.
+/// what the browser is pointed at, and it is the address a remote host has to
+/// reach.
 pub fn exit_reachability(profile: &BrowserProfile) -> crate::remote_exit::ExitReachability {
   use crate::remote_exit::{classify_proxy, classify_wireguard_endpoint, ExitReachability};
 
@@ -916,7 +924,7 @@ pub async fn update_profile_state(
 ///
 /// The server refuses a run on the copy the desktop last declared —
 /// `has_proxy: false` is `proxy_required`, and that check exists because a run
-/// without an exit node egresses from the leased host's own datacenter address.
+/// without an exit node egresses from the remote host's own address.
 /// Nothing but a full schedule write refreshed that copy, so detaching a proxy
 /// from an enrolled profile left `has_proxy: true` on the row and the night ran
 /// anyway. This closes that gap at the moment the profile changes.
@@ -1046,10 +1054,10 @@ pub async fn run_now(
 
 /// Stop a run that is still going.
 ///
-/// A 503 here means the fleet could not be reached and the browser is still
-/// up, so the run stays `running` rather than being marked cancelled under a
-/// live browser — retiring a row while something is still writing the cookie
-/// jar is the two-writer case the profile lock exists to prevent.
+/// A 503 here means the remote host could not be reached and the browser is
+/// still up, so the run stays `running` rather than being marked cancelled
+/// under a live browser — retiring a row while something is still writing the
+/// cookie jar is the two-writer case the profile lock exists to prevent.
 pub async fn cancel_run(run_id: &str) -> Result<CookieBotRun, CookieBotError> {
   let envelope: RunEnvelope = request(
     reqwest::Method::DELETE,
@@ -1294,7 +1302,7 @@ fn http() -> &'static reqwest::Client {
 ///
 /// Built here rather than left to the HTTP client so a profile id or a keyset
 /// cursor containing a `&` cannot smuggle a second parameter into the request.
-fn with_query(url: &str, query: &[(String, String)]) -> String {
+pub(crate) fn with_query(url: &str, query: &[(String, String)]) -> String {
   if query.is_empty() {
     return url.to_string();
   }
@@ -1430,9 +1438,9 @@ mod tests {
 
   #[test]
   fn a_local_only_profile_has_no_path_to_a_run() {
-    // The host obtains the profile from donut-sync. Without sync there is
-    // nothing to pull, so the run would warm an empty browser and then push
-    // that emptiness over the user's real profile.
+    // A remote run obtains the profile through sync, so a local-only profile
+    // has nothing there: the run would warm an empty browser and then push that
+    // emptiness over the user's real profile.
     let mut profile = eligible_profile();
     profile.sync_mode = SyncMode::Disabled;
     let err = bot_precondition(&profile, &ExitReachability::Remote)
@@ -1452,17 +1460,35 @@ mod tests {
   }
 
   #[test]
-  fn linux_is_refused_at_enrolment_rather_than_at_two_in_the_morning() {
+  fn an_os_the_fleet_cannot_lease_is_refused_at_enrolment_rather_than_at_two_in_the_morning() {
     let mut profile = eligible_profile();
-    profile.host_os = Some("linux".to_string());
+    profile.host_os = Some("android".to_string());
     let err = bot_precondition(&profile, &ExitReachability::Remote)
-      .expect_err("linux has no host to lease");
+      .expect_err("android has no host to lease");
     let parsed: serde_json::Value = serde_json::from_str(&err).expect("valid envelope");
     assert_eq!(parsed["code"], "COOKIE_BOT_UNSUPPORTED_PLATFORM");
     assert_eq!(
-      parsed["params"]["platform"], "linux",
+      parsed["params"]["platform"], "android",
       "the message must name the platform that cannot run"
     );
+  }
+
+  #[test]
+  fn a_linux_profile_passes_the_platform_check() {
+    // Linux is a supported remote platform, so a linux profile is judged on
+    // the same preconditions as the other two rather than refused for its OS.
+    let mut profile = eligible_profile();
+    profile.host_os = Some("linux".to_string());
+    assert!(bot_precondition(&profile, &ExitReachability::Remote).is_ok());
+
+    // ...and it reaches the NEXT precondition when it fails one: the refusal a
+    // linux profile with no exit gets is the exit-node code, not the platform
+    // code.
+    profile.proxy_id = None;
+    profile.vpn_id = None;
+    let err = bot_precondition(&profile, &ExitReachability::None)
+      .expect_err("datacenter egress must be refused for linux as for any OS");
+    assert_eq!(code_of(&err), "COOKIE_BOT_REQUIRES_EXIT_NODE");
   }
 
   #[test]
@@ -1523,9 +1549,31 @@ mod tests {
   }
 
   #[test]
+  fn a_proxy_kind_the_fleet_cannot_dial_gets_its_own_refusal() {
+    // The repeated-nightly-failure case. This must NOT collapse into
+    // REQUIRES_REMOTE_EXIT_NODE: that sentence tells the user their proxy's
+    // address is unreachable, and a VLESS server's address is perfectly
+    // reachable — the fix is a different protocol, not a different address.
+    let err = bot_precondition(
+      &eligible_profile(),
+      &ExitReachability::UnsupportedKind {
+        kind: "VLESS".to_string(),
+        source: "proxy",
+      },
+    )
+    .expect_err("no fleet host runs the xray sidecar VLESS needs");
+
+    assert_eq!(code_of(&err), "COOKIE_BOT_PROXY_KIND_UNSUPPORTED");
+    // The protocol travels in `params` so the sentence can name it rather than
+    // saying "this proxy type" and leaving the user to guess which one.
+    let parsed: serde_json::Value = serde_json::from_str(&err).expect("an error envelope");
+    assert_eq!(parsed["params"]["kind"], "VLESS");
+  }
+
+  #[test]
   fn an_exit_we_could_not_read_is_refused_too() {
     // Fails closed. Refusing a working setup costs one support question;
-    // accepting a broken one burns a leased hour and damages an identity.
+    // accepting a broken one burns an hour of quota and damages an identity.
     let err = bot_precondition(
       &eligible_profile(),
       &ExitReachability::Unknown {
@@ -1538,8 +1586,7 @@ mod tests {
     assert_eq!(code_of(&err), "COOKIE_BOT_REQUIRES_REMOTE_EXIT_NODE");
   }
 
-  /// A verbatim `CookieBotScheduleView`, field for field, as `toScheduleView`
-  /// in donutbrowser-infra's `cookie-bot.service.ts` builds it.
+  /// A verbatim schedule payload, field for field, as the cloud API sends it.
   const SERVER_SCHEDULE_VIEW: &str = r#"{
     "profile_id":"p1","profile_name":"Yu","platform":"macos","enabled":true,
     "run_at_minute":120,"days_mask":127,
@@ -1555,10 +1602,9 @@ mod tests {
 
   #[test]
   fn the_schedule_payload_matches_what_the_backend_sends() {
-    // Pinned against the Schedule shape in donutbrowser-infra's
-    // cookie-bot controller. A field name that drifts makes every read fail
-    // at the decode step, which surfaces as "something went wrong" with no
-    // hint that the contract moved.
+    // Pinned against the schedule shape the cloud API serves. A field name
+    // that drifts makes every read fail at the decode step, which surfaces as
+    // "something went wrong" with no hint that the contract moved.
     let schedule: CookieBotSchedule = serde_json::from_str(SERVER_SCHEDULE_VIEW)
       .expect("the backend's schedule payload must deserialize");
 
@@ -1737,7 +1783,7 @@ mod tests {
 
   #[test]
   fn the_run_payload_matches_what_the_backend_sends() {
-    // Verbatim `CookieBotRunView`, as `toRunViews` builds it. `max_minutes`,
+    // Verbatim run payload, exactly as the cloud API serves it. `max_minutes`,
     // `chunks_total`, `chunk_index`, `dispatch_after` and `team_id` were all
     // already on the wire and all silently discarded, so a multi-chunk night
     // could not be reported as one.
@@ -1968,9 +2014,9 @@ mod tests {
 
   #[test]
   fn the_preset_list_carries_ids_not_behaviour() {
-    // If this type ever gained a site list, a dwell range or a step
-    // programme, the browsing model would have leaked into the open-source
-    // client. Ids and a rough duration are all that may cross.
+    // If this type ever gained the parameters that describe what a preset
+    // actually does, the server-owned browsing model would have leaked into the
+    // open-source client. Ids and a rough duration are all that may cross.
     let presets: CookieBotPresetList = serde_json::from_str(
       r#"{"presets":[{"id":"balanced","typical_minutes":35,"recommended":true}],
           "default_preset":"balanced"}"#,
@@ -1988,9 +2034,9 @@ mod tests {
 
   #[test]
   fn a_template_crosses_the_wire_as_a_count_and_never_as_urls() {
-    // The pool is server-owned for the same reason a preset's browsing model
-    // is. If this type ever gained a `sites` field the curation would be
-    // published, and a published list is one a retailer can filter.
+    // The site pool is server-owned. If this type ever gained a `sites` field
+    // the curation would be published, and a published list is one a retailer
+    // can filter.
     let presets: CookieBotPresetList = serde_json::from_str(
       r#"{"presets":[],"default_preset":"balanced",
           "templates":[{"id":"low-intent-purchaser","site_count":32,

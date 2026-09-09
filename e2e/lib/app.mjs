@@ -91,6 +91,30 @@ export class AppSession {
     return path.join(this.root, "donut");
   }
 
+  /** Where this session's app looks for the Wayfern terms marker. */
+  get wayfernTermsFile() {
+    if (process.platform === "darwin") {
+      return path.join(
+        this.root,
+        "home",
+        "Library",
+        "Application Support",
+        "Wayfern",
+        "license-accepted",
+      );
+    }
+    if (process.platform === "win32") {
+      return path.join(
+        this.root,
+        "windows",
+        "roaming",
+        "Wayfern",
+        "license-accepted",
+      );
+    }
+    return path.join(this.root, "xdg", "config", "Wayfern", "license-accepted");
+  }
+
   async start() {
     await Promise.all([
       mkdir(path.join(this.root, "home"), { recursive: true }),
@@ -126,31 +150,7 @@ export class AppSession {
       });
     }
     if (this.wayfernTermsAccepted) {
-      const termsFile =
-        process.platform === "darwin"
-          ? path.join(
-              this.root,
-              "home",
-              "Library",
-              "Application Support",
-              "Wayfern",
-              "license-accepted",
-            )
-          : process.platform === "win32"
-            ? path.join(
-                this.root,
-                "windows",
-                "roaming",
-                "Wayfern",
-                "license-accepted",
-              )
-            : path.join(
-                this.root,
-                "xdg",
-                "config",
-                "Wayfern",
-                "license-accepted",
-              );
+      const termsFile = this.wayfernTermsFile;
       await mkdir(path.dirname(termsFile), { recursive: true });
       await writeFile(termsFile, `${Math.floor(Date.now() / 1000)}\n`, {
         flag: "wx",
@@ -244,6 +244,14 @@ export class AppSession {
                   DONUT_E2E_GEOIP_DOWNLOAD_URL: `${process.env.DONUT_E2E_FIXTURE_URL}/geoip.mmdb`,
                 }
               : {}),
+            // The city database has no organisation for an address; the ASN
+            // one does, and it is what a proxy check reports as the exit's
+            // ISP. Seeded separately so the suite can assert a real value.
+            ...(process.env.DONUT_E2E_GEOIP_ASN_FIXTURE_READY === "1"
+              ? {
+                  DONUT_E2E_GEOIP_ASN_DOWNLOAD_URL: `${process.env.DONUT_E2E_FIXTURE_URL}/geoip-asn.mmdb`,
+                }
+              : {}),
           }
         : {}),
       ...(this.token ? { WAYFERN_TEST_TOKEN: this.token } : {}),
@@ -255,6 +263,11 @@ export class AppSession {
       env,
       cwd: this.cwd,
       startupTimeout: 120_000,
+      // Set by run.mjs for every suite. The driver keeps the Donut window off
+      // the user's screen (on macOS transparent, click-through and never key,
+      // with the app as an accessory; hidden elsewhere), so a suite never
+      // pops a window or steals focus.
+      headless: process.env.DONUT_E2E_HEADLESS === "1",
     });
     await this.session.setTimeouts();
     await this.waitFor(
@@ -369,13 +382,19 @@ export class AppSession {
     });
   }
 
-  async clickElement(element, description = "element") {
+  async clickElement(target, description = "element") {
+    let element;
     await this.waitFor(
-      () =>
-        this.execute(
+      async () => {
+        // Event-backed tables may replace a cell while its data is loading.
+        // Resolve the current control on each attempt, as a browser locator does.
+        element = typeof target === "function" ? await target() : target;
+        if (!element) return false;
+        return this.execute(
           `
             const node = arguments[0];
             if (!(node instanceof Element) || !node.isConnected) return false;
+            if (node.matches(":disabled") || node.getAttribute("aria-disabled") === "true") return false;
             node.scrollIntoView({ block: "center", inline: "center" });
             const rect = node.getBoundingClientRect();
             const x = Math.floor(rect.left + rect.width / 2);
@@ -384,7 +403,8 @@ export class AppSession {
             return Boolean(hit && (hit === node || node.contains(hit)));
           `,
           [element],
-        ),
+        );
+      },
       { description: `pointer-interactable ${description}` },
     );
     await this.session.click(element);
@@ -394,8 +414,9 @@ export class AppSession {
     text,
     { exact = true, roles = ["button", "tab", "menuitem", "link"] } = {},
   ) {
-    const element = await this.execute(
-      `
+    const findElement = () =>
+      this.execute(
+        `
         const wanted = arguments[0];
         const exact = arguments[1];
         const roles = new Set(arguments[2]);
@@ -412,13 +433,9 @@ export class AppSession {
           return roles.has(role) && visible(node) && (exact ? label === wanted : label.includes(wanted));
         }) ?? null;
       `,
-      [text, exact, roles],
-    );
-    assert.ok(
-      element,
-      `No visible interactive element matched ${JSON.stringify(text)}`,
-    );
-    await this.clickElement(element, JSON.stringify(text));
+        [text, exact, roles],
+      );
+    await this.clickElement(findElement, JSON.stringify(text));
   }
 
   async clickTextIn(
@@ -426,8 +443,9 @@ export class AppSession {
     text,
     { exact = true, roles = ["button", "tab", "menuitem", "link"] } = {},
   ) {
-    const element = await this.execute(
-      `
+    const findElement = () =>
+      this.execute(
+        `
         const containers = [...document.querySelectorAll(arguments[0])];
         const wanted = arguments[1];
         const exact = arguments[2];
@@ -450,20 +468,16 @@ export class AppSession {
         }
         return null;
       `,
-      [containerSelector, text, exact, roles],
-    );
-    assert.ok(
-      element,
-      `No visible interactive element inside ${containerSelector} matched ${JSON.stringify(text)}`,
-    );
+        [containerSelector, text, exact, roles],
+      );
     await this.clickElement(
-      element,
+      findElement,
       `${JSON.stringify(text)} inside ${containerSelector}`,
     );
   }
 
   async clickSelector(selector) {
-    const element = await this.waitFor(
+    await this.clickElement(
       () =>
         this.execute(
           `
@@ -476,9 +490,8 @@ export class AppSession {
           `,
           [selector],
         ),
-      { description: `visible selector ${selector}` },
+      selector,
     );
-    await this.clickElement(element, selector);
   }
 
   async fillSelector(selector, value) {

@@ -30,6 +30,8 @@ resvg = "0.48"
 
 [dependencies]
 serde_json = "1"
+# Runtime as well as build time: the per-profile window badge is rendered at launch.
+resvg = "0.48"
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
@@ -47,6 +49,16 @@ env_logger = "0.11"
 
 directories = "6"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream", "socks", "charset", "http2", "system-proxy"] }
+# The `httpstls` upstream type wraps the hop to the proxy in TLS before a single
+# byte of CONNECT or Proxy-Authorization is written. native-tls (not rustls) on
+# purpose: reqwest above already terminates its proxy TLS through native-tls, so
+# both the browser tunnel and the check-button probe consult the same platform
+# trust store. A rustls tunnel plus a native-tls probe would mean a proxy that
+# passes the check and then fails in the browser. Both crates already build
+# today as transitive deps of reqwest and tokio-tungstenite; this adds an edge,
+# not a crate.
+native-tls = "0.2"
+tokio-native-tls = "0.3"
 tokio = { version = "1", features = ["full", "sync"] }
 tokio-util = "0.7"
 sysinfo = "0.39"
@@ -88,7 +100,11 @@ cbc = "0.2"
 ring = "0.17"
 subtle = "2"
 sha2 = "0.11"
-shadowsocks = { version = "1.24", default-features = false, features = ["aead-cipher"] }
+# Held below 1.25 on purpose. From 1.25 the `aead-cipher` feature hard-enables the
+# aws-lc crypto backend (a C/assembly library needing cmake, and NASM on Windows)
+# alongside the `ring` this crate already ships through boringtun. Moving up is a
+# build-toolchain decision for every platform, not a routine dependency refresh.
+shadowsocks = { version = ">=1.24, <1.25", default-features = false, features = ["aead-cipher"] }
 hyper = { version = "1.10", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
@@ -100,7 +116,6 @@ async-socks5 = "0.6"
 tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde_yaml = "0.9"
-toml = "1.1"
 thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"
@@ -116,6 +131,8 @@ image = "0.25"
 dirs = "6"
 crossbeam-channel = "0.5"
 sys-locale = "0.3"
+jsonc-parser = { version = "0.33", features = ["cst", "serde_json"] }
+toml_edit = "0.25"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["signal", "process"] }

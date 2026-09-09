@@ -119,11 +119,14 @@ pub fn signals_from_manifest(manifest: &serde_json::Value) -> ManifestSignals {
 
   let has = |list: &[&str], name: &str| list.contains(&name);
 
-  // MV2 keeps host patterns inside `permissions`; MV3 splits them into
-  // `host_permissions`. Look in both so one manifest version isn't silently
-  // under-detected.
+  // Host patterns can live in any of the four permission keys: MV2 keeps them
+  // in `permissions` and `optional_permissions`, MV3 splits them out into
+  // `host_permissions` and `optional_host_permissions`. Look in all four so one
+  // manifest version isn't silently under-detected. Only real host patterns can
+  // set the flag (`is_broad_host`), so API strings sharing these arrays are inert.
   let all_hosts: Vec<&str> = permissions
     .iter()
+    .chain(optional_permissions.iter())
     .chain(host_permissions.iter())
     .chain(optional_host_permissions.iter())
     .copied()
@@ -459,6 +462,30 @@ mod tests {
       classify(None, &s, vpn_keyword_hit("Turbo VPN", None)),
       Some("likely")
     );
+  }
+
+  #[test]
+  fn broad_hosts_detected_from_mv2_optional_permissions() {
+    // MV2 is where Chrome documents host patterns living in
+    // `optional_permissions`. Scanning the MV3 optional key but not this one
+    // dropped the extension from the scan result entirely.
+    let s = signals_of(json!({
+      "manifest_version": 2,
+      "permissions": ["webRequest", "webRequestBlocking"],
+      "optional_permissions": ["<all_urls>"]
+    }));
+    assert!(s.broad_host_permissions);
+    assert_eq!(
+      classify(None, &s, vpn_keyword_hit("Free VPN Proxy", None)),
+      Some("likely")
+    );
+    assert!(signal_labels(None, &s, true).contains(&"broadHostPermissions".to_string()));
+  }
+
+  #[test]
+  fn api_names_in_optional_permissions_are_not_broad_hosts() {
+    let s = signals_of(json!({ "optional_permissions": ["proxy", "storage"] }));
+    assert!(!s.broad_host_permissions);
   }
 
   #[test]

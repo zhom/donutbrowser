@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { LuCookie, LuPencil, LuTrash2 } from "react-icons/lu";
@@ -22,6 +21,7 @@ import {
   parseIso,
   StatusDot,
   scheduleBlockedReason,
+  scheduleSlots,
   scheduleTone,
   sessionDisplayName,
   sessionPhaseLabel,
@@ -120,7 +120,7 @@ export function CookieBotOverview({
       <TonightStrip
         live={live}
         nextAt={nextAt}
-        nextMinute={next?.run_at_minute ?? null}
+        nextTimezone={next?.timezone ?? null}
         dueCount={dueCount}
         profileIndex={profileIndex}
       />
@@ -342,21 +342,40 @@ function RecentSegment({
   );
 }
 
+/**
+ * The wall-clock time in the enrolment's own zone. A zone name the server
+ * sends but this WebView does not know would throw from `Intl`; the local
+ * clock is the honest fallback, never a crash on the overview.
+ */
+function clockInZone(at: Date, timeZone: string | null): string {
+  const options: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  try {
+    return at.toLocaleTimeString(undefined, {
+      ...options,
+      timeZone: timeZone || undefined,
+    });
+  } catch {
+    return at.toLocaleTimeString(undefined, options);
+  }
+}
+
 function TonightStrip({
   live,
   nextAt,
-  nextMinute,
+  nextTimezone,
   dueCount,
   profileIndex,
 }: {
   live: RemoteSessionState[];
   nextAt: Date | null;
-  nextMinute: number | null;
+  nextTimezone: string | null;
   dueCount: number;
   profileIndex: Map<string, BrowserProfile>;
 }) {
   const { t } = useTranslation();
-  const reduceMotion = useReducedMotion();
   const running = live.length > 0;
 
   return (
@@ -364,63 +383,54 @@ function TonightStrip({
       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {running ? t("cookieBot.running.label") : t("cookieBot.tonight.label")}
       </span>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={running ? `running-${live.length}` : "idle"}
-          initial={{ opacity: reduceMotion ? 1 : 0.55 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.01 : 0.12 }}
-          className="flex min-w-0 flex-1 items-center gap-2"
-        >
-          {running ? (
-            <>
-              <StatusDot
-                tone={sessionTone(live[0])}
-                pulse={live[0].state === "provisioning"}
-              />
-              <span className="min-w-0 truncate text-sm font-medium text-foreground">
-                {sessionDisplayName(live[0], profileIndex, undefined) ??
-                  t("cookieBot.live.unnamedSession")}
-              </span>
-              <span className="shrink-0 text-sm text-muted-foreground">
-                {sessionPhaseLabel(t, live[0])}
-              </span>
-              {live.length > 1 && (
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {t("cookieBot.running.more", { count: live.length - 1 })}
-                </span>
-              )}
-            </>
-          ) : nextMinute === null ? (
-            <span className="text-sm text-muted-foreground">
-              {t("cookieBot.tonight.nothingScheduled")}
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {running ? (
+          <>
+            <StatusDot
+              tone={sessionTone(live[0])}
+              pulse={live[0].state === "provisioning"}
+            />
+            <span className="min-w-0 truncate text-sm font-medium text-foreground">
+              {sessionDisplayName(live[0], profileIndex, undefined) ??
+                t("cookieBot.live.unnamedSession")}
             </span>
-          ) : (
-            <span className="text-sm tabular-nums text-foreground">
-              {t("cookieBot.tonight.nextRun", {
-                time: minutesToClock(nextMinute),
-              })}
-              {nextAt ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="ml-2 cursor-default text-muted-foreground">
-                      {t("cookieBot.tonight.dueCount", { count: dueCount })}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {formatDateTime(nextAt.toISOString()) ?? ""}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="ml-2 text-muted-foreground">
-                  {t("cookieBot.tonight.dueCount", { count: dueCount })}
-                </span>
-              )}
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {sessionPhaseLabel(t, live[0])}
             </span>
-          )}
-        </motion.div>
-      </AnimatePresence>
+            {live.length > 1 && (
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {t("cookieBot.running.more", { count: live.length - 1 })}
+              </span>
+            )}
+          </>
+        ) : nextAt === null ? (
+          <span className="text-sm text-muted-foreground">
+            {t("cookieBot.tonight.nothingScheduled")}
+          </span>
+        ) : (
+          <span className="text-sm tabular-nums text-foreground">
+            {t("cookieBot.tonight.nextRun", {
+              time: `${clockInZone(nextAt, nextTimezone)} ${nextTimezone ?? ""}`.trim(),
+            })}
+            {nextAt ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-2 cursor-default text-muted-foreground">
+                    {t("cookieBot.tonight.dueCount", { count: dueCount })}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {formatDateTime(nextAt.toISOString()) ?? ""}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="ml-2 text-muted-foreground">
+                {t("cookieBot.tonight.dueCount", { count: dueCount })}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -455,10 +465,27 @@ function EnrolledRow({
         </span>
       </TableCell>
       <TableCell className="hidden text-muted-foreground @2xl:table-cell">
-        {describeCadence(t, schedule.days_mask)}
+        {describeCadence(
+          t,
+          scheduleSlots(schedule).reduce(
+            (mask, slot) => mask | slot.days_mask,
+            0,
+          ),
+        )}
       </TableCell>
       <TableCell className="tabular-nums">
-        {minutesToClock(schedule.run_at_minute)}
+        <span className="block text-xs">
+          {[
+            ...new Set(
+              scheduleSlots(schedule).map((slot) =>
+                minutesToClock(slot.run_at_minute),
+              ),
+            ),
+          ].join(", ")}
+        </span>
+        <span className="block text-[10px] text-muted-foreground">
+          {schedule.timezone}
+        </span>
       </TableCell>
       {/* The server publishes why tonight would be refused on every read. A
           next-run time the enrolment cannot keep is worse than no time. */}

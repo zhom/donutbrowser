@@ -945,8 +945,37 @@ impl Downloader {
     // Auto-update non-running profiles to the latest installed version and cleanup unused binaries
     {
       let app_handle_for_update = app_handle.clone();
+      let browser_for_update = browser_str.clone();
+      let version_for_update = version.clone();
       tauri::async_runtime::spawn(async move {
         let auto_updater = crate::auto_updater::AutoUpdater::instance();
+
+        // A profile that is open right now cannot be switched to the new binary
+        // yet, so it only gets a pending update. That entry has to exist before
+        // cleanup runs: cleanup keeps a version only while it is in use or
+        // pending, and would otherwise delete what was just downloaded.
+        match auto_updater
+          .auto_update_profile_versions(
+            &app_handle_for_update,
+            &browser_for_update,
+            &version_for_update,
+          )
+          .await
+        {
+          Ok(updated) => {
+            if !updated.is_empty() {
+              log::info!(
+                "Applied {browser_for_update} {version_for_update} to profiles: {updated:?}"
+              );
+            }
+          }
+          Err(e) => {
+            log::error!(
+              "Failed to apply {browser_for_update} {version_for_update} to profiles: {e}"
+            );
+          }
+        }
+
         match auto_updater.update_profiles_to_latest_installed(&app_handle_for_update) {
           Ok(updated) => {
             if !updated.is_empty() {

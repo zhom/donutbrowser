@@ -5,6 +5,7 @@ import type { CardComponentProps } from "onborda";
 import { useOnborda } from "onborda";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { useInputModality } from "@/hooks/use-input-modality";
 import {
   ONBOARDING_TOUR_CLOSED_EVENT,
   ONBOARDING_TOUR_FINISHED_EVENT,
@@ -23,6 +24,8 @@ export function OnboardingCard({
   const { t } = useTranslation();
   const { closeOnborda } = useOnborda();
   const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const animateEntry = !reduceMotion && inputModality === "pointer";
 
   const isFirst = currentStep === 0;
   const isLast = currentStep === totalSteps - 1;
@@ -37,12 +40,12 @@ export function OnboardingCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={animateEntry ? { scale: 0.98 } : false}
+      animate={{ scale: 1 }}
       transition={
-        reduceMotion
-          ? { duration: 0.15 }
-          : { type: "spring", stiffness: 300, damping: 30 }
+        animateEntry
+          ? { type: "spring", stiffness: 300, damping: 30 }
+          : { duration: 0 }
       }
       className="relative flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-4 rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg"
     >

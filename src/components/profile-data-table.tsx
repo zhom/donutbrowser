@@ -14,7 +14,6 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
-import { AnimatePresence, motion } from "motion/react";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +29,7 @@ import {
   LuMoon,
   LuPlay,
   LuPuzzle,
+  LuShuffle,
   LuSquare,
   LuTrash2,
   LuTriangleAlert,
@@ -53,6 +53,11 @@ import {
   sessionTone,
 } from "@/components/cookie-bot-shared";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import {
+  ProfileGroupDragHandle,
+  useProfileGroupDrag,
+} from "@/components/profile-group-drag";
+import { ProfileHandoffStatus } from "@/components/profile-handoff-status";
 import {
   ProfileBypassRulesDialog,
   ProfileDnsBlocklistDialog,
@@ -101,6 +106,7 @@ import {
 import { useBrowserState } from "@/hooks/use-browser-state";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
+import { useLaunchActivity } from "@/hooks/use-launch-activity";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useRemoteHandoff } from "@/hooks/use-remote-handoff";
 import { useScrollFade } from "@/hooks/use-scroll-fade";
@@ -131,7 +137,6 @@ import type {
   ExtensionGroup,
   LocationItem,
   ProfileBotState,
-  ProxyCheckResult,
   StoredProxy,
   SyncSessionInfo,
   TrafficSnapshot,
@@ -162,9 +167,50 @@ declare module "@tanstack/react-table" {
 
 // Stable table meta type to pass volatile state/handlers into TanStack Table without
 // causing column definitions to be recreated on every render.
+/**
+ * The launch control's tooltip. While a launch is in flight it opens by
+ * itself and names the stage the backend is in, so a multi-second launch
+ * reads as progress rather than a bare spinner. It is click-through for
+ * that time, so it can never sit between the pointer and a neighbouring row.
+ */
+function LaunchControlTooltip({
+  profileId,
+  launching,
+  content,
+  children,
+}: {
+  profileId: string;
+  launching: boolean;
+  content: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const stage = useLaunchActivity(profileId).at(-1)?.stage;
+  const live =
+    launching &&
+    stage !== undefined &&
+    stage !== "running" &&
+    stage !== "failed";
+  return (
+    <Tooltip open={live ? true : undefined}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      {(live || content) && (
+        <TooltipContent
+          data-launch-stage={live ? stage : undefined}
+          className={cn(live && "pointer-events-none")}
+        >
+          {live ? t(`appFeedback.launch.${stage}`) : content}
+        </TooltipContent>
+      )}
+    </Tooltip>
+  );
+}
+
 interface TableMeta {
   t: (key: string, options?: Record<string, unknown>) => string;
   selectedProfiles: string[];
+  selectedDragProfiles: BrowserProfile[];
+  canDragProfiles: (profiles: BrowserProfile[]) => boolean;
   selectableCount: number;
   showCheckboxes: boolean;
   isClient: boolean;
@@ -201,8 +247,6 @@ interface TableMeta {
     profileId: string,
     proxyId: string | null,
   ) => void | Promise<void>;
-  checkingProfileId: string | null;
-  proxyCheckResults: Record<string, ProxyCheckResult>;
 
   // VPN selector state
   vpnConfigs: VpnConfig[];
@@ -1437,6 +1481,7 @@ BotCell.displayName = "BotCell";
 
 interface ProfilesDataTableProps {
   profiles: BrowserProfile[];
+  allProfiles?: BrowserProfile[];
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<unknown>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
   onCloneProfile: (profile: BrowserProfile) => void | Promise<void>;
@@ -1462,6 +1507,7 @@ interface ProfilesDataTableProps {
   onBulkDelete?: () => void;
   onBulkGroupAssignment?: () => void;
   onBulkProxyAssignment?: () => void;
+  onBulkProxyDistribution?: () => void;
   onBulkCopyCookies?: () => void;
   onBulkRun?: () => void;
   onBulkStop?: () => void;
@@ -1489,6 +1535,8 @@ interface ProfilesDataTableProps {
    * every other piece of internal table state.
    */
   infoDialogProfile?: BrowserProfile | null;
+  infoOpenMethod?: "pointer" | "keyboard";
+  onInfoOpenMethodChange?: (method: "pointer" | "keyboard") => void;
   onInfoDialogProfileChange?: (profile: BrowserProfile | null) => void;
   /** Initial data load in flight — renders skeleton rows instead of "empty". */
   isLoading?: boolean;
@@ -1500,6 +1548,7 @@ interface ProfilesDataTableProps {
 
 export function ProfilesDataTable({
   profiles,
+  allProfiles = profiles,
   onLaunchProfile,
   onKillProfile,
   onCloneProfile,
@@ -1518,6 +1567,7 @@ export function ProfilesDataTable({
   onBulkDelete,
   onBulkGroupAssignment,
   onBulkProxyAssignment,
+  onBulkProxyDistribution,
   onBulkCopyCookies,
   onBulkRun,
   onBulkStop,
@@ -1534,6 +1584,8 @@ export function ProfilesDataTable({
   onChangePassword,
   onRemovePassword,
   infoDialogProfile,
+  infoOpenMethod,
+  onInfoOpenMethodChange,
   onInfoDialogProfileChange,
   isLoading = false,
   showOnboardingEmptyState = false,
@@ -1541,6 +1593,10 @@ export function ProfilesDataTable({
   onImportProfiles,
 }: ProfilesDataTableProps) {
   const { t } = useTranslation();
+  const profileDrag = useProfileGroupDrag();
+  const [internalInfoOpenMethod, setInternalInfoOpenMethod] = React.useState<
+    "pointer" | "keyboard"
+  >("pointer");
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
 
@@ -1628,6 +1684,14 @@ export function ProfilesDataTable({
     },
     [isInfoDialogControlled, onInfoDialogProfileChange],
   );
+  React.useEffect(() => {
+    if (
+      profileForInfoDialog &&
+      !allProfiles.some((profile) => profile.id === profileForInfoDialog.id)
+    ) {
+      setProfileForInfoDialog(null);
+    }
+  }, [allProfiles, profileForInfoDialog, setProfileForInfoDialog]);
   const [bypassRulesProfile, setBypassRulesProfile] =
     React.useState<BrowserProfile | null>(null);
   const [dnsBlocklistProfile, setDnsBlocklistProfile] =
@@ -1697,12 +1761,6 @@ export function ProfilesDataTable({
   const [openProxySelectorFor, setOpenProxySelectorFor] = React.useState<
     string | null
   >(null);
-  const [checkingProfileId, setCheckingProfileId] = React.useState<
-    string | null
-  >(null);
-  const [proxyCheckResults, setProxyCheckResults] = React.useState<
-    Record<string, ProxyCheckResult>
-  >({});
   const [noteOverrides, setNoteOverrides] = React.useState<
     Record<string, string | null>
   >({});
@@ -1736,36 +1794,6 @@ export function ProfilesDataTable({
       console.error("Failed to load countries:", e);
     }
   }, [countriesLoaded]);
-
-  // Load cached check results for proxies
-  React.useEffect(() => {
-    const loadCachedResults = async () => {
-      const results: Record<string, ProxyCheckResult> = {};
-      const proxyIds = new Set<string>();
-      for (const profile of profiles) {
-        if (profile.proxy_id) {
-          proxyIds.add(profile.proxy_id);
-        }
-      }
-      for (const proxyId of proxyIds) {
-        try {
-          const cached = await invoke<ProxyCheckResult | null>(
-            "get_cached_proxy_check",
-            { proxyId },
-          );
-          if (cached) {
-            results[proxyId] = cached;
-          }
-        } catch (_error) {
-          // Ignore errors
-        }
-      }
-      setProxyCheckResults(results);
-    };
-    if (profiles.length > 0) {
-      void loadCachedResults();
-    }
-  }, [profiles]);
 
   const loadAllTags = React.useCallback(async () => {
     try {
@@ -1904,9 +1932,9 @@ export function ProfilesDataTable({
         // 202, not 200: the route answers with a RECORDED run, and a run that
         // could not get a host comes back already terminal, carrying an
         // `outcome_code`, rather than as an HTTP error. Treating every 2xx as
-        // "started" told a user their run had begun on a night when every
-        // Windows host in a four-slot fleet was busy, and the only trace was a
-        // row in a history panel they had to go and open.
+        // "started" told a user their run had begun on a night when no Windows
+        // host was free, and the only trace was a row in a history panel they
+        // had to go and open.
         if (RUN_DID_NOT_START.has(started.run.status)) {
           showErrorToast(
             t("cookieBot.actions.runNotStarted", {
@@ -2376,10 +2404,50 @@ export function ProfilesDataTable({
   ]);
 
   // Build table meta from volatile state so columns can stay stable
+  const selectedDragProfiles = React.useMemo(() => {
+    const ids = new Set(selectedProfiles);
+    return allProfiles.filter((profile) => ids.has(profile.id));
+  }, [allProfiles, selectedProfiles]);
+  const profilesById = React.useMemo(
+    () => new Map(allProfiles.map((profile) => [profile.id, profile])),
+    [allProfiles],
+  );
+  const canDragProfiles = React.useCallback(
+    (targets: BrowserProfile[]) => {
+      return (
+        browserState.isClient &&
+        targets.length > 0 &&
+        targets.every((captured) => {
+          const profile = profilesById.get(captured.id);
+          return (
+            profile !== undefined &&
+            profile.process_id == null &&
+            !runningProfiles.has(profile.id) &&
+            !launchingProfiles.has(profile.id) &&
+            !stoppingProfiles.has(profile.id) &&
+            !isCrossOsProfile(profile) &&
+            !isProfileLocked(profile.id) &&
+            !handoffFor(profile.id)
+          );
+        })
+      );
+    },
+    [
+      browserState.isClient,
+      profilesById,
+      runningProfiles,
+      launchingProfiles,
+      stoppingProfiles,
+      isProfileLocked,
+      handoffFor,
+    ],
+  );
   const tableMeta = React.useMemo<TableMeta>(
     () => ({
       t,
       selectedProfiles,
+      selectedDragProfiles,
+      canDragProfiles,
       selectableCount: selectableProfiles.length,
       showCheckboxes,
       isClient: browserState.isClient,
@@ -2409,8 +2477,6 @@ export function ProfilesDataTable({
       proxyOverrides,
       storedProxies,
       handleProxySelection,
-      checkingProfileId,
-      proxyCheckResults,
 
       // VPN selector state
       vpnConfigs,
@@ -2511,6 +2577,8 @@ export function ProfilesDataTable({
     [
       t,
       selectedProfiles,
+      selectedDragProfiles,
+      canDragProfiles,
       selectableProfiles.length,
       showCheckboxes,
       browserState.isClient,
@@ -2528,8 +2596,6 @@ export function ProfilesDataTable({
       proxyOverrides,
       storedProxies,
       handleProxySelection,
-      checkingProfileId,
-      proxyCheckResults,
       vpnConfigs,
       vpnOverrides,
       handleVpnSelection,
@@ -2778,9 +2844,9 @@ export function ProfilesDataTable({
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isLockedByAnother = meta.isProfileLockedByAnother(profile.id);
           const isSyncing = meta.syncStatuses[profile.id]?.status === "syncing";
-          // A remote session holds the profile lock under its own holder id, so
-          // `isLockedByAnother` is true for the user's OWN fleet session. That
-          // must not disable the control that stops it.
+          // A remote session holds the profile lock under a different holder
+          // than this device, so `isLockedByAnother` is true for the user's OWN
+          // remote session. That must not disable the control that stops it.
           const canLaunch = isRunningRemotely
             ? true
             : meta.browserState.canLaunchProfile(profile) &&
@@ -2888,77 +2954,47 @@ export function ProfilesDataTable({
                   </TooltipContent>
                 </Tooltip>
               )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <RippleButton
-                      variant={buttonVariant}
-                      size="sm"
-                      disabled={!canLaunch || isLaunching || isStopping}
-                      aria-label={
-                        isRunning
-                          ? meta.t("profiles.actions.stop")
-                          : meta.t("profiles.actions.launch")
-                      }
-                      className={cn(
-                        "grid size-7 place-items-center p-0",
-                        !canLaunch && "cursor-not-allowed opacity-50",
-                        canLaunch && "cursor-pointer",
-                        isFollower && "border-accent",
-                        isRunning &&
-                          "bg-destructive/10 text-destructive-text hover:bg-destructive/20",
+              <LaunchControlTooltip
+                profileId={profile.id}
+                launching={isLaunching}
+                content={isRunning ? stopTooltip : tooltipContent}
+              >
+                <span className="inline-flex">
+                  <RippleButton
+                    variant={buttonVariant}
+                    size="sm"
+                    disabled={!canLaunch || isLaunching || isStopping}
+                    aria-label={
+                      isRunning
+                        ? meta.t("profiles.actions.stop")
+                        : meta.t("profiles.actions.launch")
+                    }
+                    className={cn(
+                      "grid size-7 place-items-center p-0",
+                      !canLaunch && "cursor-not-allowed opacity-50",
+                      canLaunch && "cursor-pointer",
+                      isFollower && "border-accent",
+                      isRunning &&
+                        "bg-destructive/10 text-destructive-text hover:bg-destructive/20",
+                    )}
+                    onClick={() =>
+                      isRunning
+                        ? void handleStop()
+                        : void handleProfileLaunch(profile)
+                    }
+                  >
+                    <span className="grid place-items-center">
+                      {isLaunching || isStopping ? (
+                        <span className="size-3 animate-spin rounded-full border border-current border-t-transparent motion-reduce:animate-none" />
+                      ) : isRunning ? (
+                        <LuSquare className="size-3.5 fill-current" />
+                      ) : (
+                        <LuPlay className="size-3.5 fill-current" />
                       )}
-                      onClick={() =>
-                        isRunning
-                          ? void handleStop()
-                          : void handleProfileLaunch(profile)
-                      }
-                    >
-                      <AnimatePresence mode="wait" initial={false}>
-                        {isLaunching || isStopping ? (
-                          <motion.span
-                            key="spinner"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.12 }}
-                            className="grid place-items-center"
-                          >
-                            <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-                          </motion.span>
-                        ) : isRunning ? (
-                          <motion.span
-                            key="stop"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.12 }}
-                            className="grid place-items-center"
-                          >
-                            <LuSquare className="size-3.5 fill-current" />
-                          </motion.span>
-                        ) : (
-                          <motion.span
-                            key="play"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.12 }}
-                            className="grid place-items-center"
-                          >
-                            <LuPlay className="size-3.5 fill-current" />
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
-                    </RippleButton>
-                  </span>
-                </TooltipTrigger>
-                {(stopTooltip || tooltipContent) && (
-                  <TooltipContent>
-                    {isRunning ? stopTooltip : tooltipContent}
-                  </TooltipContent>
-                )}
-              </Tooltip>
+                    </span>
+                  </RippleButton>
+                </span>
+              </LaunchControlTooltip>
             </div>
           );
         },
@@ -3116,6 +3152,10 @@ export function ProfilesDataTable({
 
           const lockedEmail = meta.getProfileLockEmail(profile.id);
           const isLocked = meta.isProfileLockedByAnother(profile.id);
+          const dragProfiles = meta.selectedProfiles.includes(profile.id)
+            ? meta.selectedDragProfiles
+            : [profile];
+          const canDrag = () => meta.canDragProfiles(dragProfiles);
           const nameControl = isRuntimeLocked ? (
             <div className="mr-auto h-6 max-w-full min-w-0 cursor-text overflow-hidden rounded px-2 py-1 text-left select-text">
               {display}
@@ -3150,8 +3190,30 @@ export function ProfilesDataTable({
           );
 
           return (
-            <div className="flex max-w-full min-w-0 items-center gap-1.5 overflow-hidden">
+            <div className="flex max-w-full min-w-0 items-center gap-1.5">
+              <ProfileGroupDragHandle
+                profile={profile}
+                profiles={dragProfiles}
+                disabled={!canDrag()}
+                canMove={meta.canDragProfiles}
+                onChooseGroup={() =>
+                  meta.onAssignProfilesToGroup?.(
+                    dragProfiles.map((target) => target.id),
+                  )
+                }
+              />
               {nameControl}
+              <ProfileHandoffStatus
+                profileId={profile.id}
+                state={meta.getRemoteHandoff(profile.id)}
+                syncStatus={meta.syncStatuses[profile.id]}
+                compact
+                onOpenSync={
+                  meta.onOpenProfileSyncDialog
+                    ? () => meta.onOpenProfileSyncDialog?.(profile)
+                    : undefined
+                }
+              />
               {isLocked && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -3455,25 +3517,7 @@ export function ProfilesDataTable({
                 )}
               </Popover>
               {effectiveProxy && !effectiveVpn && !isDisabled && (
-                <ProxyCheckButton
-                  proxy={effectiveProxy}
-                  profileId={profile.id}
-                  checkingProfileId={meta.checkingProfileId}
-                  cachedResult={meta.proxyCheckResults[effectiveProxy.id]}
-                  setCheckingProfileId={setCheckingProfileId}
-                  onCheckComplete={(result) => {
-                    setProxyCheckResults((prev) => ({
-                      ...prev,
-                      [effectiveProxy.id]: result,
-                    }));
-                  }}
-                  onCheckFailed={(result) => {
-                    setProxyCheckResults((prev) => ({
-                      ...prev,
-                      [effectiveProxy.id]: result,
-                    }));
-                  }}
-                />
+                <ProxyCheckButton proxy={effectiveProxy} />
               )}
             </div>
           );
@@ -3574,8 +3618,13 @@ export function ProfilesDataTable({
               <Button
                 variant="ghost"
                 className="size-7 p-0"
+                data-slot="profile-inspect-trigger"
+                data-profile-id={profile.id}
                 disabled={!meta.isClient}
-                onClick={() => {
+                onClick={(event) => {
+                  const method = event.detail === 0 ? "keyboard" : "pointer";
+                  setInternalInfoOpenMethod(method);
+                  onInfoOpenMethodChange?.(method);
                   setProfileForInfoDialog(profile);
                 }}
               >
@@ -3589,7 +3638,7 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [t, setProfileForInfoDialog],
+    [t, setProfileForInfoDialog, onInfoOpenMethodChange],
   );
 
   // Low-priority columns leave the table as the container narrows (most
@@ -3632,6 +3681,17 @@ export function ProfilesDataTable({
   });
 
   const scrollParentRef = React.useRef<HTMLDivElement | null>(null);
+  const workspaceRef = React.useRef<HTMLDivElement | null>(null);
+  const [inspectorLayout, setInspectorLayout] = React.useState(false);
+  React.useEffect(() => {
+    const element = workspaceRef.current;
+    if (!element) return;
+    const update = () => setInspectorLayout(element.clientWidth >= 1200);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const columnWidth = React.useCallback(
     (id: string, sizePx: number) => {
       // The bot column is the one column with two shapes: a labelled state at
@@ -3713,11 +3773,15 @@ export function ProfilesDataTable({
 
   return (
     <>
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={workspaceRef}
+        data-slot="profile-workspace"
+        className="relative flex min-h-0 min-w-0 flex-1 gap-3"
+      >
         <div
           ref={scrollParentRef}
           className={cn(
-            "scroll-fade relative min-h-0 flex-1 overflow-auto",
+            "scroll-fade relative min-h-0 min-w-0 flex-1 overflow-auto",
             // Clearance for the floating selection action bar (bottom-6 +
             // ~46px tall) so the last rows can scroll out from behind it.
             // Same predicate DataTableActionBar uses for its visibility.
@@ -3879,12 +3943,25 @@ export function ProfilesDataTable({
                     return (
                       <TableRow
                         key={row.id}
+                        data-profile-id={row.id}
+                        data-inspected={
+                          profileForInfoDialog?.id === row.id
+                            ? "true"
+                            : undefined
+                        }
+                        data-moving={
+                          profileDrag?.movingIds.has(row.id)
+                            ? "true"
+                            : undefined
+                        }
                         data-state={row.getIsSelected() && "selected"}
                         title={crossOsTitle}
                         style={{ height: `${ROW_HEIGHT}px` }}
                         className={cn(
                           "overflow-visible border-0! hover:bg-muted",
                           rowIsCrossOs && "opacity-60",
+                          profileForInfoDialog?.id === row.id && "bg-muted/60",
+                          profileDrag?.movingIds.has(row.id) && "bg-muted",
                         )}
                       >
                         {row.getVisibleCells().map((cell) => (
@@ -3919,77 +3996,86 @@ export function ProfilesDataTable({
             </TableBody>
           </Table>
         </div>
+        <DeleteConfirmationDialog
+          isOpen={profileToDelete !== null}
+          onClose={() => {
+            setProfileToDelete(null);
+          }}
+          onConfirm={handleDelete}
+          title={t("profiles.delete.title")}
+          description={t("profiles.delete.description", {
+            profileName: profileToDelete?.name ?? "",
+          })}
+          confirmButtonText={t("profiles.delete.confirmButton")}
+          isLoading={isDeleting}
+        />
+        {profileForInfoDialog &&
+          (() => {
+            const infoProfile =
+              allProfiles.find((p) => p.id === profileForInfoDialog.id) ??
+              profileForInfoDialog;
+            const infoIsRunning =
+              browserState.isClient && runningProfiles.has(infoProfile.id);
+            const infoIsLaunching = launchingProfiles.has(infoProfile.id);
+            const infoIsStopping = stoppingProfiles.has(infoProfile.id);
+            const infoIsCrossOs = isCrossOsProfile(infoProfile);
+            const infoIsDisabled =
+              infoIsRunning ||
+              infoIsLaunching ||
+              infoIsStopping ||
+              infoIsCrossOs;
+            return (
+              <ProfileInfoDialog
+                presentation={inspectorLayout ? "inspector" : "modal"}
+                openMethod={infoOpenMethod ?? internalInfoOpenMethod}
+                handoffState={handoffFor(infoProfile.id)}
+                isOpen={profileForInfoDialog !== null}
+                onClose={() => {
+                  setProfileForInfoDialog(null);
+                }}
+                profile={infoProfile}
+                storedProxies={storedProxies}
+                vpnConfigs={vpnConfigs}
+                onOpenTrafficDialog={(profileId) => {
+                  const profile = profiles.find((p) => p.id === profileId);
+                  setTrafficDialogProfile({
+                    id: profileId,
+                    name: profile?.name,
+                  });
+                }}
+                onOpenProfileSyncDialog={onOpenProfileSyncDialog}
+                onAssignProfilesToGroup={onAssignProfilesToGroup}
+                onConfigureWayfern={onConfigureWayfern}
+                onCopyCookiesToProfile={onCopyCookiesToProfile}
+                onOpenCookieManagement={onOpenCookieManagement}
+                onAssignExtensionGroup={onAssignExtensionGroup}
+                onOpenBypassRules={(profile) => {
+                  setBypassRulesProfile(profile);
+                }}
+                onOpenDnsBlocklist={(profile) => {
+                  setDnsBlocklistProfile(profile);
+                }}
+                onOpenLaunchHook={(profile) => {
+                  setLaunchHookProfile(profile);
+                }}
+                onCloneProfile={onCloneProfile}
+                onLaunchWithSync={onLaunchWithSync}
+                onSetPassword={onSetPassword}
+                onChangePassword={onChangePassword}
+                onRemovePassword={onRemovePassword}
+                onDeleteProfile={(profile) => {
+                  setProfileForInfoDialog(null);
+                  setProfileToDelete(profile);
+                }}
+                crossOsUnlocked={crossOsUnlocked}
+                isRunning={infoIsRunning}
+                isDisabled={infoIsDisabled}
+                isCrossOs={infoIsCrossOs}
+                syncStatuses={syncStatuses}
+              />
+            );
+          })()}
       </div>
-      <DeleteConfirmationDialog
-        isOpen={profileToDelete !== null}
-        onClose={() => {
-          setProfileToDelete(null);
-        }}
-        onConfirm={handleDelete}
-        title={t("profiles.delete.title")}
-        description={t("profiles.delete.description", {
-          profileName: profileToDelete?.name ?? "",
-        })}
-        confirmButtonText={t("profiles.delete.confirmButton")}
-        isLoading={isDeleting}
-      />
-      {profileForInfoDialog &&
-        (() => {
-          const infoProfile =
-            profiles.find((p) => p.id === profileForInfoDialog.id) ??
-            profileForInfoDialog;
-          const infoIsRunning =
-            browserState.isClient && runningProfiles.has(infoProfile.id);
-          const infoIsLaunching = launchingProfiles.has(infoProfile.id);
-          const infoIsStopping = stoppingProfiles.has(infoProfile.id);
-          const infoIsCrossOs = isCrossOsProfile(infoProfile);
-          const infoIsDisabled =
-            infoIsRunning || infoIsLaunching || infoIsStopping || infoIsCrossOs;
-          return (
-            <ProfileInfoDialog
-              isOpen={profileForInfoDialog !== null}
-              onClose={() => {
-                setProfileForInfoDialog(null);
-              }}
-              profile={infoProfile}
-              storedProxies={storedProxies}
-              vpnConfigs={vpnConfigs}
-              onOpenTrafficDialog={(profileId) => {
-                const profile = profiles.find((p) => p.id === profileId);
-                setTrafficDialogProfile({ id: profileId, name: profile?.name });
-              }}
-              onOpenProfileSyncDialog={onOpenProfileSyncDialog}
-              onAssignProfilesToGroup={onAssignProfilesToGroup}
-              onConfigureWayfern={onConfigureWayfern}
-              onCopyCookiesToProfile={onCopyCookiesToProfile}
-              onOpenCookieManagement={onOpenCookieManagement}
-              onAssignExtensionGroup={onAssignExtensionGroup}
-              onOpenBypassRules={(profile) => {
-                setBypassRulesProfile(profile);
-              }}
-              onOpenDnsBlocklist={(profile) => {
-                setDnsBlocklistProfile(profile);
-              }}
-              onOpenLaunchHook={(profile) => {
-                setLaunchHookProfile(profile);
-              }}
-              onCloneProfile={onCloneProfile}
-              onLaunchWithSync={onLaunchWithSync}
-              onSetPassword={onSetPassword}
-              onChangePassword={onChangePassword}
-              onRemovePassword={onRemovePassword}
-              onDeleteProfile={(profile) => {
-                setProfileForInfoDialog(null);
-                setProfileToDelete(profile);
-              }}
-              crossOsUnlocked={crossOsUnlocked}
-              isRunning={infoIsRunning}
-              isDisabled={infoIsDisabled}
-              isCrossOs={infoIsCrossOs}
-              syncStatuses={syncStatuses}
-            />
-          );
-        })()}
       <DataTableActionBar table={table}>
         <DataTableActionBarSelection table={table} />
         {onBulkRun && (
@@ -4046,6 +4132,16 @@ export function ProfilesDataTable({
             size="icon"
           >
             <FiWifi />
+          </DataTableActionBarAction>
+        )}
+        {onBulkProxyDistribution && (
+          <DataTableActionBarAction
+            tooltip={t("profiles.actionBar.distributeProxies")}
+            aria-label={t("profiles.actionBar.distributeProxies")}
+            onClick={onBulkProxyDistribution}
+            size="icon"
+          >
+            <LuShuffle />
           </DataTableActionBarAction>
         )}
         {onBulkExtensionGroupAssignment && (

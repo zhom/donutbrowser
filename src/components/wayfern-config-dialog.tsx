@@ -140,6 +140,7 @@ export function WayfernConfigDialog({
               limitedMode={!crossOsUnlocked}
               profileVersion={profile.version}
               profileBrowser="wayfern"
+              profileId={profile.id}
             />
           </div>
         </ScrollArea>

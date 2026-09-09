@@ -7,6 +7,8 @@ import en from "../../src/i18n/locales/en.json" with { type: "json" };
 import { getDerivedThemeColors, THEMES } from "../../src/lib/themes.ts";
 import { withApp } from "../lib/app.mjs";
 import {
+  CRX_EXTENSION_NAME,
+  CRX_EXTENSION_VERSION,
   extensionZipBase64,
   writeUnpackedExtension,
 } from "../lib/fixtures.mjs";
@@ -203,8 +205,10 @@ async function saveSettings(app) {
   await app.clickText("Save Settings", { roles: ["button"] });
   await app.waitFor(
     () =>
-      app.execute(`return document.querySelector("#theme-select") === null;`),
-    { description: "Settings to close after saving" },
+      app.execute(
+        `return document.querySelector('[data-slot="settings-feedback"]')?.textContent.includes("Saved");`,
+      ),
+    { description: "Settings to confirm the saved values" },
   );
 }
 
@@ -317,6 +321,133 @@ async function dragBackgroundColorPicker(app) {
     { description: "color picker to close" },
   );
 }
+
+test("the integrations page ships the Local API and MCP tabs and never names remote control for a regular desktop", async () => {
+  await withApp("ui-integrations", async (app) => {
+    const modifier =
+      process.platform === "darwin" ? { meta: true } : { ctrl: true };
+    await app.clickSelector('[aria-label="Integrations"]');
+    await app.waitForText(en.integrations.tabMcp);
+
+    // Exactly the two tabs v0.30.0 shipped, in its order. Remote control is
+    // an Enterprise feature that a desktop without the entitlement is never
+    // told about, and this session is signed out, so a third tab here means
+    // the gate opened for everyone.
+    const tabs = async () =>
+      app.execute(
+        `return [...document.querySelectorAll('[role="tab"]')].map((node) => node.textContent.trim());`,
+      );
+    assert.deepEqual(await tabs(), [
+      en.integrations.tabApi,
+      en.integrations.tabMcp,
+    ]);
+    // The whole document, not just the painted text: a hidden trigger or an
+    // unmounted-looking panel is still a mention.
+    const html = await app.html();
+    for (const phrase of [
+      en.integrations.tabRemote,
+      en.integrations.remote.enableLabel,
+      en.integrations.remote.signInRequired,
+      en.integrations.remote.endpointLabel,
+      en.integrations.remote.notEntitled,
+    ]) {
+      assert.ok(
+        !html.includes(phrase),
+        `remote control must stay out of sight: ${JSON.stringify(phrase)}`,
+      );
+    }
+    assert.equal(
+      (await app.invoke("get_mcp_remote_status")).enabled,
+      false,
+      "opening the page must not open the bridge",
+    );
+
+    // Mod+I flips between the two tabs there are, and never lands on a tab
+    // that is not offered.
+    const activeTab = async () =>
+      app.execute(
+        `return document.querySelector('[role="tab"][data-state="active"]')?.textContent.trim() ?? null;`,
+      );
+    assert.equal(await activeTab(), en.integrations.tabApi);
+    await app.pressShortcut({ key: "i", ...modifier });
+    await app.waitFor(
+      async () => (await activeTab()) === en.integrations.tabMcp,
+      { description: "Mod+I to move to the MCP tab" },
+    );
+    await app.pressShortcut({ key: "i", ...modifier });
+    await app.waitFor(
+      async () => (await activeTab()) === en.integrations.tabApi,
+      { description: "Mod+I to move back to the Local API tab" },
+    );
+    assert.deepEqual(await tabs(), [
+      en.integrations.tabApi,
+      en.integrations.tabMcp,
+    ]);
+
+    await app.clickText(en.integrations.tabMcp, { roles: ["tab"] });
+    await app.waitForText(en.integrations.mcpEnableLabel);
+    // Section labels are set in CSS uppercase, which innerText applies, so
+    // they are read from the label nodes rather than from the body text.
+    const labelShown = (label) =>
+      app.execute(
+        `return [...document.querySelectorAll("label")].some((node) => node.textContent.trim() === arguments[0]);`,
+        [label],
+      );
+    // Local MCP is removed: the tab shows a deprecation banner, the local
+    // client installer is gone, and enabling it starts no server.
+    assert.ok(
+      (await app.bodyText()).includes(
+        en.integrations.mcp.deprecatedBannerTitle,
+      ),
+      "the MCP tab must show the local-MCP removal banner",
+    );
+    assert.equal(
+      await labelShown(en.integrations.mcp.clientsLabel),
+      false,
+      "the local client installer is gone with the local server",
+    );
+    assert.equal(await app.invoke("get_mcp_server_status"), false);
+
+    // Attempting to enable local MCP raises the removal dialog and starts
+    // nothing. Only the MCP tab's content is mounted, so this is its switch.
+    await app.clickSelector('[role="switch"]');
+    const removalDialogVisible = () =>
+      app.execute(
+        `return [...document.querySelectorAll('[role="dialog"]')].some(node => node.textContent.includes(arguments[0]));`,
+        [en.mcpLocalDeprecated.title],
+      );
+    await app.waitFor(removalDialogVisible, {
+      description: "the local MCP removal dialog to open",
+    });
+    assert.equal(
+      await app.invoke("get_mcp_server_status"),
+      false,
+      "enabling local MCP must not start a server",
+    );
+    assert.equal(
+      await labelShown(en.integrations.mcp.clientsLabel),
+      false,
+      "no local client installer appears after a refused enable",
+    );
+    // The refusal must leave the switch off: a regression that flips it on
+    // visually while starting nothing would otherwise pass.
+    assert.equal(
+      await app.execute(
+        `return document.querySelector('[role="switch"]').getAttribute("aria-checked");`,
+      ),
+      "false",
+      "a refused enable must leave the local MCP switch off",
+    );
+    // The command also emits a toast with the same title. Observe the dialog
+    // itself so a toast cannot stand in for modal opening or dismissal.
+    await app.pressShortcut({ key: "Escape" });
+    await app.waitFor(async () => !(await removalDialogVisible()), {
+      description: "the local MCP removal dialog to close",
+    });
+
+    await dismissSurface(app);
+  });
+});
 
 test("all primary navigation buttons and sub-page tabs render and remain interactive", async () => {
   await withApp("ui-navigation", async (app) => {
@@ -500,7 +631,9 @@ test("VLESS proxy form keeps the share URI as one clear, validated input", async
     await app.clickSelector('[aria-label="New proxy"]');
     await app.waitForText("Add Proxy");
     await app.fillSelector("#proxy-name", "E2E VLESS");
-    await chooseSelectOption(app, "#proxy-type", "VLESS");
+    // "VLESS (REALITY)" since the type list was regrouped by whether the
+    // first hop is encrypted; chooseSelectOption matches the label exactly.
+    await chooseSelectOption(app, "#proxy-type", "VLESS (REALITY)");
 
     assert.equal(
       await app.execute(
@@ -1185,7 +1318,7 @@ function extensionRowScript(body) {
   return `const wanted = arguments[0];
      const row = [...document.querySelectorAll("tbody tr")].find((candidate) => {
        const cells = [...candidate.querySelectorAll("td")];
-       return cells.length >= 7 && (cells[2].innerText || "").trim() === wanted;
+       return cells.length >= 7 && (cells[2].querySelector("button > span")?.textContent || cells[2].innerText || "").trim() === wanted;
      });
      ${body}`;
 }
@@ -1196,7 +1329,7 @@ async function extensionRow(app, name) {
      const cells = [...row.querySelectorAll("td")];
      const sync = row.querySelector('[data-slot="animated-switch"]');
      return {
-       name: (cells[2].innerText || "").trim(),
+       name: (cells[2].querySelector("button > span")?.textContent || cells[2].innerText || "").trim(),
        source: (cells[4].innerText || "").trim(),
        syncChecked: sync ? sync.getAttribute("data-state") === "checked" : null,
        syncDisabled: sync ? sync.disabled === true : null,
@@ -1471,5 +1604,894 @@ test("a folder with no manifest fails with the translated reason, not a raw code
     );
     assert.deepEqual(await app.invoke("list_extensions"), []);
     assert.equal((await restoreFolderPicker(app)).length, 1);
+  });
+});
+
+test("the agent page opens from the rail and the palette, keeps every tab live, and never shows a form it cannot honour", async () => {
+  await withApp("ui-agent", async (app) => {
+    await app.clickSelector(`[aria-label="${en.rail.agent}"]`);
+    await app.waitForText(en.agent.unavailable.signInTitle);
+
+    // Exactly the three panels the page ships, in its order. The strip renders
+    // whether or not the account can use the agent, because
+    // AGENT_NOT_CONFIGURED is only learned by asking and the chrome has to be
+    // on screen when the answer lands.
+    const tabs = async () =>
+      app.execute(
+        `return [...document.querySelectorAll('[role="tab"]')].map((node) => node.textContent.trim());`,
+      );
+    assert.deepEqual(await tabs(), [
+      en.agent.tabs.run,
+      en.agent.tabs.history,
+      en.agent.tabs.recipes,
+    ]);
+
+    // The explanation is PAINTED, not merely in the DOM. Content that only
+    // becomes visible once an animation has run renders as an empty panel every
+    // time the animation does not, which is the failure this asserts against.
+    const notice = async () =>
+      app.execute(`
+        const el = document.querySelector('[data-slot="agent-unavailable"]');
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          width: rect.width,
+          height: rect.height,
+          opacity: Number(style.opacity),
+          visibility: style.visibility,
+          text: el.innerText.trim(),
+        };
+      `);
+    const signedOut = await notice();
+    assert.ok(signedOut, "the run tab must explain itself when signed out");
+    assert.ok(signedOut.width > 0 && signedOut.height > 0);
+    assert.equal(signedOut.opacity, 1);
+    assert.equal(signedOut.visibility, "visible");
+    assert.match(signedOut.text, new RegExp(en.agent.unavailable.signInHint));
+
+    // Never a broken form: a signed-out desktop is told what is missing, it is
+    // not handed a goal field and a submit button that cannot work.
+    assert.equal(
+      await app.execute(
+        `return document.querySelector('[data-slot="agent-run-form"]') === null;`,
+      ),
+      true,
+    );
+
+    // Every tab answers a real pointer click, and each carries its own
+    // explanation rather than a blank panel.
+    for (const label of [
+      en.agent.tabs.history,
+      en.agent.tabs.recipes,
+      en.agent.tabs.run,
+    ]) {
+      await app.clickText(label);
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return [...document.querySelectorAll('[role="tab"]')].some(
+              (node) => node.textContent.trim() === arguments[0] &&
+                node.getAttribute("data-state") === "active"
+            );`,
+            [label],
+          ),
+        { description: `${label} agent tab` },
+      );
+      const panel = await notice();
+      assert.ok(panel, `${label} must explain itself when signed out`);
+      assert.ok(panel.height > 0, `${label} rendered an empty panel`);
+    }
+
+    await dismissSurface(app);
+
+    // The same page from the palette. A rail item nobody can reach by keyboard
+    // is half a navigation.
+    const modifier =
+      process.platform === "darwin" ? { meta: true } : { ctrl: true };
+    await app.pressShortcut({ key: "k", ...modifier });
+    await app.waitFor(
+      () =>
+        app.execute(`return Boolean(document.querySelector("[cmdk-input]"));`),
+      { description: "command palette" },
+    );
+    const input = await app.session.findCss("[cmdk-input]");
+    await app.session.sendKeys(input, en.shortcuts.goAgent);
+    await app.clickText(en.shortcuts.goAgent, {
+      exact: false,
+      roles: ["option", "button", "menuitem"],
+    });
+    await app.waitForText(en.agent.unavailable.signInTitle);
+    assert.deepEqual(await tabs(), [
+      en.agent.tabs.run,
+      en.agent.tabs.history,
+      en.agent.tabs.recipes,
+    ]);
+
+    await dismissSurface(app);
+  });
+});
+
+async function createUiProfile(app, name) {
+  return app.invoke("create_browser_profile_new", {
+    name,
+    browserStr: "wayfern",
+    version: "150.0.7871.100",
+    releaseType: "stable",
+    proxyId: null,
+    vpnId: null,
+    wayfernConfig: { fingerprint: "{}" },
+    groupId: null,
+    ephemeral: false,
+    dnsBlocklist: null,
+    launchHook: null,
+  });
+}
+
+async function distributionSummary(app) {
+  return app.execute(
+    `return document.querySelector('[data-testid="distribute-summary"]')?.innerText ?? "";`,
+  );
+}
+
+test("the distribute-proxies dialog opens from the action bar, counts the pairing, and answers every control", async () => {
+  await withApp(
+    "ui-proxy-distribution",
+    async (app) => {
+      for (const name of ["Fleet One", "Fleet Two", "Fleet Three"]) {
+        await createUiProfile(app, name);
+      }
+      for (const [index, name] of ["Exit One", "Exit Two"].entries()) {
+        await app.invoke("create_stored_proxy", {
+          name,
+          proxySettings: {
+            proxy_type: "http",
+            host: "127.0.0.1",
+            port: 9101 + index,
+            username: null,
+            password: null,
+          },
+        });
+      }
+      await app.waitForText("Fleet Three");
+
+      await app.clickSelector(`[aria-label="${en.common.aria.selectAll}"]`);
+      await app.clickSelector(
+        `[aria-label="${en.profiles.actionBar.distributeProxies}"]`,
+      );
+      await app.waitForText(en.proxyDistribution.title);
+
+      // Two proxies for three profiles: the dialog has to say so up front, and
+      // it must never pretend the third profile is covered.
+      await app.waitFor(
+        async () => (await distributionSummary(app)).includes("2 of 3"),
+        { description: "distribution summary" },
+      );
+      const summary = await distributionSummary(app);
+      assert.match(summary, /2 of 3/);
+      // The remainder is never silently dropped: the one profile no proxy was
+      // left for is named. Which one depends on the table's order, so assert
+      // that exactly one of the three is named rather than pinning the sort.
+      const named = ["Fleet One", "Fleet Two", "Fleet Three"].filter((name) =>
+        summary.includes(name),
+      );
+      assert.deepEqual(
+        named.length,
+        1,
+        `the unpaired profile must be named exactly once, got: ${summary}`,
+      );
+
+      // Every control answers a click. Dropping the proxies empties the plan...
+      await app.clickSelector('[data-testid="distribute-toggle-proxies"]');
+      await app.waitFor(
+        async () => (await distributionSummary(app)).includes("0 of 3"),
+        { description: "summary after clearing the proxies" },
+      );
+      // ...and putting them back restores it.
+      await app.clickSelector('[data-testid="distribute-toggle-proxies"]');
+      await app.waitFor(
+        async () => (await distributionSummary(app)).includes("2 of 3"),
+        { description: "summary after reselecting the proxies" },
+      );
+
+      const switchState = () =>
+        app.execute(
+          `return document.querySelector('[aria-label="${en.proxyDistribution.allowSharingLabel}"]')?.getAttribute("aria-checked") ?? null;`,
+        );
+      assert.equal(await switchState(), "false", "sharing is off by default");
+      await app.clickSelector(
+        `[aria-label="${en.proxyDistribution.allowSharingLabel}"]`,
+      );
+      await app.waitFor(async () => (await switchState()) === "true", {
+        description: "sharing switch turning on",
+      });
+
+      // Dropping every profile leaves nothing to do, and the primary action
+      // must not offer to do it.
+      await app.clickSelector('[data-testid="distribute-toggle-profiles"]');
+      await app.waitFor(
+        async () => (await distributionSummary(app)).includes("0 of 0"),
+        { description: "summary after clearing the profiles" },
+      );
+      assert.equal(
+        await app.execute(
+          `const nodes = [...document.querySelectorAll("button")];
+           const node = nodes.find((n) => (n.innerText ?? "").trim().includes(arguments[0]));
+           return node ? node.disabled : null;`,
+          [en.proxyDistribution.distributeButton],
+        ),
+        true,
+        "an empty plan must not offer a Distribute button that does nothing",
+      );
+
+      await dismissSurface(app);
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
+test("the group bookmark editor adds, reorders and removes a row", async () => {
+  await withApp("ui-group-bookmarks", async (app) => {
+    const group = await app.invoke("create_profile_group", { name: "Client" });
+
+    await app.clickSelector('[aria-label="Groups"]');
+    await app.waitForText("Client");
+    await app.clickSelector('[data-testid="group-bookmarks-button"]');
+    await app.waitForText(en.groupBookmarks.description);
+    assert.ok(await app.visibleTextIncludes(en.groupBookmarks.empty));
+
+    const rowCount = () =>
+      app.execute(
+        `return document.querySelectorAll('[data-testid="group-bookmark-row"]').length;`,
+      );
+    const titles = () =>
+      app.execute(
+        `return [...document.querySelectorAll('[data-testid="group-bookmark-title"]')].map((n) => n.value);`,
+      );
+    const rowSelector = (index, testid) =>
+      `[data-testid="group-bookmark-rows"] > div:nth-child(${index}) [data-testid="${testid}"]`;
+
+    await app.clickSelector('[data-testid="group-bookmark-add"]');
+    await app.waitFor(async () => (await rowCount()) === 1, {
+      description: "the first bookmark row",
+    });
+    await app.clickSelector('[data-testid="group-bookmark-add"]');
+    await app.waitFor(async () => (await rowCount()) === 2, {
+      description: "the second bookmark row",
+    });
+    await app.clickSelector('[data-testid="group-bookmark-add"]');
+    await app.waitFor(async () => (await rowCount()) === 3, {
+      description: "the third bookmark row",
+    });
+
+    await app.fillSelector(rowSelector(1, "group-bookmark-title"), "Support");
+    await app.fillSelector(
+      rowSelector(1, "group-bookmark-url"),
+      "https://support.example",
+    );
+    await app.fillSelector(rowSelector(2, "group-bookmark-title"), "Console");
+    await app.fillSelector(
+      rowSelector(2, "group-bookmark-url"),
+      "https://console.example",
+    );
+    await app.fillSelector(rowSelector(2, "group-bookmark-folder"), "Ops");
+    await app.fillSelector(rowSelector(3, "group-bookmark-title"), "Scratch");
+    await app.fillSelector(
+      rowSelector(3, "group-bookmark-url"),
+      "https://scratch.example",
+    );
+    assert.deepEqual(await titles(), ["Support", "Console", "Scratch"]);
+
+    // Reorder: the second row moves above the first.
+    await app.clickSelector(rowSelector(2, "group-bookmark-move-up"));
+    await app.waitFor(async () => (await titles())[0] === "Console", {
+      description: "the reordered first row",
+    });
+    assert.deepEqual(await titles(), ["Console", "Support", "Scratch"]);
+
+    // Remove: the last row goes away and nothing else moves.
+    await app.clickSelector(rowSelector(3, "group-bookmark-remove"));
+    await app.waitFor(async () => (await rowCount()) === 2, {
+      description: "the removed row",
+    });
+    assert.deepEqual(await titles(), ["Console", "Support"]);
+
+    await app.clickText(en.common.buttons.save);
+    await app.waitFor(
+      async () =>
+        (await app.invoke("get_group_bookmarks", { groupId: group.id }))
+          .length === 2,
+      { description: "the saved bookmark list" },
+    );
+    assert.deepEqual(
+      await app.invoke("get_group_bookmarks", { groupId: group.id }),
+      [
+        { title: "Console", url: "https://console.example", folder: "Ops" },
+        { title: "Support", url: "https://support.example" },
+      ],
+    );
+
+    await dismissSurface(app);
+  });
+});
+
+test("importing from a link validates the input and names the extension before it is saved", async () => {
+  await withApp("ui-extension-from-link", async (app) => {
+    const fixtureBase = process.env.DONUT_E2E_FIXTURE_URL;
+    assert.ok(fixtureBase, "the fixture server URL has to reach the suite");
+
+    await openExtensionsPage(app);
+    await app.clickSelector(`[aria-label="${EXTENSION_STRINGS.fromUrl}"]`);
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector("#ext-url-input"));`,
+        ),
+      { description: "the link import form" },
+    );
+
+    // Nothing to fetch yet, so the action is not offered.
+    assert.equal(
+      await app.execute(
+        `return [...document.querySelectorAll("button")]
+           .find((button) => (button.textContent || "").trim() === arguments[0])
+           ?.disabled ?? null;`,
+        [EXTENSION_STRINGS.fetchExtension],
+      ),
+      true,
+      "Fetch has to stay disabled until there is something to fetch",
+    );
+
+    // A link that is not an extension source is refused, in the user's
+    // language, and nothing is staged.
+    await app.fillSelector("#ext-url-input", "https://example.invalid/page");
+    await app.clickText(EXTENSION_STRINGS.fetchExtension, {
+      roles: ["button"],
+    });
+    await app.waitFor(
+      async () =>
+        (await toastTexts(app)).some((text) =>
+          text.includes(en.backendErrors.extensionUrlInvalid),
+        ),
+      { description: "the refusal for a link that is not an extension" },
+    );
+    assert.equal(
+      await app.execute(
+        `return document.querySelector('[data-slot="extension-fetched-identity"]') === null;`,
+      ),
+      true,
+      "a refused link must not stage anything",
+    );
+
+    // The real thing: a CRX3 the fixture server serves. The staged form has to
+    // show the identity read out of the archive's own manifest, not the file
+    // name, before the user commits to storing it.
+    await app.fillSelector("#ext-url-input", `${fixtureBase}/extension.crx`);
+    await app.clickText(EXTENSION_STRINGS.fetchExtension, {
+      roles: ["button"],
+    });
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector('[data-slot="extension-fetched-identity"]')?.innerText?.trim() ?? null;`,
+        ),
+      { description: "the parsed identity of the downloaded extension" },
+    );
+    const identity = await app.execute(
+      `return document.querySelector('[data-slot="extension-fetched-identity"]').innerText.trim();`,
+    );
+    assert.ok(
+      identity.includes(CRX_EXTENSION_NAME),
+      `the staged identity has to name the extension, got: ${identity}`,
+    );
+    assert.ok(
+      identity.includes(CRX_EXTENSION_VERSION),
+      `the staged identity has to carry the version, got: ${identity}`,
+    );
+    assert.ok(
+      await app.visibleTextIncludes(`${fixtureBase}/extension.crx`),
+      "the staged import has to name where the package came from",
+    );
+    assert.deepEqual(
+      await app.invoke("list_extensions"),
+      [],
+      "fetching stages the archive; it must not store it",
+    );
+
+    await app.clickText(en.common.buttons.add, { roles: ["button"] });
+    await app.waitForText(CRX_EXTENSION_NAME);
+    const stored = await app.invoke("list_extensions");
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].name, CRX_EXTENSION_NAME);
+    assert.equal(stored[0].version, CRX_EXTENSION_VERSION);
+    assert.equal(stored[0].file_type, "zip");
+    assert.equal(stored[0].source_kind, "archive");
+  });
+});
+
+test("a checked proxy shows its UDP verdict in the table and its check trail in the details", async () => {
+  await withApp("ui-proxy-check-trail", async (app) => {
+    const proxy = await app.invoke("create_stored_proxy", {
+      name: "Trail HTTP Proxy",
+      proxySettings: {
+        proxy_type: "http",
+        host: "127.0.0.1",
+        // Discard port: the check fails fast, which is a real check outcome
+        // and exactly what the trail has to be able to show.
+        port: 9,
+        username: null,
+        password: null,
+      },
+    });
+    await app.invokeError("check_proxy_validity", {
+      proxyId: proxy.id,
+      proxySettings: null,
+    });
+
+    await app.clickSelector('[aria-label="Network"]');
+    await app.waitForText(proxy.name);
+
+    // An HTTP proxy cannot carry a datagram, so the table says so without
+    // anyone opening anything.
+    await app.waitFor(
+      async () =>
+        (await app.execute(
+          `return document.querySelector('[data-slot="proxy-udp-verdict"]')?.dataset?.udp ?? null;`,
+        )) === "no",
+      { description: "the UDP verdict cell" },
+    );
+    assert.equal(
+      (
+        await app.execute(
+          `return document.querySelector('[data-slot="proxy-udp-verdict"]').innerText.trim();`,
+        )
+      ).toLowerCase(),
+      en.proxyCheck.udpNo.toLowerCase(),
+    );
+
+    await app.clickSelector(`[aria-label="${en.appFeedback.routeDetails}"]`);
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector('[data-slot="proxy-check-history"]'));`,
+        ),
+      { description: "the check trail" },
+    );
+    await app.waitFor(
+      async () =>
+        (await app.execute(
+          `return document.querySelectorAll('[data-slot="proxy-check-history-entry"]').length;`,
+        )) >= 1,
+      { description: "at least one remembered check" },
+    );
+
+    const trail = await app.execute(
+      `return [...document.querySelectorAll('[data-slot="proxy-check-history-entry"]')]
+         .map((entry) => entry.innerText.replace(/\\s+/g, " ").trim());`,
+    );
+    assert.ok(trail.length >= 1);
+    assert.ok(
+      trail[0].includes(en.proxyCheck.historyFailed),
+      `the newest line has to report the failure, got: ${trail[0]}`,
+    );
+    assert.ok(
+      await app.visibleTextIncludes(en.proxyCheck.historyTitle),
+      "the trail needs a heading that says what it is",
+    );
+  });
+});
+
+/**
+ * Answer one Tauri command from inside the webview.
+ *
+ * Same seam as {@link stubFolderPicker}: the synchroniser panel needs a live
+ * session to control, and a real one launches browsers. Every other command
+ * still reaches the real backend, so the panel is exercised as it ships.
+ */
+async function stubCommand(app, command, reply) {
+  await app.execute(
+    `const wanted = arguments[0];
+     const reply = arguments[1];
+     if (!window.__donutOriginalFetch) {
+       window.__donutOriginalFetch = window.fetch;
+     }
+     window.__donutStubbedCalls = window.__donutStubbedCalls ?? [];
+     window.__donutStubs = window.__donutStubs ?? {};
+     window.__donutStubs[wanted] = reply;
+     if (!window.__donutStubInstalled) {
+       window.__donutStubInstalled = true;
+       window.fetch = function (input, init) {
+         const url = String(
+           typeof input === "string" ? input : (input && input.url) || "",
+         );
+         let name = "";
+         try {
+           name = decodeURIComponent(url.split("/").pop() || "");
+         } catch (_error) {
+           name = "";
+         }
+         if (window.__donutStubs[name] !== undefined) {
+           let payload = null;
+           try {
+             payload = JSON.parse((init && init.body) || "null");
+           } catch (_error) {
+             payload = null;
+           }
+           window.__donutStubbedCalls.push({ command: name, payload });
+           return Promise.resolve(
+             new Response(JSON.stringify(window.__donutStubs[name]), {
+               status: 200,
+               headers: {
+                 "content-type": "application/json",
+                 "Tauri-Response": "ok",
+               },
+             }),
+           );
+         }
+         return window.__donutOriginalFetch.apply(window, arguments);
+       };
+     }
+     return true;`,
+    [command, reply],
+  );
+}
+
+async function restoreStubs(app) {
+  return app.execute(
+    `const calls = window.__donutStubbedCalls ?? [];
+     if (window.__donutOriginalFetch) {
+       window.fetch = window.__donutOriginalFetch;
+       delete window.__donutOriginalFetch;
+     }
+     delete window.__donutStubbedCalls;
+     delete window.__donutStubs;
+     delete window.__donutStubInstalled;
+     return calls;`,
+  );
+}
+
+const DATA_ROOT = en.settings.dataRoot;
+
+test("the data directory setting shows where state lives, refuses a bad move, and reports the one it makes", async () => {
+  await withApp("ui-data-root", async (app) => {
+    const defaultRoot = path.join(app.dataRoot, "data");
+    await app.clickSelector(`[aria-label="${en.rail.settings}"]`);
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector('[data-slot="data-root-setting"]'));`,
+        ),
+      { description: "the data directory control" },
+    );
+
+    const shown = await app.execute(
+      `return {
+         path: document.querySelector('[data-slot="data-root-active-path"]')?.innerText ?? null,
+         size: document.querySelector('[data-slot="data-root-size"]')?.innerText ?? null,
+         moveDisabled: document.querySelector('[data-slot="data-root-move"]')?.disabled ?? null,
+         missing: Boolean(document.querySelector('[data-slot="data-root-missing"]')),
+         restart: Boolean(document.querySelector('[data-slot="data-root-restart-required"]')),
+       };`,
+    );
+    assert.equal(shown.path, defaultRoot, "the real directory is on screen");
+    assert.match(shown.size, /\d/, "the size has to be a real figure");
+    assert.equal(
+      shown.moveDisabled,
+      true,
+      "there is nowhere to move to until a folder is chosen",
+    );
+    assert.equal(shown.missing, false);
+    assert.equal(shown.restart, false);
+    assert.equal(await app.visibleTextIncludes(DATA_ROOT.title), true);
+
+    // A folder inside the current directory: the copy would never finish and
+    // the delete afterwards would take the copy with it.
+    await stubFolderPicker(app, path.join(defaultRoot, "profiles"));
+    await app.clickSelector('[data-slot="data-root-choose"]');
+    await app.waitFor(
+      async () =>
+        (await app.execute(
+          `return document.querySelector('[data-slot="data-root-move"]')?.disabled;`,
+        )) === false,
+      { description: "the move button waking up once a folder is chosen" },
+    );
+    const chosen = await app.execute(
+      `return document.querySelector('[data-slot="data-root-destination"]')?.innerText ?? null;`,
+    );
+    assert.ok(
+      chosen?.startsWith(path.join(defaultRoot, "profiles")),
+      `the exact destination has to be shown before committing, got: ${chosen}`,
+    );
+
+    await app.clickSelector('[data-slot="data-root-move"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector('[data-slot="data-root-error"]'));`,
+        ),
+      { description: "the refusal" },
+    );
+    assert.equal(
+      (await restoreFolderPicker(app)).length,
+      1,
+      "the first choice went through the picker",
+    );
+    assert.equal(
+      await app.execute(
+        `return document.querySelector('[data-slot="data-root-error"]').innerText.trim();`,
+      ),
+      en.backendErrors.dataRootDestinationInsideSource,
+      "a refusal is a translated sentence, never a raw code",
+    );
+    await app.capture("data-root-refused");
+
+    // Nothing was created for a move that was never going to run.
+    assert.equal(
+      await app
+        .invoke("get_data_root_info")
+        .then((info) => info.configured_path),
+      null,
+    );
+
+    // Now a real move, into this session's own temporary root.
+    const destination = path.join(app.root, "ui-moved-data");
+    await stubFolderPicker(app, destination);
+    await app.clickSelector('[data-slot="data-root-choose"]');
+    await app.waitFor(
+      async () =>
+        (
+          await app.execute(
+            `return document.querySelector('[data-slot="data-root-destination"]')?.innerText ?? "";`,
+          )
+        ).startsWith(destination),
+      { description: "the new destination on screen" },
+    );
+    await app.clickSelector('[data-slot="data-root-move"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector('[data-slot="data-root-restart-required"]'));`,
+        ),
+      { description: "the restart notice", timeoutMs: 60_000 },
+    );
+    assert.equal(
+      await app.execute(
+        `return Boolean(document.querySelector('[data-slot="data-root-error"]'));`,
+      ),
+      false,
+      "a move that worked must not also report an error",
+    );
+    await app.capture("data-root-moved");
+
+    // The fixture clears its own log each time it is installed, so this reads
+    // only the second choice.
+    const picks = await restoreFolderPicker(app);
+    assert.equal(picks.length, 1);
+    assert.equal(
+      picks[0]?.options?.directory,
+      true,
+      "the control asks for a folder, not a file",
+    );
+
+    const info = await app.invoke("get_data_root_info");
+    assert.ok(
+      info.configured_path?.startsWith(destination),
+      `the choice has to be recorded, got: ${info.configured_path}`,
+    );
+    assert.equal(info.restart_required, true);
+  });
+});
+
+const SYNC = en.profiles.synchronizer;
+
+test("the synchroniser panel lists a live session and its controls act on the real state", async () => {
+  await withApp("ui-synchronizer-panel", async (app) => {
+    const session = {
+      id: "ui-panel-session",
+      leader_profile_id: "leader-id",
+      leader_profile_name: "Panel leader",
+      paused: false,
+      followers: [
+        {
+          profile_id: "follower-one",
+          profile_name: "Panel follower one",
+          failed_at_url: null,
+          held: false,
+        },
+        {
+          profile_id: "follower-two",
+          profile_name: "Panel follower two",
+          failed_at_url: "https://example.invalid/lost",
+          held: false,
+        },
+      ],
+    };
+    const panel = '[data-slot="synchronizer-panel"]';
+    const followerState = (id) =>
+      app.execute(
+        `const row = document.querySelector('[data-slot="synchronizer-panel-follower"][data-profile-id="' + arguments[0] + '"]');
+         if (!row) return null;
+         return {
+           held: row.dataset.held === "true",
+           badge: row.querySelector('[data-slot="synchronizer-panel-follower-state"]')?.innerText?.trim() ?? null,
+           holdLabel: row.querySelector('[data-slot="synchronizer-panel-hold"]')?.innerText?.trim() ?? null,
+         };`,
+        [id],
+      );
+
+    try {
+      // The profiles page has to be mounted before any of this means
+      // anything: an event emitted before the hook subscribes is simply gone.
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return Boolean(document.querySelector('[data-slot="profile-workspace"]'));`,
+          ),
+        { description: "the profiles page" },
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector(arguments[0]));`,
+          [panel],
+        ),
+        false,
+        "no session, no panel",
+      );
+
+      // Re-emitted until it lands, because subscribing is asynchronous and a
+      // missed event is indistinguishable from a broken panel.
+      await app.waitFor(
+        async () => {
+          await app.invoke("plugin:event|emit", {
+            event: "sync-session-changed",
+            payload: session,
+          });
+          return app.execute(
+            `return Boolean(document.querySelector(arguments[0]));`,
+            [panel],
+          );
+        },
+        { description: "the session panel" },
+      );
+
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('[data-slot="synchronizer-panel-leader"]').innerText.trim();`,
+        ),
+        session.leader_profile_name,
+      );
+      assert.deepEqual(
+        await app.execute(
+          `return [...document.querySelectorAll('[data-slot="synchronizer-panel-follower"]')]
+             .map((row) => row.dataset.profileId);`,
+        ),
+        ["follower-one", "follower-two"],
+        "followers stay in the order they were chosen",
+      );
+      assert.deepEqual(await followerState("follower-one"), {
+        held: false,
+        badge: SYNC.stateMirroring,
+        holdLabel: SYNC.holdOut,
+      });
+      // The desynced follower reports the failure instead of a state badge.
+      assert.equal(await app.visibleTextIncludes(SYNC.stateDesynced), true);
+      await app.capture("synchronizer-panel");
+
+      // The backend has no such session, so pausing must fail and the panel
+      // must keep telling the truth rather than flipping hopefully.
+      await app.clickSelector('[data-slot="synchronizer-panel-pause"]');
+      await app.waitFor(
+        () => app.visibleTextIncludes(en.backendErrors.syncSessionNotFound),
+        { description: "the refusal surfaced to the user" },
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('[data-slot="synchronizer-panel-pause"]').innerText.trim();`,
+        ),
+        SYNC.pauseMirroring,
+        "a refused pause must not read as paused",
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-slot="synchronizer-panel-paused-note"]'));`,
+        ),
+        false,
+      );
+
+      // With the backend agreeing, the same click has to land.
+      await stubCommand(app, "set_sync_session_paused", {
+        ...session,
+        paused: true,
+      });
+      await app.clickSelector('[data-slot="synchronizer-panel-pause"]');
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return Boolean(document.querySelector('[data-slot="synchronizer-panel-paused-note"]'));`,
+          ),
+        { description: "the paused state" },
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('[data-slot="synchronizer-panel-pause"]').innerText.trim();`,
+        ),
+        SYNC.resumeMirroring,
+      );
+      assert.equal(
+        (await followerState("follower-one")).badge,
+        SYNC.statePaused,
+      );
+      await app.capture("synchronizer-panel-paused");
+
+      // Holding one follower out leaves the other exactly as it was.
+      await stubCommand(app, "set_sync_follower_held", {
+        ...session,
+        followers: [
+          { ...session.followers[0], held: true },
+          session.followers[1],
+        ],
+      });
+      await app.clickSelector(
+        '[data-slot="synchronizer-panel-follower"][data-profile-id="follower-one"] [data-slot="synchronizer-panel-hold"]',
+      );
+      await app.waitFor(
+        async () => (await followerState("follower-one")).held === true,
+        { description: "the held-out follower" },
+      );
+      assert.deepEqual(await followerState("follower-one"), {
+        held: true,
+        badge: SYNC.stateHeld,
+        holdLabel: SYNC.rejoin,
+      });
+
+      // The layout the user picked is the layout the backend is asked for.
+      await stubCommand(app, "arrange_sync_windows", session);
+      await app.clickSelector('[data-slot="synchronizer-panel-layout"]');
+      await app.clickText(SYNC.layout.cascade, {
+        roles: ["option", "menuitem", "button"],
+      });
+      await app.waitFor(
+        async () =>
+          (await app.execute(
+            `return document.querySelector('[data-slot="synchronizer-panel-layout"]').innerText.trim();`,
+          )) === SYNC.layout.cascade,
+        { description: "the chosen layout" },
+      );
+      await app.clickSelector('[data-slot="synchronizer-panel-arrange"]');
+      await app.waitFor(
+        async () =>
+          (await app.execute(
+            `return (window.__donutStubbedCalls ?? []).filter((call) => call.command === "arrange_sync_windows").length;`,
+          )) === 1,
+        { description: "the arrange request" },
+      );
+      const calls = await app.execute(
+        `return window.__donutStubbedCalls.map((call) => call.command + ":" + JSON.stringify(call.payload));`,
+      );
+      const arrange = calls.find((call) =>
+        call.startsWith("arrange_sync_windows"),
+      );
+      assert.match(arrange, /"layout":"cascade"/);
+      assert.match(arrange, /"sessionId":"ui-panel-session"/);
+      await app.capture("synchronizer-panel-arranged");
+
+      await app.waitFor(
+        async () => {
+          await app.invoke("plugin:event|emit", {
+            event: "sync-session-ended",
+            payload: session.id,
+          });
+          return (
+            (await app.execute(
+              `return Boolean(document.querySelector(arguments[0]));`,
+              [panel],
+            )) === false
+          );
+        },
+        { description: "the panel leaving with the session" },
+      );
+    } finally {
+      await restoreStubs(app);
+    }
   });
 });

@@ -19,6 +19,24 @@ export function useSyncSessions() {
     }
   }, []);
 
+  /**
+   * Fold an authoritative session record into the list.
+   *
+   * The pause, hold and arrange commands all return the session as the backend
+   * now holds it. Applying that return value alongside the event means a
+   * control never has to show what it hopes happened, and a dropped event
+   * cannot leave a button lying about the state.
+   */
+  const applySession = useCallback((session: SyncSessionInfo) => {
+    setSessions((prev) => {
+      const idx = prev.findIndex((s) => s.id === session.id);
+      if (idx < 0) return [...prev, session];
+      const next = [...prev];
+      next[idx] = session;
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     let changedUnlisten: (() => void) | undefined;
     let endedUnlisten: (() => void) | undefined;
@@ -85,5 +103,5 @@ export function useSyncSessions() {
     [sessions],
   );
 
-  return { sessions, getProfileSyncInfo, loadSessions };
+  return { sessions, getProfileSyncInfo, loadSessions, applySession };
 }

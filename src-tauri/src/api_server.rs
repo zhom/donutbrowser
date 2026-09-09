@@ -45,6 +45,10 @@ pub struct ApiProfile {
   /// `PUT /v1/profiles/{id}`; exposed here so a caller can read back what it
   /// set instead of having to go through the desktop app.
   pub extension_group_id: Option<String>,
+  /// Browsing data is kept in memory only.
+  pub ephemeral: bool,
+  /// Created for one automation run: deleted when its browser stops.
+  pub temporary: bool,
   pub clear_on_close: bool,
   /// Cloud sync mode: `"Disabled"`, `"Regular"` or `"Encrypted"`.
   /// Settable via `PUT /v1/profiles/{id}`; exposed here so a caller can read
@@ -89,6 +93,8 @@ impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
       proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
       vpn_id: profile.vpn_id.clone(),
       extension_group_id: profile.extension_group_id.clone(),
+      ephemeral: profile.ephemeral,
+      temporary: profile.temporary,
       clear_on_close: profile.clear_on_close,
       sync_mode: format!("{:?}", profile.sync_mode),
       cloud_sync_enabled: profile.is_sync_enabled(),
@@ -121,7 +127,11 @@ pub struct CreateProfileRequest {
   /// downloaded; the create path does not fetch new versions.
   #[serde(default)]
   pub version: Option<String>,
+  /// Optional stored-proxy id. Omit it, send `null`, or send an empty string
+  /// for a profile with no proxy. Mutually exclusive with `vpn_id`.
   pub proxy_id: Option<String>,
+  /// Optional stored-VPN id. Omit it, send `null`, or send an empty string for
+  /// a profile with no VPN. Mutually exclusive with `proxy_id`.
   pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
@@ -133,6 +143,13 @@ pub struct CreateProfileRequest {
   pub wayfern_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
+  /// Keep the profile's browsing data in memory only, so nothing it browses
+  /// reaches real disk. Defaults to false.
+  pub ephemeral: Option<bool>,
+  /// A profile for one automation run: implies `ephemeral`, is destroyed when
+  /// its browser stops, and is swept at startup if it outlived a crash.
+  /// Defaults to false.
+  pub temporary: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -142,7 +159,11 @@ pub struct UpdateProfileRequest {
   // would invalidate the generated fingerprint and on-disk profile dir).
   // Accepting it here only to silently ignore it misled API clients.
   pub version: Option<String>,
+  /// Omitted or `null` leaves the proxy assignment unchanged; an empty string
+  /// detaches it. Assigning a proxy clears any assigned VPN.
   pub proxy_id: Option<String>,
+  /// Omitted or `null` leaves the VPN assignment unchanged; an empty string
+  /// detaches it. Assigning a VPN clears any assigned proxy.
   pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
@@ -335,8 +356,8 @@ struct ApiRemoteSessionsResponse {
 struct SetCookieBotScheduleRequest {
   /// Defaults to the profile's local name.
   profile_name: Option<String>,
-  /// `windows` or `macos`. Defaults to the profile's own operating system, and
-  /// must match it when supplied.
+  /// `windows`, `macos` or `linux`. Defaults to the profile's own operating
+  /// system, and must match it when supplied.
   platform: Option<String>,
   /// Whether the nightly run is armed. A disabled schedule keeps its settings.
   enabled: bool,
@@ -501,6 +522,17 @@ struct BatchRunResponse {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
+struct DistributeProxiesRequest {
+  /// Profile/proxy pairs to apply, one proxy per profile.
+  pairs: Vec<crate::proxy_distribution::ProxyPair>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct DistributeProxiesResponse {
+  results: Vec<crate::proxy_distribution::ProxyAssignmentResult>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
 struct BatchStopRequest {
   /// Profile IDs to stop.
   profile_ids: Vec<String>,
@@ -596,6 +628,7 @@ struct ImportProxiesResponse {
     kill_profile,
     batch_run_profiles,
     batch_stop_profiles,
+    distribute_proxies,
     detect_import_profiles,
     import_profiles_api,
     import_profile_cookies,
@@ -633,6 +666,12 @@ struct ImportProxiesResponse {
     download_browser_api,
     get_browser_versions,
     check_browser_downloaded,
+    agent_perceive_api,
+    agent_resolve_locator_api,
+    agent_click_api,
+    agent_type_api,
+    agent_extract_api,
+    agent_pick_api,
   ),
   components(schemas(
     ApiProfile,
@@ -687,6 +726,10 @@ struct ImportProxiesResponse {
     BatchStopRequest,
     BatchStopResult,
     BatchStopResponse,
+    DistributeProxiesRequest,
+    DistributeProxiesResponse,
+    crate::proxy_distribution::ProxyPair,
+    crate::proxy_distribution::ProxyAssignmentResult,
     OpenUrlRequest,
     ImportCookiesRequest,
     ImportCookiesResponse,
@@ -707,6 +750,28 @@ struct ImportProxiesResponse {
     crate::profile_importer::ProfileImportItemResult,
     crate::profile_importer::ProfileImportBatchResult,
     crate::profile_import::report::ProfileImportReport,
+    crate::wayfern_cdp::Engine,
+    crate::wayfern_cdp::LocatorAttribute,
+    crate::wayfern_cdp::LocatorDescription,
+    crate::wayfern_cdp::LocatorBounds,
+    crate::wayfern_cdp::LocatorCandidate,
+    crate::wayfern_cdp::LocatorResolution,
+    crate::wayfern_cdp::PerceptionRequest,
+    crate::wayfern_cdp::PerceptionNode,
+    crate::wayfern_cdp::PerceptionFrame,
+    crate::wayfern_cdp::PerceptionStats,
+    crate::wayfern_cdp::PerceptionPage,
+    crate::wayfern_cdp::ExtractionField,
+    crate::wayfern_cdp::ExtractionRequest,
+    crate::wayfern_cdp::ExtractionRow,
+    crate::wayfern_cdp::Extraction,
+    crate::wayfern_cdp::PickedElement,
+    crate::mcp_server::AgentResolveRequest,
+    crate::mcp_server::AgentClickRequest,
+    crate::mcp_server::AgentClick,
+    crate::mcp_server::AgentTypeRequest,
+    crate::mcp_server::AgentTyping,
+    crate::mcp_server::AgentPickRequest,
   )),
   tags(
     (name = "profiles", description = "Profile management endpoints"),
@@ -719,6 +784,7 @@ struct ImportProxiesResponse {
     (name = "cookies", description = "Cookie management endpoints"),
     (name = "remote-sessions", description = "Sessions running on the leased remote fleet"),
     (name = "cookie-bot", description = "Scheduled cookie-warming runs on the remote fleet"),
+    (name = "agent", description = "Native page perception, locators, extraction and humanized input for a running profile"),
   ),
   modifiers(&SecurityAddon),
 )]
@@ -897,6 +963,7 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(kill_profile))
     .routes(routes!(batch_run_profiles))
     .routes(routes!(batch_stop_profiles))
+    .routes(routes!(distribute_proxies))
     .routes(routes!(detect_import_profiles))
     .routes(routes!(import_profiles_api))
     .routes(routes!(import_profile_cookies))
@@ -923,6 +990,12 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(download_browser_api))
     .routes(routes!(get_browser_versions))
     .routes(routes!(check_browser_downloaded))
+    .routes(routes!(agent_perceive_api))
+    .routes(routes!(agent_resolve_locator_api))
+    .routes(routes!(agent_click_api))
+    .routes(routes!(agent_type_api))
+    .routes(routes!(agent_extract_api))
+    .routes(routes!(agent_pick_api))
     .split_for_parts();
 
   // The two paths that carry an extension payload, kept apart so the raised
@@ -1072,11 +1145,9 @@ fn is_automation_request(method: &Method, path: &str) -> bool {
   // expensive thing this API can be asked to do.
   //
   // Deliberately NOT here: the cookie-bot schedule writes (PUT and DELETE on
-  // /v1/cookie-bot/schedules/{profile_id}). They are configuration — a small
-  // row in donutbrowser-infra — and lease nothing. Metering them would 429 a
-  // client enrolling a fleet of profiles at start-up, while the thing that
-  // actually protects the hardware, the pooled hour budget, is enforced
-  // server-side on every run whether or not it was scheduled from here.
+  // /v1/cookie-bot/schedules/{profile_id}). They are configuration and lease
+  // nothing. Metering them would 429 a client enrolling many profiles at
+  // start-up, and they are not what spends the account's hours.
   if matches!(
     path,
     "/v1/profiles/batch/run" | "/v1/profiles/batch/stop" | "/v1/cookie-bot/runs"
@@ -1089,12 +1160,26 @@ fn is_automation_request(method: &Method, path: &str) -> bool {
   };
   let mut segments = profile_action.split('/');
   matches!(
-    (segments.next(), segments.next(), segments.next()),
+    (
+      segments.next(),
+      segments.next(),
+      segments.next(),
+      segments.next()
+    ),
     // `run-remote` is a separate segment from `run`, so it matched nothing here
     // and every remote launch bypassed the quota it declares a 429 for.
     (
       Some(_),
       Some("run" | "open-url" | "kill" | "run-remote"),
+      None,
+      None
+    ) | (
+      // The agent surface reads and drives the same browser the tools above
+      // launch, through the same paid gate; a native page read is automation
+      // exactly as a script one is.
+      Some(_),
+      Some("agent"),
+      Some("perceive" | "resolve-locator" | "click" | "type" | "extract" | "pick"),
       None
     )
   )
@@ -1459,13 +1544,24 @@ async fn create_profile(
       request.vpn_id.clone(),
       wayfern_config,
       request.group_id.clone(),
-      false,
+      request.ephemeral.unwrap_or(false) || request.temporary.unwrap_or(false),
       None,
       request.launch_hook.clone(),
     )
     .await
   {
     Ok(mut profile) => {
+      if request.temporary.unwrap_or(false) {
+        match profile_manager.mark_profile_temporary(&profile.id.to_string()) {
+          Ok(updated) => profile = updated,
+          Err(e) => {
+            return Err((
+              StatusCode::INTERNAL_SERVER_ERROR,
+              format!("Profile created but could not be marked temporary: {e}"),
+            ))
+          }
+        }
+      }
       // Apply tags if provided
       if let Some(tags) = &request.tags {
         if profile_manager
@@ -1556,13 +1652,8 @@ async fn update_profile(
   }
 
   if let Some(vpn_id) = request.vpn_id {
-    let normalized = if vpn_id.is_empty() {
-      None
-    } else {
-      Some(vpn_id)
-    };
     if let Err(e) = profile_manager
-      .update_profile_vpn(state.app_handle.clone(), &id, normalized)
+      .update_profile_vpn(state.app_handle.clone(), &id, Some(vpn_id))
       .await
     {
       return Err(manager_error_response(e));
@@ -2764,7 +2855,7 @@ async fn remove_extension_from_group_api(
   request_body = RunProfileRequest,
   responses(
     (status = 200, description = "Profile launched successfully", body = RunProfileResponse),
-    (status = 400, description = "Cannot launch cross-OS profile"),
+    (status = 400, description = "Cannot launch cross-OS profile, or the url is not an http, https or about:blank address"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
@@ -2792,6 +2883,19 @@ async fn run_profile(
 
   let headless = request.headless.unwrap_or(false);
   let url = request.url;
+  // Same allowlist the MCP surface enforces, from the same predicate so the two
+  // cannot drift: `Page.navigate` will load `file:///…` and the content tools
+  // hand the bytes back. This listener is loopback-only, so it is defence in
+  // depth rather than the remote hole, but a second copy of the rule would be
+  // a second copy that rots.
+  if let Some(candidate) = url.as_deref() {
+    if !crate::mcp_server::is_navigable_url(candidate) {
+      return Err((
+        StatusCode::BAD_REQUEST,
+        crate::backend_error("URL_SCHEME_NOT_ALLOWED"),
+      ));
+    }
+  }
 
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
@@ -2857,7 +2961,7 @@ async fn run_profile(
   request_body = RunRemoteRequest,
   responses(
     (status = 200, description = "Remote session started", body = RunRemoteResponse),
-    (status = 400, description = "Profile does not have cloud sync enabled"),
+    (status = 400, description = "Profile does not have cloud sync enabled, or the url is not an http, https or about:blank address"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
@@ -2897,6 +3001,17 @@ async fn run_profile_remote(
   // launch an empty browser and then push that emptiness back over the real one.
   if let Err(reason) = remote_launch_precondition(profile).await {
     return Err((StatusCode::BAD_REQUEST, reason));
+  }
+
+  // Same allowlist the MCP surface enforces, from the same predicate so the two
+  // cannot drift.
+  if let Some(candidate) = request.url.as_deref() {
+    if !crate::mcp_server::is_navigable_url(candidate) {
+      return Err((
+        StatusCode::BAD_REQUEST,
+        crate::backend_error("URL_SCHEME_NOT_ALLOWED"),
+      ));
+    }
   }
 
   // Deliberately NO is_cross_os() guard here. Local /run refuses a foreign
@@ -3081,8 +3196,8 @@ async fn stop_remote_session(
   Path(id): Path<String>,
 ) -> Result<Json<StopRemoteResponse>, (StatusCode, String)> {
   // Without this route, `run-remote` hands back a session id nothing can act
-  // on: the only thing that ends a session is the fleet's own two-hour cap, so
-  // every launch bills 7200s no matter how briefly it ran.
+  // on: a session then runs to its maximum duration, so every launch spends the
+  // same allowance no matter how briefly it ran.
   let outcome = crate::remote_session::end_remote_session(&id)
     .await
     .map_err(remote_session_error_response)?;
@@ -3150,7 +3265,7 @@ fn error_code_of(body: &str) -> String {
     .unwrap_or_default()
 }
 
-/// Turn a donutbrowser-infra failure into the status a local client can act on.
+/// Turn a cloud API failure into the status a local client can act on.
 ///
 /// The upstream status is not echoed blindly. A 401 up there means THIS desktop
 /// has no cloud session, which has nothing to do with the caller's own bearer
@@ -3328,9 +3443,8 @@ async fn pump_cdp(session_id: String, client: WebSocket, upstream: crate::cdp_ta
         RelayMessage::Binary(bytes) => WsMessage::Binary(bytes),
         RelayMessage::Ping(bytes) => WsMessage::Ping(bytes),
         RelayMessage::Pong(bytes) => WsMessage::Pong(bytes),
-        // A relay close carries the only diagnosis the server gives (1008 is a
-        // rejected credential, 1013 is "not up yet"), so it is passed through
-        // rather than swallowed into a bare disconnect.
+        // A relay close carries the only diagnosis the server gives, so it is
+        // passed through rather than swallowed into a bare disconnect.
         RelayMessage::Close(frame) => {
           let _ = client_tx
             .send(WsMessage::Close(frame.map(|f| {
@@ -3352,7 +3466,7 @@ async fn pump_cdp(session_id: String, client: WebSocket, upstream: crate::cdp_ta
   };
 
   // Either direction ending means the conversation is over. Waiting for both
-  // would hold a relay socket open — and one of the session's four allowed
+  // would hold a relay socket open — and one of the session's limited
   // attachments with it — after the client had gone.
   tokio::select! {
     () = to_relay => {}
@@ -3447,7 +3561,7 @@ async fn get_remote_hours(
 
 // --- Cookie bot -------------------------------------------------------------
 //
-// Thin proxies onto donutbrowser-infra, which owns the schedule, the calendar
+// Thin proxies onto Donut cloud, which owns the schedule, the calendar
 // arithmetic, the browsing model and the pooled hour budget. Nothing here
 // decides when a run happens or what it does. What this file DOES decide is
 // which profiles may be offered to it at all.
@@ -3464,7 +3578,7 @@ async fn get_remote_hours(
 /// Every cookie-bot WRITE on this server goes through here, so there is no
 /// surface on which a local-only profile can be pointed at the bot. The server
 /// re-checks all of it; this exists so the refusal happens at the moment the
-/// caller asks rather than silently at 02:00.
+/// caller asks rather than silently when the run is due.
 fn cookie_bot_eligible_profile(
   profile_id: &str,
 ) -> Result<crate::profile::types::BrowserProfile, (StatusCode, String)> {
@@ -3615,8 +3729,8 @@ async fn set_cookie_bot_schedule(
     jitter_seconds: request.jitter_seconds,
     ..Default::default()
   }
-  // The server requires these and cannot read them itself — the profile lives
-  // in the user's sync namespace, not its database.
+  // The server requires these and cannot read them itself: only this machine
+  // knows the profile's own facts.
   .with_profile_state(crate::cookie_bot::profile_state(&profile));
 
   crate::cookie_bot::save_schedule(&profile_id, &input, request.acknowledge_conflict)
@@ -3823,9 +3937,8 @@ async fn cancel_cookie_bot_run(
 )]
 async fn list_cookie_bot_presets(
 ) -> Result<Json<crate::cookie_bot::CookieBotPresetList>, (StatusCode, String)> {
-  // Ids and a rough duration only. What a preset expands to — the site
-  // ordering, the dwell model, the scroll and click programme — is the
-  // server's, and stays there.
+  // Ids and a rough duration only. What a preset expands to is the server's,
+  // and stays there.
   crate::cookie_bot::list_presets()
     .await
     .map(Json)
@@ -3878,7 +3991,7 @@ async fn get_cookie_bot_usage(
   request_body = OpenUrlRequest,
   responses(
     (status = 200, description = "URL opened successfully, locally or on the profile's remote session"),
-    (status = 400, description = "Cannot open URL with a cross-OS profile that is not running remotely"),
+    (status = 400, description = "Cannot open URL with a cross-OS profile that is not running remotely, or the url is not an http, https or about:blank address"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 404, description = "Profile not found"),
@@ -3904,6 +4017,14 @@ async fn open_url_in_profile(
     return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
   }
 
+  // Same allowlist the MCP surface enforces, from the same predicate.
+  if !crate::mcp_server::is_navigable_url(&request.url) {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      crate::backend_error("URL_SCHEME_NOT_ALLOWED"),
+    ));
+  }
+
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
 
   browser_runner
@@ -3921,11 +4042,11 @@ async fn open_url_in_profile(
 
 // API Handler - Kill browser process
 //
-// Stops the browser wherever it is. A profile open on the leased fleet is ended
-// through the backend, which is what makes this endpoint mean "stop this
-// profile" rather than "stop this profile if it happens to be on this machine" —
-// the latter reported success, killed nothing, and left the session billing to
-// its two-hour cap.
+// Stops the browser wherever it is. A profile open on a leased remote host is
+// ended through the cloud API, which is what makes this endpoint mean "stop
+// this profile" rather than "stop this profile if it happens to be on this
+// machine" — the latter reported success, killed nothing, and left the session
+// running to its maximum duration.
 #[utoipa::path(
   post,
   path = "/v1/profiles/{id}/kill",
@@ -3975,9 +4096,9 @@ async fn kill_profile(
     .await
     .map_err(|e| {
       let message = e.to_string();
-      // The backend refuses to retire a session it could not stop on the fleet.
-      // Reporting that as a 500 invites a retry loop against a browser that is
-      // still running; 503 says "it is still up, try again".
+      // A stop can fail with the remote browser still running. Reporting that
+      // as a 500 invites a retry loop against a browser that is still running;
+      // 503 says "it is still up, try again".
       if message.contains("REMOTE_") {
         (StatusCode::SERVICE_UNAVAILABLE, message)
       } else {
@@ -3999,6 +4120,7 @@ async fn kill_profile(
   request_body = BatchRunRequest,
   responses(
     (status = 200, description = "Batch launch completed; inspect per-profile results", body = BatchRunResponse),
+    (status = 400, description = "The url is not an http, https or about:blank address"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Active paid plan with browser automation required"),
     (status = 429, description = "Automation request rate limit exceeded"),
@@ -4018,6 +4140,17 @@ async fn batch_run_profiles(
     .await
   {
     return Err(StatusCode::PAYMENT_REQUIRED);
+  }
+
+  // Same allowlist the MCP surface enforces, from the same predicate. Checked
+  // once up front rather than per profile: a bad scheme is a bad request, not
+  // a per-profile failure.
+  if let Some(candidate) = request.url.as_deref() {
+    if !crate::mcp_server::is_navigable_url(candidate) {
+      // This handler answers with a bare status, so the code travels in the
+      // per-profile results rather than a body.
+      return Err(StatusCode::BAD_REQUEST);
+    }
   }
 
   let headless = request.headless.unwrap_or(false);
@@ -4084,6 +4217,38 @@ async fn batch_run_profiles(
   }
 
   Ok(Json(BatchRunResponse { results }))
+}
+
+// API Handler - Distribute proxies one to one across profiles.
+//
+// Configuration, not automation: no plan gate and no rate limit, same as
+// assigning a group. Never breaks on one profile's failure — a running profile
+// is refused by name while the other forty-nine are moved.
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/distribute-proxies",
+  request_body = DistributeProxiesRequest,
+  responses(
+    (status = 200, description = "Distribution completed; inspect per-profile results", body = DistributeProxiesResponse),
+    (status = 400, description = "No pairs were supplied"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn distribute_proxies(
+  State(state): State<ApiServerState>,
+  Json(request): Json<DistributeProxiesRequest>,
+) -> Result<Json<DistributeProxiesResponse>, StatusCode> {
+  if request.pairs.is_empty() {
+    return Err(StatusCode::BAD_REQUEST);
+  }
+  let results =
+    crate::proxy_distribution::apply_pairs(state.app_handle.clone(), &request.pairs).await;
+  Ok(Json(DistributeProxiesResponse { results }))
 }
 
 // API Handler - Batch stop profiles (paid: browser automation).
@@ -4421,6 +4586,367 @@ async fn check_browser_downloaded(
   Ok(Json(is_downloaded))
 }
 
+// API Handlers - Agent surface: perception, locators, extraction, the picker
+// and humanized input.
+//
+// REST parity for the MCP tools of the same names, from the same shared
+// operations in `mcp_server`, so the two front doors cannot drift. Gated and
+// resolved the way every automation endpoint is: 402 without the plan, 404 for
+// an unknown profile, 409 when it is not running, 429 from the shared limiter.
+
+/// The running browser behind `id`, and the engine its version entitles it to.
+async fn agent_context_for(
+  id: &str,
+) -> Result<crate::mcp_server::AgentContext, (StatusCode, String)> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .can_use_browser_automation()
+    .await
+  {
+    return Err((StatusCode::PAYMENT_REQUIRED, String::new()));
+  }
+
+  let profiles = ProfileManager::instance()
+    .list_profiles()
+    .map_err(manager_error_response)?;
+  let profile = profiles
+    .into_iter()
+    .find(|p| p.id.to_string() == id)
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
+  if profile.browser != "wayfern" {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      "the agent endpoints drive Wayfern profiles only".to_string(),
+    ));
+  }
+
+  let target = crate::cdp_target::resolve(&profile)
+    .await
+    .map_err(resolve_error_response)?;
+  Ok(crate::mcp_server::AgentContext::new(profile, target))
+}
+
+/// A profile that could not be resolved to a browser.
+///
+/// "Not running" is a 409: the profile exists and the request was well
+/// formed, but the browser has to be started first. An automation client can
+/// act on that, which it cannot on a 500.
+fn resolve_error_response(error: crate::cdp_target::ResolveError) -> (StatusCode, String) {
+  use crate::cdp_target::ResolveError;
+  match error {
+    ResolveError::Unsupported(m) => (StatusCode::BAD_REQUEST, m),
+    ResolveError::NotRunning(m) => (StatusCode::CONFLICT, m),
+    ResolveError::Endpoint(m) => (StatusCode::BAD_GATEWAY, m),
+  }
+}
+
+/// Map a shared agent failure onto a status, with the structured detail in
+/// the body.
+///
+/// The body is the same `{"code": ..., ...}` envelope the MCP transport puts
+/// in its error `data`, plus `message`, so a locator that matched three
+/// buttons hands a REST client the same candidate list an agent gets.
+fn agent_error_response(error: crate::mcp_server::AgentError) -> (StatusCode, String) {
+  use crate::cdp_target::CdpError;
+  use crate::mcp_server::AgentError;
+  let status = match &error {
+    AgentError::InvalidArgument(_)
+    | AgentError::RequiresWayfern152 { .. }
+    | AgentError::AmbiguousLocator { .. }
+    | AgentError::NoMatch { .. }
+    | AgentError::TypingTooLong { .. }
+    | AgentError::BadRequest(_) => StatusCode::BAD_REQUEST,
+    AgentError::PaymentRequired(_) => StatusCode::PAYMENT_REQUIRED,
+    AgentError::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
+    AgentError::AuthorizationUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+    AgentError::PickerTimedOut { .. } => StatusCode::REQUEST_TIMEOUT,
+    AgentError::PickerCancelled { .. } => StatusCode::CONFLICT,
+    AgentError::Cdp(CdpError::Unauthorized(_)) => StatusCode::UNAUTHORIZED,
+    // Nothing answers on the profile's socket: the browser is gone, or is not
+    // drivable yet. Both read as "start it and try again".
+    AgentError::Cdp(CdpError::Unreachable(_) | CdpError::NotDrivable(_)) => StatusCode::CONFLICT,
+    AgentError::Cdp(CdpError::Transport(_) | CdpError::Protocol(_))
+    | AgentError::Browser(_)
+    | AgentError::Malformed(_) => StatusCode::BAD_GATEWAY,
+  };
+  let mut body = error.detail();
+  body["message"] = serde_json::Value::from(error.message());
+  (status, body.to_string())
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/agent/perceive",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = crate::wayfern_cdp::PerceptionRequest,
+  responses(
+    (status = 200, description = "The page as the agent sees it: nodes, frames, text, stats, and a cursor when truncated. Node keys are the browser's own camelCase; `engine` says whether Wayfern 152 or the DOM fallback answered", body = crate::wayfern_cdp::PerceptionPage),
+    (status = 400, description = "Malformed request, or a cursor on a profile whose browser cannot paginate"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The profile is not running"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 502, description = "The browser did not answer as documented"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agent"
+)]
+async fn agent_perceive_api(
+  Path(id): Path<String>,
+  Json(request): Json<crate::wayfern_cdp::PerceptionRequest>,
+) -> Result<Json<crate::wayfern_cdp::PerceptionPage>, (StatusCode, String)> {
+  let ctx = agent_context_for(&id).await?;
+  crate::mcp_server::agent_perceive(&ctx, &request)
+    .await
+    .map(Json)
+    .map_err(agent_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/agent/resolve-locator",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = crate::mcp_server::AgentResolveRequest,
+  responses(
+    (status = 200, description = "Exactly one element matched; `match` describes it", body = crate::wayfern_cdp::LocatorResolution),
+    (status = 400, description = "Malformed locator, no element matched (`code` LOCATOR_NO_MATCH), or several did (`code` LOCATOR_AMBIGUOUS, with `candidates`)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The profile is not running"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 502, description = "The browser did not answer as documented"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agent"
+)]
+async fn agent_resolve_locator_api(
+  Path(id): Path<String>,
+  Json(request): Json<crate::mcp_server::AgentResolveRequest>,
+) -> Result<Json<crate::wayfern_cdp::LocatorResolution>, (StatusCode, String)> {
+  let ctx = agent_context_for(&id).await?;
+  crate::mcp_server::agent_resolve_locator(&ctx, &request)
+    .await
+    .map(Json)
+    .map_err(agent_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/agent/click",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = crate::mcp_server::AgentClickRequest,
+  responses(
+    (status = 200, description = "The element was clicked; `navigated` says whether a page load followed", body = crate::mcp_server::AgentClick),
+    (status = 400, description = "Malformed request, no element matched, or several did (see resolve-locator)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The profile is not running"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 502, description = "The browser did not answer as documented"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agent"
+)]
+async fn agent_click_api(
+  Path(id): Path<String>,
+  Json(request): Json<crate::mcp_server::AgentClickRequest>,
+) -> Result<Json<crate::mcp_server::AgentClick>, (StatusCode, String)> {
+  let ctx = agent_context_for(&id).await?;
+  crate::mcp_server::agent_click_locator(&ctx, &request)
+    .await
+    .map(Json)
+    .map_err(agent_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/agent/type",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = crate::mcp_server::AgentTypeRequest,
+  responses(
+    (status = 200, description = "The text was typed", body = crate::mcp_server::AgentTyping),
+    (status = 400, description = "Malformed request, no element matched, several did, or the text would take longer than the typing budget (`code` TYPING_TOO_LONG)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The profile is not running"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 502, description = "The browser did not answer as documented"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agent"
+)]
+async fn agent_type_api(
+  Path(id): Path<String>,
+  Json(request): Json<crate::mcp_server::AgentTypeRequest>,
+) -> Result<Json<crate::mcp_server::AgentTyping>, (StatusCode, String)> {
+  let ctx = agent_context_for(&id).await?;
+  crate::mcp_server::agent_type_locator(&ctx, &request, crate::mcp_server::MAX_TYPING_SECONDS)
+    .await
+    .map(Json)
+    .map_err(agent_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/agent/extract",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = crate::wayfern_cdp::ExtractionRequest,
+  responses(
+    (status = 200, description = "The rows read, and why reading stopped. A missing container is a result with `stopReason` no-container, not an error", body = crate::wayfern_cdp::Extraction),
+    (status = 400, description = "Malformed request, or the profile runs a Wayfern older than 152 (`code` WAYFERN_152_REQUIRED)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The profile is not running"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 502, description = "The browser did not answer as documented"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agent"
+)]
+async fn agent_extract_api(
+  Path(id): Path<String>,
+  Json(request): Json<crate::wayfern_cdp::ExtractionRequest>,
+) -> Result<Json<crate::wayfern_cdp::Extraction>, (StatusCode, String)> {
+  let ctx = agent_context_for(&id).await?;
+  crate::mcp_server::agent_extract(&ctx, &request)
+    .await
+    .map(Json)
+    .map_err(agent_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/agent/pick",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = crate::mcp_server::AgentPickRequest,
+  responses(
+    (status = 200, description = "The user clicked an element; `locator` is the smallest description that resolves to it", body = crate::wayfern_cdp::PickedElement),
+    (status = 400, description = "Malformed request, or the profile runs a Wayfern older than 152 (`code` WAYFERN_152_REQUIRED)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 404, description = "Profile not found"),
+    (status = 408, description = "Nothing was picked within timeout_ms; the picker has been disarmed"),
+    (status = 409, description = "The profile is not running, or the picker was cancelled (Escape, or a navigation)"),
+    (status = 429, description = "Automation request rate limit exceeded"),
+    (status = 502, description = "The browser did not answer as documented"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agent"
+)]
+async fn agent_pick_api(
+  Path(id): Path<String>,
+  Json(request): Json<crate::mcp_server::AgentPickRequest>,
+) -> Result<Json<crate::wayfern_cdp::PickedElement>, (StatusCode, String)> {
+  let ctx = agent_context_for(&id).await?;
+  let timeout_ms = request
+    .timeout_ms
+    .unwrap_or(crate::mcp_server::DEFAULT_PICK_TIMEOUT_MS)
+    .clamp(1_000, crate::mcp_server::MAX_PICK_TIMEOUT_MS);
+  crate::mcp_server::agent_pick_element(&ctx, timeout_ms)
+    .await
+    .map(Json)
+    .map_err(agent_error_response)
+}
+
+#[cfg(test)]
+mod url_guard_tests {
+  //! The REST automation surface takes caller-supplied URLs too.
+  //!
+  //! The MCP handlers are covered by `every_url_entry_point_is_guarded` in
+  //! mcp_server.rs; these four had NO test of any kind, so the guards could be
+  //! deleted or a fifth endpoint added without anything noticing.
+
+  #[test]
+  fn every_rest_endpoint_that_takes_a_url_validates_its_scheme() {
+    let full = include_str!("api_server.rs");
+    let source = full
+      .split_once("\n#[cfg(test)]")
+      .map(|(code, _)| code)
+      .unwrap_or(full);
+
+    // Every request struct with a `url` field, and the handler that consumes
+    // it, must reach the shared predicate.
+    let structs: Vec<&str> = source
+      .split("struct ")
+      .skip(1)
+      .filter(|chunk| {
+        let head = &chunk[..chunk.len().min(600)];
+        head.contains("url: Option<String>") || head.contains("url: String")
+      })
+      .map(|chunk| chunk.split(['{', ' ', '<']).next().unwrap_or("?"))
+      .collect();
+    assert!(
+      structs.len() >= 4,
+      "expected the url-carrying request types; found {structs:?}"
+    );
+
+    // Each of those types is destructured by exactly one handler, and every
+    // one of those handlers must consult the predicate.
+    let guards = source
+      .matches("crate::mcp_server::is_navigable_url")
+      .count();
+    assert!(
+      guards >= structs.len(),
+      "found {} url-carrying request types but only {guards} scheme checks: \
+       an endpoint takes a url and never validates it, which is how \
+       `file:///…` plus a content read became a file disclosure",
+      structs.len()
+    );
+  }
+
+  #[test]
+  fn the_shared_predicate_is_the_one_the_mcp_surface_uses() {
+    // Two copies of an allowlist are two copies that drift. If this ever
+    // becomes a local re-implementation, the surfaces can disagree about what
+    // `file://` means.
+    // Cut before the test module, or this assertion trips over its own text.
+    let full = include_str!("api_server.rs");
+    let source = full
+      .split_once("\n#[cfg(test)]")
+      .map(|(code, _)| code)
+      .unwrap_or(full);
+    assert!(
+      !source.contains("fn is_navigable_url"),
+      "api_server must CALL the shared predicate, never define its own"
+    );
+    assert!(source.contains("crate::mcp_server::is_navigable_url"));
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -4679,6 +5205,13 @@ mod tests {
       // Starting a bot run leases a host for up to two hours and spends the
       // account's pooled remote-hour budget.
       "/v1/cookie-bot/runs",
+      // The agent surface drives the same browser through the same gate.
+      "/v1/profiles/profile-id/agent/perceive",
+      "/v1/profiles/profile-id/agent/resolve-locator",
+      "/v1/profiles/profile-id/agent/click",
+      "/v1/profiles/profile-id/agent/type",
+      "/v1/profiles/profile-id/agent/extract",
+      "/v1/profiles/profile-id/agent/pick",
     ] {
       assert!(
         is_automation_request(&Method::POST, path),
@@ -4700,6 +5233,14 @@ mod tests {
 
     for (method, path) in [
       (Method::GET, "/v1/profiles/profile-id/run"),
+      // Handing a fleet its proxies rewrites configuration; it never starts a
+      // browser, so metering it would spend an automation quota on nothing.
+      (Method::POST, "/v1/profiles/distribute-proxies"),
+      // Not routes: the agent segment alone, an unknown action, a nested one.
+      (Method::POST, "/v1/profiles/profile-id/agent"),
+      (Method::POST, "/v1/profiles/profile-id/agent/unknown"),
+      (Method::POST, "/v1/profiles/profile-id/agent/click/twice"),
+      (Method::GET, "/v1/profiles/profile-id/agent/perceive"),
       (Method::POST, "/v1/profiles"),
       (Method::POST, "/v1/profiles/import"),
       (Method::GET, "/v1/profiles"),
@@ -4709,10 +5250,9 @@ mod tests {
       (Method::DELETE, "/v1/remote-sessions/"),
       (Method::GET, "/v1/remote-sessions/session-id"),
       (Method::GET, "/v1/remote-sessions"),
-      // Enrolling a profile writes one row on the server and leases nothing.
-      // Metering it would 429 a client setting up a fleet of profiles, while
-      // the budget that actually protects the hardware is spent per RUN and
-      // enforced server-side however the run was scheduled.
+      // Enrolling a profile is configuration and leases nothing. Metering it
+      // would 429 a client setting up many profiles, and it is not what spends
+      // the account's hours.
       (Method::PUT, "/v1/cookie-bot/schedules/profile-id"),
       (Method::DELETE, "/v1/cookie-bot/schedules/profile-id"),
       (Method::GET, "/v1/cookie-bot/schedules"),
@@ -4896,6 +5436,23 @@ mod tests {
     let _router: Router<ApiServerState> = build_v1_router();
   }
 
+  // `""` is the only way a REST client can detach a proxy or VPN (an omitted
+  // field means "leave unchanged"), so that meaning has to reach clients
+  // through the served spec rather than living only in the Rust code.
+  #[test]
+  fn openapi_documents_the_empty_string_network_id_clear() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for schema in ["CreateProfileRequest", "UpdateProfileRequest"] {
+      for field in ["proxy_id", "vpn_id"] {
+        let property = spec["components"]["schemas"][schema]["properties"][field].to_string();
+        assert!(
+          property.contains("empty string"),
+          "{schema}.{field} must document the empty-string clear, got: {property}"
+        );
+      }
+    }
+  }
+
   fn schema_required(spec: &serde_json::Value, schema: &str) -> Vec<String> {
     spec["components"]["schemas"][schema]["required"]
       .as_array()
@@ -4910,6 +5467,62 @@ mod tests {
   // `#[schema(value_type = Object)]` on an `Option<T>` erases the optionality
   // and marks the field required in the served spec; these fields must stay
   // optional so generated clients aren't forced to send them.
+  #[test]
+  fn openapi_describes_the_distribution_contract() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let operation = &spec["paths"]["/v1/profiles/distribute-proxies"]["post"];
+
+    let body = &operation["requestBody"]["content"]["application/json"]["schema"]["$ref"];
+    assert_eq!(
+      body.as_str(),
+      Some("#/components/schemas/DistributeProxiesRequest"),
+      "request body does not resolve: {body:?}"
+    );
+    let response = &operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"];
+    assert_eq!(
+      response.as_str(),
+      Some("#/components/schemas/DistributeProxiesResponse"),
+      "response body does not resolve: {response:?}"
+    );
+    for status in ["400", "401", "500"] {
+      assert!(
+        operation["responses"].get(status).is_some(),
+        "distribute-proxies is missing its {status} response"
+      );
+    }
+    // The schemas the two bodies point at have to exist, or a client is
+    // generated against nothing.
+    for schema in [
+      "DistributeProxiesRequest",
+      "DistributeProxiesResponse",
+      "ProxyPair",
+      "ProxyAssignmentResult",
+    ] {
+      assert!(
+        spec["components"]["schemas"].get(schema).is_some(),
+        "missing schema: {schema}"
+      );
+    }
+
+    // A successful assignment carries no error, so `error` must stay nullable;
+    // marking it required would make every generated client demand a string
+    // that is not there.
+    let required = spec["components"]["schemas"]["ProxyAssignmentResult"]["required"]
+      .as_array()
+      .cloned()
+      .unwrap_or_default();
+    assert!(
+      !required.iter().any(|r| r == "error"),
+      "the per-profile error is nullable and must stay optional"
+    );
+    for always in ["profile_id", "proxy_id", "ok"] {
+      assert!(
+        required.iter().any(|r| r == always),
+        "{always} is always reported and must stay required"
+      );
+    }
+  }
+
   #[test]
   fn openapi_optional_fields_are_not_required() {
     let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
@@ -4934,11 +5547,38 @@ mod tests {
       "group_id must be a nullable string, not a free-form object"
     );
 
+    // A client that does not ask for a disposable profile must not have to
+    // say so, and one that reads a profile must always learn whether it is.
+    for field in ["ephemeral", "temporary"] {
+      assert!(
+        !create_profile.iter().any(|f| f == field),
+        "{field} must be optional on create, required list: {create_profile:?}"
+      );
+      assert!(
+        api_profile.iter().any(|f| f == field),
+        "{field} must always be reported on ApiProfile, required list: {api_profile:?}"
+      );
+    }
+
     let update_profile = schema_required(&spec, "UpdateProfileRequest");
     assert!(
       !update_profile.iter().any(|f| f == "group_id"),
       "group_id must be optional, required list: {update_profile:?}"
     );
+
+    // Sending `""` is the only way a REST client can detach a proxy or VPN,
+    // since an omitted field means "leave unchanged". Requiring either would
+    // force generated clients to send one.
+    for field in ["proxy_id", "vpn_id"] {
+      assert!(
+        !create_profile.iter().any(|f| f == field),
+        "{field} must be optional on create, required list: {create_profile:?}"
+      );
+      assert!(
+        !update_profile.iter().any(|f| f == field),
+        "{field} must be optional on update, required list: {update_profile:?}"
+      );
+    }
 
     let update_proxy = schema_required(&spec, "UpdateProxyRequest");
     assert!(
@@ -5112,6 +5752,158 @@ mod tests {
         "{field} must be optional on an extension, required list: {extension:?}"
       );
     }
+
+    // The agent surface. Every knob on a perception request has a default;
+    // a locator is any subset of its parts; the pick body is optional to the
+    // last field. A wrongly-required field here makes a generated client send
+    // something the caller never chose.
+    for request in [
+      "PerceptionRequest",
+      "LocatorDescription",
+      "AgentPickRequest",
+    ] {
+      let fields = schema_required(&spec, request);
+      assert!(
+        fields.is_empty(),
+        "every field of {request} must be optional, required list: {fields:?}"
+      );
+    }
+    assert_eq!(
+      schema_required(&spec, "AgentResolveRequest"),
+      vec!["locator"]
+    );
+    assert_eq!(schema_required(&spec, "AgentClickRequest"), vec!["locator"]);
+    let type_request = schema_required(&spec, "AgentTypeRequest");
+    assert!(
+      type_request.contains(&"locator".to_string()) && type_request.contains(&"text".to_string())
+    );
+    for field in ["clear_first", "typos", "wpm"] {
+      assert!(
+        !type_request.iter().any(|f| f == field),
+        "{field} must be optional on a type request, required list: {type_request:?}"
+      );
+    }
+    let extraction = schema_required(&spec, "ExtractionRequest");
+    assert!(
+      extraction.contains(&"container".to_string())
+        && extraction.contains(&"field_map".to_string())
+    );
+    for field in [
+      "next_page",
+      "max_pages",
+      "max_rows",
+      "max_bytes",
+      "max_nodes",
+      "time_budget_ms",
+    ] {
+      assert!(
+        !extraction.iter().any(|f| f == field),
+        "{field} must be optional on an extraction, required list: {extraction:?}"
+      );
+    }
+    // `value` is withheld for a protected control, `url` exists only for links
+    // and images, and `backendNodeId` only on the native engine.
+    let candidate = schema_required(&spec, "LocatorCandidate");
+    for field in ["value", "url", "backendNodeId"] {
+      assert!(
+        !candidate.iter().any(|f| f == field),
+        "{field} must be optional on a candidate, required list: {candidate:?}"
+      );
+    }
+    let node = schema_required(&spec, "PerceptionNode");
+    for field in [
+      "parentId",
+      "name",
+      "text",
+      "value",
+      "checked",
+      "expanded",
+      "scrollable",
+      "scrollContainerId",
+    ] {
+      assert!(
+        !node.iter().any(|f| f == field),
+        "{field} must be optional on a node, required list: {node:?}"
+      );
+    }
+    let page = schema_required(&spec, "PerceptionPage");
+    assert!(
+      !page.iter().any(|f| f == "cursor"),
+      "cursor follows only a truncated page: {page:?}"
+    );
+    let typing = schema_required(&spec, "AgentTyping");
+    assert!(
+      !typing.iter().any(|f| f == "corrections"),
+      "the fallback engine counts no corrections: {typing:?}"
+    );
+  }
+
+  #[test]
+  fn agent_failures_map_onto_statuses_a_client_can_act_on() {
+    use crate::cdp_target::CdpError;
+    use crate::mcp_server::AgentError;
+
+    // A locator that matched three things is the caller's problem, and the
+    // body carries what matched so they can fix it.
+    let (status, body) = agent_error_response(AgentError::AmbiguousLocator {
+      match_count: 3,
+      candidates: vec![serde_json::json!({ "backendNodeId": 1 })],
+      message: "Ambiguous locator: 3 nodes match.".to_string(),
+    });
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = serde_json::from_str(&body).expect("a JSON body");
+    assert_eq!(body["code"], "LOCATOR_AMBIGUOUS");
+    assert_eq!(body["matchCount"], 3);
+    assert_eq!(body["candidates"][0]["backendNodeId"], 1);
+    assert!(body["message"]
+      .as_str()
+      .unwrap()
+      .starts_with("Ambiguous locator"));
+
+    let (status, body) = agent_error_response(AgentError::NoMatch {
+      message: "No node matches locator (role=button).".to_string(),
+    });
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.contains("LOCATOR_NO_MATCH"));
+
+    // The browser's own gate is the same 402 and 429 the launch routes answer.
+    let (status, _) = agent_error_response(AgentError::PaymentRequired("no plan".into()));
+    assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+    let (status, _) = agent_error_response(AgentError::RateLimited("too fast".into()));
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    let (status, body) = agent_error_response(AgentError::RequiresWayfern152 {
+      version: "151.0.7922.76".into(),
+    });
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.contains("WAYFERN_152_REQUIRED") && body.contains("151.0.7922.76"));
+
+    // Nobody clicked: a timeout, not a fault. Escape: a conflict with what
+    // the user did, not a fault either.
+    let (status, _) = agent_error_response(AgentError::PickerTimedOut { timeout_ms: 5 });
+    assert_eq!(status, StatusCode::REQUEST_TIMEOUT);
+    let (status, _) = agent_error_response(AgentError::PickerCancelled {
+      reason: "escape".into(),
+    });
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    // A browser that is not there is "start it", not "we broke".
+    let (status, _) = agent_error_response(AgentError::Cdp(CdpError::Unreachable("x".into())));
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, _) = agent_error_response(AgentError::Cdp(CdpError::Transport("x".into())));
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    let (status, _) = agent_error_response(AgentError::Cdp(CdpError::Unauthorized("x".into())));
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    // And a profile that exists but is not running is a 409 from the resolver.
+    use crate::cdp_target::ResolveError;
+    assert_eq!(
+      resolve_error_response(ResolveError::NotRunning("not running".into())).0,
+      StatusCode::CONFLICT
+    );
+    assert_eq!(
+      resolve_error_response(ResolveError::Unsupported("firefox".into())).0,
+      StatusCode::BAD_REQUEST
+    );
   }
 
   #[test]
@@ -5365,9 +6157,8 @@ mod tests {
 
   #[test]
   fn the_kill_route_documents_that_it_can_fail_to_stop_a_remote_browser() {
-    // The backend refuses to retire a session it could not stop on the fleet, so
-    // stopping can genuinely fail with the browser still running. A spec that
-    // only lists 204 tells a client that never happens.
+    // Stopping can genuinely fail with the remote browser still running. A spec
+    // that only lists 204 tells a client that never happens.
     let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
     let responses = &spec["paths"]["/v1/profiles/{id}/kill"]["post"]["responses"];
     assert!(
@@ -5405,6 +6196,9 @@ mod tests {
       "/v1/profiles/import",
       "/v1/profiles/import/detect",
       "/v1/proxies/import",
+      // One proxy per profile across a whole fleet. Registered on the router
+      // is not registered in the spec, and the spec is the contract.
+      "/v1/profiles/distribute-proxies",
       // The whole remote-execution surface was registered on the router but
       // absent from ApiDoc, so it never appeared in the served spec. This list
       // is a hand-maintained allowlist, which is exactly why that drift went
@@ -5424,6 +6218,14 @@ mod tests {
       "/v1/cookie-bot/runs/{run_id}",
       "/v1/cookie-bot/presets",
       "/v1/cookie-bot/usage",
+      // The agent surface. Same hazard as every route above: registered on
+      // the router is not registered in the spec.
+      "/v1/profiles/{id}/agent/perceive",
+      "/v1/profiles/{id}/agent/resolve-locator",
+      "/v1/profiles/{id}/agent/click",
+      "/v1/profiles/{id}/agent/type",
+      "/v1/profiles/{id}/agent/extract",
+      "/v1/profiles/{id}/agent/pick",
     ] {
       assert!(paths.contains_key(path), "missing from ApiDoc: {path}");
     }
@@ -5599,8 +6401,8 @@ mod tests {
     }
 
     // The presets a client may choose from must never carry the behaviour they
-    // expand to. A site list, a dwell range or a step programme appearing here
-    // would mean the browsing model had leaked out of the server.
+    // expand to: anything beyond an id and a rough duration would mean the
+    // browsing model had leaked out of the server.
     let preset_properties = spec["components"]["schemas"]["CookieBotPreset"]["properties"]
       .as_object()
       .expect("preset properties");
@@ -5625,12 +6427,105 @@ mod tests {
       "/v1/profiles/{id}/run-remote",
       "/v1/profiles/batch/run",
       "/v1/profiles/batch/stop",
+      "/v1/profiles/{id}/agent/perceive",
+      "/v1/profiles/{id}/agent/resolve-locator",
+      "/v1/profiles/{id}/agent/click",
+      "/v1/profiles/{id}/agent/type",
+      "/v1/profiles/{id}/agent/extract",
+      "/v1/profiles/{id}/agent/pick",
     ] {
       assert!(
         paths[path]["post"]["responses"].get("429").is_some(),
         "automation route is missing its 429 response: {path}"
       );
+      for status in ["402", "404", "409"] {
+        assert!(
+          paths[path]["post"]["responses"].get(status).is_some() || !path.contains("/agent/"),
+          "agent route is missing its {status} response: {path}"
+        );
+      }
     }
+
+    // The agent surface's bodies resolve to the components the shared
+    // operations serialize, and every one of those is registered: a response
+    // body that resolves to nothing is worse than a missing path.
+    for (path, schema) in [
+      ("/v1/profiles/{id}/agent/perceive", "PerceptionPage"),
+      (
+        "/v1/profiles/{id}/agent/resolve-locator",
+        "LocatorResolution",
+      ),
+      ("/v1/profiles/{id}/agent/click", "AgentClick"),
+      ("/v1/profiles/{id}/agent/type", "AgentTyping"),
+      ("/v1/profiles/{id}/agent/extract", "Extraction"),
+      ("/v1/profiles/{id}/agent/pick", "PickedElement"),
+    ] {
+      let reference =
+        &paths[path]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"];
+      assert_eq!(
+        reference.as_str(),
+        Some(format!("#/components/schemas/{schema}").as_str()),
+        "post {path} 200 does not reference {schema}: {reference:?}"
+      );
+      let tags = paths[path]["post"]["tags"].as_array().expect("tags");
+      assert!(
+        tags.iter().any(|tag| tag == "agent"),
+        "{path} is not tagged agent"
+      );
+    }
+    for schema in [
+      "Engine",
+      "LocatorAttribute",
+      "LocatorDescription",
+      "LocatorBounds",
+      "LocatorCandidate",
+      "LocatorResolution",
+      "PerceptionRequest",
+      "PerceptionNode",
+      "PerceptionFrame",
+      "PerceptionStats",
+      "PerceptionPage",
+      "ExtractionField",
+      "ExtractionRequest",
+      "ExtractionRow",
+      "Extraction",
+      "PickedElement",
+      "AgentResolveRequest",
+      "AgentClickRequest",
+      "AgentClick",
+      "AgentTypeRequest",
+      "AgentTyping",
+      "AgentPickRequest",
+    ] {
+      let component = &spec["components"]["schemas"][schema];
+      assert!(
+        component["properties"].is_object() || component["enum"].is_array(),
+        "schema is missing from the served spec: {schema}"
+      );
+    }
+    // The node shape is the browser's, camelCase included: a client generated
+    // from the spec must read the same keys the wire carries.
+    let node = spec["components"]["schemas"]["PerceptionNode"]["properties"]
+      .as_object()
+      .expect("node properties");
+    for key in ["frameId", "inViewport", "parentId", "scrollContainerId"] {
+      assert!(
+        node.contains_key(key),
+        "PerceptionNode.{key} is missing or not camelCase"
+      );
+    }
+    let candidate = spec["components"]["schemas"]["LocatorCandidate"]["properties"]
+      .as_object()
+      .expect("candidate properties");
+    assert!(candidate.contains_key("backendNodeId"));
+    let resolution = spec["components"]["schemas"]["LocatorResolution"]["properties"]
+      .as_object()
+      .expect("resolution properties");
+    assert!(resolution.contains_key("match") && resolution.contains_key("matchCount"));
+    assert_eq!(
+      spec["components"]["schemas"]["Engine"]["enum"],
+      serde_json::json!(["wayfern", "fallback"])
+    );
 
     assert!(
       paths["/v1/cookie-bot/runs"]["post"]["responses"]

@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
@@ -28,10 +29,141 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
+  PersonaField,
   WayfernConfig,
   WayfernFingerprintConfig,
   WayfernOS,
+  WebRtcMode,
 } from "@/types";
+
+/**
+ * Whether a profile reopens the windows and tabs it was closed with. A plain
+ * behaviour choice, so it sits in the simple view as well as the advanced one.
+ */
+function SessionRestoreOption({
+  checked,
+  onChange,
+  readOnly,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  readOnly: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+      <div className="flex items-center gap-x-2">
+        <Checkbox
+          id="restore-session"
+          checked={checked}
+          onCheckedChange={(value) => {
+            onChange(value === true);
+          }}
+          disabled={readOnly}
+        />
+        <Label htmlFor="restore-session" className="font-medium">
+          {t("fingerprint.restoreSession")}
+        </Label>
+      </div>
+      <p className="ml-6 text-sm text-muted-foreground">
+        {t("fingerprint.restoreSessionDescription")}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The person this profile presents when a site asks for one. Every value is
+ * derived from the profile's own seed, so it is the same on every launch and
+ * different for every profile; editing one field leaves the rest derived.
+ */
+function PersonaEditor({
+  profileId,
+  edits,
+  onChange,
+  readOnly,
+}: {
+  profileId: string;
+  edits?: string;
+  onChange: (value: string | undefined) => void;
+  readOnly: boolean;
+}) {
+  const { t } = useTranslation();
+  const [fields, setFields] = useState<PersonaField[]>([]);
+
+  // Read once per profile. Re-reading whenever the edits change would fetch
+  // the SAVED persona while the user is still typing an unsaved one, and
+  // overwrite what they typed.
+  useEffect(() => {
+    let cancelled = false;
+    void invoke<PersonaField[]>("get_profile_persona", { profileId })
+      .then((result) => {
+        if (!cancelled) setFields(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+
+  if (fields.length === 0) return null;
+
+  const update = (id: string, value: string) => {
+    const next = fields.map((field) =>
+      field.id === id ? { ...field, value } : field,
+    );
+    setFields(next);
+    onChange(JSON.stringify(next));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label>{t("fingerprint.personaLabel")}</Label>
+        {edits && (
+          <RippleButton
+            variant="ghost"
+            size="sm"
+            disabled={readOnly}
+            onClick={() => {
+              void invoke<PersonaField[]>("get_profile_persona", {
+                profileId,
+                derivedOnly: true,
+              }).then((derived) => {
+                setFields(derived);
+                onChange(undefined);
+              });
+            }}
+          >
+            {t("fingerprint.personaReset")}
+          </RippleButton>
+        )}
+      </div>
+      <div className="grid gap-3 @md:grid-cols-2">
+        {fields.map((field) => (
+          <div key={field.id} className="space-y-1">
+            <Label htmlFor={`persona-${field.id}`} className="text-xs">
+              {field.label}
+            </Label>
+            <Input
+              id={`persona-${field.id}`}
+              value={field.value}
+              disabled={readOnly}
+              onChange={(e) => {
+                update(field.id, e.target.value);
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {t("fingerprint.personaDescription")}
+      </p>
+    </div>
+  );
+}
 
 interface WayfernConfigFormProps {
   config: WayfernConfig;
@@ -44,6 +176,9 @@ interface WayfernConfigFormProps {
   limitedMode?: boolean;
   profileVersion?: string;
   profileBrowser?: string;
+  /// The saved profile whose persona is edited here. Absent while a profile is
+  /// being created: there is no seed yet, so there is no person to show.
+  profileId?: string;
 }
 
 const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
@@ -85,6 +220,7 @@ export function WayfernConfigForm({
   limitedMode = false,
   profileVersion,
   profileBrowser,
+  profileId,
 }: WayfernConfigFormProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
@@ -110,9 +246,9 @@ export function WayfernConfigForm({
         },
       );
       // An identity-backed profile stores the id, its location and the user's
-      // edits, never the device: the browser rebuilds the device from the id
-      // on every launch, so nothing worth copying is ever written to disk. A
-      // legacy browser without the identity API still stores the payload.
+      // edits, never the device: the device is derived from the id at launch,
+      // so nothing worth copying is ever written to disk. A legacy browser
+      // without the identity API still stores the payload.
       onConfigChange("identity_id", result.identity_id ?? undefined);
       onConfigChange("location", result.location ?? undefined);
       onConfigChange(
@@ -307,6 +443,116 @@ export function WayfernConfigForm({
         </div>
         <p className="ml-6 text-sm text-muted-foreground">
           {t("fingerprint.generateRandomDescription")}
+        </p>
+      </div>
+
+      <SessionRestoreOption
+        checked={config.restore_session ?? true}
+        onChange={(checked) => {
+          onConfigChange("restore_session", checked);
+        }}
+        readOnly={readOnly}
+      />
+
+      {/* WebRTC posture */}
+      <div className="space-y-3">
+        <Label htmlFor="webrtc-mode">{t("fingerprint.webrtcModeLabel")}</Label>
+        <Select
+          value={config.webrtc_mode ?? (config.block_webrtc ? "block" : "auto")}
+          onValueChange={(value: WebRtcMode) => {
+            onConfigChange("webrtc_mode", value);
+          }}
+          disabled={readOnly}
+        >
+          <SelectTrigger id="webrtc-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(["auto", "tcp_only", "block"] as WebRtcMode[]).map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {t(`fingerprint.webrtcMode.${mode}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground">
+          {t("fingerprint.webrtcModeDescription")}
+        </p>
+      </div>
+
+      {profileId && (
+        <PersonaEditor
+          profileId={profileId}
+          edits={config.persona}
+          onChange={(value) => {
+            onConfigChange("persona", value);
+          }}
+          readOnly={readOnly}
+        />
+      )}
+
+      {/* Camera source */}
+      <div className="space-y-3">
+        <Label>{t("fingerprint.cameraLabel")}</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <RippleButton
+            variant="outline"
+            size="sm"
+            disabled={readOnly}
+            onClick={() => {
+              void (async () => {
+                const selected = await open({
+                  multiple: false,
+                  filters: [
+                    {
+                      name: t("fingerprint.cameraFileFilter"),
+                      extensions: ["png", "y4m", "mjpeg"],
+                    },
+                  ],
+                });
+                if (typeof selected === "string") {
+                  onConfigChange("camera_file", selected);
+                }
+              })();
+            }}
+          >
+            {t("fingerprint.cameraChoose")}
+          </RippleButton>
+          {config.camera_file && (
+            <>
+              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                {config.camera_file}
+              </span>
+              <RippleButton
+                variant="ghost"
+                size="sm"
+                disabled={readOnly}
+                onClick={() => {
+                  onConfigChange("camera_file", undefined);
+                  onConfigChange("camera_crop", undefined);
+                }}
+              >
+                {t("common.buttons.clear")}
+              </RippleButton>
+            </>
+          )}
+        </div>
+        {config.camera_file && (
+          <div className="space-y-2">
+            <Label htmlFor="camera-crop">{t("fingerprint.cameraCrop")}</Label>
+            <Input
+              id="camera-crop"
+              value={config.camera_crop ?? ""}
+              placeholder="0,0,1280,720"
+              disabled={readOnly}
+              onChange={(e) => {
+                onConfigChange("camera_crop", e.target.value || undefined);
+              }}
+            />
+          </div>
+        )}
+        <p className="text-sm text-muted-foreground">
+          {t("fingerprint.cameraDescription")}
         </p>
       </div>
 
@@ -1310,6 +1556,14 @@ export function WayfernConfigForm({
                 {t("fingerprint.generateRandomDescription")}
               </p>
             </div>
+
+            <SessionRestoreOption
+              checked={config.restore_session ?? true}
+              onChange={(checked) => {
+                onConfigChange("restore_session", checked);
+              }}
+              readOnly={readOnly}
+            />
 
             {/* Automatic Location Configuration */}
             <div className="space-y-3">

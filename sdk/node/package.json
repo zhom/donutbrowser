@@ -1,0 +1,41 @@
+{
+  "name": "@donutbrowser/sdk",
+  "version": "0.1.0",
+  "description": "Thin client for the Donut Browser local REST API",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "donut-browser",
+    "browser-automation",
+    "anti-detect",
+    "cdp"
+  ],
+  "homepage": "https://donutbrowser.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhom/donutbrowser.git",
+    "directory": "sdk/node"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

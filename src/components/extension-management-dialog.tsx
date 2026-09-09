@@ -21,6 +21,7 @@ import {
   LuChevronUp,
   LuExternalLink,
   LuFolderOpen,
+  LuGlobe,
   LuLink,
   LuPencil,
   LuPuzzle,
@@ -28,11 +29,13 @@ import {
   LuTrash2,
   LuUpload,
 } from "react-icons/lu";
+import { AssignmentImpact } from "@/components/assignment-impact";
 import {
   DataTableActionBar,
   DataTableActionBarAction,
   DataTableActionBarSelection,
 } from "@/components/data-table-action-bar";
+import { ProfileUsageButton } from "@/components/profile-usage-button";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -76,10 +79,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfileReferences } from "@/hooks/use-profile-references";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
-import type { Extension, ExtensionGroup } from "@/types";
+import type { Extension, ExtensionGroup, FetchedExtension } from "@/types";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { RippleButton } from "./ui/ripple";
 
@@ -170,6 +174,16 @@ export function ExtensionManagementDialog({
     null,
   );
   const [linkFolder, setLinkFolder] = useState(false);
+  const [showUrlForm, setShowUrlForm] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  /** Identity read out of a downloaded archive's own manifest, shown before
+   * the extension is saved so the user sees what a link actually resolved to. */
+  const [fetchedIdentity, setFetchedIdentity] = useState<{
+    name: string;
+    version: string | null;
+    source: string;
+  } | null>(null);
 
   // Group state
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -202,6 +216,8 @@ export function ExtensionManagementDialog({
   );
 
   // Edit extension state
+  const { profiles: referencedProfiles, failed: referencesFailed } =
+    useProfileReferences(isOpen);
   const [editingExtension, setEditingExtension] = useState<Extension | null>(
     null,
   );
@@ -323,6 +339,7 @@ export function ExtensionManagementDialog({
     setPendingSource(null);
     setExtensionName("");
     setLinkFolder(false);
+    setFetchedIdentity(null);
   }, []);
 
   const closeEditExtension = useCallback(() => {
@@ -472,6 +489,7 @@ export function ExtensionManagementDialog({
           file.name.replace(/\.(crx|zip)$/i, "").replace(/[-_]/g, " "),
         );
         setLinkFolder(false);
+        setFetchedIdentity(null);
         setPendingSource(source);
       });
     },
@@ -499,6 +517,7 @@ export function ExtensionManagementDialog({
     if (!folder) return;
     setExtensionName(pathBaseName(folder).replace(/[-_]/g, " "));
     setLinkFolder(false);
+    setFetchedIdentity(null);
     setPendingSource({ kind: "folder", path: folder });
   }, [pickExtensionFolder]);
 
@@ -507,6 +526,41 @@ export function ExtensionManagementDialog({
     if (!folder) return;
     setPendingUpdateSource({ kind: "folder", path: folder });
   }, [pickExtensionFolder]);
+
+  /** Stage a link exactly as a picked file is staged: the download is
+   * validated and its manifest read in the backend, and the user still
+   * confirms the name before anything is stored. */
+  const handleFetchFromUrl = useCallback(async () => {
+    const link = urlInput.trim();
+    if (!link || isFetchingUrl) return;
+    setIsFetchingUrl(true);
+    try {
+      const fetched = await invoke<FetchedExtension>(
+        "fetch_extension_from_url",
+        { url: link },
+      );
+      const identity = fetched.name?.trim() ?? "";
+      setPendingSource({
+        kind: "archive",
+        fileName: fetched.file_name,
+        data: fetched.file_data,
+      });
+      setExtensionName(identity || fetched.file_name.replace(/\.zip$/i, ""));
+      setLinkFolder(false);
+      setFetchedIdentity({
+        name: identity || fetched.file_name,
+        version: fetched.version?.trim() || null,
+        source: fetched.source_url,
+      });
+      setShowUrlForm(false);
+      setUrlInput("");
+      showSuccessToast(t("extensions.fetchSuccess"));
+    } catch (err) {
+      showActionError(err, t("extensions.fetchFailed"));
+    } finally {
+      setIsFetchingUrl(false);
+    }
+  }, [urlInput, isFetchingUrl, showActionError, t]);
 
   const handleUpload = useCallback(async () => {
     if (!pendingSource || !extensionName.trim()) return;
@@ -891,16 +945,32 @@ export function ExtensionManagementDialog({
           </Button>
         ),
         cell: ({ row }) => (
-          <span className="block min-w-0 truncate text-sm font-medium">
-            {row.original.name}
-          </span>
+          <button
+            type="button"
+            className="block min-w-0 max-w-full rounded-sm text-left text-sm font-medium hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            onClick={() => {
+              const ext = row.original;
+              setEditingExtension(ext);
+              setEditExtensionName(ext.name);
+              setPendingUpdateSource(null);
+              setEditLinkFolder(Boolean(ext.linked_path));
+            }}
+          >
+            <span className="block truncate">{row.original.name}</span>
+            <span className="block truncate text-xs font-normal text-muted-foreground">
+              {row.original.manifest_name &&
+              row.original.manifest_name !== row.original.name
+                ? row.original.manifest_name
+                : row.original.file_name}
+            </span>
+          </button>
         ),
       },
       {
         id: "compat",
-        size: 56,
+        size: 100,
         enableSorting: false,
-        header: () => null,
+        header: () => t("extensions.compatibility.label"),
         cell: ({ row }) =>
           renderCompatIcons(row.original.browser_compatibility),
       },
@@ -908,14 +978,37 @@ export function ExtensionManagementDialog({
         id: "source",
         size: 128,
         enableSorting: false,
-        header: () => null,
+        header: () => t("appFeedback.source"),
         cell: ({ row }) => renderSource(row.original),
+      },
+      {
+        id: "usage",
+        size: 88,
+        enableSorting: false,
+        header: () => t("profiles.title"),
+        cell: ({ row }) => (
+          <ProfileUsageButton
+            label={t("appFeedback.assignedProfiles", {
+              name: row.original.name,
+            })}
+            failed={referencesFailed}
+            profiles={
+              referencedProfiles?.filter((profile) =>
+                extensionGroups.some(
+                  (group) =>
+                    group.id === profile.extension_group_id &&
+                    group.extension_ids.includes(row.original.id),
+                ),
+              ) ?? null
+            }
+          />
+        ),
       },
       {
         id: "sync",
         size: 88,
         enableSorting: false,
-        header: () => null,
+        header: () => t("proxies.management.syncCol"),
         cell: ({ row }) => {
           const ext = row.original;
           const syncDot = getSyncStatusDot(ext, extSyncStatus[ext.id], t);
@@ -962,7 +1055,7 @@ export function ExtensionManagementDialog({
         id: "actions",
         size: 80,
         enableSorting: false,
-        header: () => null,
+        header: () => t("common.labels.actions"),
         cell: ({ row }) => {
           const ext = row.original;
           return (
@@ -1007,6 +1100,9 @@ export function ExtensionManagementDialog({
     ],
     [
       t,
+      referencedProfiles,
+      referencesFailed,
+      extensionGroups,
       extSyncStatus,
       isTogglingExtSync,
       handleToggleExtSync,
@@ -1077,16 +1173,24 @@ export function ExtensionManagementDialog({
           </Button>
         ),
         cell: ({ row }) => (
-          <span className="block min-w-0 truncate text-sm font-medium">
+          <button
+            type="button"
+            className="block min-w-0 max-w-full truncate rounded-sm text-left text-sm font-medium hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            onClick={() => {
+              setEditingGroup(row.original);
+              setEditGroupName(row.original.name);
+              setEditGroupExtensionIds([...row.original.extension_ids]);
+            }}
+          >
             {row.original.name}
-          </span>
+          </button>
         ),
       },
       {
         id: "extensions",
         size: 120,
         enableSorting: false,
-        header: () => null,
+        header: () => t("extensions.extensionsTab"),
         cell: ({ row }) => {
           const group = row.original;
           const groupExts = group.extension_ids
@@ -1137,10 +1241,29 @@ export function ExtensionManagementDialog({
         },
       },
       {
+        id: "usage",
+        size: 88,
+        enableSorting: false,
+        header: () => t("profiles.title"),
+        cell: ({ row }) => (
+          <ProfileUsageButton
+            label={t("appFeedback.assignedProfiles", {
+              name: row.original.name,
+            })}
+            failed={referencesFailed}
+            profiles={
+              referencedProfiles?.filter(
+                (profile) => profile.extension_group_id === row.original.id,
+              ) ?? null
+            }
+          />
+        ),
+      },
+      {
         id: "sync",
         size: 88,
         enableSorting: false,
-        header: () => null,
+        header: () => t("proxies.management.syncCol"),
         cell: ({ row }) => {
           const group = row.original;
           const groupSyncDot = getSyncStatusDot(
@@ -1188,7 +1311,7 @@ export function ExtensionManagementDialog({
         id: "actions",
         size: 80,
         enableSorting: false,
-        header: () => null,
+        header: () => t("common.labels.actions"),
         cell: ({ row }) => {
           const group = row.original;
           return (
@@ -1232,6 +1355,8 @@ export function ExtensionManagementDialog({
     ],
     [
       t,
+      referencedProfiles,
+      referencesFailed,
       extensions,
       extSyncStatus,
       isTogglingGroupSync,
@@ -1355,6 +1480,27 @@ export function ExtensionManagementDialog({
                           {t("extensions.loadUnpackedTooltip")}
                         </TooltipContent>
                       </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <RippleButton
+                            size="sm"
+                            variant="outline"
+                            disabled={limitedMode}
+                            onClick={() => {
+                              setShowUrlForm((open) => !open);
+                            }}
+                            aria-label={t("extensions.fromUrl")}
+                          >
+                            <LuGlobe className="size-4" />
+                            <span className="hidden @2xl:inline">
+                              {t("extensions.fromUrl")}
+                            </span>
+                          </RippleButton>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {t("extensions.fromUrlTooltip")}
+                        </TooltipContent>
+                      </Tooltip>
                     </>
                   )}
                   {activeTab === "groups" && (
@@ -1399,6 +1545,51 @@ export function ExtensionManagementDialog({
                     disabled={limitedMode}
                   />
 
+                  {/* Import from a link */}
+                  {showUrlForm && (
+                    <div className="space-y-2 rounded-md border p-3">
+                      <div className="flex gap-2">
+                        <Input
+                          id="ext-url-input"
+                          value={urlInput}
+                          onChange={(e) => {
+                            setUrlInput(e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void handleFetchFromUrl();
+                          }}
+                          placeholder={t("extensions.urlPlaceholder")}
+                          className="flex-1"
+                          disabled={isFetchingUrl}
+                        />
+                        <RippleButton
+                          size="sm"
+                          onClick={() => void handleFetchFromUrl()}
+                          disabled={
+                            isFetchingUrl || urlInput.trim().length === 0
+                          }
+                        >
+                          {isFetchingUrl
+                            ? t("extensions.fetching")
+                            : t("extensions.fetchExtension")}
+                        </RippleButton>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setShowUrlForm(false);
+                            setUrlInput("");
+                          }}
+                        >
+                          {t("common.buttons.cancel")}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("extensions.urlHint")}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Import form */}
                   {pendingSource && (
                     <div className="space-y-3 rounded-md border p-3">
@@ -1413,6 +1604,26 @@ export function ExtensionManagementDialog({
                             : pendingSource.fileName}
                         </span>
                       </div>
+                      {fetchedIdentity && (
+                        <div className="space-y-0.5">
+                          <div
+                            data-slot="extension-fetched-identity"
+                            className="text-sm font-medium break-all text-foreground"
+                          >
+                            {fetchedIdentity.version
+                              ? t("extensions.fetchedIdentity", {
+                                  name: fetchedIdentity.name,
+                                  version: fetchedIdentity.version,
+                                })
+                              : fetchedIdentity.name}
+                          </div>
+                          <p className="text-xs break-all text-muted-foreground">
+                            {t("extensions.fetchedFrom", {
+                              source: fetchedIdentity.source,
+                            })}
+                          </p>
+                        </div>
+                      )}
                       {pendingSource.kind === "folder" && (
                         <div className="flex items-start gap-2">
                           <Checkbox
@@ -1715,6 +1926,20 @@ export function ExtensionManagementDialog({
 
           <ScrollArea className="-mx-6 flex-1 overflow-y-auto px-6">
             <div className="space-y-4">
+              {editingGroup && (
+                <AssignmentImpact
+                  sources={editGroupExtensionIds.map(
+                    (id) => extensions.find((ext) => ext.id === id)?.name ?? id,
+                  )}
+                  groups={[editingGroup]}
+                  profiles={referencedProfiles}
+                  failed={referencesFailed}
+                  pending={
+                    JSON.stringify(editGroupExtensionIds) !==
+                    JSON.stringify(editingGroup.extension_ids)
+                  }
+                />
+              )}
               <div className="space-y-2">
                 <Label>{t("common.labels.name")}</Label>
                 <Input
@@ -1836,6 +2061,15 @@ export function ExtensionManagementDialog({
           <ScrollArea className="-mx-6 flex-1 overflow-y-auto px-6">
             {editingExtension && (
               <div className="space-y-4">
+                <AssignmentImpact
+                  sources={[editExtensionName || editingExtension.name]}
+                  groups={extensionGroups.filter((group) =>
+                    group.extension_ids.includes(editingExtension.id),
+                  )}
+                  profiles={referencedProfiles}
+                  failed={referencesFailed}
+                  pending={pendingUpdateSource !== null}
+                />
                 <div className="space-y-2">
                   <Label>{t("common.labels.name")}</Label>
                   <Input
@@ -1850,6 +2084,26 @@ export function ExtensionManagementDialog({
                   />
                 </div>
 
+                {editingExtension.manifest_name &&
+                  editingExtension.manifest_name !== editExtensionName && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="break-words text-muted-foreground">
+                        {editingExtension.manifest_name}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setEditExtensionName(
+                            editingExtension.manifest_name ??
+                              editingExtension.name,
+                          )
+                        }
+                      >
+                        {t("appFeedback.useManifestName")}
+                      </Button>
+                    </div>
+                  )}
                 {/* Metadata from manifest.json */}
                 <div className="space-y-2 rounded-md border p-3">
                   <Label className="text-xs tracking-wide text-muted-foreground uppercase">

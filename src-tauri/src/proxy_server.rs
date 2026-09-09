@@ -2,6 +2,7 @@ use crate::proxy_storage::ProxyConfig;
 use crate::traffic_stats::{get_traffic_tracker, init_traffic_tracker, LiveTrafficTracker};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
+use hyper::header::{HeaderName, HeaderValue};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
@@ -204,14 +205,18 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for CountingStream<S> {
   }
 }
 
-// Wrapper to prepend consumed bytes to a stream
-struct PrependReader {
+// Wrapper to prepend consumed bytes to a stream.
+//
+// Generic over the inner stream rather than fixed to `TcpStream`: the upstream
+// hop is a bare socket for `http`/`https` but a `TlsStream<TcpStream>` for
+// `httpstls`, and both need the same coalesced-payload replay.
+struct PrependReader<S> {
   prepended: Vec<u8>,
   prepended_pos: usize,
-  inner: TcpStream,
+  inner: S,
 }
 
-impl AsyncRead for PrependReader {
+impl<S: AsyncRead + Unpin> AsyncRead for PrependReader<S> {
   fn poll_read(
     mut self: Pin<&mut Self>,
     cx: &mut Context<'_>,
@@ -231,7 +236,7 @@ impl AsyncRead for PrependReader {
   }
 }
 
-impl AsyncWrite for PrependReader {
+impl<S: AsyncWrite + Unpin> AsyncWrite for PrependReader<S> {
   fn poll_write(
     mut self: Pin<&mut Self>,
     cx: &mut Context<'_>,
@@ -466,9 +471,23 @@ async fn connect_via_socks(
   }
 }
 
+/// How the body of a buffered response is framed on the wire.
+enum BufferedBody {
+  /// The body follows the header block in `bytes` exactly as the upstream sent
+  /// it.
+  AsSent,
+  /// The upstream used `Transfer-Encoding: chunked`; this is the de-framed body.
+  Dechunked(Vec<u8>),
+  /// The upstream declared chunked but the framing never completed. Nothing can
+  /// be forwarded: the chunk-size lines are not body bytes, and a half-decoded
+  /// body reaches the browser as a complete-looking short one.
+  BrokenChunks,
+}
+
 /// A buffered HTTP response read off a raw upstream stream.
 struct BufferedHttpResponse {
   bytes: Vec<u8>,
+  body: BufferedBody,
   /// True when the read stopped at `MAX_HTTP_HEADER_BUFFER` /
   /// `MAX_HTTP_RESPONSE_BUFFER` rather than at the end of the response, so
   /// `bytes` holds only a prefix. Callers must fail the request instead of
@@ -476,6 +495,117 @@ struct BufferedHttpResponse {
   /// is handed, so a truncated response reaches the browser as a well-formed,
   /// self-consistent short one and silently corrupts the download.
   truncated: bool,
+}
+
+/// Progress of a chunked body walk.
+enum ChunkedState {
+  /// The terminating zero-length chunk was reached.
+  Complete,
+  /// Well-formed so far, but the terminating chunk has not arrived yet.
+  Incomplete,
+  /// The framing itself is broken, so no further byte of it can be trusted.
+  Malformed,
+}
+
+/// Decode as much of a `Transfer-Encoding: chunked` body as `body` holds,
+/// appending the payload to `out` and advancing `cursor` past every chunk
+/// consumed in full. Carrying the cursor across reads keeps a body that arrives
+/// in many pieces a single linear walk instead of one per read.
+///
+/// Any trailer section after the zero-length chunk is dropped; hyper re-derives
+/// the framing of the response it sends.
+fn decode_chunked(body: &[u8], cursor: &mut usize, out: &mut Vec<u8>) -> ChunkedState {
+  loop {
+    let rest = &body[*cursor..];
+    let Some(line_end) = rest.windows(2).position(|w| w == b"\r\n") else {
+      return ChunkedState::Incomplete;
+    };
+    let Ok(header) = std::str::from_utf8(&rest[..line_end]) else {
+      return ChunkedState::Malformed;
+    };
+    // A chunk extension (`;name=value`) may follow the size and carries nothing
+    // this proxy acts on.
+    let size_text = header.split(';').next().unwrap_or("").trim();
+    let Ok(size) = usize::from_str_radix(size_text, 16) else {
+      return ChunkedState::Malformed;
+    };
+    // A chunk larger than the whole buffer cap can never be satisfied, and
+    // rejecting it here keeps the offset arithmetic below overflow-free.
+    if size > MAX_HTTP_RESPONSE_BUFFER {
+      return ChunkedState::Malformed;
+    }
+    if size == 0 {
+      return ChunkedState::Complete;
+    }
+    let data_start = line_end + 2;
+    let data_end = data_start + size;
+    let Some(trailing) = rest.get(data_end..) else {
+      return ChunkedState::Incomplete;
+    };
+    if trailing.len() < 2 {
+      return ChunkedState::Incomplete;
+    }
+    if !trailing.starts_with(b"\r\n") {
+      return ChunkedState::Malformed;
+    }
+    out.extend_from_slice(&rest[data_start..data_end]);
+    *cursor += data_end + 2;
+  }
+}
+
+/// True when this raw header block declares `Transfer-Encoding: chunked`.
+fn declares_chunked(header_block: &[u8]) -> bool {
+  String::from_utf8_lossy(header_block).lines().any(|line| {
+    let line = line.to_lowercase();
+    line.starts_with("transfer-encoding:") && line.contains("chunked")
+  })
+}
+
+/// Headers hyper re-derives for the `Full<Bytes>` body this proxy builds, plus
+/// the hop-by-hop set. Forwarding the upstream's own framing would fight
+/// hyper's and corrupt every response through these paths.
+const NON_FORWARDED_RESPONSE_HEADERS: &[&str] = &[
+  "content-length",
+  "transfer-encoding",
+  "connection",
+  "keep-alive",
+  "proxy-connection",
+  "upgrade",
+  "trailer",
+  "te",
+];
+
+/// Copy an upstream's response headers onto a response assembled from raw
+/// bytes. The SOCKS4 and Shadowsocks paths speak HTTP by hand, and without this
+/// a redirect loses its `Location`, a sign-in loses its `Set-Cookie` and a
+/// compressed body arrives with no `Content-Encoding` to undo it.
+///
+/// `header_block` is the raw header bytes including the status line; a trailing
+/// blank line is tolerated. A line that does not parse is dropped rather than
+/// failing the whole response, and `HeaderName`/`HeaderValue` do the rejecting,
+/// so a hostile upstream cannot smuggle a header past this.
+fn forward_upstream_headers(response: &mut Response<Full<Bytes>>, header_block: &[u8]) {
+  let block = String::from_utf8_lossy(header_block);
+  for line in block.split("\r\n").skip(1) {
+    let Some((name, value)) = line.split_once(':') else {
+      continue;
+    };
+    let name = name.trim();
+    if NON_FORWARDED_RESPONSE_HEADERS
+      .iter()
+      .any(|skipped| name.eq_ignore_ascii_case(skipped))
+    {
+      continue;
+    }
+    let (Ok(name), Ok(value)) = (
+      HeaderName::from_bytes(name.as_bytes()),
+      HeaderValue::from_str(value.trim()),
+    ) else {
+      continue;
+    };
+    // `append`, not `insert`: every `Set-Cookie` has to survive.
+    response.headers_mut().append(name, value);
+  }
 }
 
 /// Read a full HTTP response from `stream` into a buffer: headers first
@@ -489,6 +619,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
   let mut content_length: Option<usize> = None;
   let mut is_chunked = false;
   let mut truncated = false;
+  let mut body = BufferedBody::AsSent;
 
   // Read until we have complete headers
   loop {
@@ -553,7 +684,38 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
                 }
               }
             }
-          } else if !is_chunked {
+          } else if is_chunked {
+            // A chunked body has no Content-Length, so the framing itself says
+            // where it ends. Walk it as the bytes arrive, and de-frame it here:
+            // the chunk-size lines are not body bytes, and forwarding them left
+            // the browser rendering the framing.
+            let body_start = pos + 4;
+            let mut cursor = 0;
+            let mut decoded = Vec::new();
+            let state = loop {
+              match decode_chunked(&response_buffer[body_start..], &mut cursor, &mut decoded) {
+                ChunkedState::Incomplete => {}
+                terminal => break terminal,
+              }
+              if response_buffer.len() >= MAX_HTTP_RESPONSE_BUFFER {
+                log::warn!(
+                  "Chunked HTTP response exceeded {} bytes; refusing to forward a truncated response",
+                  MAX_HTTP_RESPONSE_BUFFER
+                );
+                truncated = true;
+                break ChunkedState::Incomplete;
+              }
+              match stream.read(&mut temp_buf).await {
+                Ok(0) => break ChunkedState::Incomplete,
+                Ok(n) => response_buffer.extend_from_slice(&temp_buf[..n]),
+                Err(_) => break ChunkedState::Incomplete,
+              }
+            };
+            body = match state {
+              ChunkedState::Complete => BufferedBody::Dechunked(decoded),
+              _ => BufferedBody::BrokenChunks,
+            };
+          } else {
             // No Content-Length and not chunked - read until connection closes
             // But limit to reasonable size to avoid memory issues
             loop {
@@ -574,8 +736,6 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
               }
             }
           }
-          // Note: Chunked encoding is complex to parse manually, so we'll read what we can
-          // For full chunked support, we'd need a proper HTTP parser
           break;
         }
       }
@@ -588,6 +748,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
 
   BufferedHttpResponse {
     bytes: response_buffer,
+    body,
     truncated,
   }
 }
@@ -821,7 +982,11 @@ async fn handle_http_via_socks4(
     *response.status_mut() = StatusCode::BAD_GATEWAY;
     return Ok(response);
   }
-  let response_buffer = buffered.bytes;
+  let BufferedHttpResponse {
+    bytes: response_buffer,
+    body: buffered_body,
+    ..
+  } = buffered;
 
   // Parse HTTP response
   let response_str = String::from_utf8_lossy(&response_buffer);
@@ -840,7 +1005,16 @@ async fn handle_http_via_socks4(
     .map(|p| p + 4)
     .unwrap_or(response_buffer.len());
 
-  let body = response_buffer[header_end..].to_vec();
+  let body = match buffered_body {
+    BufferedBody::AsSent => response_buffer[header_end..].to_vec(),
+    BufferedBody::Dechunked(body) => body,
+    BufferedBody::BrokenChunks => {
+      log::error!("Chunked HTTP response via SOCKS4 for {domain} did not decode");
+      let mut response = Response::new(Full::new(Bytes::from("Malformed upstream response")));
+      *response.status_mut() = StatusCode::BAD_GATEWAY;
+      return Ok(response);
+    }
+  };
 
   // Record request in traffic tracker
   let response_size = body.len() as u64;
@@ -849,7 +1023,11 @@ async fn handle_http_via_socks4(
   }
 
   let mut hyper_response = Response::new(Full::new(Bytes::from(body)));
-  *hyper_response.status_mut() = StatusCode::from_u16(status_code).unwrap();
+  // A status line carrying something outside 100..=999 must not panic the
+  // connection task.
+  *hyper_response.status_mut() =
+    StatusCode::from_u16(status_code).unwrap_or(StatusCode::BAD_GATEWAY);
+  forward_upstream_headers(&mut hyper_response, &response_buffer[..header_end]);
 
   Ok(hyper_response)
 }
@@ -950,10 +1128,17 @@ async fn handle_http_via_shadowsocks(
     tracker.record_request(&domain, raw_req.len() as u64, response_buf.len() as u64);
   }
 
-  // Parse the raw HTTP response
-  let response_str = String::from_utf8_lossy(&response_buf);
-  let header_end = response_str.find("\r\n\r\n").unwrap_or(response_str.len());
-  let status_line = response_str
+  // Parse the raw HTTP response. The boundary is found in the raw bytes, not in
+  // a lossy UTF-8 copy of them, so a body byte that is not valid UTF-8 cannot
+  // shift the offset the body is sliced at.
+  let header_end = response_buf
+    .windows(4)
+    .position(|w| w == b"\r\n\r\n")
+    .map(|p| p + 4)
+    .unwrap_or(response_buf.len());
+  let header_block = &response_buf[..header_end];
+  let header_text = String::from_utf8_lossy(header_block);
+  let status_line = header_text
     .lines()
     .next()
     .unwrap_or("HTTP/1.1 502 Bad Gateway");
@@ -962,15 +1147,28 @@ async fn handle_http_via_shadowsocks(
     .nth(1)
     .and_then(|s| s.parse().ok())
     .unwrap_or(502);
-  let body = if header_end + 4 < response_buf.len() {
-    &response_buf[header_end + 4..]
+
+  let raw_body = &response_buf[header_end..];
+  let body = if declares_chunked(header_block) {
+    let mut cursor = 0;
+    let mut decoded = Vec::new();
+    match decode_chunked(raw_body, &mut cursor, &mut decoded) {
+      ChunkedState::Complete => decoded,
+      _ => {
+        log::error!("Chunked HTTP response via Shadowsocks for {domain} did not decode");
+        let mut resp = Response::new(Full::new(Bytes::from("Malformed upstream response")));
+        *resp.status_mut() = StatusCode::BAD_GATEWAY;
+        return Ok(resp);
+      }
+    }
   } else {
-    b""
+    raw_body.to_vec()
   };
 
-  let mut hyper_response = Response::new(Full::new(Bytes::from(body.to_vec())));
+  let mut hyper_response = Response::new(Full::new(Bytes::from(body)));
   *hyper_response.status_mut() =
     StatusCode::from_u16(status_code).unwrap_or(StatusCode::BAD_GATEWAY);
+  forward_upstream_headers(&mut hyper_response, header_block);
 
   Ok(hyper_response)
 }
@@ -1186,9 +1384,15 @@ fn build_reqwest_client_with_proxy(
 
   let proxy = match scheme {
     "http" | "https" => {
-      // For HTTP/HTTPS proxies, reqwest handles them directly
-      // Note: HTTPS proxy URLs still use HTTP CONNECT method, reqwest handles TLS automatically
+      // Both are a plaintext hop to the proxy. `https` is only a provider
+      // label here; the tunnel path treats it identically to `http`.
       Proxy::http(upstream_url)?
+    }
+    "httpstls" => {
+      // TLS to the proxy. reqwest spells that `https://`, which is what
+      // `reqwest_upstream_url` produces; the scheme rewrite is the whole
+      // difference, the endpoint and credentials are unchanged.
+      Proxy::http(crate::proxy_storage::reqwest_upstream_url(upstream_url))?
     }
     "socks5" => {
       // Force REMOTE (proxy-side) DNS for plaintext HTTP over a SOCKS5
@@ -1944,8 +2148,8 @@ pub(crate) fn log_throttle(key: &str) -> Option<u64> {
 /// and the terminating CRLFCRLF can arrive with destination payload appended
 /// (those bytes belong to the tunnel). Reads until the header terminator and
 /// returns `(headers, bytes_after_headers)`.
-async fn read_upstream_connect_response(
-  stream: &mut TcpStream,
+async fn read_upstream_connect_response<S: AsyncRead + Unpin>(
+  stream: &mut S,
 ) -> Result<(String, Vec<u8>), Box<dyn std::error::Error>> {
   let mut buffer = Vec::with_capacity(1024);
   let mut chunk = [0u8; 4096];
@@ -1978,11 +2182,108 @@ async fn read_upstream_connect_response(
   }
 }
 
+/// Perform the HTTP CONNECT handshake over an already-established hop to the
+/// proxy and return the tunnelled stream.
+///
+/// Generic over the hop so the identical handshake runs on a bare `TcpStream`
+/// (`http`/`https`) and on a `TlsStream<TcpStream>` (`httpstls`). This is the
+/// only place `Proxy-Authorization` is written, so whether those credentials
+/// cross the network in the clear is decided entirely by which stream the
+/// caller hands in, nothing here can weaken it.
+async fn connect_via_http_proxy<S: AsyncStream + 'static>(
+  mut proxy_stream: S,
+  proxy_host: &str,
+  proxy_port: u16,
+  target_host: &str,
+  target_port: u16,
+  upstream: &Url,
+) -> Result<BoxedAsyncStream, Box<dyn std::error::Error>> {
+  let mut connect_req = format!(
+    "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",
+    target_host, target_port, target_host, target_port
+  );
+
+  let (username, password) = upstream_userpass(upstream);
+  if !username.is_empty() {
+    use base64::{engine::general_purpose, Engine as _};
+    let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
+    connect_req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", auth));
+  }
+
+  connect_req.push_str("\r\n");
+
+  proxy_stream.write_all(connect_req.as_bytes()).await?;
+
+  let (response_headers, coalesced) = read_upstream_connect_response(&mut proxy_stream).await?;
+  let status_line = response_headers.lines().next().unwrap_or("").to_string();
+
+  if !response_headers.starts_with("HTTP/1.1 200") && !response_headers.starts_with("HTTP/1.0 200")
+  {
+    log::warn!(
+      "Upstream CONNECT to {}:{} via {}:{} rejected: {}",
+      target_host,
+      target_port,
+      proxy_host,
+      proxy_port,
+      status_line
+    );
+    return Err(format!("Upstream proxy CONNECT failed: {status_line}").into());
+  }
+
+  log::info!(
+    "Upstream CONNECT to {}:{} via {}:{} accepted ({})",
+    target_host,
+    target_port,
+    proxy_host,
+    proxy_port,
+    status_line
+  );
+
+  if coalesced.is_empty() {
+    Ok(Box::new(proxy_stream))
+  } else {
+    // The upstream packed the destination's first bytes into the same
+    // segment as its 200. They are tunnel payload, not proxy protocol:
+    // replay them ahead of the socket so the client sees an unbroken
+    // stream. Server-speaks-first protocols (SMTP/IMAP/SSH banners)
+    // reach this reliably.
+    log::debug!(
+      "Upstream CONNECT response coalesced {} byte(s) of payload; forwarding",
+      coalesced.len()
+    );
+    Ok(Box::new(PrependReader {
+      prepended: coalesced,
+      prepended_pos: 0,
+      inner: proxy_stream,
+    }))
+  }
+}
+
+/// Wrap an established TCP hop to the proxy in TLS, verifying the proxy's
+/// certificate against `proxy_host`.
+///
+/// There is deliberately no opportunistic downgrade and no
+/// `danger_accept_invalid_certs` escape hatch: a failed handshake is a failed
+/// connection. Certificate verification is what makes this hop resistant to an
+/// active man-in-the-middle and not merely to a passive sniffer, and a bypass
+/// switch would be clicked the first time a provider hands out a bare IP.
+async fn tls_wrap_upstream_hop(
+  tcp: TcpStream,
+  proxy_host: &str,
+) -> Result<tokio_native_tls::TlsStream<TcpStream>, Box<dyn std::error::Error>> {
+  let connector = tokio_native_tls::TlsConnector::from(native_tls::TlsConnector::new()?);
+  match tokio::time::timeout(UPSTREAM_DIAL_TIMEOUT, connector.connect(proxy_host, tcp)).await {
+    Ok(result) => Ok(result?),
+    Err(_) => Err(format!("TLS handshake with upstream proxy {proxy_host} timed out").into()),
+  }
+}
+
 /// Establish a stream to `target_host:target_port`, either directly or through
 /// the configured upstream proxy. Shared by the HTTP CONNECT path and the
 /// local SOCKS5 server so every upstream type (direct, HTTP/HTTPS CONNECT,
-/// SOCKS4/5, Shadowsocks) is dialed in exactly one place. Returns a
-/// `BoxedAsyncStream` so the caller can tunnel over any upstream uniformly.
+/// TLS-wrapped CONNECT, SOCKS4/5, Shadowsocks) is dialed in exactly one place.
+/// Returns a `BoxedAsyncStream` so the caller can tunnel over any upstream
+/// uniformly.
 pub(crate) async fn connect_to_target_via_upstream(
   target_host: &str,
   target_port: u16,
@@ -2002,10 +2303,15 @@ pub(crate) async fn connect_to_target_via_upstream(
       let scheme = upstream.scheme();
 
       match scheme {
+        // `https` here is NOT TLS to the proxy: it is a label many providers
+        // put on a plaintext CONNECT endpoint, and Donut has always treated it
+        // byte-for-byte like `http`. Changing that would silently break every
+        // stored `https` proxy, so the encrypted hop is the separate
+        // `httpstls` scheme below.
         "http" | "https" => {
           let proxy_host = upstream.host_str().unwrap_or("127.0.0.1");
           let proxy_port = upstream.port().unwrap_or(8080);
-          let mut proxy_stream = tokio::time::timeout(
+          let proxy_stream = tokio::time::timeout(
             UPSTREAM_DIAL_TIMEOUT,
             TcpStream::connect((proxy_host, proxy_port)),
           )
@@ -2015,67 +2321,43 @@ pub(crate) async fn connect_to_target_via_upstream(
           })??;
           configure_tcp(&proxy_stream);
 
-          let mut connect_req = format!(
-            "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",
-            target_host, target_port, target_host, target_port
-          );
-
-          let (username, password) = upstream_userpass(&upstream);
-          if !username.is_empty() {
-            use base64::{engine::general_purpose, Engine as _};
-            let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
-            connect_req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", auth));
-          }
-
-          connect_req.push_str("\r\n");
-
-          proxy_stream.write_all(connect_req.as_bytes()).await?;
-
-          let (response_headers, coalesced) =
-            read_upstream_connect_response(&mut proxy_stream).await?;
-          let status_line = response_headers.lines().next().unwrap_or("").to_string();
-
-          if !response_headers.starts_with("HTTP/1.1 200")
-            && !response_headers.starts_with("HTTP/1.0 200")
-          {
-            log::warn!(
-              "Upstream CONNECT to {}:{} via {}:{} rejected: {}",
-              target_host,
-              target_port,
-              proxy_host,
-              proxy_port,
-              status_line
-            );
-            return Err(format!("Upstream proxy CONNECT failed: {status_line}").into());
-          }
-
-          log::info!(
-            "Upstream CONNECT to {}:{} via {}:{} accepted ({})",
-            target_host,
-            target_port,
+          connect_via_http_proxy(
+            proxy_stream,
             proxy_host,
             proxy_port,
-            status_line
-          );
+            target_host,
+            target_port,
+            &upstream,
+          )
+          .await?
+        }
+        // TLS to the proxy first, CONNECT second. The target hostname and the
+        // `Proxy-Authorization` credentials are written only after the
+        // handshake, so neither reaches the wire in the clear.
+        "httpstls" => {
+          let proxy_host = upstream.host_str().unwrap_or("127.0.0.1");
+          let proxy_port = upstream.port().unwrap_or(443);
+          let tcp = tokio::time::timeout(
+            UPSTREAM_DIAL_TIMEOUT,
+            TcpStream::connect((proxy_host, proxy_port)),
+          )
+          .await
+          .map_err(|_| {
+            format!("upstream proxy connect to {proxy_host}:{proxy_port} timed out")
+          })??;
+          configure_tcp(&tcp);
 
-          if coalesced.is_empty() {
-            Box::new(proxy_stream)
-          } else {
-            // The upstream packed the destination's first bytes into the same
-            // segment as its 200. They are tunnel payload, not proxy protocol:
-            // replay them ahead of the socket so the client sees an unbroken
-            // stream. Server-speaks-first protocols (SMTP/IMAP/SSH banners)
-            // reach this reliably.
-            log::debug!(
-              "Upstream CONNECT response coalesced {} byte(s) of payload; forwarding",
-              coalesced.len()
-            );
-            Box::new(PrependReader {
-              prepended: coalesced,
-              prepended_pos: 0,
-              inner: proxy_stream,
-            })
-          }
+          let tls = tls_wrap_upstream_hop(tcp, proxy_host).await?;
+
+          connect_via_http_proxy(
+            tls,
+            proxy_host,
+            proxy_port,
+            target_host,
+            target_port,
+            &upstream,
+          )
+          .await?
         }
         "socks4" | "socks5" => {
           let socks_host = upstream.host_str().unwrap_or("127.0.0.1");
@@ -2502,6 +2784,133 @@ mod tests {
     assert!(!buf.truncated);
   }
 
+  /// Frame `pieces` as a chunked body, terminator included.
+  fn chunked_wire(pieces: &[&str]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for piece in pieces {
+      out.extend_from_slice(format!("{:x}\r\n", piece.len()).as_bytes());
+      out.extend_from_slice(piece.as_bytes());
+      out.extend_from_slice(b"\r\n");
+    }
+    out.extend_from_slice(b"0\r\n\r\n");
+    out
+  }
+
+  #[tokio::test]
+  async fn read_http_response_buffer_dechunks_a_chunked_body() {
+    let (mut writer, mut reader) = tokio::io::duplex(1024);
+    let mut resp = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+    resp.extend_from_slice(&chunked_wire(&["hello ", "world"]));
+    writer.write_all(&resp).await.unwrap();
+    drop(writer);
+
+    let buf = read_http_response_buffer(&mut reader).await;
+    assert!(!buf.truncated);
+    match buf.body {
+      BufferedBody::Dechunked(body) => assert_eq!(body, b"hello world".to_vec()),
+      _ => panic!("a chunked body must be de-framed before it reaches the browser"),
+    }
+  }
+
+  #[test]
+  fn chunked_body_decodes_to_the_payload_alone() {
+    let wire = chunked_wire(&["hello ", "world"]);
+    let mut cursor = 0;
+    let mut out = Vec::new();
+    assert!(matches!(
+      decode_chunked(&wire, &mut cursor, &mut out),
+      ChunkedState::Complete
+    ));
+    assert_eq!(out, b"hello world".to_vec());
+  }
+
+  #[test]
+  fn a_chunked_body_split_across_reads_is_walked_once() {
+    let wire = chunked_wire(&["one", "two"]);
+    let mut cursor = 0;
+    let mut out = Vec::new();
+    // Half the buffer holds the first chunk and part of the second header.
+    assert!(matches!(
+      decode_chunked(&wire[..wire.len() / 2], &mut cursor, &mut out),
+      ChunkedState::Incomplete
+    ));
+    assert!(matches!(
+      decode_chunked(&wire, &mut cursor, &mut out),
+      ChunkedState::Complete
+    ));
+    assert_eq!(out, b"onetwo".to_vec());
+  }
+
+  #[test]
+  fn chunk_extensions_are_ignored() {
+    let mut cursor = 0;
+    let mut out = Vec::new();
+    assert!(matches!(
+      decode_chunked(b"5;name=value\r\nhello\r\n0\r\n\r\n", &mut cursor, &mut out),
+      ChunkedState::Complete
+    ));
+    assert_eq!(out, b"hello".to_vec());
+  }
+
+  #[test]
+  fn a_malformed_chunk_stream_is_rejected_not_half_decoded() {
+    for wire in [
+      // A size that is not hexadecimal.
+      b"zz\r\nnope\r\n0\r\n\r\n".to_vec(),
+      // Chunk data not followed by its CRLF.
+      b"5\r\nhelloXX\r\n0\r\n\r\n".to_vec(),
+    ] {
+      let mut cursor = 0;
+      let mut out = Vec::new();
+      assert!(
+        matches!(
+          decode_chunked(&wire, &mut cursor, &mut out),
+          ChunkedState::Malformed
+        ),
+        "{}",
+        String::from_utf8_lossy(&wire)
+      );
+    }
+  }
+
+  #[test]
+  fn upstream_response_headers_reach_the_browser() {
+    let block = b"HTTP/1.1 302 Found\r\n\
+Location: https://example.com/next\r\n\
+Set-Cookie: a=1; Path=/\r\n\
+Set-Cookie: b=2; Path=/\r\n\
+Content-Type: text/html; charset=utf-8\r\n\
+Content-Length: 17\r\n\
+Transfer-Encoding: chunked\r\n\
+Connection: keep-alive\r\n\
+this line has no colon\r\n\
+\r\n";
+    let mut response = Response::new(Full::new(Bytes::new()));
+    forward_upstream_headers(&mut response, block);
+    let headers = response.headers();
+
+    assert_eq!(headers.get("location").unwrap(), "https://example.com/next");
+    assert_eq!(
+      headers.get("content-type").unwrap(),
+      "text/html; charset=utf-8"
+    );
+    // Every Set-Cookie survives, so a sign-in actually establishes a session.
+    let cookies: Vec<&str> = headers
+      .get_all("set-cookie")
+      .iter()
+      .map(|value| value.to_str().unwrap())
+      .collect();
+    assert_eq!(cookies, ["a=1; Path=/", "b=2; Path=/"]);
+    // hyper re-derives the framing for the body it is handed; the upstream's
+    // own framing headers would contradict it.
+    for framing in ["content-length", "transfer-encoding", "connection"] {
+      assert!(
+        headers.get(framing).is_none(),
+        "{framing} must not be forwarded"
+      );
+    }
+  }
+
   #[tokio::test]
   async fn read_http_response_buffer_caps_oversized_content_length_body() {
     let (mut writer, mut reader) = tokio::io::duplex(64 * 1024);
@@ -2650,6 +3059,187 @@ mod tests {
     let domain_stats = stats.domains.get(domain).unwrap();
     assert_eq!(domain_stats.bytes_sent, upload_len as u64);
     assert_eq!(domain_stats.bytes_received, download_len as u64);
+  }
+
+  /// Dial `connect_to_target_via_upstream` at a listener that never answers and
+  /// return the first bytes it puts on the wire.
+  ///
+  /// The dial cannot complete (nothing on the far end speaks proxy or TLS), and
+  /// that is the point: what matters is what leaves this machine BEFORE the
+  /// other side has proved anything.
+  async fn first_bytes_sent_to_upstream(scheme: &str) -> Vec<u8> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let upstream = format!("{scheme}://donutuser:hunter2secret@127.0.0.1:{port}");
+
+    let dial = tokio::spawn(async move {
+      let matcher = BypassMatcher::new(&[]);
+      let _ = connect_to_target_via_upstream(
+        "private-target.example.com",
+        443,
+        Some(&upstream),
+        &matcher,
+      )
+      .await;
+    });
+
+    let (mut server, _) = listener.accept().await.unwrap();
+    let mut buf = vec![0u8; 4096];
+    let n = tokio::time::timeout(std::time::Duration::from_secs(10), server.read(&mut buf))
+      .await
+      .expect("upstream saw no bytes at all before the timeout")
+      .expect("reading from the mock upstream failed");
+    buf.truncate(n);
+
+    dial.abort();
+    buf
+  }
+
+  #[tokio::test]
+  async fn httpstls_upstream_negotiates_tls_before_writing_anything_readable() {
+    // This is the whole point of the type. Nothing readable may reach the wire
+    // ahead of the TLS handshake: not the CONNECT verb, not the target host,
+    // and above all not the Proxy-Authorization credentials. The handshake here
+    // never completes, which proves the credentials never left the machine.
+    let first = first_bytes_sent_to_upstream("httpstls").await;
+
+    assert_eq!(
+      first.first().copied(),
+      Some(0x16),
+      "the first byte must be a TLS handshake record (0x16), got {:02x?}",
+      &first[..first.len().min(16)]
+    );
+
+    let as_text = String::from_utf8_lossy(&first);
+    for secret in [
+      "CONNECT ",
+      "Proxy-Authorization",
+      "private-target.example.com",
+      "donutuser",
+      "hunter2secret",
+    ] {
+      assert!(
+        !as_text.contains(secret),
+        "{secret:?} reached the wire in the clear on an httpstls upstream"
+      );
+    }
+  }
+
+  #[tokio::test]
+  async fn http_upstream_still_writes_a_plaintext_connect() {
+    // The counterpart, pinning today's behaviour rather than wishing it away.
+    // If this ever stops holding, the `http` path changed and every stored
+    // plaintext proxy changed with it.
+    let first = first_bytes_sent_to_upstream("http").await;
+    let as_text = String::from_utf8_lossy(&first);
+
+    assert!(
+      as_text.starts_with("CONNECT private-target.example.com:443 "),
+      "expected a plaintext CONNECT, got {as_text:?}"
+    );
+    assert!(
+      as_text.contains("Proxy-Authorization: Basic "),
+      "expected plaintext proxy credentials, got {as_text:?}"
+    );
+  }
+
+  #[tokio::test]
+  async fn https_upstream_is_a_plaintext_hop_despite_the_name() {
+    // `https` is a provider label, not TLS to the proxy. The UI now says so;
+    // this is the assertion that keeps the code and the copy agreeing.
+    let first = first_bytes_sent_to_upstream("https").await;
+    assert!(
+      String::from_utf8_lossy(&first).starts_with("CONNECT "),
+      "the `https` type must keep behaving exactly like `http`"
+    );
+    assert_ne!(
+      first.first().copied(),
+      Some(0x16),
+      "`https` must not have silently become a TLS hop"
+    );
+  }
+
+  #[tokio::test]
+  async fn httpstls_refuses_a_hop_that_answers_in_plaintext() {
+    // The downgrade case: a proxy (or something sitting in front of it)
+    // answering the way a plaintext CONNECT endpoint would. There is no
+    // opportunistic fallback, a failed handshake is a failed connection, or
+    // the whole type is worth nothing against an active attacker.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    let server = tokio::spawn(async move {
+      let (mut socket, _) = listener.accept().await.unwrap();
+      let mut scratch = [0u8; 1024];
+      let _ = socket.read(&mut scratch).await;
+      let _ = socket
+        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .await;
+      tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    });
+
+    let upstream = format!("httpstls://user:pass@127.0.0.1:{port}");
+    let matcher = BypassMatcher::new(&[]);
+    let result = tokio::time::timeout(
+      std::time::Duration::from_secs(20),
+      connect_to_target_via_upstream("example.com", 443, Some(&upstream), &matcher),
+    )
+    .await
+    .expect("the dial must not hang");
+
+    assert!(
+      result.is_err(),
+      "a plaintext answer must not yield a usable tunnel on an httpstls upstream"
+    );
+    server.abort();
+  }
+
+  #[tokio::test]
+  async fn build_reqwest_client_with_proxy_accepts_the_tls_scheme() {
+    // reqwest rejects the `httpstls` scheme outright, so without the rewrite
+    // every plain-HTTP request through such a proxy fails to build a client.
+    build_reqwest_client_with_proxy("httpstls://user:pass@proxy.example.com:443")
+      .expect("httpstls must build a reqwest client");
+    build_reqwest_client_with_proxy("http://proxy.example.com:8080")
+      .expect("http must keep building a reqwest client");
+  }
+
+  #[tokio::test]
+  async fn prepend_reader_replays_payload_over_a_non_tcp_stream() {
+    // The coalesced-payload replay has to survive the TLS stream type, not just
+    // TcpStream. `duplex` stands in for any non-TCP AsyncRead+AsyncWrite.
+    let (mut peer, inner) = tokio::io::duplex(1024);
+    peer.write_all(b"-rest-of-stream").await.unwrap();
+
+    let mut reader = PrependReader {
+      prepended: b"replayed-".to_vec(),
+      prepended_pos: 0,
+      inner,
+    };
+
+    let mut got = [0u8; 24];
+    let mut filled = 0;
+    while filled < got.len() {
+      let n = reader.read(&mut got[filled..]).await.unwrap();
+      assert_ne!(n, 0, "stream ended before the expected bytes arrived");
+      filled += n;
+    }
+    assert_eq!(&got[..filled], b"replayed--rest-of-stream");
+  }
+
+  #[tokio::test]
+  async fn read_upstream_connect_response_works_off_a_non_tcp_stream() {
+    // Guards the generic bound: a `&mut TcpStream` signature would not compile
+    // against the TLS stream the httpstls path hands it.
+    let (mut peer, mut inner) = tokio::io::duplex(1024);
+    peer
+      .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\nBANNER")
+      .await
+      .unwrap();
+
+    let (headers, leftover) = read_upstream_connect_response(&mut inner).await.unwrap();
+    assert!(headers.starts_with("HTTP/1.1 200"));
+    assert_eq!(leftover, b"BANNER");
   }
 
   #[test]

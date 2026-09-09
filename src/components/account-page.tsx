@@ -34,6 +34,7 @@ import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { translateBackendError } from "@/lib/backend-errors";
 import {
   canUseCookieBot,
+  effectivePlanOf,
   getEntitlements,
   isTeamOwner,
 } from "@/lib/entitlements";
@@ -73,6 +74,20 @@ export function AccountPage({
   // a refused launch.
   const remoteHoursVisible = isLoggedIn && canUseCookieBot(user);
   const showTeamUsage = remoteHoursVisible && isTeamOwner(user);
+  // A member's own row says "free" because the owner pays. The plan the seat
+  // is served under is the one the customer expects to read here, and the
+  // billing period slot names the seat instead, since a seat has no period.
+  const effectivePlan = effectivePlanOf(user);
+  const isTeamSeat = user != null && effectivePlan !== user.plan;
+  const seatRole =
+    user?.teamRole === "owner"
+      ? t("sync.team.roleOwner")
+      : user?.teamRole === "admin"
+        ? t("sync.team.roleAdmin")
+        : t("sync.team.roleMember");
+  const seatLabel = user?.teamName
+    ? t("account.teamSeat", { role: seatRole, team: user.teamName })
+    : t("account.teamSeatUnnamed", { role: seatRole });
   const { quota, isLoading: isQuotaLoading } = useCookieBot(
     remoteHoursVisible,
     cookieBotScopeFor(user),
@@ -268,8 +283,10 @@ export function AccountPage({
                           </h2>
                           <p className="mt-0.5 text-xs text-muted-foreground">
                             {t("account.plan", {
-                              plan: user.plan,
-                              period: user.planPeriod ?? "—",
+                              plan: effectivePlan,
+                              period: isTeamSeat
+                                ? seatLabel
+                                : (user.planPeriod ?? "—"),
                             })}
                           </p>
                         </>
@@ -350,7 +367,7 @@ export function AccountPage({
                           {t("account.fields.plan")}
                         </p>
                         <p className="mt-0.5 font-medium uppercase">
-                          {user.plan}
+                          {effectivePlan}
                         </p>
                       </div>
                       <div className="rounded-md border border-border bg-muted/40 px-3 py-2">

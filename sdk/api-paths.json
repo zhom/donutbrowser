@@ -1,0 +1,363 @@
+{
+  "source": "src-tauri/src/api_server.rs",
+  "regenerate_with": "python3 sdk/tools/extract-api-paths.py",
+  "description": "Every operation the desktop app publishes in its /openapi.json. The SDK test suites assert this list and their own coverage tables match exactly, so an endpoint added to the app fails the SDK tests until it is either wrapped or deliberately listed as omitted.",
+  "operation_count": 71,
+  "operations": [
+    {
+      "operation_id": "download_browser_api",
+      "method": "POST",
+      "path": "/v1/browsers/download"
+    },
+    {
+      "operation_id": "get_browser_versions",
+      "method": "GET",
+      "path": "/v1/browsers/{browser}/versions"
+    },
+    {
+      "operation_id": "check_browser_downloaded",
+      "method": "GET",
+      "path": "/v1/browsers/{browser}/versions/{version}/downloaded"
+    },
+    {
+      "operation_id": "get_cookie_bot_conflicts",
+      "method": "GET",
+      "path": "/v1/cookie-bot/conflicts"
+    },
+    {
+      "operation_id": "list_cookie_bot_presets",
+      "method": "GET",
+      "path": "/v1/cookie-bot/presets"
+    },
+    {
+      "operation_id": "list_cookie_bot_runs",
+      "method": "GET",
+      "path": "/v1/cookie-bot/runs"
+    },
+    {
+      "operation_id": "start_cookie_bot_run",
+      "method": "POST",
+      "path": "/v1/cookie-bot/runs"
+    },
+    {
+      "operation_id": "cancel_cookie_bot_run",
+      "method": "DELETE",
+      "path": "/v1/cookie-bot/runs/{run_id}"
+    },
+    {
+      "operation_id": "list_cookie_bot_schedules",
+      "method": "GET",
+      "path": "/v1/cookie-bot/schedules"
+    },
+    {
+      "operation_id": "delete_cookie_bot_schedule",
+      "method": "DELETE",
+      "path": "/v1/cookie-bot/schedules/{profile_id}"
+    },
+    {
+      "operation_id": "get_cookie_bot_schedule",
+      "method": "GET",
+      "path": "/v1/cookie-bot/schedules/{profile_id}"
+    },
+    {
+      "operation_id": "set_cookie_bot_schedule",
+      "method": "PUT",
+      "path": "/v1/cookie-bot/schedules/{profile_id}"
+    },
+    {
+      "operation_id": "get_cookie_bot_usage",
+      "method": "GET",
+      "path": "/v1/cookie-bot/usage"
+    },
+    {
+      "operation_id": "get_extension_groups",
+      "method": "GET",
+      "path": "/v1/extension-groups"
+    },
+    {
+      "operation_id": "create_extension_group_api",
+      "method": "POST",
+      "path": "/v1/extension-groups"
+    },
+    {
+      "operation_id": "delete_extension_group_api",
+      "method": "DELETE",
+      "path": "/v1/extension-groups/{id}"
+    },
+    {
+      "operation_id": "get_extension_group_api",
+      "method": "GET",
+      "path": "/v1/extension-groups/{id}"
+    },
+    {
+      "operation_id": "update_extension_group_api",
+      "method": "PUT",
+      "path": "/v1/extension-groups/{id}"
+    },
+    {
+      "operation_id": "remove_extension_from_group_api",
+      "method": "DELETE",
+      "path": "/v1/extension-groups/{id}/extensions/{extension_id}"
+    },
+    {
+      "operation_id": "add_extension_to_group_api",
+      "method": "POST",
+      "path": "/v1/extension-groups/{id}/extensions/{extension_id}"
+    },
+    {
+      "operation_id": "get_extensions",
+      "method": "GET",
+      "path": "/v1/extensions"
+    },
+    {
+      "operation_id": "create_extension_api",
+      "method": "POST",
+      "path": "/v1/extensions"
+    },
+    {
+      "operation_id": "delete_extension_api",
+      "method": "DELETE",
+      "path": "/v1/extensions/{id}"
+    },
+    {
+      "operation_id": "get_extension_api",
+      "method": "GET",
+      "path": "/v1/extensions/{id}"
+    },
+    {
+      "operation_id": "update_extension_api",
+      "method": "PUT",
+      "path": "/v1/extensions/{id}"
+    },
+    {
+      "operation_id": "get_groups",
+      "method": "GET",
+      "path": "/v1/groups"
+    },
+    {
+      "operation_id": "create_group",
+      "method": "POST",
+      "path": "/v1/groups"
+    },
+    {
+      "operation_id": "delete_group",
+      "method": "DELETE",
+      "path": "/v1/groups/{id}"
+    },
+    {
+      "operation_id": "get_group",
+      "method": "GET",
+      "path": "/v1/groups/{id}"
+    },
+    {
+      "operation_id": "update_group",
+      "method": "PUT",
+      "path": "/v1/groups/{id}"
+    },
+    {
+      "operation_id": "get_profiles",
+      "method": "GET",
+      "path": "/v1/profiles"
+    },
+    {
+      "operation_id": "create_profile",
+      "method": "POST",
+      "path": "/v1/profiles"
+    },
+    {
+      "operation_id": "batch_run_profiles",
+      "method": "POST",
+      "path": "/v1/profiles/batch/run"
+    },
+    {
+      "operation_id": "batch_stop_profiles",
+      "method": "POST",
+      "path": "/v1/profiles/batch/stop"
+    },
+    {
+      "operation_id": "distribute_proxies",
+      "method": "POST",
+      "path": "/v1/profiles/distribute-proxies"
+    },
+    {
+      "operation_id": "import_profiles_api",
+      "method": "POST",
+      "path": "/v1/profiles/import"
+    },
+    {
+      "operation_id": "detect_import_profiles",
+      "method": "GET",
+      "path": "/v1/profiles/import/detect"
+    },
+    {
+      "operation_id": "delete_profile",
+      "method": "DELETE",
+      "path": "/v1/profiles/{id}"
+    },
+    {
+      "operation_id": "get_profile",
+      "method": "GET",
+      "path": "/v1/profiles/{id}"
+    },
+    {
+      "operation_id": "update_profile",
+      "method": "PUT",
+      "path": "/v1/profiles/{id}"
+    },
+    {
+      "operation_id": "agent_click_api",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/agent/click"
+    },
+    {
+      "operation_id": "agent_extract_api",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/agent/extract"
+    },
+    {
+      "operation_id": "agent_perceive_api",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/agent/perceive"
+    },
+    {
+      "operation_id": "agent_pick_api",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/agent/pick"
+    },
+    {
+      "operation_id": "agent_resolve_locator_api",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/agent/resolve-locator"
+    },
+    {
+      "operation_id": "agent_type_api",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/agent/type"
+    },
+    {
+      "operation_id": "set_profile_cloud_sync",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/cloud-sync"
+    },
+    {
+      "operation_id": "import_profile_cookies",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/cookies/import"
+    },
+    {
+      "operation_id": "kill_profile",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/kill"
+    },
+    {
+      "operation_id": "open_url_in_profile",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/open-url"
+    },
+    {
+      "operation_id": "run_profile",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/run"
+    },
+    {
+      "operation_id": "run_profile_remote",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/run-remote"
+    },
+    {
+      "operation_id": "get_proxies",
+      "method": "GET",
+      "path": "/v1/proxies"
+    },
+    {
+      "operation_id": "create_proxy",
+      "method": "POST",
+      "path": "/v1/proxies"
+    },
+    {
+      "operation_id": "import_proxies_api",
+      "method": "POST",
+      "path": "/v1/proxies/import"
+    },
+    {
+      "operation_id": "delete_proxy",
+      "method": "DELETE",
+      "path": "/v1/proxies/{id}"
+    },
+    {
+      "operation_id": "get_proxy",
+      "method": "GET",
+      "path": "/v1/proxies/{id}"
+    },
+    {
+      "operation_id": "update_proxy",
+      "method": "PUT",
+      "path": "/v1/proxies/{id}"
+    },
+    {
+      "operation_id": "get_remote_hours",
+      "method": "GET",
+      "path": "/v1/remote-hours"
+    },
+    {
+      "operation_id": "list_remote_sessions_api",
+      "method": "GET",
+      "path": "/v1/remote-sessions"
+    },
+    {
+      "operation_id": "stop_remote_session",
+      "method": "DELETE",
+      "path": "/v1/remote-sessions/{id}"
+    },
+    {
+      "operation_id": "get_remote_session_api",
+      "method": "GET",
+      "path": "/v1/remote-sessions/{id}"
+    },
+    {
+      "operation_id": "remote_session_cdp",
+      "method": "GET",
+      "path": "/v1/remote-sessions/{id}/cdp"
+    },
+    {
+      "operation_id": "get_tags",
+      "method": "GET",
+      "path": "/v1/tags"
+    },
+    {
+      "operation_id": "get_vpns",
+      "method": "GET",
+      "path": "/v1/vpns"
+    },
+    {
+      "operation_id": "create_vpn",
+      "method": "POST",
+      "path": "/v1/vpns"
+    },
+    {
+      "operation_id": "import_vpn",
+      "method": "POST",
+      "path": "/v1/vpns/import"
+    },
+    {
+      "operation_id": "delete_vpn",
+      "method": "DELETE",
+      "path": "/v1/vpns/{id}"
+    },
+    {
+      "operation_id": "get_vpn",
+      "method": "GET",
+      "path": "/v1/vpns/{id}"
+    },
+    {
+      "operation_id": "update_vpn",
+      "method": "PUT",
+      "path": "/v1/vpns/{id}"
+    },
+    {
+      "operation_id": "export_vpn",
+      "method": "GET",
+      "path": "/v1/vpns/{id}/export"
+    }
+  ]
+}

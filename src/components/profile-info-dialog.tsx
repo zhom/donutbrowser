@@ -4,7 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { hideOthers } from "aria-hidden";
 import Color from "color";
+import { motion, useReducedMotion } from "motion/react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import { DismissableLayer, FocusGuards, FocusScope } from "radix-ui/internal";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
@@ -35,6 +39,10 @@ import {
   LuUsers,
   LuX,
 } from "react-icons/lu";
+import { ProfileHandoffStatus } from "@/components/profile-handoff-status";
+import { ProfileLaunchActivity } from "@/components/profile-launch-activity";
+import { ProfileMetadataCard } from "@/components/profile-metadata-card";
+import { ExportProfileSection } from "@/components/profile-transfer";
 import { SharedFingerprintConfigForm } from "@/components/shared-fingerprint-config-form";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Button } from "@/components/ui/button";
@@ -74,10 +82,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { WindowDragArea } from "@/components/window-drag-area";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getProfileIcon } from "@/lib/browser-utils";
 import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { formatRelativeTime } from "@/lib/flag-utils";
+import { MOTION_EASE_OUT } from "@/lib/motion";
+import type { RemoteHandoffState } from "@/lib/remote-sessions";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -91,6 +103,9 @@ import type {
 interface ProfileInfoDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  presentation?: "modal" | "inspector";
+  openMethod?: "pointer" | "keyboard";
+  handoffState?: RemoteHandoffState | null;
   profile: BrowserProfile | null;
   storedProxies: StoredProxy[];
   vpnConfigs: VpnConfig[];
@@ -180,11 +195,33 @@ function ClearOnCloseToggle({
   );
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({
+  label,
+  value,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  if (onClick)
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className="min-w-0 rounded-md bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+      >
+        <span className="block text-xs text-muted-foreground">{label}</span>
+        <span className="mt-0.5 block break-words text-sm">{value}</span>
+      </button>
+    );
   return (
     <div className="rounded-md border bg-muted/50 px-3 py-2.5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 truncate text-sm">{value}</p>
+      <p className="mt-0.5 break-words text-sm">{value}</p>
     </div>
   );
 }
@@ -287,7 +324,7 @@ function WindowColorSwatch({ profile }: { profile: BrowserProfile }) {
           type="button"
           aria-label={t("profileInfo.fields.windowColor")}
           title={t("profileInfo.fields.windowColor")}
-          className="size-9 shrink-0 cursor-pointer rounded-lg border shadow-sm ring-offset-background transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="size-9 shrink-0 cursor-pointer rounded-lg border shadow-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           style={{ backgroundColor: color ?? DEFAULT_SWATCH_COLOR }}
         />
       </PopoverTrigger>
@@ -314,10 +351,223 @@ function WindowColorSwatch({ profile }: { profile: BrowserProfile }) {
   );
 }
 
-export function ProfileInfoDialog({
+function profileInfoFocusSurfaces(surface: HTMLElement): HTMLElement[] {
+  const surfaces = [surface];
+  const seen = new Set<HTMLElement>(surfaces);
+  for (let index = 0; index < surfaces.length; index++) {
+    for (const trigger of surfaces[index].querySelectorAll(
+      '[aria-expanded="true"][aria-controls]',
+    )) {
+      for (const id of trigger.getAttribute("aria-controls")?.split(/\s+/) ??
+        []) {
+        const popup = surface.ownerDocument.getElementById(id);
+        if (popup && !seen.has(popup)) {
+          seen.add(popup);
+          surfaces.push(popup);
+        }
+      }
+    }
+  }
+  return surfaces;
+}
+
+export function ProfileInfoDialog(props: ProfileInfoDialogProps) {
+  const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const {
+    isOpen,
+    onClose,
+    profile,
+    presentation = "modal",
+    openMethod = inputModality,
+  } = props;
+  const [section, setSection] = React.useState<ProfileSection>("overview");
+  const surfaceRef = React.useRef<HTMLDivElement>(null);
+  const returnFocusRef = React.useRef<HTMLElement | null>(null);
+  const titleId = React.useId();
+  const isModal = presentation === "modal";
+  const previousProfileId = React.useRef(profile?.id);
+  FocusGuards.useFocusGuards();
+
+  React.useLayoutEffect(() => {
+    if (!isOpen) return;
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement &&
+      !surfaceRef.current?.contains(activeElement)
+    ) {
+      returnFocusRef.current = activeElement;
+    }
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    if (!isOpen || !isModal || !surfaceRef.current) return;
+    // An open picker may already hide the inspector itself. Keep its owned
+    // portal accessible while that picker continues to manage its own layer.
+    return hideOthers(profileInfoFocusSurfaces(surfaceRef.current));
+  }, [isOpen, isModal]);
+
+  React.useLayoutEffect(() => {
+    const changedProfile = previousProfileId.current !== profile?.id;
+    previousProfileId.current = profile?.id;
+    if (isOpen && changedProfile && openMethod === "keyboard") {
+      surfaceRef.current
+        ?.querySelector<HTMLElement>('[aria-current="location"]')
+        ?.focus({ preventScroll: true });
+    }
+  }, [isOpen, openMethod, profile?.id]);
+
+  React.useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (
+      isOpen &&
+      isModal &&
+      surface &&
+      !profileInfoFocusSurfaces(surface).some((node) =>
+        node.contains(document.activeElement),
+      )
+    ) {
+      surface
+        .querySelector<HTMLElement>('[aria-current="location"]')
+        ?.focus({ preventScroll: true });
+    }
+  }, [isOpen, isModal]);
+
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    const activeElement = document.activeElement;
+    const returnTarget =
+      returnFocusRef.current?.isConnected &&
+      returnFocusRef.current !== document.body
+        ? returnFocusRef.current
+        : Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '[data-slot="profile-inspect-trigger"]',
+            ),
+          ).find((trigger) => trigger.dataset.profileId === profile?.id);
+    // A profile action may have opened another dialog. Its focus wins.
+    if (
+      returnTarget &&
+      (activeElement === document.body ||
+        (activeElement instanceof Node &&
+          surfaceRef.current?.contains(activeElement)))
+    ) {
+      returnTarget.focus({ preventScroll: true });
+    }
+  };
+
+  if (!profile || !isOpen) return null;
+
+  // Dialog.Content changes component type when modal changes. Composing the
+  // same Radix primitives keeps the form DOM and drafts through window resizes.
+  return (
+    <DialogPrimitive.Root
+      open={isOpen}
+      modal={isModal}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      {isModal && (
+        <div
+          data-slot="dialog-overlay"
+          className="pointer-events-auto fixed inset-0 z-9999 bg-background/50"
+        >
+          <div
+            data-tauri-drag-region
+            data-window-drag-area="true"
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-11"
+          />
+          <WindowDragArea />
+        </div>
+      )}
+      <FocusScope.Root
+        asChild
+        trapped={isModal}
+        loop={isModal}
+        onMountAutoFocus={(event) => {
+          event.preventDefault();
+          if (isModal || openMethod === "keyboard") {
+            surfaceRef.current
+              ?.querySelector<HTMLElement>('[aria-current="location"]')
+              ?.focus({ preventScroll: true });
+          }
+        }}
+        onUnmountAutoFocus={restoreFocus}
+      >
+        <DismissableLayer.Root
+          asChild
+          disableOutsidePointerEvents={isModal}
+          deferPointerDownOutside
+          onDismiss={onClose}
+          onFocusOutside={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => {
+            const original = event.detail.originalEvent;
+            if (
+              original.button === 2 ||
+              (original.button === 0 && original.ctrlKey)
+            ) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            if (!isModal) event.preventDefault();
+            const target = event.target;
+            if (target instanceof Element) {
+              if (target.closest('[data-window-drag-area="true"]')) {
+                event.preventDefault();
+              }
+              const trigger = target.closest<HTMLElement>(
+                '[data-slot="profile-inspect-trigger"]',
+              );
+              if (trigger) returnFocusRef.current = trigger;
+            }
+          }}
+        >
+          <motion.div
+            ref={surfaceRef}
+            role="dialog"
+            aria-modal={isModal || undefined}
+            aria-labelledby={titleId}
+            data-slot={isModal ? "dialog-content" : "profile-inspector"}
+            data-profile-id={profile.id}
+            initial={
+              isModal || reduceMotion || openMethod === "keyboard"
+                ? false
+                : { x: 6 }
+            }
+            animate={{ x: 0 }}
+            transition={{ duration: 0.18, ease: MOTION_EASE_OUT }}
+            className={cn(
+              "@container/profile-info flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden rounded-lg bg-card text-card-foreground",
+              isModal
+                ? "fixed top-1/2 left-1/2 z-10000 h-[min(clamp(30rem,80vh,48rem),calc(100vh-3rem))] w-[calc(100%-2rem)] max-w-[60rem] -translate-1/2"
+                : "h-full w-[29rem]",
+            )}
+          >
+            <DialogPrimitive.Title id={titleId} className="sr-only">
+              {t("profileInfo.title")}: {profile.name}
+            </DialogPrimitive.Title>
+            <ProfileInfoContents
+              key={profile.id}
+              {...props}
+              section={section}
+              onSectionChange={setSection}
+            />
+          </motion.div>
+        </DismissableLayer.Root>
+      </FocusScope.Root>
+    </DialogPrimitive.Root>
+  );
+}
+
+function ProfileInfoContents({
   isOpen,
   onClose,
   profile,
+  handoffState,
   storedProxies,
   vpnConfigs,
   onOpenTrafficDialog,
@@ -341,7 +591,12 @@ export function ProfileInfoDialog({
   isDisabled = false,
   isCrossOs = false,
   syncStatuses,
-}: ProfileInfoDialogProps) {
+  section,
+  onSectionChange,
+}: ProfileInfoDialogProps & {
+  section: ProfileSection;
+  onSectionChange: (section: ProfileSection) => void;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
   const [groupName, setGroupName] = React.useState<string | null>(null);
@@ -350,24 +605,29 @@ export function ProfileInfoDialog({
   >(null);
 
   React.useEffect(() => {
+    let current = true;
+    setGroupName(null);
     if (!isOpen || !profile?.group_id) {
-      setGroupName(null);
       return;
     }
     void (async () => {
       try {
         const groups = await invoke<ProfileGroup[]>("get_groups");
         const group = groups.find((g) => g.id === profile.group_id);
-        setGroupName(group?.name ?? null);
+        if (current) setGroupName(group?.name ?? null);
       } catch {
-        setGroupName(null);
+        if (current) setGroupName(null);
       }
     })();
+    return () => {
+      current = false;
+    };
   }, [isOpen, profile?.group_id]);
 
   React.useEffect(() => {
+    let current = true;
+    setExtensionGroupName(null);
     if (!isOpen || !profile?.extension_group_id) {
-      setExtensionGroupName(null);
       return;
     }
     void (async () => {
@@ -376,11 +636,14 @@ export function ProfileInfoDialog({
           "get_extension_group_for_profile",
           { profileId: profile.id },
         );
-        setExtensionGroupName(group?.name ?? null);
+        if (current) setExtensionGroupName(group?.name ?? null);
       } catch {
-        setExtensionGroupName(null);
+        if (current) setExtensionGroupName(null);
       }
     })();
+    return () => {
+      current = false;
+    };
   }, [isOpen, profile?.extension_group_id, profile?.id]);
 
   React.useEffect(() => {
@@ -427,9 +690,6 @@ export function ProfileInfoDialog({
     action();
   };
 
-  const hasTags = profile.tags && profile.tags.length > 0;
-  const hasNote = !!profile.note;
-
   // Items in the settings tab `actions` list MUST only open another dialog
   // (or trigger a navigation/action that closes this one). Do NOT put inline
   // settings UI — inputs, toggles, save buttons — directly in this dialog's
@@ -473,6 +733,7 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
+      id: "group",
       icon: <LuGroup className="size-4" />,
       label: t("profiles.actions.assignToGroup"),
       onClick: () => {
@@ -495,6 +756,7 @@ export function ProfileInfoDialog({
       hidden: !isWayfern || !onConfigureWayfern,
     },
     {
+      id: "synchronizer",
       icon: <LuUsers className="size-4" />,
       label: t("profiles.synchronizer.launchWithSync"),
       onClick: () => {
@@ -621,47 +883,46 @@ export function ProfileInfoDialog({
   const visibleActions = actions.filter((a) => !a.hidden);
 
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent
-        hideClose
-        className="flex h-[min(clamp(30rem,80vh,48rem),calc(100vh-3rem))] max-w-[min(60rem,calc(100%-4rem))] flex-col gap-0 overflow-hidden p-0"
-      >
-        {/* The dialog renders its own custom header, so the accessible title is
-            visually hidden but present for screen readers (Radix requires it). */}
-        <DialogTitle className="sr-only">{t("profileInfo.title")}</DialogTitle>
-        <ProfileInfoLayout
-          profile={profile}
-          ProfileIcon={ProfileIcon}
-          isRunning={isRunning}
-          isDisabled={isDisabled}
-          networkLabel={networkLabel}
-          groupName={groupName}
-          extensionGroupName={extensionGroupName}
-          syncMode={syncMode}
+    <ProfileInfoLayout
+      profile={profile}
+      ProfileIcon={ProfileIcon}
+      isRunning={isRunning}
+      isDisabled={isDisabled}
+      networkLabel={networkLabel}
+      groupName={groupName}
+      extensionGroupName={extensionGroupName}
+      syncMode={syncMode}
+      syncStatus={syncStatus}
+      handoffStatus={
+        <ProfileHandoffStatus
+          profileId={profile.id}
+          state={handoffState ?? null}
           syncStatus={syncStatus}
-          storedProxies={storedProxies}
-          vpnConfigs={vpnConfigs}
-          hasTags={hasTags}
-          hasNote={hasNote}
-          copied={copied}
-          handleCopyId={handleCopyId}
-          onClose={onClose}
-          onCloneProfile={onCloneProfile}
-          onKillProfile={undefined}
-          visibleActions={visibleActions}
-          t={t}
+          onOpenSync={
+            onOpenProfileSyncDialog
+              ? () => handleAction(() => onOpenProfileSyncDialog(profile))
+              : undefined
+          }
         />
-      </DialogContent>
-    </Dialog>
+      }
+      storedProxies={storedProxies}
+      vpnConfigs={vpnConfigs}
+      copied={copied}
+      handleCopyId={handleCopyId}
+      onClose={onClose}
+      onCloneProfile={onCloneProfile}
+      onKillProfile={undefined}
+      visibleActions={visibleActions}
+      section={section}
+      onSectionChange={onSectionChange}
+      t={t}
+    />
   );
 }
 
 interface ProfileInfoLayoutProps {
+  section: ProfileSection;
+  onSectionChange: (section: ProfileSection) => void;
   profile: BrowserProfile;
   ProfileIcon: React.ComponentType<{ className?: string }>;
   isRunning: boolean;
@@ -671,8 +932,7 @@ interface ProfileInfoLayoutProps {
   extensionGroupName: string | null;
   syncMode: string;
   syncStatus: { status: string; error?: string } | undefined;
-  hasTags: boolean | undefined;
-  hasNote: boolean;
+  handoffStatus: React.ReactNode;
   copied: boolean;
   storedProxies: StoredProxy[];
   vpnConfigs: VpnConfig[];
@@ -701,10 +961,13 @@ type ProfileSection =
   | "extensions"
   | "sync"
   | "automation"
+  | "transfer"
   | "security"
   | "delete";
 
 function ProfileInfoLayout({
+  section: requestedSection,
+  onSectionChange,
   profile,
   ProfileIcon,
   isRunning,
@@ -714,10 +977,9 @@ function ProfileInfoLayout({
   extensionGroupName,
   syncMode,
   syncStatus,
+  handoffStatus,
   storedProxies,
   vpnConfigs,
-  hasTags,
-  hasNote,
   copied,
   handleCopyId,
   onClose,
@@ -725,7 +987,7 @@ function ProfileInfoLayout({
   visibleActions,
   t,
 }: ProfileInfoLayoutProps) {
-  const [section, setSection] = React.useState<ProfileSection>("overview");
+  const contentId = React.useId();
 
   // Map sidebar items to existing actions by their stable, language-independent
   // `id`, so clicking a section triggers the existing dialog handler. Matching
@@ -750,6 +1012,7 @@ function ProfileInfoLayout({
   const cookiesAction = cookiesManageAction ?? cookiesCopyAction;
   const extensionAction = findAction("extension");
   const syncAction = findAction("sync");
+  const synchronizerAction = findAction("synchronizer");
   const _launchHookAction = findAction("hook");
   const _networkAction = findAction("network");
   // Password actions are no longer routed via the legacy action handlers —
@@ -844,23 +1107,38 @@ function ProfileInfoLayout({
       badge: profile.launch_hook ? t("profileInfo.badges.active") : undefined,
     },
     {
+      id: "transfer",
+      icon: <LuDownload className="size-3.5" />,
+      label: t("profileInfo.sections.transfer"),
+      // Nothing to carry: an ephemeral profile keeps no data between launches
+      // and a temporary one is deleted when its browser stops.
+      hidden: isEphemeral || profile.temporary === true,
+    },
+    {
       id: "security",
       icon: <LuKey className="size-3.5" />,
       label: t("profileInfo.sections.security"),
     },
   ];
+  const section = sidebarItems.some(
+    (item) => item.id === requestedSection && !item.hidden,
+  )
+    ? requestedSection
+    : "overview";
 
   return (
     <>
       {/* Top bar */}
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+      <div className="flex min-h-11 shrink-0 items-center gap-2 px-3 py-2">
         <LuUsers className="size-3.5 shrink-0 text-muted-foreground" />
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
           <span className="font-semibold">
             {t("profileInfo.breadcrumbRoot")}
           </span>
           <span className="text-muted-foreground">/</span>
-          <span className="truncate text-muted-foreground">{profile.name}</span>
+          <span className="truncate text-muted-foreground" title={profile.name}>
+            {profile.name}
+          </span>
         </div>
         {onCloneProfile && (
           <Button
@@ -876,18 +1154,23 @@ function ProfileInfoLayout({
         )}
         <button
           type="button"
+          data-slot="profile-info-close"
           aria-label={t("common.buttons.close")}
           onClick={onClose}
-          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <LuX className="size-3.5" />
         </button>
       </div>
 
       {/* Body */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col @[40rem]/profile-info:flex-row">
         {/* Sidebar */}
-        <nav className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-2">
+        <nav
+          aria-label={t("profileMotion.inspectorSections")}
+          data-slot="profile-info-sections"
+          className="flex max-h-[40%] shrink-0 flex-wrap gap-1 overflow-y-auto px-3 py-2 @[40rem]/profile-info:max-h-none @[40rem]/profile-info:w-44 @[40rem]/profile-info:flex-col @[40rem]/profile-info:flex-nowrap @[40rem]/profile-info:px-2"
+        >
           {sidebarItems
             .filter((it) => !it.hidden)
             .map((it) => {
@@ -896,18 +1179,28 @@ function ProfileInfoLayout({
                 <button
                   key={it.id}
                   type="button"
-                  onClick={() => setSection(it.id)}
+                  data-slot="profile-info-section"
+                  data-section={it.id}
+                  aria-current={active ? "location" : undefined}
+                  aria-controls={contentId}
+                  onClick={() => onSectionChange(it.id)}
                   className={cn(
-                    "flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors duration-100",
+                    "flex min-h-8 max-w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     active
                       ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   <span className="shrink-0">{it.icon}</span>
-                  <span className="flex-1 truncate">{it.label}</span>
+                  <span className="min-w-0 flex-1 break-words">{it.label}</span>
                   {it.badge && (
-                    <span className="max-w-[60px] truncate text-[9px] tracking-wide text-muted-foreground uppercase">
+                    <span
+                      title={it.badge}
+                      className={cn(
+                        "hidden max-w-[60px] truncate text-[10px] @[40rem]/profile-info:inline",
+                        active ? "opacity-80" : "text-muted-foreground",
+                      )}
+                    >
                       {it.badge}
                     </span>
                   )}
@@ -915,35 +1208,37 @@ function ProfileInfoLayout({
               );
             })}
           {deleteAction && (
-            <>
-              <div className="my-1 h-px bg-border" />
-              <button
-                type="button"
-                onClick={deleteAction.onClick}
-                disabled={deleteAction.disabled}
-                className="flex h-7 items-center gap-2 rounded-md px-2 text-xs text-destructive-text transition-colors duration-100 hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
-              >
-                <LuTrash2 className="size-3.5 shrink-0" />
-                <span className="flex-1 text-left">
-                  {t("profileInfo.sections.delete")}
-                </span>
-              </button>
-            </>
+            <button
+              type="button"
+              data-slot="profile-info-delete"
+              onClick={deleteAction.onClick}
+              disabled={deleteAction.disabled}
+              className="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-destructive-text transition-colors duration-100 hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 @[40rem]/profile-info:mt-2"
+            >
+              <LuTrash2 className="size-3.5 shrink-0" />
+              <span className="flex-1 text-left">
+                {t("profileInfo.sections.delete")}
+              </span>
+            </button>
           )}
         </nav>
 
         {/* Main */}
-        <div className="scroll-fade min-w-0 flex-1 overflow-y-auto p-4">
+        <div
+          id={contentId}
+          data-slot="profile-info-content"
+          data-profile-id={profile.id}
+          data-section={section}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4"
+        >
           {section === "overview" && (
             <div className="flex flex-col gap-3">
               {/* Hero */}
               <div className="flex items-center gap-3">
-                <div className="shrink-0 rounded-lg bg-muted p-2.5">
-                  <ProfileIcon className="size-7 text-foreground" />
-                </div>
+                <ProfileIcon className="size-7 shrink-0 text-foreground" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="truncate text-base font-semibold">
+                    <h3 className="break-words text-base font-semibold">
                       {profile.name}
                     </h3>
                   </div>
@@ -953,15 +1248,29 @@ function ProfileInfoLayout({
                     </span>
                   </div>
                 </div>
-                <WindowColorSwatch profile={profile} />
+                <div className="flex shrink-0 flex-col items-center gap-1">
+                  <WindowColorSwatch profile={profile} />
+                  <span className="max-w-20 text-center text-[10px] text-muted-foreground">
+                    {t("profileInfo.fields.windowColor")}
+                  </span>
+                </div>
               </div>
+
+              {handoffStatus}
+              <ProfileLaunchActivity
+                profileId={profile.id}
+                running={isRunning}
+              />
 
               {/* ID */}
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
                 <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
-                  ID
+                  {t("profiles.table.profileId")}
                 </span>
-                <span className="flex-1 truncate font-mono text-xs">
+                <span
+                  className="min-w-0 flex-1 truncate font-mono text-xs"
+                  title={profile.id}
+                >
                   {profile.id}
                 </span>
                 <button
@@ -983,26 +1292,25 @@ function ProfileInfoLayout({
                 <InfoCard
                   label={t("profileInfo.fields.group")}
                   value={groupName ?? t("profileInfo.values.none")}
+                  onClick={findAction("group")?.onClick}
+                  disabled={findAction("group")?.disabled}
                 />
                 <InfoCard
                   label={t("profileInfo.fields.proxyVpn")}
                   value={networkLabel}
+                  onClick={() => onSectionChange("network")}
                 />
-                <InfoCard
-                  label={t("profileInfo.fields.tags")}
-                  value={
-                    hasTags
-                      ? (profile.tags ?? []).join(", ")
-                      : t("profileInfo.values.none")
-                  }
+                <ProfileMetadataCard
+                  key={`${profile.id}:tags`}
+                  profile={profile}
+                  field="tags"
+                  disabled={isDisabled}
                 />
-                <InfoCard
-                  label={t("profileInfo.fields.note")}
-                  value={
-                    hasNote
-                      ? (profile.note ?? "")
-                      : t("profileInfo.values.none")
-                  }
+                <ProfileMetadataCard
+                  key={`${profile.id}:note`}
+                  profile={profile}
+                  field="note"
+                  disabled={isDisabled}
                 />
               </div>
 
@@ -1132,8 +1440,25 @@ function ProfileInfoLayout({
             ))}
 
           {section === "automation" && (
-            <LaunchHookEditor profile={profile} t={t} />
+            <div className="flex flex-col gap-5">
+              <LaunchHookEditor profile={profile} t={t} />
+              {synchronizerAction && (
+                <Button
+                  data-slot="profile-start-synchronizer"
+                  variant="secondary"
+                  size="sm"
+                  className="h-auto min-h-8 self-start whitespace-normal"
+                  onClick={synchronizerAction.onClick}
+                  disabled={synchronizerAction.disabled}
+                >
+                  {synchronizerAction.icon}
+                  {synchronizerAction.label}
+                </Button>
+              )}
+            </div>
           )}
+
+          {section === "transfer" && <ExportProfileSection profile={profile} />}
 
           {section === "security" && (
             <SecuritySectionInline
@@ -1275,6 +1600,7 @@ function LaunchHookEditor({
       </p>
       <Input
         type="url"
+        data-slot="profile-launch-hook-input"
         value={value}
         onChange={(e) => {
           setValue(e.target.value);
@@ -1368,7 +1694,7 @@ function SyncSectionInline({
             void onChangeMode(v);
           }}
         >
-          <SelectTrigger className="h-7 flex-1 text-xs">
+          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1488,7 +1814,7 @@ function NetworkSectionInline({
             void onProxyChange(v);
           }}
         >
-          <SelectTrigger className="h-7 flex-1 text-xs">
+          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1515,7 +1841,7 @@ function NetworkSectionInline({
             void onVpnChange(v);
           }}
         >
-          <SelectTrigger className="h-7 flex-1 text-xs">
+          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1756,12 +2082,12 @@ function CookiesSectionInline({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <LuCookie className="size-4" />
           {t("profileInfo.sections.cookies")}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -1982,6 +2308,7 @@ function FingerprintSectionInline({
         limitedMode={false}
         profileVersion={profile.version}
         profileBrowser={profile.browser}
+        profileId={profile.id}
       />
 
       {error && <p className="text-xs text-destructive-text">{error}</p>}
@@ -2158,7 +2485,7 @@ function SecuritySectionInline({
               setIsVerifyOpen(true);
             }}
             className={cn(
-              "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
+              "min-h-7 flex-1 rounded-md border px-2 py-1 text-xs transition-colors",
               "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
@@ -2171,7 +2498,7 @@ function SecuritySectionInline({
               reset();
             }}
             className={cn(
-              "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
+              "min-h-7 flex-1 rounded-md border px-2 py-1 text-xs transition-colors",
               mode === "change"
                 ? "border-transparent bg-accent text-accent-foreground"
                 : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",

@@ -1,12 +1,7 @@
 "use client";
 
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import {
-  AnimatePresence,
-  type HTMLMotionProps,
-  motion,
-  type Transition,
-} from "motion/react";
+import { type HTMLMotionProps, motion, type Transition } from "motion/react";
 import * as React from "react";
 
 import { AutoHeight } from "@/components/ui/auto-height";
@@ -118,29 +113,21 @@ type TabsContentProps = React.ComponentProps<typeof TabsPrimitive.Content> &
 function TabsContent({
   value,
   forceMount,
-  transition = { duration: 0.5, ease: "easeInOut" },
   className,
   ...props
 }: TabsContentProps) {
   return (
-    <AnimatePresence mode="wait">
-      <TabsPrimitive.Content asChild forceMount={forceMount} value={value}>
-        <motion.div
-          data-slot="tabs-content"
-          layout
-          layoutDependency={value}
-          initial={{ opacity: 0, filter: "blur(4px)" }}
-          animate={{ opacity: 1, filter: "blur(0px)" }}
-          exit={{ opacity: 0, filter: "blur(4px)" }}
-          transition={transition}
-          className={cn(
-            "mt-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
-            className,
-          )}
-          {...props}
-        />
-      </TabsPrimitive.Content>
-    </AnimatePresence>
+    <TabsPrimitive.Content asChild forceMount={forceMount} value={value}>
+      <motion.div
+        data-slot="tabs-content"
+        initial={false}
+        className={cn(
+          "mt-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+          className,
+        )}
+        {...props}
+      />
+    </TabsPrimitive.Content>
   );
 }
 

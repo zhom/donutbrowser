@@ -544,6 +544,10 @@
     "license": "MIT"
   },
   {
+    "name": "arrayref",
+    "license": "BSD-2-Clause"
+  },
+  {
     "name": "arrayvec",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1052,6 +1056,10 @@
     "license": "MIT"
   },
   {
+    "name": "data-url",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "dayjs",
     "license": "MIT"
   },
@@ -1260,6 +1268,10 @@
     "license": "MIT"
   },
   {
+    "name": "euclid",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "event-listener",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1320,12 +1332,28 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "float-cmp",
+    "license": "MIT"
+  },
+  {
     "name": "fnv",
     "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "foldhash",
     "license": "Zlib"
+  },
+  {
+    "name": "font-types",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "fontconfig-parser",
+    "license": "MIT"
+  },
+  {
+    "name": "fontdb",
+    "license": "MIT"
   },
   {
     "name": "foreign-types",
@@ -1496,6 +1524,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "harfrust",
+    "license": "MIT"
+  },
+  {
     "name": "hash32",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1640,6 +1672,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "imagesize",
+    "license": "MIT"
+  },
+  {
     "name": "imgref",
     "license": "CC0-1.0 OR Apache-2.0"
   },
@@ -1756,11 +1792,19 @@
     "license": "MIT"
   },
   {
+    "name": "jsonc-parser",
+    "license": "MIT"
+  },
+  {
     "name": "jsonptr",
     "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "keyboard-types",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "kurbo",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -1874,6 +1918,10 @@
   {
     "name": "memchr",
     "license": "Unlicense OR MIT"
+  },
+  {
+    "name": "memmap2",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "memoffset",
@@ -2172,6 +2220,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "phc",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "phf",
     "license": "MIT"
   },
@@ -2185,6 +2237,10 @@
   },
   {
     "name": "phf_shared",
+    "license": "MIT"
+  },
+  {
+    "name": "pico-args",
     "license": "MIT"
   },
   {
@@ -2225,6 +2281,10 @@
   },
   {
     "name": "poly1305",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "polycool",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -2388,6 +2448,10 @@
     "license": "MIT"
   },
   {
+    "name": "read-fonts",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "reborrow",
     "license": "MIT"
   },
@@ -2440,6 +2504,10 @@
     "license": "MIT"
   },
   {
+    "name": "resvg",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "rfd",
     "license": "MIT"
   },
@@ -2453,6 +2521,10 @@
   },
   {
     "name": "ring-compat",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "roxmltree",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -2660,12 +2732,24 @@
     "license": "MIT"
   },
   {
+    "name": "simplecss",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "siphasher",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "skrifa",
     "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "slab",
     "license": "MIT"
+  },
+  {
+    "name": "slotmap",
+    "license": "Zlib"
   },
   {
     "name": "smallvec",
@@ -2712,6 +2796,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "strict-num",
+    "license": "MIT"
+  },
+  {
     "name": "string_cache",
     "license": "Apache-2.0 OR MIT"
   },
@@ -2726,6 +2814,10 @@
   {
     "name": "subtle",
     "license": "BSD-3-Clause"
+  },
+  {
+    "name": "svgtypes",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "swift-rs",
@@ -2878,6 +2970,14 @@
   {
     "name": "tiny-keccak",
     "license": "CC0-1.0"
+  },
+  {
+    "name": "tiny-skia",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "tiny-skia-path",
+    "license": "BSD-3-Clause"
   },
   {
     "name": "tinystr",
@@ -3036,11 +3136,23 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "unicode-bidi",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "unicode-ident",
     "license": "(MIT OR Apache-2.0) AND Unicode-3.0"
   },
   {
+    "name": "unicode-script",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "unicode-segmentation",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "unicode-vo",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -3082,6 +3194,10 @@
   {
     "name": "use-sync-external-store",
     "license": "MIT"
+  },
+  {
+    "name": "usvg",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "utf8_iter",
@@ -3312,6 +3428,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "xmlwriter",
+    "license": "MIT"
+  },
+  {
     "name": "Xray-core",
     "license": "MPL-2.0"
   },
@@ -3382,6 +3502,10 @@
   {
     "name": "zip",
     "license": "MIT"
+  },
+  {
+    "name": "zlib-rs",
+    "license": "Zlib"
   },
   {
     "name": "zmij",

@@ -36,6 +36,7 @@ export interface BrowserProfile {
   last_sync?: number; // Timestamp of last successful sync (epoch seconds)
   host_os?: string; // OS where profile was created ("macos", "windows", "linux")
   ephemeral?: boolean;
+  temporary?: boolean; // Created for one automation run; deleted when its browser stops
   clear_on_close?: boolean;
   extension_group_id?: string;
   proxy_bypass_rules?: string[];
@@ -51,6 +52,7 @@ export interface BrowserProfile {
 export interface Extension {
   id: string;
   name: string;
+  manifest_name?: string | null;
   file_name: string;
   file_type: string;
   browser_compatibility: string[];
@@ -110,9 +112,9 @@ export interface SyncServerCheck {
  * Capability/limit set derived from the plan by the backend. Features are gated
  * on these flags instead of a single "is paid?" check, so a plan like "solo"
  * (cloud backup + nightly cookie bot, no automation, no fingerprint editing, no
- * hands-on remote session) is just data. Mirrors
- * `apps/backend/src/plans/entitlements.ts`. Resolve via `getEntitlements()` —
- * the desktop populates it, but it stays optional for safety on older state.
+ * hands-on remote session) is just data. Mirrors the capability matrix the
+ * cloud API resolves. Resolve via `getEntitlements()` — the desktop populates
+ * it, but it stays optional for safety on older state.
  */
 export interface Entitlements {
   active: boolean;
@@ -129,6 +131,22 @@ export interface Entitlements {
    * control must read this flag.
    */
   remoteInteractive: boolean;
+  /**
+   * May drive this desktop from donutbrowser.com, the remote MCP endpoint and
+   * the API in front of it. Enterprise only.
+   *
+   * Read by the UI to explain why a connected desktop cannot be driven. The
+   * bridge itself never gates on it: the server decides who may send work.
+   */
+  remoteControl: boolean;
+  /**
+   * May run the browsing agent: a goal the cloud pursues on one profile, on
+   * this desktop or on a leased host.
+   *
+   * Never derived from `browserAutomation`. A backend that omits this key has
+   * no agent routes to be entitled to, so `false` is the true answer.
+   */
+  agentAutomation: boolean;
   profileLimit: number;
   requestsPerHour: number;
   /**
@@ -148,13 +166,29 @@ export interface Entitlements {
  * did: a backend predating the solo tier omits it, and reading the absent key as
  * `false` would take interactive remote sessions away from a Pro customer whose
  * only mistake was a stale cached login.
+ *
+ * `remoteControl` is optional too, but for the opposite reason: a backend that
+ * omits it has no remote-control endpoint at all, so `false` is the true answer
+ * rather than a gap to fill in. `agentAutomation` is optional on exactly the
+ * same terms.
  */
 export type ServerEntitlements = Omit<
   Entitlements,
-  "cookieBot" | "remoteBrowserHours" | "remoteInteractive"
+  | "cookieBot"
+  | "remoteBrowserHours"
+  | "remoteInteractive"
+  | "remoteControl"
+  | "agentAutomation"
 > &
   Partial<
-    Pick<Entitlements, "cookieBot" | "remoteBrowserHours" | "remoteInteractive">
+    Pick<
+      Entitlements,
+      | "cookieBot"
+      | "remoteBrowserHours"
+      | "remoteInteractive"
+      | "remoteControl"
+      | "agentAutomation"
+    >
   >;
 
 export interface CloudUser {
@@ -168,6 +202,12 @@ export interface CloudUser {
   proxyBandwidthLimitMb: number;
   proxyBandwidthUsedMb: number;
   proxyBandwidthExtraMb: number;
+  // The plan the account is actually served under. For a team member this is
+  // the owner's plan while `plan` stays the member's own row, because billing
+  // surfaces (subscription, invoices) belong to the row. Optional: the login
+  // response and older backends omit it, so read it through
+  // `effectivePlanOf()`, never directly.
+  effectivePlan?: string;
   teamId?: string;
   teamName?: string;
   teamRole?: string;
@@ -238,6 +278,13 @@ export interface ProfileSyncStatusEvent {
   status: "disabled" | "syncing" | "synced" | "error" | "pending";
 }
 
+/**
+ * Whether a proxy carries UDP, which decides whether WebRTC can be routed
+ * through it at all. `unknown` means the probe could not establish it, and is
+ * never reported in place of a real "no".
+ */
+export type UdpSupport = "yes" | "no" | "unknown";
+
 export interface ProxyCheckResult {
   ip: string;
   city?: string;
@@ -245,6 +292,36 @@ export interface ProxyCheckResult {
   country_code?: string;
   timestamp: number;
   is_valid: boolean;
+  /** The exit's ISP or registered organisation, from the local MaxMind data. */
+  isp?: string;
+  /** The exit's own timezone, the value a fingerprint is matched against. */
+  timezone?: string;
+  udp?: UdpSupport;
+  /** How long the whole check took, end to end. */
+  latency_ms?: number;
+}
+
+/** One remembered check for a proxy. The backend keeps the last 50, newest first. */
+export interface ProxyCheckHistoryEntry {
+  timestamp: number;
+  ok: boolean;
+  ip?: string;
+  country?: string;
+  country_code?: string;
+  isp?: string;
+  udp?: UdpSupport;
+  latency_ms?: number;
+}
+
+/** A staged extension downloaded from a link, before the user confirms it. */
+export interface FetchedExtension {
+  file_name: string;
+  file_data: number[];
+  name?: string;
+  version?: string;
+  description?: string;
+  source_url: string;
+  from_web_store: boolean;
 }
 
 export function isSyncEnabled(profile: BrowserProfile): boolean {
@@ -273,9 +350,16 @@ export interface LocationItem {
   name: string;
 }
 
+export interface GroupBookmark {
+  title: string;
+  url: string;
+  folder?: string | null;
+}
+
 export interface ProfileGroup {
   id: string;
   name: string;
+  bookmarks?: GroupBookmark[];
   sync_enabled?: boolean;
   last_sync?: number;
 }
@@ -284,8 +368,29 @@ export interface GroupWithCount {
   id: string;
   name: string;
   count: number;
+  bookmark_count?: number;
   sync_enabled?: boolean;
   last_sync?: number;
+}
+
+export interface ProxyPair {
+  profile_id: string;
+  proxy_id: string;
+}
+
+export interface ProxyDistributionPlan {
+  pairs: ProxyPair[];
+  unpaired_profile_ids: string[];
+  unused_proxy_ids: string[];
+  running_profile_ids: string[];
+  shared_proxy_ids: string[];
+}
+
+export interface ProxyAssignmentResult {
+  profile_id: string;
+  proxy_id: string;
+  ok: boolean;
+  error?: string | null;
 }
 
 export interface DetectedProfile {
@@ -398,6 +503,15 @@ export interface AppUpdateProgress {
 
 export type WayfernOS = "windows" | "macos" | "linux" | "android" | "ios";
 
+export type WebRtcMode = "auto" | "tcp_only" | "block";
+
+/** One row of the browser's "Fill with generated" menu. */
+export interface PersonaField {
+  id: string;
+  label: string;
+  value: string;
+}
+
 export interface WayfernConfig {
   proxy?: string;
   screen_max_width?: number;
@@ -406,8 +520,13 @@ export interface WayfernConfig {
   screen_min_height?: number;
   geoip?: string | boolean; // For compatibility with shared config form
   block_images?: boolean; // For compatibility with shared config form
-  block_webrtc?: boolean;
+  block_webrtc?: boolean; // Legacy on/off switch; webrtc_mode wins when set
+  webrtc_mode?: WebRtcMode; // auto (default) | tcp_only | block
+  persona?: string; // JSON array of the user's edits to the derived persona
+  camera_file?: string; // Absolute path to a PNG still or Y4M/MJPEG clip
+  camera_crop?: string; // "x,y,width,height" in source pixels
   block_webgl?: boolean;
+  restore_session?: boolean; // Reopen the last session's windows and tabs on interactive launches (default true)
   executable_path?: string;
   fingerprint?: string; // JSON string of the complete fingerprint config
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
@@ -418,7 +537,7 @@ export interface WayfernConfig {
   location?: string; // JSON object of the exit-derived location fields (timezone, language, coordinates)
 }
 
-// Wayfern fingerprint config - matches the C++ FingerprintData structure
+// Wayfern fingerprint config - matches the blob the browser accepts
 export interface WayfernFingerprintConfig {
   // User agent and platform
   userAgent?: string;
@@ -541,6 +660,8 @@ export interface SyncFollowerState {
   profile_id: string;
   profile_name: string;
   failed_at_url: string | null;
+  /** Held out of the mirroring on purpose; the window stays open. */
+  held: boolean;
 }
 
 export interface SyncSessionInfo {
@@ -548,6 +669,33 @@ export interface SyncSessionInfo {
   leader_profile_id: string;
   leader_profile_name: string;
   followers: SyncFollowerState[];
+  /** Mirroring is suspended for the whole session. */
+  paused: boolean;
+}
+
+/** How the follower windows are placed on the host display. */
+export type SyncWindowLayout = "grid" | "columns" | "cascade";
+
+// Data directory
+export interface DataRootInfo {
+  active_path: string;
+  configured_path: string | null;
+  default_path: string;
+  size_bytes: number;
+  file_count: number;
+  overridden_by_environment: boolean;
+  restart_required: boolean;
+  app_directory_name: string;
+  active_path_missing: boolean;
+}
+
+export interface DataRootMoveProgress {
+  phase: "scanning" | "copying" | "verifying" | "cleaning" | "done";
+  copied_files: number;
+  total_files: number;
+  copied_bytes: number;
+  total_bytes: number;
+  destination: string;
 }
 
 // Traffic stats types
@@ -768,9 +916,16 @@ export interface VpnStatus {
   last_handshake?: number;
 }
 
-/** Result of comparing a proxy's exit node against a profile's fingerprint. */
+/**
+ * Result of comparing a proxy's exit node against a profile's fingerprint.
+ *
+ * Three outcomes, not two: the dimensions agree, they disagree, or nothing was
+ * compared. `consistent` alone is not the first of those, it is also true when
+ * nothing was compared at all, so read it with `checked` and `unverified`.
+ */
 export interface ConsistencyResult {
   consistent: boolean;
+  /** An exit was reached AND at least one dimension was compared against it. */
   checked: boolean;
   exit_ip: string | null;
   exit_country_code: string | null;
@@ -779,6 +934,12 @@ export interface ConsistencyResult {
   fingerprint_language: string | null;
   /** Which dimensions disagree: "timezone", "language". */
   mismatches: string[];
+  /**
+   * Dimensions the exit supplied but that were never compared, because the
+   * fingerprint declares no value of its own. Never a block, but never a pass
+   * either.
+   */
+  unverified: string[];
 }
 
 /**
@@ -816,6 +977,8 @@ export interface PreLaunchChecks {
   scan_state: ExtensionScanState;
   consistency: ConsistencyResult;
   exit_probe_pending: boolean;
+  /** Dimensions no probe can verify for this profile. Informational. */
+  exit_unverified: string[];
   exit_measurement_unreliable: boolean;
   consent_token: string | null;
 }
@@ -832,3 +995,18 @@ export interface PreLaunchChecks {
 export type SetDefaultBrowserOutcome =
   | { status: "set" }
   | { status: "awaitingSystemSettings" };
+
+/** One deleted profile waiting in the trash, as `list_trashed_profiles` reports it. */
+export interface TrashedProfileSummary {
+  id: string;
+  name: string;
+  browser: string;
+  version: string;
+  /** Epoch seconds. */
+  deleted_at: number;
+  /** Epoch seconds; the entry is purged once this has passed. */
+  expires_at: number;
+  size_bytes: number;
+  group_id?: string;
+  password_protected: boolean;
+}

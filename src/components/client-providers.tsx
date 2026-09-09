@@ -8,6 +8,8 @@ import { CustomThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WindowDragArea } from "@/components/window-drag-area";
+import { InputModalityProvider } from "@/hooks/use-input-modality";
+import { LaunchActivityProvider } from "@/hooks/use-launch-activity";
 import { setupLogging } from "@/lib/logger";
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
@@ -23,11 +25,15 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
             cross-fades are kept. The CSS-side media query in globals.css only
             covers CSS transitions — this covers the JS-driven ones. */}
         <MotionConfig reducedMotion="user">
-          <WindowDragArea />
-          <TooltipProvider>
-            <OnboardingProvider>{children}</OnboardingProvider>
-          </TooltipProvider>
-          <Toaster />
+          <InputModalityProvider>
+            <WindowDragArea />
+            <TooltipProvider>
+              <LaunchActivityProvider>
+                <OnboardingProvider>{children}</OnboardingProvider>
+              </LaunchActivityProvider>
+            </TooltipProvider>
+            <Toaster />
+          </InputModalityProvider>
         </MotionConfig>
       </CustomThemeProvider>
     </I18nProvider>

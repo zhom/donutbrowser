@@ -12,11 +12,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
-import type {
-  CookieBotRun,
-  CookieBotSchedule,
-  CookieBotSlot,
-  RemoteHoursQuota,
+import {
+  type CookieBotRun,
+  type CookieBotSchedule,
+  isCookieBotPlatform,
+  type RemoteHoursQuota,
 } from "@/lib/cookie-bot";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import type { RemoteSessionState } from "@/lib/remote-sessions";
@@ -72,25 +72,7 @@ export function nightsPerWeek(mask: number): number {
 /* Slots                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Every time-of-day an enrolment fires, from whichever shape the server sent.
- *
- * ALWAYS at least one slot. A server that predates multi-slot scheduling sends
- * only the mirrored `run_at_minute` / `days_mask` pair, and a renderer that read
- * `slots` directly would show an enrolment as firing at no time at all. Reading
- * the wire through here is what keeps that fallback in one place.
- */
-export function scheduleSlots(schedule: {
-  slots?: CookieBotSlot[];
-  run_at_minute: number;
-  days_mask: number;
-}): CookieBotSlot[] {
-  const slots = schedule.slots ?? [];
-  if (slots.length > 0) return slots;
-  return [
-    { days_mask: schedule.days_mask, run_at_minute: schedule.run_at_minute },
-  ];
-}
+export { scheduleSlots } from "@/lib/schedule-layout";
 
 /**
  * How many times a week a whole calendar fires.
@@ -237,13 +219,6 @@ export function formatDate(value: string | null | undefined): string | null {
 /* Preflight                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Hosts the fleet can lease. Mirrors `BOT_PLATFORMS` in
- * `src-tauri/src/cookie_bot.rs`; a profile built for anything else has no
- * machine to run on and is refused before a schedule row is ever written.
- */
-const BOT_PLATFORMS = ["windows", "macos"];
-
 export type PreflightCode =
   | "syncOff"
   | "encrypted"
@@ -303,7 +278,7 @@ export function preflight(profile: BrowserProfile): PreflightResult {
       fix: null,
     };
   }
-  if (!BOT_PLATFORMS.includes(os)) {
+  if (!isCookieBotPlatform(os)) {
     return {
       eligible: false,
       code: "unsupportedPlatform",
@@ -467,11 +442,16 @@ export function runStatusLabel(t: TFunction, status: string): string {
  * A value newer than this build still falls through to its own name, which
  * beats a blank cell, but every code the server defines today has a sentence.
  */
-const OUTCOME_KEYS: Record<string, string> = {
+export const OUTCOME_KEYS: Record<string, string> = {
   not_entitled: "cookieBot.outcome.notEntitled",
   sync_disabled: "cookieBot.outcome.syncDisabled",
   encrypted_sync: "cookieBot.outcome.encryptedSync",
   proxy_required: "cookieBot.outcome.proxyRequired",
+  // An exit IS attached; it just only resolves on the user's own machine. The
+  // server has returned this since the reachability check landed and this map
+  // never learned it, so the one refusal whose fix is "use a public proxy"
+  // printed as `proxy_local_only`.
+  proxy_local_only: "cookieBot.outcome.proxyLocalOnly",
   touch_fingerprint: "cookieBot.outcome.touchFingerprint",
   platform_unsupported: "cookieBot.outcome.platformUnsupported",
   no_sites: "cookieBot.outcome.noSites",
@@ -480,6 +460,15 @@ const OUTCOME_KEYS: Record<string, string> = {
   no_capacity: "cookieBot.outcome.noCapacity",
   manager_error: "cookieBot.outcome.managerError",
   budget_exceeded: "cookieBot.outcome.budgetExceeded",
+  // The commonest real outcome of the five missing ones, and it was showing
+  // the raw token every time.
+  browsing_incomplete: "cookieBot.outcome.browsingIncomplete",
+  // Three refusals raised on the remote host itself. Each is a PERMANENT
+  // condition — an unsupported proxy, no synced copy, wrong OS — so the
+  // sentence has to say what to change, not "try again tonight".
+  proxy_unsupported: "cookieBot.outcome.proxyUnsupported",
+  profile_not_synced: "cookieBot.outcome.profileNotSynced",
+  profile_os_mismatch: "cookieBot.outcome.profileOsMismatch",
   cancelled_by_user: "cookieBot.outcome.cancelledByUser",
 };
 
@@ -572,7 +561,7 @@ export function sessionTone(session: RemoteSessionState): StatusTone {
  * Why a session ended, when the backend named a reason.
  *
  * `close_reason` has been on the wire since the stream existed and nothing read
- * it, so a session that hit the two-hour cap and one the user stopped looked
+ * it, so a session that hit the session cap and one the user stopped looked
  * identical.
  */
 export function sessionCloseReason(
@@ -674,10 +663,10 @@ export function CookieDelta({
   );
 }
 
-/** One decimal, but only when it earns one: `4.7 h`, `128 h`. */
+/** One decimal, but only when it earns one: `4.7 h`, `128 h`, `199.8 h`. */
 export function formatHours(hours: number): string {
   if (!Number.isFinite(hours)) return "0";
-  if (hours >= 100 || Number.isInteger(hours)) return String(Math.round(hours));
+  if (Number.isInteger(hours)) return String(hours);
   return hours.toFixed(1);
 }
 
@@ -896,15 +885,14 @@ export function sessionElapsedSeconds(
 /**
  * Whether a run's per-site counters mean anything yet.
  *
- * `sites_visited`, `sites_failed` and `consent_dismissed` are columns the
- * server declares with `DEFAULT 0` and, today, nothing ever writes: the fleet
- * computes them but donutbrowser-infra does not ingest them. Rendering the
- * default as a fact told a paying user their run visited "0 of 12 sites" and
- * drew a success-green progress bar pinned at zero for the whole night.
+ * `sites_visited`, `sites_failed` and `consent_dismissed` default to 0 and are
+ * not always populated, so rendering the default as a fact told a paying user
+ * their run visited "0 of 12 sites" and drew a success-green progress bar
+ * pinned at zero for the whole night.
  *
  * So a run is only credited with counters once one of them is non-zero. Until
- * then the UI says it does not know, which is the truth. The moment the
- * ingestion lands this starts reporting real numbers with no further change.
+ * then the UI says it does not know, which is the truth, and it reports real
+ * numbers as soon as any arrive.
  */
 export function hasRunCounters(run: {
   sites_visited: number;

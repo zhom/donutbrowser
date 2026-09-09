@@ -1,9 +1,18 @@
+import { LuGlobe } from "react-icons/lu";
+import { SiBrave, SiOpera, SiVivaldi } from "react-icons/si";
 /**
  * Browser utility functions
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
-import { FaChrome, FaExclamationTriangle, FaFire } from "react-icons/fa";
+import {
+  FaChrome,
+  FaEdge,
+  FaExclamationTriangle,
+  FaFire,
+  FaFirefox,
+  FaSafari,
+} from "react-icons/fa";
 import { LuLock } from "react-icons/lu";
 import { getCurrentOS } from "@/lib/platform";
 
@@ -31,6 +40,35 @@ export function getBrowserIcon(browserType: string) {
       return FaChrome;
     default:
       return FaExclamationTriangle;
+  }
+}
+
+/** Source browsers are identities, not warnings about the destination runtime. */
+export function getSourceBrowserIcon(browserType: string) {
+  switch (browserType.toLowerCase()) {
+    case "chrome":
+    case "chrome-beta":
+    case "chrome-dev":
+    case "chrome-canary":
+    case "chromium":
+    case "wayfern":
+      return FaChrome;
+    case "edge":
+    case "msedge":
+      return FaEdge;
+    case "brave":
+      return SiBrave;
+    case "vivaldi":
+      return SiVivaldi;
+    case "opera":
+    case "opera-gx":
+      return SiOpera;
+    case "firefox":
+      return FaFirefox;
+    case "safari":
+      return FaSafari;
+    default:
+      return LuGlobe;
   }
 }
 

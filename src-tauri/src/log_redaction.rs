@@ -8,8 +8,15 @@ static PRIVATE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"(?is)-----BEGIN [^-\r\n]*PRIVATE KEY-----.*?-----END [^-\r\n]*PRIVATE KEY-----")
     .expect("valid private-key regex")
 });
-static BEARER_RE: LazyLock<Regex> =
-  LazyLock::new(|| Regex::new(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+").expect("valid bearer regex"));
+/// Every HTTP auth scheme that carries its credential as a single token after
+/// the scheme name, not just `Bearer`. SECRET_RE cannot reach these: its value
+/// class stops at the space between the scheme and the credential, so a
+/// `Basic`/`NTLM` blob used to survive into an exported log verbatim. Digest's
+/// quoted-parameter form (`response="..."`) is out of scope.
+static AUTH_SCHEME_RE: LazyLock<Regex> = LazyLock::new(|| {
+  Regex::new(r"(?i)\b(Bearer|Basic|Token|Digest|Negotiate|NTLM)\s+[A-Za-z0-9._~+/=-]+")
+    .expect("valid auth-scheme regex")
+});
 static SECRET_RE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(
     r"(?i)\b(api[_-]?key|authorization|password|passwd|private[_-]?key|proxy[_-]?(password|username)|refresh[_-]?token|secret|token|username)\b\s*[:=]\s*[^\s,;]+",
@@ -41,7 +48,9 @@ pub fn url_label(value: &str) -> String {
 pub fn text(value: &str) -> String {
   let redacted = PRIVATE_KEY_RE.replace_all(value, "<redacted-private-key>");
   let redacted = URL_RE.replace_all(&redacted, "<redacted-url>");
-  let redacted = BEARER_RE.replace_all(&redacted, "Bearer <redacted-secret>");
+  // Must stay ahead of SECRET_RE, which would otherwise consume
+  // `Authorization: Basic` and leave the credential with no scheme to match.
+  let redacted = AUTH_SCHEME_RE.replace_all(&redacted, "${1} <redacted-secret>");
   let redacted = SECRET_RE.replace_all(&redacted, "<redacted-secret>");
   let redacted = EMAIL_RE.replace_all(&redacted, "<redacted-email>");
   let redacted = UNIX_HOME_RE.replace_all(&redacted, "/<redacted-home>");
@@ -83,6 +92,28 @@ mod tests {
     ] {
       assert!(!output.contains(sensitive), "log output leaked {sensitive}");
     }
+  }
+
+  #[test]
+  fn redacts_non_bearer_authorization_credentials() {
+    let headers = [
+      ("Authorization: Basic ", "dXNlcjpwYXNzd29yZA=="),
+      ("Proxy-Authorization: Basic ", "cHJveHk6c2VjcmV0"),
+      ("Authorization: Token ", "gh_example_credential"),
+      ("authorization: bearer ", "lower-case-credential"),
+      ("WWW-Authenticate: NTLM ", "TlRMTVNTUAAB"),
+    ];
+    for (header, credential) in headers {
+      let output = text(&format!("{header}{credential}"));
+      assert!(
+        !output.contains(credential),
+        "log output leaked {credential}"
+      );
+    }
+
+    // The scheme survives wherever the header name is not itself redacted, so a
+    // log still says which kind of authentication was in play.
+    assert!(text("WWW-Authenticate: NTLM TlRMTVNTUAAB").contains("NTLM"));
   }
 
   #[test]

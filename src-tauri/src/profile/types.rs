@@ -58,6 +58,13 @@ pub struct BrowserProfile {
   pub host_os: Option<String>, // OS where profile was created ("macos", "windows", "linux")
   #[serde(default)]
   pub ephemeral: bool,
+  /// A profile that exists for one automation run. REST and MCP create it,
+  /// the browser stopping destroys it, and a startup sweep destroys any that
+  /// outlived a crash. Always ephemeral as well, so nothing it browses ever
+  /// reaches real disk. Never trashed: a disposable profile has nothing to
+  /// restore, and keeping one would defeat the point of asking for it.
+  #[serde(default)]
+  pub temporary: bool,
   #[serde(default)]
   pub extension_group_id: Option<String>,
   #[serde(default)]

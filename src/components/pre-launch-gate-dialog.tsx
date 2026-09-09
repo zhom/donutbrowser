@@ -33,6 +33,10 @@ export interface GateFindings {
   measurementUnreliable: boolean;
   /// The exit has not been measured yet; the launch itself will still check.
   probePending: boolean;
+  /// Dimensions nothing will compare, because the fingerprint declares no value
+  /// of its own. Reported so a launch that verified nothing does not read as a
+  /// launch that verified everything. Never a block.
+  unverified: string[];
 }
 
 export interface GateDecision {
@@ -187,6 +191,11 @@ export function PreLaunchGateDialog({
   const mismatches = fingerprint?.mismatches ?? [];
   const exitIp = fingerprint?.exit_ip ?? null;
   const isBlocked = fingerprint !== null;
+  // What nothing compared. A measured result is authoritative about that, so it
+  // wins over the local prediction whenever the gate got as far as measuring.
+  const unverified = fingerprint
+    ? fingerprint.unverified
+    : (findings?.unverified ?? []);
 
   // Two guards, because answering a gate promotes the next one into the same
   // DOM node rather than closing the dialog. The ref settles one gate exactly
@@ -359,6 +368,21 @@ export function PreLaunchGateDialog({
           {findings?.probePending && !isBlocked && (
             <p className="text-xs text-muted-foreground">
               {t("prelaunchGate.probePending")}
+            </p>
+          )}
+
+          {/* Not a block and not a mismatch: the exit check has nothing to
+              compare on these dimensions, so it can neither clear them nor
+              flag them. Said plainly, so a launch that verified nothing is
+              never mistaken for one that verified everything. */}
+          {unverified.includes("timezone") && (
+            <p className="text-xs text-muted-foreground">
+              {t("prelaunchGate.exitUnverifiedTimezone")}
+            </p>
+          )}
+          {unverified.includes("language") && (
+            <p className="text-xs text-muted-foreground">
+              {t("prelaunchGate.exitUnverifiedLanguage")}
             </p>
           )}
 

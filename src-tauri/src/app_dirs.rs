@@ -61,10 +61,121 @@ fn log_dir_for(root: Option<PathBuf>, portable: Option<&PathBuf>) -> Option<Path
 /// File name `tauri-plugin-window-state` persists geometry under.
 pub const WINDOW_STATE_FILENAME: &str = ".window-state.json";
 
+/// File name of the pointer that records a data directory the user chose in
+/// Settings.
+pub const DATA_ROOT_POINTER_FILENAME: &str = "data-root.json";
+
+static CUSTOM_DATA_ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// Where the pointer to a user-chosen data directory lives.
+///
+/// It must never sit inside `data_dir()` itself: a move deletes the old
+/// directory once the copy verifies, which would take the pointer with it and
+/// send the next start back to the platform default. Every branch below
+/// therefore resolves OUTSIDE the data directory it points at.
+///
+/// - With `DONUTBROWSER_DATA_ROOT` set, `<root>/data-root.json`, a sibling of
+///   `<root>/data`. An isolated run (the E2E harness) then keeps its own
+///   pointer and can never read, or write, the real machine's.
+/// - In portable mode, `<exe dir>/data-root.json`, beside `<exe dir>/data`, so
+///   the choice travels with the install.
+/// - Otherwise the platform preference directory, which is a different root
+///   from `data_local_dir` on macOS, Linux and Windows alike.
+pub fn data_root_pointer_file() -> PathBuf {
+  data_root_pointer_file_for(
+    data_root(),
+    portable_dir(),
+    base_dirs().preference_dir().join(app_name()),
+  )
+}
+
+/// Split out from `data_root_pointer_file` so the precedence is testable
+/// without a `.portable` marker or process-wide environment mutation.
+fn data_root_pointer_file_for(
+  root: Option<PathBuf>,
+  portable: Option<&PathBuf>,
+  preference_dir: PathBuf,
+) -> PathBuf {
+  if let Some(root) = root {
+    return root.join(DATA_ROOT_POINTER_FILENAME);
+  }
+  if let Some(dir) = portable {
+    return dir.join(DATA_ROOT_POINTER_FILENAME);
+  }
+  preference_dir.join(DATA_ROOT_POINTER_FILENAME)
+}
+
+/// Read a pointer file written by a previous "move data directory".
+///
+/// A missing, unreadable, malformed, empty or relative entry resolves to
+/// `None`. Falling back to the platform default is always better than
+/// resolving every profile, binary and setting to a path that cannot exist.
+pub fn read_data_root_pointer(file: &std::path::Path) -> Option<PathBuf> {
+  let content = std::fs::read_to_string(file).ok()?;
+  let parsed: serde_json::Value = match serde_json::from_str(&content) {
+    Ok(value) => value,
+    Err(e) => {
+      log::warn!(
+        "Ignoring the data directory pointer at {}: it is not valid JSON ({e})",
+        file.display()
+      );
+      return None;
+    }
+  };
+  let path = PathBuf::from(parsed.get("path")?.as_str()?);
+  if path.as_os_str().is_empty() || !path.is_absolute() {
+    log::warn!(
+      "Ignoring the data directory pointer at {}: {} is not an absolute path",
+      file.display(),
+      path.display()
+    );
+    return None;
+  }
+  Some(path)
+}
+
+/// Record a data directory for the next start. Written atomically, because a
+/// truncated pointer read at startup would silently drop the user back onto
+/// the platform default with an empty profile list.
+pub fn write_data_root_pointer(
+  file: &std::path::Path,
+  path: &std::path::Path,
+) -> std::io::Result<()> {
+  if let Some(parent) = file.parent() {
+    std::fs::create_dir_all(parent)?;
+  }
+  let body = serde_json::json!({ "path": path.to_string_lossy() }).to_string();
+  let temp = file.with_extension("json.tmp");
+  std::fs::write(&temp, body.as_bytes())?;
+  std::fs::rename(&temp, file)
+}
+
+/// Forget a recorded data directory, returning the app to the default.
+pub fn clear_data_root_pointer(file: &std::path::Path) -> std::io::Result<()> {
+  match std::fs::remove_file(file) {
+    Ok(()) => Ok(()),
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+    Err(e) => Err(e),
+  }
+}
+
+/// The data directory a previous move chose, read once per process.
+///
+/// Cached deliberately. Every open handle, cached path and loaded manager in a
+/// running app points at the directory it started on, so a move must take
+/// effect at the NEXT start and never mid-session.
+pub fn custom_data_root() -> Option<&'static PathBuf> {
+  CUSTOM_DATA_ROOT
+    .get_or_init(|| read_data_root_pointer(&data_root_pointer_file()))
+    .as_ref()
+}
+
 /// True when app state has been moved off the platform default location, by
-/// portable mode or by either directory override.
+/// portable mode, either directory override, or a data directory the user
+/// chose in Settings.
 fn state_is_relocated() -> bool {
   std::env::var_os("DONUTBROWSER_DATA_DIR").is_some_and(|v| !v.is_empty())
+    || custom_data_root().is_some()
     || data_root().is_some()
     || portable_dir().is_some()
 }
@@ -80,8 +191,34 @@ fn state_is_relocated() -> bool {
 /// host machine. If a future plugin version sanitises the name to a bare file
 /// component this silently reverts to the default directory, which is why the
 /// first-run probe in `lib.rs` reads this same function rather than assuming.
+///
+/// A relocation that resolves to a relative path is rejected: see
+/// `window_state_override_for`.
 pub fn window_state_path_override() -> Option<PathBuf> {
-  state_is_relocated().then(|| data_dir().join(WINDOW_STATE_FILENAME))
+  window_state_override_for(state_is_relocated(), data_dir())
+}
+
+/// Split out from `window_state_path_override` so the absolute-path rule is
+/// testable without mutating process-wide environment variables.
+///
+/// A relative override is worse than no override: the plugin would resolve it
+/// against `app_config_dir` and write into an intermediate directory it never
+/// creates, so every save fails with ENOENT and is swallowed by the plugin's
+/// fire-and-forget exit handler. Falling back to the platform default at least
+/// persists geometry.
+fn window_state_override_for(relocated: bool, data_dir: PathBuf) -> Option<PathBuf> {
+  if !relocated {
+    return None;
+  }
+  let path = data_dir.join(WINDOW_STATE_FILENAME);
+  if !path.is_absolute() {
+    log::warn!(
+      "Ignoring relative window-state override {}: the plugin resolves its filename against app_config_dir, so geometry would never persist. Set DONUTBROWSER_DATA_DIR/DONUTBROWSER_DATA_ROOT to an absolute path.",
+      path.display()
+    );
+    return None;
+  }
+  Some(path)
 }
 
 /// Where the window-state file actually is, override or not. Used for the
@@ -115,19 +252,66 @@ pub fn data_dir() -> PathBuf {
     }
   }
 
-  if let Ok(dir) = std::env::var("DONUTBROWSER_DATA_DIR") {
-    return PathBuf::from(dir);
-  }
+  data_dir_for(
+    std::env::var_os("DONUTBROWSER_DATA_DIR")
+      .filter(|v| !v.is_empty())
+      .map(PathBuf::from),
+    custom_data_root(),
+    data_root(),
+    portable_dir(),
+    base_dirs().data_local_dir().join(app_name()),
+  )
+}
 
-  if let Some(root) = data_root() {
+/// The data directory resolution order, split out so it can be tested without
+/// mutating process-wide environment variables.
+///
+/// `DONUTBROWSER_DATA_DIR` stays on top: it names an exact directory and is the
+/// bluntest override there is. The directory the user picked in Settings comes
+/// next, ahead of `DONUTBROWSER_DATA_ROOT` and portable mode, because both of
+/// those are defaults for where state *would* live and an explicit choice
+/// outranks a default. It cannot break an isolated run, because the pointer it
+/// is read from lives under that same `DONUTBROWSER_DATA_ROOT`.
+fn data_dir_for(
+  env_data_dir: Option<PathBuf>,
+  custom_root: Option<&PathBuf>,
+  env_data_root: Option<PathBuf>,
+  portable: Option<&PathBuf>,
+  platform_default: PathBuf,
+) -> PathBuf {
+  if let Some(dir) = env_data_dir {
+    return dir;
+  }
+  if let Some(dir) = custom_root {
+    return dir.clone();
+  }
+  if let Some(root) = env_data_root {
     return root.join("data");
   }
-
-  if let Some(dir) = portable_dir() {
+  if let Some(dir) = portable {
     return dir.join("data");
   }
+  platform_default
+}
 
-  base_dirs().data_local_dir().join(app_name())
+/// Where the data directory would resolve with no user choice recorded. Shown
+/// in Settings so a person can see what they moved away from.
+pub fn default_data_dir() -> PathBuf {
+  data_dir_for(
+    std::env::var_os("DONUTBROWSER_DATA_DIR")
+      .filter(|v| !v.is_empty())
+      .map(PathBuf::from),
+    None,
+    data_root(),
+    portable_dir(),
+    base_dirs().data_local_dir().join(app_name()),
+  )
+}
+
+/// True when an environment override decides the data directory, so a
+/// directory chosen in Settings would be recorded but not used.
+pub fn data_dir_forced_by_environment() -> bool {
+  std::env::var_os("DONUTBROWSER_DATA_DIR").is_some_and(|v| !v.is_empty())
 }
 
 pub fn cache_dir() -> PathBuf {
@@ -390,6 +574,27 @@ mod tests {
   }
 
   #[test]
+  fn window_state_override_rejects_a_relative_data_dir() {
+    // `DONUTBROWSER_DATA_ROOT=don-state` (or a relative DATA_DIR) would hand the
+    // plugin a relative filename it resolves against app_config_dir, into a
+    // directory nothing creates. Falling back to the default keeps geometry.
+    assert_eq!(
+      window_state_override_for(true, PathBuf::from("don-state/data")),
+      None
+    );
+    assert_eq!(window_state_override_for(true, PathBuf::from("")), None);
+
+    // temp_dir is absolute on every platform; a hard-coded "/tmp/..." is not
+    // absolute on Windows, where these tests also run.
+    let relocated = std::env::temp_dir().join("donut-relocated");
+    assert_eq!(
+      window_state_override_for(true, relocated.clone()),
+      Some(relocated.join(WINDOW_STATE_FILENAME))
+    );
+    assert_eq!(window_state_override_for(false, relocated), None);
+  }
+
+  #[test]
   fn window_state_follows_a_relocated_data_dir() {
     let tmp = PathBuf::from("/tmp/donut-relocated");
     let _guard = set_test_data_dir(tmp.clone());
@@ -411,6 +616,111 @@ mod tests {
     );
     assert!(portable.join("data").starts_with(&portable));
     assert!(portable.join("cache").starts_with(&portable));
+  }
+
+  #[test]
+  fn data_dir_resolution_order_puts_the_chosen_directory_under_the_exact_override() {
+    let env_dir = PathBuf::from("/env/exact");
+    let chosen = PathBuf::from("/Volumes/Big/DonutBrowser");
+    let env_root = PathBuf::from("/env/root");
+    let portable = PathBuf::from("/stick");
+    let default = PathBuf::from("/home/user/.local/share/DonutBrowser");
+
+    // DONUTBROWSER_DATA_DIR names an exact directory and outranks everything.
+    assert_eq!(
+      data_dir_for(
+        Some(env_dir.clone()),
+        Some(&chosen),
+        Some(env_root.clone()),
+        Some(&portable),
+        default.clone(),
+      ),
+      env_dir
+    );
+
+    // The directory the user picked beats both defaults-for-where-state-lives.
+    assert_eq!(
+      data_dir_for(
+        None,
+        Some(&chosen),
+        Some(env_root.clone()),
+        Some(&portable),
+        default.clone(),
+      ),
+      chosen
+    );
+
+    // With nothing chosen the existing order is untouched.
+    assert_eq!(
+      data_dir_for(
+        None,
+        None,
+        Some(env_root.clone()),
+        Some(&portable),
+        default.clone(),
+      ),
+      env_root.join("data")
+    );
+    assert_eq!(
+      data_dir_for(None, None, None, Some(&portable), default.clone()),
+      portable.join("data")
+    );
+    assert_eq!(
+      data_dir_for(None, None, None, None, default.clone()),
+      default
+    );
+  }
+
+  #[test]
+  fn the_pointer_never_lives_inside_the_directory_it_points_at() {
+    let root = PathBuf::from("/tmp/donut-root");
+    let portable = PathBuf::from("/tmp/donut-portable");
+    let preference = PathBuf::from("/home/user/.config/DonutBrowser");
+
+    // With DONUTBROWSER_DATA_ROOT the data dir is <root>/data, so a sibling
+    // file survives deleting it — and an isolated run reads only its own.
+    let with_root =
+      data_root_pointer_file_for(Some(root.clone()), Some(&portable), preference.clone());
+    assert_eq!(with_root, root.join(DATA_ROOT_POINTER_FILENAME));
+    assert!(!with_root.starts_with(root.join("data")));
+
+    let with_portable = data_root_pointer_file_for(None, Some(&portable), preference.clone());
+    assert_eq!(with_portable, portable.join(DATA_ROOT_POINTER_FILENAME));
+    assert!(!with_portable.starts_with(portable.join("data")));
+
+    assert_eq!(
+      data_root_pointer_file_for(None, None, preference.clone()),
+      preference.join(DATA_ROOT_POINTER_FILENAME)
+    );
+  }
+
+  #[test]
+  fn a_written_pointer_reads_back_and_a_broken_one_falls_back() {
+    let temp = tempfile::tempdir().unwrap();
+    let file = temp.path().join("nested").join(DATA_ROOT_POINTER_FILENAME);
+    let target = std::env::temp_dir().join("donut-moved-root");
+
+    assert_eq!(read_data_root_pointer(&file), None, "missing file");
+
+    write_data_root_pointer(&file, &target).unwrap();
+    assert_eq!(read_data_root_pointer(&file), Some(target.clone()));
+
+    // A relative path would be resolved against whatever the working directory
+    // happens to be, which is not a place app state can live.
+    write_data_root_pointer(&file, std::path::Path::new("relative/root")).unwrap();
+    assert_eq!(read_data_root_pointer(&file), None, "relative path");
+
+    std::fs::write(&file, b"not json at all").unwrap();
+    assert_eq!(read_data_root_pointer(&file), None, "malformed file");
+
+    std::fs::write(&file, br#"{"other":"key"}"#).unwrap();
+    assert_eq!(read_data_root_pointer(&file), None, "no path entry");
+
+    write_data_root_pointer(&file, &target).unwrap();
+    clear_data_root_pointer(&file).unwrap();
+    assert_eq!(read_data_root_pointer(&file), None, "cleared");
+    // Clearing an absent pointer is not an error; the caller has nothing to fix.
+    clear_data_root_pointer(&file).unwrap();
   }
 
   #[test]

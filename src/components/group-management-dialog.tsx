@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import {
+  LuBookmark,
   LuChevronDown,
   LuChevronUp,
   LuFolder,
@@ -31,8 +32,9 @@ import {
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { DeleteGroupDialog } from "@/components/delete-group-dialog";
 import { EditGroupDialog } from "@/components/edit-group-dialog";
+import { GroupBookmarksDialog } from "@/components/group-bookmarks-dialog";
+import { ProfileUsageButton } from "@/components/profile-usage-button";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -57,6 +59,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfileReferences } from "@/hooks/use-profile-references";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
@@ -127,6 +130,8 @@ export function GroupManagementDialog({
   subPage,
 }: GroupManagementDialogProps) {
   const { t } = useTranslation();
+  const { profiles: referencedProfiles, failed: referencesFailed } =
+    useProfileReferences(isOpen);
   const [groups, setGroups] = useState<GroupWithCount[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +140,7 @@ export function GroupManagementDialog({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [bookmarksDialogOpen, setBookmarksDialogOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<GroupWithCount | null>(
@@ -245,6 +251,11 @@ export function GroupManagementDialog({
   const handleDeleteGroup = useCallback((group: GroupWithCount) => {
     setSelectedGroup(group);
     setDeleteDialogOpen(true);
+  }, []);
+
+  const handleEditBookmarks = useCallback((group: GroupWithCount) => {
+    setSelectedGroup(group);
+    setBookmarksDialogOpen(true);
   }, []);
 
   const handleToggleSync = useCallback(
@@ -371,7 +382,17 @@ export function GroupManagementDialog({
         enableSorting: false,
         header: () => t("groupManagement.profilesCol"),
         cell: ({ row }) => (
-          <Badge variant="secondary">{row.original.count}</Badge>
+          <ProfileUsageButton
+            label={t("appFeedback.assignedProfiles", {
+              name: row.original.name,
+            })}
+            failed={referencesFailed}
+            profiles={
+              referencedProfiles?.filter(
+                (profile) => profile.group_id === row.original.id,
+              ) ?? null
+            }
+          />
         ),
       },
       {
@@ -410,13 +431,37 @@ export function GroupManagementDialog({
       },
       {
         id: "actions",
-        size: 96,
+        size: 132,
         enableSorting: false,
         header: () => t("common.labels.actions"),
         cell: ({ row }) => {
           const group = row.original;
           return (
             <div className="flex gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-testid="group-bookmarks-button"
+                    aria-label={t("groupBookmarks.editTooltip", {
+                      n: group.bookmark_count ?? 0,
+                    })}
+                    onClick={() => {
+                      handleEditBookmarks(group);
+                    }}
+                  >
+                    <LuBookmark className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {t("groupBookmarks.editTooltip", {
+                      n: group.bookmark_count ?? 0,
+                    })}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -456,6 +501,8 @@ export function GroupManagementDialog({
     ],
     [
       t,
+      referencedProfiles,
+      referencesFailed,
       groupSyncStatus,
       groupSyncErrors,
       groupInUse,
@@ -463,6 +510,7 @@ export function GroupManagementDialog({
       handleToggleSync,
       handleEditGroup,
       handleDeleteGroup,
+      handleEditBookmarks,
     ],
   );
 
@@ -752,6 +800,19 @@ export function GroupManagementDialog({
         }}
         group={selectedGroup}
         onGroupUpdated={handleGroupUpdated}
+      />
+
+      <GroupBookmarksDialog
+        isOpen={bookmarksDialogOpen}
+        onClose={() => {
+          setBookmarksDialogOpen(false);
+        }}
+        groupId={selectedGroup?.id ?? null}
+        groupName={selectedGroup?.name ?? ""}
+        onBookmarksSaved={() => {
+          void loadGroups();
+          onGroupManagementComplete();
+        }}
       />
 
       <DeleteGroupDialog

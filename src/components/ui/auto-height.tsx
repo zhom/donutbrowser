@@ -6,10 +6,12 @@ import {
   motion,
   type TargetAndTransition,
   type Transition,
+  useReducedMotion,
 } from "motion/react";
 import type * as React from "react";
 
 import { useAutoHeight } from "@/hooks/use-auto-height";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { Slot, type WithAsChild } from "@/lib/slot";
 
 type AutoHeightProps = WithAsChild<
@@ -37,14 +39,21 @@ function AutoHeight({
   ...props
 }: AutoHeightProps) {
   const { ref, height } = useAutoHeight<HTMLDivElement>(deps);
+  const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
 
   const Comp = asChild ? Slot : motion.div;
 
   return (
     <Comp
-      style={{ overflow: "hidden", maxHeight: "100%", ...style }}
-      animate={{ height, ...animate }}
-      transition={transition}
+      initial={false}
+      style={{ overflow: "auto", maxHeight: "100%", ...style }}
+      animate={{ height: height || "auto", ...animate }}
+      transition={
+        reduceMotion || inputModality === "keyboard"
+          ? { duration: 0 }
+          : transition
+      }
       {...props}
     >
       <div ref={ref} className="min-h-0">

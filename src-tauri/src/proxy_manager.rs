@@ -1,6 +1,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -93,6 +94,76 @@ pub struct ProxyCheckResult {
   pub country_code: Option<String>,
   pub timestamp: u64,
   pub is_valid: bool,
+  /// The exit's ISP or registered organisation, read from the local MaxMind
+  /// databases. `None` means the databases carry none, never "no ISP".
+  #[serde(default)]
+  pub isp: Option<String>,
+  /// The exit's own timezone, the value a fingerprint is matched against.
+  #[serde(default)]
+  pub timezone: Option<String>,
+  /// Whether the proxy carries UDP, which decides whether WebRTC can be
+  /// routed through it at all. Receipts written before this existed
+  /// deserialize as `Unknown`, which is the truth about them.
+  #[serde(default)]
+  pub udp: crate::proxy_udp::UdpSupport,
+  /// How long the whole check took, end to end.
+  #[serde(default)]
+  pub latency_ms: Option<u64>,
+}
+
+/// One line of a proxy's check log. Deliberately smaller than
+/// `ProxyCheckResult`: this is a trail, not a cache, so it keeps what a user
+/// reads down a list and nothing that would make the file grow without bound.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProxyCheckHistoryEntry {
+  pub timestamp: u64,
+  pub ok: bool,
+  #[serde(default)]
+  pub ip: Option<String>,
+  #[serde(default)]
+  pub country: Option<String>,
+  #[serde(default)]
+  pub country_code: Option<String>,
+  #[serde(default)]
+  pub isp: Option<String>,
+  #[serde(default)]
+  pub udp: crate::proxy_udp::UdpSupport,
+  #[serde(default)]
+  pub latency_ms: Option<u64>,
+}
+
+/// How many checks a proxy remembers. Old enough entries stop being evidence
+/// and the file has to stay small enough to read on every popover open.
+pub const PROXY_CHECK_HISTORY_LIMIT: usize = 50;
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct ProxyCheckHistory {
+  #[serde(default)]
+  entries: Vec<ProxyCheckHistoryEntry>,
+}
+
+/// Prepend `entry` and drop anything past the limit. Newest first is both the
+/// order the list is read in and the order that makes the cap mean "the last
+/// 50 checks" rather than "the first 50".
+fn push_history_entry(entries: &mut Vec<ProxyCheckHistoryEntry>, entry: ProxyCheckHistoryEntry) {
+  entries.insert(0, entry);
+  entries.truncate(PROXY_CHECK_HISTORY_LIMIT);
+}
+
+#[derive(Serialize, Deserialize)]
+struct CachedProxyCheck {
+  settings_hash: [u8; 32],
+  result: ProxyCheckResult,
+}
+
+impl CachedProxyCheck {
+  fn settings_hash(settings: &ProxySettings) -> Result<[u8; 32], serde_json::Error> {
+    Ok(Sha256::digest(serde_json::to_vec(settings)?).into())
+  }
+
+  fn for_settings(self, settings: &ProxySettings) -> Option<ProxyCheckResult> {
+    (self.settings_hash == Self::settings_hash(settings).ok()?).then_some(self.result)
+  }
 }
 
 pub const CLOUD_PROXY_ID: &str = "cloud-included-proxy";
@@ -303,17 +374,25 @@ impl ProxyManager {
       Err(_) => return None,
     };
 
-    serde_json::from_str::<ProxyCheckResult>(&content).ok()
+    let settings = self.get_proxy_settings_by_id(proxy_id)?;
+    serde_json::from_str::<CachedProxyCheck>(&content)
+      .ok()?
+      .for_settings(&settings)
   }
 
   // Save proxy check result to cache
   fn save_proxy_check_cache(
     &self,
     proxy_id: &str,
+    settings: &ProxySettings,
     result: &ProxyCheckResult,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let cache_file = self.get_proxy_check_cache_file(proxy_id)?;
-    let content = serde_json::to_string_pretty(result)?;
+    let cache = CachedProxyCheck {
+      settings_hash: CachedProxyCheck::settings_hash(settings)?,
+      result: result.clone(),
+    };
+    let content = serde_json::to_string_pretty(&cache)?;
     crate::app_dirs::write_owner_only(&cache_file, content.as_bytes())?;
     Ok(())
   }
@@ -450,7 +529,70 @@ impl ProxyManager {
     if proxy_file.exists() {
       fs::remove_file(proxy_file)?;
     }
+    let history_file = self.get_proxy_history_file_path(proxy_id);
+    if history_file.exists() {
+      // The trail is about a proxy that no longer exists, and it names the
+      // addresses that proxy exited from. It goes with the config.
+      fs::remove_file(history_file)?;
+    }
     Ok(())
+  }
+
+  /// The check trail sits in a `history` folder beside the proxy configs
+  /// rather than next to them: `load_stored_proxies` reads every `*.json` in
+  /// the proxies directory and warns about anything that is not a proxy, so a
+  /// sibling file would log a parse failure per proxy on every start.
+  fn get_proxy_history_dir(&self) -> PathBuf {
+    self.get_proxies_dir().join("history")
+  }
+
+  fn get_proxy_history_file_path(&self, proxy_id: &str) -> PathBuf {
+    self
+      .get_proxy_history_dir()
+      .join(format!("{proxy_id}.json"))
+  }
+
+  /// Every remembered check for a proxy, newest first.
+  pub fn get_proxy_check_history(&self, proxy_id: &str) -> Vec<ProxyCheckHistoryEntry> {
+    let path = self.get_proxy_history_file_path(proxy_id);
+    let Ok(content) = fs::read_to_string(&path) else {
+      return Vec::new();
+    };
+    match serde_json::from_str::<ProxyCheckHistory>(&content) {
+      Ok(mut history) => {
+        history.entries.truncate(PROXY_CHECK_HISTORY_LIMIT);
+        history.entries
+      }
+      Err(e) => {
+        log::warn!("Failed to parse proxy check history {path:?}: {e}");
+        Vec::new()
+      }
+    }
+  }
+
+  /// Append one check to a proxy's trail.
+  fn record_proxy_check(&self, proxy_id: &str, entry: ProxyCheckHistoryEntry) {
+    let mut entries = self.get_proxy_check_history(proxy_id);
+    push_history_entry(&mut entries, entry);
+
+    let dir = self.get_proxy_history_dir();
+    if let Err(e) = fs::create_dir_all(&dir) {
+      log::warn!("Failed to create the proxy check history directory: {e}");
+      return;
+    }
+    match serde_json::to_string_pretty(&ProxyCheckHistory { entries }) {
+      Ok(content) => {
+        // Owner-only: the trail records which addresses this machine exits
+        // from, which is exactly what the proxy exists to keep private.
+        if let Err(e) = crate::app_dirs::write_owner_only(
+          &self.get_proxy_history_file_path(proxy_id),
+          content.as_bytes(),
+        ) {
+          log::warn!("Failed to write the proxy check history: {e}");
+        }
+      }
+      Err(e) => log::warn!("Failed to serialize the proxy check history: {e}"),
+    }
   }
 
   fn normalize_proxy_settings(mut proxy_settings: ProxySettings) -> Result<ProxySettings, String> {
@@ -1159,12 +1301,58 @@ impl ProxyManager {
   /// the exit rather than on this machine. Resolving locally would leak the
   /// real DNS and, behind a split-horizon resolver, can reach a different host
   /// than the browser would.
+  ///
+  /// `httpstls` becomes `https://` because reqwest has no such scheme; both
+  /// spellings mean TLS to the proxy followed by CONNECT, so the probe still
+  /// crosses the same encrypted hop the browser will.
   pub fn build_probe_proxy_url(proxy_settings: &ProxySettings) -> String {
     let url = Self::build_proxy_url(proxy_settings);
     if proxy_settings.proxy_type.eq_ignore_ascii_case("socks5") {
       return url.replacen("socks5://", "socks5h://", 1);
     }
-    url
+    crate::proxy_storage::reqwest_upstream_url(&url)
+  }
+
+  /// Prove the TLS hop to an `httpstls` proxy can actually be established, so
+  /// a certificate that does not verify is reported as exactly that.
+  ///
+  /// Returns the coded error the frontend translates. There is intentionally no
+  /// "connect anyway" path: verification is the property that makes this proxy
+  /// type resistant to an active man-in-the-middle rather than only to a
+  /// passive one, so a failure here is fatal by design.
+  async fn verify_upstream_tls(proxy_settings: &ProxySettings) -> Result<(), String> {
+    let host = proxy_settings.host.clone();
+    let port = proxy_settings.port;
+    let addr = format!("{host}:{port}");
+
+    let attempt = async {
+      let tcp = tokio::net::TcpStream::connect((host.as_str(), port))
+        .await
+        .map_err(|e| e.to_string())?;
+      let connector = tokio_native_tls::TlsConnector::from(
+        native_tls::TlsConnector::new().map_err(|e| e.to_string())?,
+      );
+      connector
+        .connect(host.as_str(), tcp)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    };
+
+    let detail = match tokio::time::timeout(std::time::Duration::from_secs(15), attempt).await {
+      Ok(Ok(())) => return Ok(()),
+      Ok(Err(detail)) => detail,
+      Err(_) => "timed out".to_string(),
+    };
+
+    log::warn!("TLS handshake with upstream proxy {addr} failed: {detail}");
+    Err(
+      serde_json::json!({
+        "code": "PROXY_TLS_HANDSHAKE_FAILED",
+        "params": { "proxy": addr }
+      })
+      .to_string(),
+    )
   }
 
   // Check if a proxy is valid by routing through a temporary donut-proxy process.
@@ -1190,6 +1378,29 @@ impl ProxyManager {
       proxy_settings.clone()
     };
     let upstream_url = Self::build_proxy_url(&effective_proxy_settings);
+    let started = std::time::Instant::now();
+
+    // Whether the proxy carries UDP is asked of the same endpoint the browser
+    // dials. Spawned rather than awaited here so it runs alongside the exit
+    // lookup: a check should not take twice as long to answer twice as much,
+    // and for a VLESS proxy the probe has to reach the local worker while it
+    // is still up.
+    let probe_settings = effective_proxy_settings.clone();
+    let udp_probe = tauri::async_runtime::spawn(async move {
+      crate::proxy_udp::probe_udp_support(&probe_settings).await
+    });
+
+    // The dominant failure for a TLS-wrapped hop is a certificate that will not
+    // verify: the provider publishes a bare IP, or serves a self-signed cert.
+    // Through the worker that surfaces as a generic "could not connect", which
+    // sends users hunting for the wrong problem. One handshake, on this type
+    // only, so no existing proxy type can regress.
+    if effective_proxy_settings
+      .proxy_type
+      .eq_ignore_ascii_case("httpstls")
+    {
+      Self::verify_upstream_tls(&effective_proxy_settings).await?;
+    }
 
     // Try process-based check first (identical to browser launch path).
     // If the proxy worker fails to start (e.g. Gatekeeper, antivirus, signing
@@ -1235,7 +1446,24 @@ impl ProxyManager {
             "Proxy worker failed to start ({}), falling back to direct check",
             err_msg
           );
-          ip_utils::fetch_public_ip(Some(&upstream_url)).await
+          // reqwest cannot parse Donut's own `httpstls` scheme; without the
+          // rewrite every fallback check on that type dies as "Invalid proxy"
+          // rather than telling the user anything true. Deliberately not
+          // `build_probe_proxy_url` here: that would also flip existing SOCKS5
+          // fallbacks to `socks5h`, an unrelated behaviour change.
+          let fallback_url = crate::proxy_storage::reqwest_upstream_url(&upstream_url);
+          // Only when reqwest can genuinely route through it. For `ss`,
+          // `vless`, or any scheme it does not know, `Proxy::all` succeeds and
+          // then matches nothing, so this "fallback check" fetched the
+          // MACHINE'S OWN address, reported it as the proxy's exit, and marked
+          // the proxy valid. Answering "could not check" is the honest result.
+          if crate::proxy_storage::reqwest_can_proxy(&fallback_url) {
+            ip_utils::fetch_public_ip(Some(&fallback_url)).await
+          } else {
+            Err(ip_utils::IpError::Network(format!(
+              "Could not start a proxy worker ({err_msg}), and this proxy type cannot be checked directly"
+            )))
+          }
         }
       }
     };
@@ -1246,6 +1474,9 @@ impl ProxyManager {
     let ip = match ip_result {
       Ok(ip) => ip,
       Err(e) => {
+        let udp = udp_probe
+          .await
+          .unwrap_or(crate::proxy_udp::UdpSupport::Unknown);
         let failed_result = ProxyCheckResult {
           ip: String::new(),
           city: None,
@@ -1253,8 +1484,13 @@ impl ProxyManager {
           country_code: None,
           timestamp: Self::get_current_timestamp(),
           is_valid: false,
+          isp: None,
+          timezone: None,
+          udp,
+          latency_ms: Some(started.elapsed().as_millis() as u64),
         };
-        let _ = self.save_proxy_check_cache(proxy_id, &failed_result);
+        let _ = self.save_proxy_check_cache(proxy_id, proxy_settings, &failed_result);
+        self.record_proxy_check(proxy_id, Self::history_entry(&failed_result));
 
         let err_str = e.to_string();
         let user_message = Self::classify_proxy_error(&err_str, proxy_settings);
@@ -1266,6 +1502,14 @@ impl ProxyManager {
     let (city, country, country_code): (Option<String>, Option<String>, Option<String>) =
       Self::get_ip_geolocation(&ip).await.unwrap_or_default();
 
+    // The ISP and the timezone come off the databases already on disk. Handing
+    // an exit address to an outside lookup service to learn them would tell
+    // that service which addresses this machine is testing.
+    let insight = crate::geolocation::lookup_exit_insight(&ip);
+    let udp = udp_probe
+      .await
+      .unwrap_or(crate::proxy_udp::UdpSupport::Unknown);
+
     // Create successful result
     let result = ProxyCheckResult {
       ip: ip.clone(),
@@ -1274,12 +1518,32 @@ impl ProxyManager {
       country_code,
       timestamp: Self::get_current_timestamp(),
       is_valid: true,
+      isp: insight.organization,
+      timezone: insight.timezone,
+      udp,
+      latency_ms: Some(started.elapsed().as_millis() as u64),
     };
 
     // Save to cache
-    let _ = self.save_proxy_check_cache(proxy_id, &result);
+    let _ = self.save_proxy_check_cache(proxy_id, proxy_settings, &result);
+    self.record_proxy_check(proxy_id, Self::history_entry(&result));
 
     Ok(result)
+  }
+
+  /// The trail line for a finished check. Built from the receipt rather than
+  /// assembled twice, so the list can never disagree with the last result.
+  fn history_entry(result: &ProxyCheckResult) -> ProxyCheckHistoryEntry {
+    ProxyCheckHistoryEntry {
+      timestamp: result.timestamp,
+      ok: result.is_valid,
+      ip: (!result.ip.is_empty()).then(|| result.ip.clone()),
+      country: result.country.clone(),
+      country_code: result.country_code.clone(),
+      isp: result.isp.clone(),
+      udp: result.udp,
+      latency_ms: result.latency_ms,
+    }
   }
 
   // Get cached proxy check result
@@ -1449,7 +1713,14 @@ impl ProxyManager {
     }
 
     // Check for protocol prefix using strip_prefix
-    let (protocol, rest) = if let Some(rest) = line.strip_prefix("http://") {
+    let (protocol, rest) = if let Some(rest) = line.strip_prefix("httpstls://") {
+      // Must be tested before `http://`, which is not a prefix of it but reads
+      // as though it could be at a glance. Deliberately NOT folded into
+      // `https://`: provider lists routinely paste `https://user:pass@host:port`
+      // for a plaintext CONNECT endpoint, so mapping that to the TLS type would
+      // break real imports.
+      ("httpstls", rest)
+    } else if let Some(rest) = line.strip_prefix("http://") {
       ("http", rest)
     } else if let Some(rest) = line.strip_prefix("https://") {
       ("https", rest)
@@ -2527,6 +2798,63 @@ mod tests {
   }
 
   #[test]
+  fn cached_checks_do_not_survive_route_or_credential_edits() {
+    let settings = ProxySettings {
+      proxy_type: "http".into(),
+      host: "127.0.0.1".into(),
+      port: 8080,
+      username: Some("user".into()),
+      password: Some("secret".into()),
+      vless_uri: None,
+    };
+    let result = ProxyCheckResult {
+      ip: "203.0.113.1".into(),
+      city: None,
+      country: None,
+      country_code: None,
+      timestamp: 123,
+      is_valid: true,
+      isp: None,
+      timezone: None,
+      udp: crate::proxy_udp::UdpSupport::Unknown,
+      latency_ms: None,
+    };
+    let encoded = serde_json::to_string(&CachedProxyCheck {
+      settings_hash: CachedProxyCheck::settings_hash(&settings).unwrap(),
+      result: result.clone(),
+    })
+    .unwrap();
+    assert!(!encoded.contains("secret"));
+    let decode = |current: &ProxySettings| {
+      serde_json::from_str::<CachedProxyCheck>(&encoded)
+        .unwrap()
+        .for_settings(current)
+    };
+    assert_eq!(decode(&settings).unwrap().ip, result.ip);
+    let mut changed = settings.clone();
+    changed.password = Some("rotated".into());
+    assert!(decode(&changed).is_none());
+    changed = settings.clone();
+    changed.host = "other.example".into();
+    assert!(decode(&changed).is_none());
+    changed = settings.clone();
+    changed.port = 1080;
+    assert!(decode(&changed).is_none());
+    changed = settings.clone();
+    changed.proxy_type = "socks5".into();
+    assert!(decode(&changed).is_none());
+    changed = settings.clone();
+    changed.username = Some("another-user".into());
+    assert!(decode(&changed).is_none());
+    changed = settings.clone();
+    changed.vless_uri = Some("changed-route".into());
+    assert!(decode(&changed).is_none());
+    assert!(
+      serde_json::from_str::<CachedProxyCheck>(&serde_json::to_string(&result).unwrap()).is_err()
+    );
+  }
+
+  #[test]
   fn test_proxy_settings_validation() {
     // Test valid proxy settings
     let valid_settings = ProxySettings {
@@ -3525,6 +3853,82 @@ mod tests {
     assert_eq!(url, "http://justuser@host.io:3128");
   }
 
+  #[test]
+  fn probe_proxy_url_maps_httpstls_to_the_scheme_reqwest_understands() {
+    // The browser tunnel dials `httpstls` itself, but the check button and the
+    // fingerprint probe go through reqwest, which has never heard of it. Both
+    // spellings mean TLS-to-the-proxy, so the probe still crosses the encrypted
+    // hop rather than silently falling back to a plaintext one.
+    let url = ProxyManager::build_probe_proxy_url(&ProxySettings {
+      proxy_type: "httpstls".to_string(),
+      host: "proxy.example.com".to_string(),
+      port: 443,
+      username: Some("user".to_string()),
+      password: Some("p@ss".to_string()),
+      vless_uri: None,
+    });
+    assert_eq!(url, "https://user:p%40ss@proxy.example.com:443");
+  }
+
+  #[test]
+  fn probe_proxy_url_still_forces_remote_dns_for_socks5() {
+    // Pinning the pre-existing behaviour: adding the httpstls rewrite must not
+    // disturb the socks5h rewrite that keeps DNS off this machine.
+    let url = ProxyManager::build_probe_proxy_url(&ProxySettings {
+      proxy_type: "socks5".to_string(),
+      host: "proxy.example.com".to_string(),
+      port: 1080,
+      username: None,
+      password: None,
+      vless_uri: None,
+    });
+    assert_eq!(url, "socks5h://proxy.example.com:1080");
+  }
+
+  #[test]
+  fn probe_proxy_url_leaves_the_plaintext_types_alone() {
+    for proxy_type in ["http", "https", "socks4"] {
+      let url = ProxyManager::build_probe_proxy_url(&ProxySettings {
+        proxy_type: proxy_type.to_string(),
+        host: "proxy.example.com".to_string(),
+        port: 8080,
+        username: None,
+        password: None,
+        vless_uri: None,
+      });
+      assert_eq!(url, format!("{proxy_type}://proxy.example.com:8080"));
+    }
+  }
+
+  #[test]
+  fn parse_txt_proxies_round_trips_the_tls_scheme_without_stealing_https() {
+    // `httpstls://` must parse as its own type...
+    let results =
+      ProxyManager::parse_txt_proxies("httpstls://admin:secret@proxy.example.com:443\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "httpstls");
+        assert_eq!(p.host, "proxy.example.com");
+        assert_eq!(p.port, 443);
+        assert_eq!(p.username.as_deref(), Some("admin"));
+        assert_eq!(p.password.as_deref(), Some("secret"));
+      }
+      other => panic!("Expected Parsed, got {other:?}"),
+    }
+
+    // ...and `https://` must keep meaning the plaintext CONNECT type. Provider
+    // lists paste it for endpoints that do no TLS at all, so promoting it here
+    // would break real imports and claim an encrypted hop that is not there.
+    let results = ProxyManager::parse_txt_proxies("https://admin:secret@proxy.example.com:8443\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "https");
+        assert_eq!(p.port, 8443);
+      }
+      other => panic!("Expected Parsed, got {other:?}"),
+    }
+  }
+
   fn valid_vless_uri() -> String {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
@@ -3569,6 +3973,109 @@ mod tests {
     .unwrap_err();
     assert!(error.contains("VLESS_CONFIG_INVALID"));
     assert!(!error.contains(&invalid));
+  }
+
+  fn history_entry(timestamp: u64, ok: bool) -> ProxyCheckHistoryEntry {
+    ProxyCheckHistoryEntry {
+      timestamp,
+      ok,
+      ip: ok.then(|| format!("203.0.113.{}", timestamp % 250)),
+      country: ok.then(|| "Netherlands".to_string()),
+      country_code: ok.then(|| "NL".to_string()),
+      isp: ok.then(|| "Example Telecom B.V.".to_string()),
+      udp: crate::proxy_udp::UdpSupport::Yes,
+      latency_ms: Some(timestamp),
+    }
+  }
+
+  #[test]
+  fn the_check_trail_keeps_the_last_fifty_newest_first_and_survives_a_restart() {
+    let temp = tempfile::tempdir().unwrap();
+    let _data_guard = crate::app_dirs::set_test_data_dir(temp.path().to_path_buf());
+    let manager = ProxyManager::new();
+    let proxy_id = "trail-proxy";
+
+    assert!(manager.get_proxy_check_history(proxy_id).is_empty());
+
+    for timestamp in 1..=(PROXY_CHECK_HISTORY_LIMIT as u64 + 12) {
+      manager.record_proxy_check(proxy_id, history_entry(timestamp, timestamp % 4 != 0));
+    }
+
+    let stored = manager.get_proxy_check_history(proxy_id);
+    assert_eq!(stored.len(), PROXY_CHECK_HISTORY_LIMIT);
+    // Newest first, and the cap drops the OLDEST checks rather than refusing
+    // to record new ones.
+    assert_eq!(stored[0].timestamp, PROXY_CHECK_HISTORY_LIMIT as u64 + 12);
+    assert_eq!(stored[PROXY_CHECK_HISTORY_LIMIT - 1].timestamp, 13);
+    assert!(stored
+      .windows(2)
+      .all(|pair| pair[0].timestamp > pair[1].timestamp));
+
+    // A fresh manager reads the same trail off disk, with every field intact.
+    let reopened = ProxyManager::new().get_proxy_check_history(proxy_id);
+    assert_eq!(reopened, stored);
+    let newest = &reopened[0];
+    assert_eq!(newest.isp.as_deref(), Some("Example Telecom B.V."));
+    assert_eq!(newest.country_code.as_deref(), Some("NL"));
+    assert_eq!(newest.udp, crate::proxy_udp::UdpSupport::Yes);
+    assert_eq!(
+      newest.latency_ms,
+      Some(PROXY_CHECK_HISTORY_LIMIT as u64 + 12)
+    );
+    assert!(reopened.iter().any(|entry| !entry.ok));
+
+    // The trail lives beside the configs without being mistaken for one: the
+    // loader reads every `*.json` in the proxies directory.
+    let history_file = manager.get_proxy_history_file_path(proxy_id);
+    assert!(history_file.starts_with(manager.get_proxies_dir()));
+    assert_ne!(history_file, manager.get_proxy_file_path(proxy_id));
+    assert!(ProxyManager::new().get_stored_proxies().is_empty());
+  }
+
+  #[test]
+  fn a_check_that_failed_records_that_it_failed_rather_than_an_empty_exit() {
+    let failure = ProxyCheckResult {
+      ip: String::new(),
+      city: None,
+      country: None,
+      country_code: None,
+      timestamp: 1700,
+      is_valid: false,
+      isp: None,
+      timezone: None,
+      udp: crate::proxy_udp::UdpSupport::No,
+      latency_ms: Some(42),
+    };
+    let entry = ProxyManager::history_entry(&failure);
+    assert!(!entry.ok);
+    assert_eq!(entry.ip, None);
+    assert_eq!(entry.udp, crate::proxy_udp::UdpSupport::No);
+    assert_eq!(entry.latency_ms, Some(42));
+  }
+
+  #[test]
+  fn deleting_a_proxy_takes_its_check_trail_with_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let _data_guard = crate::app_dirs::set_test_data_dir(temp.path().to_path_buf());
+    let manager = ProxyManager::new();
+    let stored = StoredProxy::new(
+      "Doomed".to_string(),
+      ProxySettings {
+        proxy_type: "socks5".to_string(),
+        host: "127.0.0.1".to_string(),
+        port: 1080,
+        username: None,
+        password: None,
+        vless_uri: None,
+      },
+    );
+    manager.save_proxy(&stored).unwrap();
+    manager.record_proxy_check(&stored.id, history_entry(9, true));
+    assert!(manager.get_proxy_history_file_path(&stored.id).exists());
+
+    manager.delete_proxy_file(&stored.id).unwrap();
+    assert!(!manager.get_proxy_history_file_path(&stored.id).exists());
+    assert!(manager.get_proxy_check_history(&stored.id).is_empty());
   }
 
   #[test]

@@ -1,0 +1,11 @@
+# Build and test artifacts for the two standalone SDK packages. Neither is part
+# of the pnpm workspace, so they carry their own ignores rather than adding
+# Python and npm noise to the repository root.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+node_modules/

@@ -1,6 +1,6 @@
 //! What a remote session owes this machine, and the gate that collects it.
 //!
-//! A profile that runs on the leased fleet is written by the host, not here.
+//! A profile that runs remotely is written by that host, not here.
 //! The host pushes it back to cloud storage when the session ends, and until
 //! this machine has pulled that push, the local profile directory is a stale
 //! copy of something that has moved on.
@@ -21,9 +21,9 @@
 //!
 //! Two states, and the difference matters to the user:
 //!
-//! - [`HandoffState::Running`]: a session is live on the fleet. The profile lock
-//!   is held server-side, so a launch would be refused anyway; this makes the
-//!   refusal instant and legible instead of a round trip and a raw string.
+//! - [`HandoffState::Running`]: a session is live remotely. The profile lock is
+//!   held, so a launch would be refused anyway; this makes the refusal instant
+//!   and legible instead of a round trip and a raw string.
 //! - [`HandoffState::PendingSync`]: the session is over, the lock is released,
 //!   and the work is sitting in cloud storage. This is the window that used to
 //!   be wide open.
@@ -40,10 +40,10 @@ pub const EVENT_REMOTE_HANDOFF: &str = "remote-handoff-changed";
 ///
 /// The entry survives a failure, so "giving up" only means this burst stops;
 /// the next stream event, app start or manual sync tries again. What the retries
-/// buy is the common case: the profile lock is released server-side a moment
-/// before this machine's cached copy of it expires, and a single attempt would
-/// hit `Skipped("profile is locked elsewhere")` and leave the user blocked for
-/// no reason.
+/// buy is the common case: the profile lock is released a moment before this
+/// machine's cached copy of it expires, and a single attempt would hit
+/// `Skipped("profile is locked elsewhere")` and leave the user blocked for no
+/// reason.
 const PULL_ATTEMPTS: u32 = 5;
 
 /// Delay before the second pull attempt. Doubles, capped by [`PULL_RETRY_MAX`].
@@ -53,11 +53,11 @@ const PULL_RETRY_BASE: Duration = Duration::from_secs(2);
 /// attempts is guaranteed to span at least one refresh of the lock cache.
 const PULL_RETRY_MAX: Duration = Duration::from_secs(45);
 
-/// Where a profile stands with respect to the fleet.
+/// Where a profile stands with respect to remote execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HandoffState {
-  /// A session is live on the fleet right now.
+  /// A session is live remotely right now.
   Running,
   /// A session has finished and its work has not been pulled down yet.
   PendingSync,
@@ -167,7 +167,7 @@ pub fn state_for(profile_id: &str) -> Option<HandoffState> {
   with_store(|store| store.get(profile_id).map(|entry| entry.state))
 }
 
-/// The session currently holding this profile on the fleet, if any.
+/// The session currently holding this profile remotely, if any.
 ///
 /// Answers for a `provisioning` session too, which the drivable-session index
 /// deliberately does not. Stopping a session that has not finished coming up is
@@ -196,7 +196,7 @@ pub fn profile_for_session(session_id: &str) -> Option<String> {
   })
 }
 
-/// Record that a session is live on the fleet for this profile.
+/// Record that a session is live remotely for this profile.
 ///
 /// Written to disk immediately, and this is the point of the whole store: if the
 /// app is closed while a session runs, nothing on restart would otherwise
@@ -339,6 +339,22 @@ pub fn resume_pending_pulls(app_handle: &tauri::AppHandle) {
   }
 }
 
+/// Whether a profile with this id exists on THIS device.
+///
+/// A transient failure to read the profile list returns `true`, deliberately:
+/// the caller only clears a gate when this is `false`, and clearing one during
+/// a momentary read error would unblock a local profile whose remote work is
+/// genuinely still pending. "Cannot tell" must never mean "gone".
+fn profile_exists_locally(profile_id: &str) -> bool {
+  let Ok(uuid) = uuid::Uuid::parse_str(profile_id) else {
+    return false;
+  };
+  crate::profile::ProfileManager::instance()
+    .list_profiles()
+    .map(|profiles| profiles.iter().any(|p| p.id == uuid))
+    .unwrap_or(true)
+}
+
 /// Pull one profile's finished session down, then lift its gate.
 ///
 /// Spawned rather than awaited by its callers: a stream frame and a stop button
@@ -370,6 +386,20 @@ pub fn schedule_pull(app_handle: tauri::AppHandle, profile_id: String) {
         }
         Ok(_) => unreachable!("is_completed covers every completed outcome"),
         Err(e) => {
+          // A profile that was created and run entirely on a remote host may
+          // not exist on this device at all: nothing to pull, nothing to gate.
+          // The pull would fail with "not found" on every attempt and the entry
+          // would sit in the handoff store for ever. Clear it — the gate only
+          // protects a LOCAL profile from being opened over unsynced remote
+          // work, and there is no local profile here.
+          if !profile_exists_locally(&profile_id) {
+            log::info!(
+              "Clearing the post-session gate for profile {profile_id}: it has no local copy \
+               (created and run remotely), so there is nothing to pull or protect"
+            );
+            clear(&profile_id);
+            return;
+          }
           log::warn!("Post-session pull for profile {profile_id} failed: {e}");
         }
       }
@@ -478,10 +508,11 @@ mod tests {
 
   #[test]
   fn a_closed_session_this_machine_never_watched_does_not_gate_anything() {
-    // `listForUser` returns closed sessions next to live ones, so the snapshot
-    // on every reconnect replays every session that ever finished. Treating
-    // those as fresh handoffs would block the Run button on a perfectly current
-    // profile at each app start, and block it indefinitely while offline.
+    // The session listing returns closed sessions next to live ones, so the
+    // snapshot on every reconnect replays every session that ever finished.
+    // Treating those as fresh handoffs would block the Run button on a
+    // perfectly current profile at each app start, and block it indefinitely
+    // while offline.
     let _iso = isolated();
     assert!(!note_ended("p1", "s-finished-last-week"));
     assert_eq!(state_for("p1"), None);

@@ -24,6 +24,9 @@ fn default_source_kind() -> String {
 pub struct Extension {
   pub id: String,
   pub name: String,
+  /// The archive's identity, kept separately from the user's editable name.
+  #[serde(default)]
+  pub manifest_name: Option<String>,
   pub file_name: String,
   pub file_type: String,
   pub browser_compatibility: Vec<String>,
@@ -258,7 +261,7 @@ fn extract_manifest_metadata(file_data: &[u8], file_type: &str) -> ManifestMetad
   }
 }
 
-fn manifest_metadata(
+pub(crate) fn manifest_metadata(
   manifest: &serde_json::Value,
   source: &ManifestSource<'_>,
 ) -> ManifestMetadata {
@@ -630,7 +633,8 @@ impl ExtensionManager {
 
     let ext = Extension {
       id: uuid::Uuid::new_v4().to_string(),
-      name: Self::resolve_name(name, manifest_name)?,
+      name: Self::resolve_name(name, manifest_name.clone())?,
+      manifest_name,
       file_name: file_name.clone(),
       file_type,
       browser_compatibility,
@@ -677,7 +681,8 @@ impl ExtensionManager {
 
     let ext = Extension {
       id: uuid::Uuid::new_v4().to_string(),
-      name: Self::resolve_name(name, manifest_name)?,
+      name: Self::resolve_name(name, manifest_name.clone())?,
+      manifest_name,
       file_name: absolute
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -1001,6 +1006,7 @@ impl ExtensionManager {
     if let Some(h) = homepage_url {
       ext.homepage_url = Some(h);
     }
+    ext.manifest_name = manifest_name.clone();
     if let Some(mn) = manifest_name {
       if !explicit_name_provided && !mn.trim().is_empty() {
         ext.name = mn;
@@ -1678,7 +1684,8 @@ impl ExtensionManager {
 
     let (manifest_name, version, description, author, homepage_url) = metadata;
     let mut updated = ext.clone();
-    let mut changed = false;
+    let mut changed = updated.manifest_name != manifest_name;
+    updated.manifest_name = manifest_name.clone();
 
     // The name is user-editable, so it is only touched when what is stored is
     // an unresolved placeholder.
@@ -2307,11 +2314,37 @@ mod tests {
       .unwrap();
 
     assert_eq!(ext.name, "uBlock Origin Lite");
+    assert_eq!(ext.manifest_name.as_deref(), Some("uBlock Origin Lite"));
     assert_eq!(
       ext.description.as_deref(),
       Some("An efficient content blocker.")
     );
     assert_eq!(ext.version.as_deref(), Some("1.2.3"));
+  }
+
+  #[test]
+  fn manifest_identity_backfill_preserves_an_explicit_name_and_edit_time() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let mgr = ExtensionManager::new();
+    let mut ext = mgr
+      .add_extension(
+        "fallback".to_string(),
+        "ublock.zip".to_string(),
+        localized_extension_zip(),
+      )
+      .unwrap();
+    ext.name = "My blocker".to_string();
+    ext.manifest_name = None;
+    mgr.update_extension_internal(&ext).unwrap();
+    mgr.ensure_icons_extracted();
+    let restored = mgr.get_extension(&ext.id).unwrap();
+    assert_eq!(restored.name, "My blocker");
+    assert_eq!(
+      restored.manifest_name.as_deref(),
+      Some("uBlock Origin Lite")
+    );
+    assert_eq!(restored.updated_at, ext.updated_at);
   }
 
   #[test]

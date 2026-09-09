@@ -48,12 +48,12 @@ function CommandDialog({
   const resolvedDescription =
     description ?? t("common.commandPalette.description");
   return (
-    <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{resolvedTitle}</DialogTitle>
-        <DialogDescription>{resolvedDescription}</DialogDescription>
-      </DialogHeader>
+    <Dialog {...props} motionEnabled={false}>
       <DialogContent className="overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{resolvedTitle}</DialogTitle>
+          <DialogDescription>{resolvedDescription}</DialogDescription>
+        </DialogHeader>
         <Command
           filter={filter}
           shouldFilter={shouldFilter}

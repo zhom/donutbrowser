@@ -102,7 +102,7 @@ async fn main() {
             .arg(
               Arg::new("type")
                 .long("type")
-                .help("Proxy type (http, https, socks4, socks5, ss)"),
+                .help("Proxy type (http, https, httpstls, socks4, socks5, ss)"),
             )
             .arg(
               Arg::new("port")

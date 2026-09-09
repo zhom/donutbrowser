@@ -33,6 +33,18 @@ async fn lock_profile_launch(profile_id: &str) -> tokio::sync::OwnedMutexGuard<(
   lock.lock_owned().await
 }
 
+fn emit_launch_stage(profile: &BrowserProfile, stage: &str, error: Option<&str>) {
+  let _ = events::emit(
+    "profile-launch-stage",
+    serde_json::json!({
+      "id": profile.id.to_string(),
+      "stage": stage,
+      "timestamp": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+      "error": error,
+    }),
+  );
+}
+
 pub struct BrowserRunner {
   pub profile_manager: &'static ProfileManager,
   pub downloaded_browsers_registry: &'static DownloadedBrowsersRegistry,
@@ -208,6 +220,10 @@ impl BrowserRunner {
       .map_err(|e| format!("Failed to get executable path for {}: {e}", profile.browser).into())
   }
 
+  /// One argument per thing a launch decides, and they are all independent:
+  /// grouping them into a struct would only move the same list one level out,
+  /// and the one caller shape that repeats already has `LaunchOptions`.
+  #[allow(clippy::too_many_arguments)]
   async fn launch_browser_internal(
     &self,
     app_handle: tauri::AppHandle,
@@ -215,6 +231,7 @@ impl BrowserRunner {
     url: Option<String>,
     remote_debugging_port: Option<u16>,
     headless: bool,
+    kind: crate::wayfern_manager::LaunchKind,
     gate: &crate::launch_gate::FingerprintGate,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Handle Wayfern profiles using WayfernManager
@@ -228,6 +245,7 @@ impl BrowserRunner {
         WayfernConfig::default()
       });
 
+      emit_launch_stage(profile, "network", None);
       // Always start a local proxy for Wayfern (for traffic monitoring and geoip support)
       let mut upstream_proxy = self
         .resolve_launch_proxy(profile)
@@ -292,9 +310,16 @@ impl BrowserRunner {
         vpn_id: String,
         created: bool,
         profile_name: String,
+        /// This launch's own hold on the worker, kept until the guard goes out
+        /// of scope so a sibling launch cannot stop the worker while this one
+        /// is still between adoption and publishing its browser PID.
+        claim: Option<crate::vpn_worker_runner::VpnLaunchClaim>,
       }
       impl Drop for VpnLaunchGuard {
         fn drop(&mut self) {
+          // Released before anything reads the claims, or this launch would
+          // count itself as a reason to keep the worker it just failed to use.
+          drop(self.claim.take());
           let Some(worker_id) = self.worker_id.take() else {
             return;
           };
@@ -333,6 +358,7 @@ impl BrowserRunner {
                 vpn_id: vpn_id.clone(),
                 created: started.created,
                 profile_name: profile.name.clone(),
+                claim: Some(started.claim),
               });
               if let Some(port) = started.config.local_port {
                 upstream_proxy = Some(ProxySettings {
@@ -361,6 +387,12 @@ impl BrowserRunner {
       // unpack, and the browser process, so a blocked launch has nothing to
       // undo beyond the two workers whose guards are already armed above.
       //
+      // The group's bookmarks are written before the gate rather than inside
+      // it: the gate returns early for several kinds of profile and answers a
+      // question ("may this launch proceed"), while this is a preparation step
+      // every spawn needs, including a profile with no route to check.
+      crate::group_bookmarks::sync_for_launch(profile);
+
       // Run concurrently with the blocklist compile so the added wall clock is
       // max(), not sum().
       let (blocklist, gate_result) = tokio::join!(
@@ -522,21 +554,20 @@ impl BrowserRunner {
         // launch at all, because nothing tells the user to stop using it.
         //
         // Structured rather than prose, because the most common failure is the
-        // browser refusing a generation once the account's hourly quota is
-        // spent. That has to reach the user as an explanation; a raw CDP string
-        // is not one, and the frontend only translates a coded error.
+        // browser refusing a generation outright. That has to reach the user as
+        // an explanation; a raw CDP string is not one, and the frontend only
+        // translates a coded error.
         let generated = self
           .wayfern_manager
           .generate_fingerprint_config(&app_handle, profile, &config_for_generation)
           .await
           .map_err(|e| {
             let detail = e.to_string();
-            // BOTH refusal texts, because this path serves BOTH releases. 151
-            // says "Fingerprint generation limit reached for this account.";
-            // the shipped 150 browser says "Too many profiles are being
-            // created." Matching only the 151 wording leaves a quota-blocked
-            // 150 user staring at a raw CDP string, which is the exact defect
-            // this mapping exists to remove.
+            // BOTH refusal texts, because a profile may be on either browser
+            // version. Older builds word the generation-limit refusal
+            // differently, and matching only one wording leaves those users
+            // staring at a raw CDP string, which is the exact defect this
+            // mapping exists to remove.
             if detail.contains("generation limit reached") || detail.contains("Too many profiles") {
               crate::backend_error_with_detail("WAYFERN_GENERATION_LIMIT_REACHED", detail)
             } else {
@@ -650,6 +681,7 @@ impl BrowserRunner {
       let profile_path_str = profile_data_path.to_string_lossy().to_string();
 
       // Install extensions if an extension group is assigned
+      emit_launch_stage(profile, "extensions", None);
       let mut extension_paths = Vec::new();
       if updated_profile.extension_group_id.is_some() {
         let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
@@ -673,6 +705,7 @@ impl BrowserRunner {
       // Get proxy URL from config
       let proxy_url = wayfern_config.proxy.as_deref();
 
+      emit_launch_stage(profile, "starting", None);
       let wayfern_result = self
         .wayfern_manager
         .launch_wayfern(
@@ -686,6 +719,7 @@ impl BrowserRunner {
           &extension_paths,
           remote_debugging_port,
           headless,
+          kind,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -874,6 +908,7 @@ impl BrowserRunner {
         url,
         remote_debugging_port,
         headless,
+        crate::wayfern_manager::LaunchKind::Automation,
         gate,
       )
       .await
@@ -966,7 +1001,15 @@ impl BrowserRunner {
     } else {
       log::info!("Launching new browser instance - browser not running");
       self
-        .launch_browser_internal(app_handle.clone(), &final_profile, url, None, false, gate)
+        .launch_browser_internal(
+          app_handle.clone(),
+          &final_profile,
+          url,
+          None,
+          false,
+          crate::wayfern_manager::LaunchKind::Interactive,
+          gate,
+        )
         .await
     }
   }
@@ -1003,7 +1046,7 @@ impl BrowserRunner {
     // "Stop this profile" has to mean the browser that is actually running, and
     // for a profile on the leased fleet that browser is not on this machine.
     // Without this, stopping reported success, killed nothing, and left the
-    // session running to its two-hour cap — billing the user for every minute
+    // session running to its maximum duration — spending the user's allowance
     // and holding their profile lock the whole time.
     if self.stop_remote_session_for(&app_handle, profile).await? {
       return Ok(());
@@ -1039,10 +1082,9 @@ impl BrowserRunner {
     crate::remote_session::end_remote_session(&session_id)
       .await
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-        // Surfaced rather than swallowed. The backend refuses to retire a
-        // session it could not stop on the fleet, so a failure here means the
-        // browser is STILL RUNNING; reporting success would tell the user their
-        // profile is free when a host is still writing to it.
+        // Surfaced rather than swallowed. A failure here means the browser is
+        // STILL RUNNING; reporting success would tell the user their profile is
+        // free when a remote host is still writing to it.
         log::warn!("Failed to stop remote session {session_id}: {e}");
         e.to_error_json().into()
       })?;
@@ -1051,8 +1093,8 @@ impl BrowserRunner {
     // the profile into "pending sync" and starts the pull, so the user is not
     // handed back a profile directory that predates the session they just ran.
     //
-    // The session's own profile lock is released by the backend when it retires
-    // the row; nothing is released from here, because this client never held it.
+    // The session's own profile lock is released by the server; nothing is
+    // released from here, because this client never held it.
     crate::remote_session::note_session_stopped(app_handle, &session_id);
     Ok(true)
   }
@@ -1409,6 +1451,22 @@ impl BrowserRunner {
         &profile.id.to_string(),
       );
 
+      // A temporary profile exists for one automation run, so the run ending
+      // is what ends it. Destroyed rather than trashed: nothing here is worth
+      // restoring, and a trash full of automation leftovers is its own bug.
+      if profile.temporary {
+        match self
+          .profile_manager
+          .delete_profile_permanently(&app_handle, &profile.id.to_string())
+        {
+          Ok(()) => log::info!(
+            "Deleted temporary profile {} now that its browser has stopped",
+            profile.name
+          ),
+          Err(e) => log::warn!("Could not delete temporary profile {}: {e}", profile.name),
+        }
+      }
+
       log::info!(
         "Wayfern process cleanup completed for profile: {} (ID: {})",
         profile.name,
@@ -1633,6 +1691,26 @@ pub async fn launch_browser_profile_impl(
   url: Option<String>,
   options: LaunchOptions,
 ) -> Result<BrowserProfile, String> {
+  let _profile_launch_guard = lock_profile_launch(&profile.id.to_string()).await;
+  emit_launch_stage(&profile, "queued", None);
+  let result = launch_browser_profile_tracked(app_handle, profile.clone(), url, options).await;
+  match &result {
+    Ok(_) => emit_launch_stage(&profile, "running", None),
+    Err(error) => emit_launch_stage(
+      &profile,
+      "failed",
+      Some(&crate::wrap_backend_error(error, "Browser launch failed")),
+    ),
+  }
+  result
+}
+
+async fn launch_browser_profile_tracked(
+  app_handle: tauri::AppHandle,
+  profile: BrowserProfile,
+  url: Option<String>,
+  options: LaunchOptions,
+) -> Result<BrowserProfile, String> {
   let LaunchOptions {
     remote_debugging_port,
     headless,
@@ -1644,7 +1722,7 @@ pub async fn launch_browser_profile_impl(
     profile.name,
     profile.id
   );
-  let _profile_launch_guard = lock_profile_launch(&profile.id.to_string()).await;
+  emit_launch_stage(&profile, "preparing", None);
 
   if profile.is_cross_os() {
     return Err(format!(

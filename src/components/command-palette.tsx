@@ -6,6 +6,7 @@ import { FiWifi } from "react-icons/fi";
 import { GoGear } from "react-icons/go";
 import {
   LuBadgeInfo,
+  LuBot,
   LuCircleStop,
   LuCloud,
   LuCookie,
@@ -15,6 +16,7 @@ import {
   LuPlug,
   LuPlus,
   LuPuzzle,
+  LuTrash2,
   LuUser,
   LuUsers,
 } from "react-icons/lu";
@@ -69,9 +71,11 @@ const ICONS: Record<ShortcutId, React.ComponentType<{ className?: string }>> = {
   goExtensions: LuPuzzle,
   goGroups: LuUsers,
   goCookieBot: LuCookie,
+  goAgent: LuBot,
   goIntegrations: LuPlug,
   goAccount: LuCloud,
   goSettings: GoGear,
+  goTrash: LuTrash2,
 };
 
 function Tokens({ tokens }: { tokens: string[] }) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
@@ -270,57 +271,55 @@ async function createProfileThroughUi(app, groupName) {
   return profiles.find((profile) => profile.name === "Visible Network Profile");
 }
 
-async function assignNetworkThroughUi(app, profileName, currentName, newName) {
-  const trigger = await app.execute(
+/**
+ * The popover trigger sitting in a named COLUMN of a profile's row.
+ *
+ * Anchored to the column, never to the label the cell happens to show. Both
+ * callers used to search the whole row for the cell's current text, "Default"
+ * for the extension group, "Not selected" for the network, and both of those
+ * strings had long since become "None" in the app. Neither string exists
+ * anywhere in src/ any more, so the assertions failed against a UI that was
+ * working correctly, and with no E2E in CI nothing reported it.
+ *
+ * Matching on "None" instead would only move the problem: Proxy / VPN and EXT
+ * render the identical text, so a row-wide search would pick whichever came
+ * first in the DOM. The column is the thing that actually identifies the
+ * control, so that is what this matches on.
+ *
+ * A renamed header returns the header list rather than null, so the failure
+ * says which column went missing instead of "was not visible".
+ */
+async function columnTrigger(app, profileName, header) {
+  return app.execute(
     `
-      const row = [...document.querySelectorAll("tr")].find((candidate) =>
+      const row = [...document.querySelectorAll("tbody tr")].find((candidate) =>
         (candidate.innerText || "").includes(arguments[0])
       );
-      const expected = arguments[1].toLocaleLowerCase();
-      return [...(row?.querySelectorAll('[aria-haspopup="dialog"]') ?? [])].find(
-        (trigger) => (trigger.innerText || trigger.textContent || "")
-          .toLocaleLowerCase()
-          .includes(expected)
-      ) ?? null;
+      if (!row) return null;
+      const headers = [
+        ...(row.closest("table")?.querySelectorAll("thead th") ?? []),
+      ].map((cell) => (cell.innerText || cell.textContent || "").trim());
+      const index = headers.indexOf(arguments[1]);
+      if (index < 0) return "MISSING_COLUMN:" + headers.join(" | ");
+      return (
+        row.children[index]?.querySelector(
+          '[aria-haspopup="dialog"], button',
+        ) ?? null
+      );
     `,
-    [profileName, currentName],
-  );
-  assert.ok(trigger, `Network selector for ${profileName} was not visible`);
-  await app.session.click(trigger);
-  await app.clickText(newName, { exact: false, roles: ["option"] });
-  await app.waitFor(
-    () =>
-      app.execute(
-        `
-          return ![...document.querySelectorAll('[data-slot="popover-content"]')]
-            .some((content) => (content.innerText || "").includes(arguments[0]));
-        `,
-        [newName],
-      ),
-    { description: `${newName} network picker to unmount` },
+    [profileName, header],
   );
 }
 
-async function assignExtensionGroupThroughUi(
-  app,
-  profileName,
-  currentName,
-  newName,
-) {
-  const trigger = await app.execute(
-    `
-      const row = [...document.querySelectorAll("tr")].find((candidate) =>
-        (candidate.innerText || "").includes(arguments[0])
-      );
-      return [...(row?.querySelectorAll("button") ?? [])].find(
-        (button) => (button.innerText || button.textContent || "")
-          .trim()
-          .includes(arguments[1])
-      ) ?? null;
-    `,
-    [profileName, currentName],
-  );
-  assert.ok(trigger, `Extension selector for ${profileName} was not visible`);
+async function assignThroughUi(app, profileName, header, newName, what) {
+  const trigger = await columnTrigger(app, profileName, header);
+  if (typeof trigger === "string") {
+    assert.fail(
+      `The "${header}" column is gone; the table now has: ` +
+        trigger.replace("MISSING_COLUMN:", ""),
+    );
+  }
+  assert.ok(trigger, `${what} selector for ${profileName} was not visible`);
   await app.session.click(trigger);
   await app.clickText(newName, { exact: false, roles: ["option"] });
   await app.waitFor(
@@ -332,9 +331,15 @@ async function assignExtensionGroupThroughUi(
         `,
         [newName],
       ),
-    { description: `${newName} extension picker to unmount` },
+    { description: `${newName} ${what.toLowerCase()} picker to unmount` },
   );
 }
+
+const assignNetworkThroughUi = (app, profileName, newName) =>
+  assignThroughUi(app, profileName, "Proxy / VPN", newName, "Network");
+
+const assignExtensionGroupThroughUi = (app, profileName, newName) =>
+  assignThroughUi(app, profileName, "EXT", newName, "Extension");
 
 async function runProfile(_app, base, token, profileId, url) {
   const launched = await request(`${base}/v1/profiles/${profileId}/run`, {
@@ -808,7 +813,6 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
     await assignExtensionGroupThroughUi(
       app,
       profile.name,
-      "Default",
       extensionEntities.group.name,
     );
     await app.waitFor(
@@ -824,6 +828,23 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
       name: "Residential SOCKS5",
       proxySettings: socksSettings,
     });
+
+    // The exit's ISP and timezone are read from the MaxMind databases on this
+    // machine, never from an outside lookup service, so they have to actually
+    // be in place before a check can report them. The create-profile dialog
+    // starts that download in the background; this waits for it rather than
+    // racing it.
+    await app.invoke("download_geoip_database");
+    await app.waitFor(
+      async () =>
+        existsSync(path.join(app.dataRoot, "cache", "GeoLite2-City.mmdb")) &&
+        existsSync(path.join(app.dataRoot, "cache", "GeoLite2-ASN.mmdb")),
+      {
+        description: "the local MaxMind city and ASN databases",
+        timeoutMs: 180_000,
+      },
+    );
+
     const [httpCheck, socksCheck] = await Promise.all([
       app.invoke("check_proxy_validity", {
         proxyId: httpProxy.id,
@@ -839,12 +860,62 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
     assert.ok(isIP(httpCheck.ip));
     assert.ok(isIP(socksCheck.ip));
 
-    await assignNetworkThroughUi(
-      app,
-      profile.name,
-      "Not selected",
-      httpProxy.name,
+    // An HTTP proxy tunnels TCP with CONNECT and has no datagram command, so
+    // the verdict follows from the protocol and is never a probe result.
+    assert.equal(httpCheck.udp, "no");
+    // The SOCKS5 proxy answered the exit lookup, so the UDP probe reached it
+    // too: the verdict has to be a real answer, never "unknown". Which answer
+    // is the provider's to decide.
+    assert.ok(
+      ["yes", "no"].includes(socksCheck.udp),
+      `a reachable SOCKS5 proxy must give a definite UDP verdict, got ${socksCheck.udp}`,
     );
+
+    for (const [label, check] of [
+      ["http", httpCheck],
+      ["socks5", socksCheck],
+    ]) {
+      assert.ok(
+        typeof check.latency_ms === "number" && check.latency_ms > 0,
+        `${label} check has to report how long it took`,
+      );
+      // Read out of the local MaxMind databases: the exit address is never
+      // handed to an outside lookup service to learn these.
+      assert.ok(
+        typeof check.isp === "string" && check.isp.trim().length > 0,
+        `${label} check has to name the exit's ISP, got ${JSON.stringify(check.isp)}`,
+      );
+      assert.ok(
+        typeof check.timezone === "string" && check.timezone.includes("/"),
+        `${label} check has to report the exit's timezone, got ${JSON.stringify(check.timezone)}`,
+      );
+    }
+
+    // The trail grows by one line per check, newest first, and carries what
+    // the receipt carried.
+    const firstTrail = await app.invoke("get_proxy_check_history", {
+      proxyId: socksProxy.id,
+    });
+    assert.equal(firstTrail.length, 1);
+    assert.equal(firstTrail[0].ok, true);
+    assert.equal(firstTrail[0].ip, socksCheck.ip);
+    assert.equal(firstTrail[0].udp, socksCheck.udp);
+    assert.equal(firstTrail[0].isp, socksCheck.isp);
+
+    await app.invoke("check_proxy_validity", {
+      proxyId: socksProxy.id,
+      proxySettings: null,
+    });
+    const grownTrail = await app.invoke("get_proxy_check_history", {
+      proxyId: socksProxy.id,
+    });
+    assert.equal(grownTrail.length, 2);
+    assert.ok(
+      grownTrail[0].timestamp >= grownTrail[1].timestamp,
+      "the trail is newest first",
+    );
+
+    await assignNetworkThroughUi(app, profile.name, httpProxy.name);
     await app.waitFor(
       async () =>
         (await app.invoke("list_browser_profiles")).find(
@@ -885,7 +956,7 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
     activeCdp = null;
     await assertProxyWorkerLogsRedacted(app, [httpSettings, socksSettings]);
 
-    await assignNetworkThroughUi(app, profile.name, httpProxy.name, vpn.name);
+    await assignNetworkThroughUi(app, profile.name, vpn.name);
     await app.waitFor(
       async () =>
         (await app.invoke("list_browser_profiles")).find(

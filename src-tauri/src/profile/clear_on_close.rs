@@ -20,6 +20,10 @@ const PROFILE_KEEP: &[&str] = &[
   "Extension Scripts",
   "Extension Cookies",
   "Local Extension Settings",
+  // Backs chrome.storage.sync for every extension. Without a Chrome Sync
+  // account this directory is the only copy of that data, so wiping it resets
+  // every extension to defaults on each close.
+  "Sync Extension Settings",
   "Managed Extension Settings",
   // Preferences hold the extension registry + user settings; deleting them
   // disables every installed extension, so they stay.
@@ -149,6 +153,33 @@ mod tests {
     fs::create_dir_all(dir.join(name)).unwrap();
   }
 
+  /// The per-extension settings stores. Wiping any of them resets every
+  /// installed extension to its defaults on the next launch.
+  const EXTENSION_STORES: [&str; 3] = [
+    "Local Extension Settings",
+    "Sync Extension Settings",
+    "Managed Extension Settings",
+  ];
+
+  fn seed_extension_stores(dir: &Path) {
+    for store in EXTENSION_STORES {
+      let store_dir = dir.join(store).join("abcdefghijklmnop");
+      fs::create_dir_all(&store_dir).unwrap();
+      fs::write(store_dir.join("000003.ldb"), "settings").unwrap();
+    }
+  }
+
+  fn assert_extension_stores_survived(dir: &Path) {
+    for store in EXTENSION_STORES {
+      let file = dir.join(store).join("abcdefghijklmnop").join("000003.ldb");
+      assert_eq!(
+        fs::read_to_string(&file).ok().as_deref(),
+        Some("settings"),
+        "{store} must survive clear-on-close"
+      );
+    }
+  }
+
   #[test]
   fn clears_root_profile_layout_keeping_extensions_and_bookmarks() {
     let tmp = TempDir::new().unwrap();
@@ -160,7 +191,7 @@ mod tests {
     touch(dir, "Web Data");
     touch(dir, "Login Data");
     mkdir(dir, "Extensions");
-    mkdir(dir, "Local Extension Settings");
+    seed_extension_stores(dir);
     mkdir(dir, "Cache");
     mkdir(dir, "Network");
     touch(&dir.join("Network"), "Cookies");
@@ -175,7 +206,7 @@ mod tests {
     assert!(dir.join("Preferences").exists());
     assert!(dir.join("Bookmarks").exists());
     assert!(dir.join("Extensions").exists());
-    assert!(dir.join("Local Extension Settings").exists());
+    assert_extension_stores_survived(dir);
     assert!(!dir.join("History").exists());
     assert!(!dir.join("Web Data").exists());
     assert!(!dir.join("Login Data").exists());
@@ -196,6 +227,7 @@ mod tests {
     touch(&default, "Bookmarks");
     touch(&default, "History");
     mkdir(&default, "Extensions");
+    seed_extension_stores(&default);
     mkdir(&default, "IndexedDB");
 
     clear_user_data_dir(dir);
@@ -205,6 +237,7 @@ mod tests {
     assert!(default.join("Preferences").exists());
     assert!(default.join("Bookmarks").exists());
     assert!(default.join("Extensions").exists());
+    assert_extension_stores_survived(&default);
     assert!(!default.join("History").exists());
     assert!(!default.join("IndexedDB").exists());
   }
@@ -222,7 +255,7 @@ mod tests {
     touch(&default, "Bookmarks");
     touch(&default, "History");
     mkdir(&default, "Extensions");
-    mkdir(&default, "Local Extension Settings");
+    seed_extension_stores(&default);
     mkdir(&default, "IndexedDB");
 
     clear_user_data_dir(dir);
@@ -230,7 +263,7 @@ mod tests {
     assert!(default.exists(), "the profile dir must survive");
     assert!(default.join("Bookmarks").exists());
     assert!(default.join("Extensions").exists());
-    assert!(default.join("Local Extension Settings").exists());
+    assert_extension_stores_survived(&default);
     // Browsing data inside it is still cleared.
     assert!(!default.join("History").exists());
     assert!(!default.join("IndexedDB").exists());
@@ -244,10 +277,12 @@ mod tests {
     let p2 = dir.join("Profile 2");
     touch(&p2, "Bookmarks");
     touch(&p2, "History");
+    seed_extension_stores(&p2);
 
     clear_user_data_dir(dir);
 
     assert!(p2.join("Bookmarks").exists());
+    assert_extension_stores_survived(&p2);
     assert!(!p2.join("History").exists());
   }
 

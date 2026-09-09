@@ -53,6 +53,15 @@ impl GeoIPDownloader {
     Ok(Self::get_cache_dir().join("GeoLite2-City.mmdb"))
   }
 
+  /// Where the autonomous-system database lives. It is the only MaxMind file
+  /// that carries an organisation for an address, which is what a proxy check
+  /// reports as the exit's ISP; the city database has no such field. Same
+  /// release, same publisher, fetched by the same code — it is simply a second
+  /// asset off the download the city database already comes from.
+  pub fn get_asn_mmdb_file_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(Self::get_cache_dir().join("GeoLite2-ASN.mmdb"))
+  }
+
   pub fn is_geoip_database_available() -> bool {
     if let Ok(mmdb_path) = Self::get_mmdb_file_path() {
       mmdb_path.exists()
@@ -99,12 +108,15 @@ impl GeoIPDownloader {
   }
 
   fn find_city_mmdb_asset(&self, release: &GithubRelease) -> Option<String> {
-    for asset in &release.assets {
-      if asset.name.ends_with("-City.mmdb") {
-        return Some(asset.browser_download_url.clone());
-      }
-    }
-    None
+    Self::find_mmdb_asset(release, "-City.mmdb")
+  }
+
+  fn find_mmdb_asset(release: &GithubRelease, suffix: &str) -> Option<String> {
+    release
+      .assets
+      .iter()
+      .find(|asset| asset.name.ends_with(suffix))
+      .map(|asset| asset.browser_download_url.clone())
   }
 
   pub async fn download_geoip_database(
@@ -148,14 +160,26 @@ impl GeoIPDownloader {
     #[cfg(not(feature = "e2e"))]
     let fixture_url: Option<String> = None;
 
-    let download_url = if let Some(url) = fixture_url {
-      url
+    #[cfg(feature = "e2e")]
+    let asn_fixture_url = std::env::var("DONUT_E2E_GEOIP_ASN_DOWNLOAD_URL")
+      .ok()
+      .filter(|url| !url.is_empty());
+    #[cfg(not(feature = "e2e"))]
+    let asn_fixture_url: Option<String> = None;
+
+    // The ASN asset comes off the same release as the city one, so the release
+    // is kept rather than looked up twice.
+    let (download_url, asn_url) = if let Some(url) = fixture_url {
+      (url, asn_fixture_url)
     } else {
       let releases = self.fetch_geoip_releases().await?;
       let latest_release = releases.first().ok_or("No GeoIP database releases found")?;
-      self
-        .find_city_mmdb_asset(latest_release)
-        .ok_or("No compatible GeoIP database asset found")?
+      (
+        self
+          .find_city_mmdb_asset(latest_release)
+          .ok_or("No compatible GeoIP database asset found")?,
+        Self::find_mmdb_asset(latest_release, "-ASN.mmdb"),
+      )
     };
 
     // Create cache directory
@@ -250,6 +274,15 @@ impl GeoIPDownloader {
       .as_secs();
     let _ = fs::write(&timestamp_path, now.to_string()).await;
 
+    // The autonomous-system database, best effort. It only feeds the exit
+    // organisation a proxy check reports, so a failure here must never fail
+    // the download that fingerprint geolocation actually depends on.
+    if let Some(url) = asn_url {
+      if let Err(e) = self.download_asn_database(&url).await {
+        log::warn!("Failed to download the GeoIP ASN database: {e}");
+      }
+    }
+
     // Emit completion
     let _ = events::emit(
       "geoip-download-progress",
@@ -264,6 +297,34 @@ impl GeoIPDownloader {
       },
     );
 
+    Ok(())
+  }
+
+  /// Fetch the ASN database to a temp file and rename it into place, so a
+  /// half-written file is never left where a lookup would read it.
+  async fn download_asn_database(
+    &self,
+    url: &str,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let path = Self::get_asn_mmdb_file_path()?;
+    let temp_path = path.with_extension("mmdb.downloading");
+    let _ = fs::remove_file(&temp_path).await;
+
+    let response = self.client.get(url).send().await?;
+    if !response.status().is_success() {
+      return Err(format!("HTTP {}", response.status()).into());
+    }
+
+    let mut file = fs::File::create(&temp_path).await?;
+    let mut stream = response.bytes_stream();
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+      file.write_all(&chunk?).await?;
+    }
+    file.flush().await?;
+    drop(file);
+
+    fs::rename(&temp_path, &path).await?;
     Ok(())
   }
 

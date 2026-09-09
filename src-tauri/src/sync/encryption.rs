@@ -2,8 +2,42 @@ use aes_gcm::{
   aead::{Aead, KeyInit},
   Aes256Gcm, Key,
 };
-use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use argon2::Argon2;
+use base64::{
+  engine::general_purpose::{STANDARD as BASE64, STANDARD_NO_PAD as SALT_B64},
+  Engine,
+};
+
+/// Derive a 32-byte AES key from a password and a raw salt with Argon2id at
+/// the crate's default parameters (m=19456 KiB, t=2, p=1, 32-byte output).
+///
+/// ONE function for every vault in the app, so the parameters can never drift
+/// between the sync, settings and cloud-auth stores. Byte-compatible with the
+/// PHC-string path used before argon2 0.6: that path hashed the DECODED salt
+/// with the same defaults and the key was its 32-byte output, which is exactly
+/// what `hash_password_into` produces here. A different parameter set would
+/// silently lock every user out of their encrypted data, so the defaults are
+/// pinned by the test below rather than trusted.
+pub fn derive_vault_key(password: &[u8], salt: &[u8]) -> Result<[u8; 32], String> {
+  let mut key = [0u8; 32];
+  Argon2::default()
+    .hash_password_into(password, salt, &mut key)
+    .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+  Ok(key)
+}
+
+/// The on-disk salt encoding: PHC "B64", the standard alphabet with no
+/// padding, exactly what the retired `SaltString` wrote, so files written by
+/// earlier builds decode unchanged.
+pub fn encode_salt(salt: &[u8]) -> String {
+  SALT_B64.encode(salt)
+}
+
+pub fn decode_salt(salt: &str) -> Result<Vec<u8>, String> {
+  SALT_B64
+    .decode(salt)
+    .map_err(|e| format!("Invalid salt: {e}"))
+}
 use rand::RngExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -57,18 +91,8 @@ pub fn store_e2e_password(password: &str) -> Result<(), String> {
 
   let vault_password = get_vault_password();
   let salt_bytes: [u8; 16] = rand::rng().random();
-  let salt =
-    SaltString::encode_b64(&salt_bytes).map_err(|e| format!("Failed to encode salt: {e}"))?;
-  let argon2 = Argon2::default();
-  let password_hash = argon2
-    .hash_password(vault_password.as_bytes(), &salt)
-    .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
-  let hash_value = password_hash.hash.unwrap();
-  let hash_bytes = hash_value.as_bytes();
-
-  let key_bytes: [u8; 32] = hash_bytes[..32]
-    .try_into()
-    .map_err(|_| "Invalid key length")?;
+  let salt = encode_salt(&salt_bytes);
+  let key_bytes = derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
   let key = Key::<Aes256Gcm>::from(key_bytes);
   let cipher = Aes256Gcm::new(&key);
   let nonce_bytes: [u8; 12] = rand::rng().random();
@@ -133,7 +157,7 @@ pub fn load_e2e_password() -> Result<Option<String>, String> {
     .map_err(|_| "Invalid salt encoding")?;
   offset += salt_len;
 
-  let salt = SaltString::from_b64(salt_str).map_err(|e| format!("Invalid salt: {e}"))?;
+  let salt_bytes = decode_salt(salt_str)?;
 
   if offset + 12 > file_data.len() {
     return Ok(None);
@@ -157,16 +181,7 @@ pub fn load_e2e_password() -> Result<Option<String>, String> {
   let ciphertext = &file_data[offset..offset + ciphertext_len];
 
   let vault_password = get_vault_password();
-  let argon2 = Argon2::default();
-  let password_hash = argon2
-    .hash_password(vault_password.as_bytes(), &salt)
-    .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
-  let hash_value = password_hash.hash.unwrap();
-  let hash_bytes = hash_value.as_bytes();
-
-  let key_bytes: [u8; 32] = hash_bytes[..32]
-    .try_into()
-    .map_err(|_| "Invalid key length")?;
+  let key_bytes = derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
   let key = Key::<Aes256Gcm>::from(key_bytes);
   let cipher = Aes256Gcm::new(&key);
 
@@ -212,18 +227,7 @@ pub fn derive_profile_key(user_password: &str, profile_salt: &str) -> Result<[u8
     .decode(profile_salt)
     .map_err(|e| format!("Invalid salt encoding: {e}"))?;
 
-  let salt = SaltString::encode_b64(&salt_bytes)
-    .map_err(|e| format!("Failed to create salt string: {e}"))?;
-
-  let argon2 = Argon2::default();
-  let password_hash = argon2
-    .hash_password(user_password.as_bytes(), &salt)
-    .map_err(|e| format!("Key derivation failed: {e}"))?;
-  let hash_value = password_hash.hash.unwrap();
-  let hash_bytes = hash_value.as_bytes();
-
-  let mut key = [0u8; 32];
-  key.copy_from_slice(&hash_bytes[..32]);
+  let key = derive_vault_key(user_password.as_bytes(), &salt_bytes)?;
 
   if let Ok(mut cache) = KEY_CACHE.lock() {
     cache.insert(cache_key, key);
@@ -364,12 +368,12 @@ pub async fn delete_e2e_password() -> Result<(), String> {
   remove_e2e_password()
 }
 
-/// On Team plans, only the team owner is allowed to flip the E2E password
-/// state — otherwise members could lock each other out by changing the key.
+/// Only the team owner may flip the E2E password state — otherwise members
+/// could lock each other out by changing the key.
 async fn enforce_team_owner_for_encryption_change() -> Result<(), String> {
   use crate::cloud_auth::CLOUD_AUTH;
   if let Some(state) = CLOUD_AUTH.get_user().await {
-    if state.user.plan == "team" && state.user.team_role.as_deref() != Some("owner") {
+    if state.user.effective_plan() == "team" && state.user.team_role.as_deref() != Some("owner") {
       return Err("TEAM_OWNER_ONLY".to_string());
     }
   }
@@ -483,5 +487,32 @@ mod tests {
   fn test_decrypt_too_short_data() {
     let key = [1u8; 32];
     assert!(decrypt_bytes(&key, &[0u8; 5]).is_err());
+  }
+}
+
+#[cfg(test)]
+mod vault_key_tests {
+  use super::{decode_salt, derive_vault_key, encode_salt};
+
+  /// A stored vault is only readable while this vector holds. It pins the
+  /// Argon2id parameters and the salt encoding together: a dependency bump
+  /// that changed either would fail here instead of at the user's data.
+  #[test]
+  fn vault_key_derivation_is_pinned() {
+    let key = derive_vault_key(b"correct horse battery staple", &[7u8; 16]).unwrap();
+    let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+      hex,
+      "799f12b9e17710824482d829835acb69f5a9355bf774c4f07342823b11b90928"
+    );
+  }
+
+  #[test]
+  fn salt_encoding_round_trips_without_padding() {
+    let salt = [0u8, 1, 2, 3, 250, 251, 252, 253, 254, 255, 9, 8, 7, 6, 5, 4];
+    let encoded = encode_salt(&salt);
+    assert!(!encoded.contains('='), "PHC B64 carries no padding");
+    assert_eq!(decode_salt(&encoded).unwrap(), salt);
+    assert!(decode_salt("not*valid").is_err());
   }
 }

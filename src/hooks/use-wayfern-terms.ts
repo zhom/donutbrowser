@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 
 interface UseWayfernTermsReturn {
@@ -33,6 +34,20 @@ export function useWayfernTerms(): UseWayfernTermsReturn {
 
   useEffect(() => {
     void checkTerms();
+  }, [checkTerms]);
+
+  // The backend announces every acceptance, including ones the dialog did
+  // not drive (the REST API, an automation session), so the gate lifts
+  // without a restart.
+  useEffect(() => {
+    let active = true;
+    const subscription = listen("wayfern-terms-accepted", () => {
+      if (active) void checkTerms();
+    });
+    return () => {
+      active = false;
+      void subscription.then((unlisten) => unlisten());
+    };
   }, [checkTerms]);
 
   return {

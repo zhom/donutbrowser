@@ -24,8 +24,15 @@ function commandHasExecutableEvidence(source, command) {
     .split("::")
     .at(-1)
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Every helper that actually CALLS the command counts. This list is the gate's
+  // blind spot: a suite can strengthen its assertions by routing through a new
+  // helper and silently lose the evidence, which is exactly what happened when
+  // `assertContract` replaced eight `assert.ok(await invokeContract(...))` calls
+  //, the assertions got stronger and the gate went red. `assertCommandErrorCode`
+  // joined the list when the local-MCP tests moved to asserting refusal codes.
   return new RegExp(
-    `(?:invoke|invokeError)\\(\\s*["']${name}["']|invokeContract\\(\\s*\\w+\\s*,\\s*["']${name}["']`,
+    `(?:invoke|invokeError)\\(\\s*["']${name}["']` +
+      `|(?:invokeContract|assertContract|assertCommandErrorCode)\\(\\s*\\w+\\s*,\\s*["']${name}["']`,
   ).test(source);
 }
 

@@ -31,8 +31,27 @@ export function isUserTemplateId(id: string | null | undefined): boolean {
   );
 }
 
-/** Hosts the fleet can lease. Linux is refused at enrolment. */
-export type CookieBotPlatform = "windows" | "macos";
+/**
+ * Operating systems a remote run can be scheduled on.
+ * Mirrors `BOT_PLATFORMS` in `src-tauri/src/cookie_bot.rs`.
+ */
+export type CookieBotPlatform = "windows" | "macos" | "linux";
+
+/**
+ * The one list every client-side platform check reads. A profile built for
+ * anything else has no machine to run on and is refused before a schedule row
+ * is ever written.
+ */
+export const BOT_PLATFORMS: readonly CookieBotPlatform[] = [
+  "windows",
+  "macos",
+  "linux",
+];
+
+/** Whether an OS name a profile reports is one the fleet can lease. */
+export function isCookieBotPlatform(value: string): value is CookieBotPlatform {
+  return (BOT_PLATFORMS as readonly string[]).includes(value);
+}
 
 /** `mine` shows the caller's enrolments, `team` the whole team's. */
 export type CookieBotScope = "mine" | "team";

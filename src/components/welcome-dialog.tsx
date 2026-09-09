@@ -7,6 +7,7 @@ import {
   LuArrowRight,
   LuBriefcase,
   LuCamera,
+  LuChevronDown,
   LuCookie,
   LuFolders,
   LuGithub,
@@ -21,9 +22,11 @@ import {
   LuUsers,
 } from "react-icons/lu";
 import { Logo } from "@/components/icons/logo";
+import { ProfileIsolationDemo } from "@/components/profile-isolation-demo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useBrowserSetup } from "@/hooks/use-browser-setup";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { usePermissions } from "@/hooks/use-permissions";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import { getCurrentOS } from "@/lib/platform";
@@ -121,11 +124,9 @@ function SetupProgress({ value, label }: { value: number; label: string }) {
       className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
     >
       {determined ? (
-        <motion.div
-          className="h-full origin-left rounded-full bg-primary"
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: normalizedValue / 100 }}
-          transition={{ type: "spring", stiffness: 120, damping: 24 }}
+        <div
+          className="h-full rounded-full bg-primary transition-[width] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
+          style={{ width: `${normalizedValue}%` }}
         />
       ) : (
         <div className="h-full w-1/3 rounded-full bg-primary motion-safe:animate-progress-indeterminate motion-reduce:translate-x-0" />
@@ -151,6 +152,8 @@ export function WelcomeDialog({
 }) {
   const { t, i18n } = useTranslation();
   const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const animatePanels = !reduceMotion && inputModality === "pointer";
   const {
     requestPermission,
     isMicrophoneAccessGranted,
@@ -170,9 +173,9 @@ export function WelcomeDialog({
     ...(needsSetup ? (["setup"] as const) : []),
   ];
   const currentStepIndex = Math.max(0, visibleSteps.indexOf(step));
-  const panelTransition = reduceMotion
-    ? ({ duration: 0.15 } as const)
-    : panelSpring;
+  const panelTransition = animatePanels
+    ? panelSpring
+    : ({ duration: 0 } as const);
   // Where the "skip" / "continue" affordances go: into the setup flow when a
   // browser/profile is still needed, otherwise straight to completion.
   const advanceToSetup = () => {
@@ -219,13 +222,11 @@ export function WelcomeDialog({
           aria-valuenow={currentStepIndex + 1}
           className="mx-auto h-1 w-24 overflow-hidden rounded-full bg-muted"
         >
-          <motion.div
-            className="h-full origin-left rounded-full bg-primary"
-            initial={false}
-            animate={{
-              scaleX: (currentStepIndex + 1) / visibleSteps.length,
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-200 ease-[var(--ease-out)] motion-reduce:transition-none"
+            style={{
+              width: `${((currentStepIndex + 1) / visibleSteps.length) * 100}%`,
             }}
-            transition={panelTransition}
           />
         </div>
 
@@ -234,23 +235,13 @@ export function WelcomeDialog({
             <motion.div
               key="intro"
               variants={panelVariants}
-              initial="enter"
+              initial={animatePanels ? "enter" : false}
               animate="center"
               transition={panelTransition}
-              className="flex flex-col gap-7"
+              className="flex flex-col gap-5"
             >
               <div className="flex flex-col items-center gap-4 text-center">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{
-                    ...panelTransition,
-                    delay: reduceMotion ? 0 : 0.05,
-                  }}
-                  className="text-foreground"
-                >
-                  <Logo className="size-12" />
-                </motion.div>
+                <Logo className="size-10 text-foreground" />
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-semibold tracking-tight text-balance">
                     {t("welcome.title")}
@@ -261,30 +252,30 @@ export function WelcomeDialog({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
-                <p className="text-base/7 font-medium text-muted-foreground sm:text-sm/6">
+              <ProfileIsolationDemo />
+
+              <details className="group" data-slot="welcome-features">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                  <LuChevronDown
+                    className="size-3.5 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none"
+                    aria-hidden="true"
+                  />
                   {t("welcome.features.title")}
-                </p>
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                  {FEATURES.map(({ key, Icon }, i) => (
-                    <motion.div
+                </summary>
+                <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                  {FEATURES.map(({ key, Icon }) => (
+                    <div
                       key={key}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        ...panelTransition,
-                        delay: reduceMotion ? 0 : 0.12 + i * 0.04,
-                      }}
                       className="flex min-w-0 items-center gap-2.5"
                     >
                       <Icon className="size-4 shrink-0 text-muted-foreground" />
                       <dt className="text-base/7 font-medium text-foreground sm:text-sm/6">
                         {t(key)}
                       </dt>
-                    </motion.div>
+                    </div>
                   ))}
                 </dl>
-              </div>
+              </details>
 
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Button
@@ -311,7 +302,7 @@ export function WelcomeDialog({
             <motion.div
               key="license"
               variants={panelVariants}
-              initial="enter"
+              initial={animatePanels ? "enter" : false}
               animate="center"
               transition={panelTransition}
               className="flex flex-col gap-7"
@@ -389,22 +380,19 @@ export function WelcomeDialog({
             <motion.div
               key="permissions"
               variants={panelVariants}
-              initial="enter"
+              initial={animatePanels ? "enter" : false}
               animate="center"
               transition={panelTransition}
               className="flex flex-col gap-7"
             >
               <div className="flex flex-col items-center gap-3 text-center">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.85, rotate: -8 }}
-                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                  transition={panelTransition}
-                  className="flex size-12 items-center justify-center gap-1.5 rounded-full bg-primary/10 text-primary-text"
+                <div
+                  className="flex items-center justify-center gap-3 py-2 text-foreground"
                   aria-hidden="true"
                 >
                   <LuMic className="size-4 shrink-0" />
                   <LuCamera className="size-4 shrink-0" />
-                </motion.div>
+                </div>
                 <h2 className="text-2xl font-semibold tracking-tight text-balance">
                   {t("welcome.permissions.title")}
                 </h2>
@@ -432,7 +420,7 @@ export function WelcomeDialog({
                   }}
                 >
                   {requesting && (
-                    <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
+                    <LuLoaderCircle className="size-4 shrink-0 motion-safe:animate-spin" />
                   )}
                   {requesting
                     ? t("welcome.permissions.requesting")
@@ -446,7 +434,7 @@ export function WelcomeDialog({
             <motion.div
               key="setup"
               variants={panelVariants}
-              initial="enter"
+              initial={animatePanels ? "enter" : false}
               animate="center"
               transition={panelTransition}
               className="flex flex-col items-center gap-6 text-center"
@@ -509,7 +497,7 @@ export function WelcomeDialog({
                       />
                       <div className="flex items-center justify-between text-base/7 text-muted-foreground tabular-nums sm:text-sm/6">
                         <span className="inline-flex items-center gap-1.5">
-                          <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
+                          <LuLoaderCircle className="size-4 shrink-0 motion-safe:animate-spin" />
                           {t("welcome.ready.downloading")}
                         </span>
                         <span>{setup.downloadPercent}%</span>
@@ -559,7 +547,7 @@ export function WelcomeDialog({
                     <div className="flex w-full max-w-xs flex-col gap-2">
                       {setup.extractionOvertime ? (
                         <div className="flex items-center justify-center gap-1.5 text-base/7 text-muted-foreground tabular-nums sm:text-sm/6">
-                          <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
+                          <LuLoaderCircle className="size-4 shrink-0 motion-safe:animate-spin" />
                           {t("welcome.ready.almostFinished")}
                         </div>
                       ) : (
@@ -570,7 +558,7 @@ export function WelcomeDialog({
                           />
                           <div className="flex items-center justify-between text-base/7 text-muted-foreground tabular-nums sm:text-sm/6">
                             <span className="inline-flex items-center gap-1.5">
-                              <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
+                              <LuLoaderCircle className="size-4 shrink-0 motion-safe:animate-spin" />
                               {t("welcome.ready.extracting")}
                             </span>
                             <span>{setup.extractionPercent}%</span>

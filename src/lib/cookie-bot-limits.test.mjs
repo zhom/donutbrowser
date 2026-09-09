@@ -10,16 +10,15 @@ import { SCHEDULE_BOUNDS } from "./cookie-bot-limits.ts";
  *
  * The platform list (`BOT_PLATFORMS`) and the preflight refusals are both
  * pinned — one by a cross-referenced comment in `cookie_bot.rs`, the other by
- * tests beside it. These four numbers were not pinned by anything, so infra
- * could widen `max_minutes` to 180 and the desktop would go on refusing 150
- * with no field-level explanation, or cap sites at 25 and let a user fill a
- * form the PUT answers with `COOKIE_BOT_INVALID_SCHEDULE`.
+ * tests beside it. These four numbers were not pinned by anything, so a
+ * server-side change to `max_minutes` or the site cap would leave the desktop
+ * refusing a legal value with no field-level explanation, or accepting one the
+ * PUT answers with `COOKIE_BOT_INVALID_SCHEDULE`.
  */
 
 test("the mirrored bounds are exactly what the server enforces", () => {
-  // Read off `validateScheduleBody` / `normaliseSites` and the constants in
-  // donutbrowser-infra's apps/backend/src/cookie-bot/cookie-bot-schedule.ts.
-  // Changing a number here without changing it there is the bug.
+  // These are the bounds the cloud API enforces on a schedule. Changing a
+  // number here without a matching server change is the bug.
   assert.deepEqual(
     { ...SCHEDULE_BOUNDS },
     { minMaxMinutes: 5, maxMaxMinutes: 120, minSites: 1, maxSites: 40 },

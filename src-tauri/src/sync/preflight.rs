@@ -34,7 +34,7 @@ pub struct SyncServerCheck {
   /// one.
   pub storage_ready: Option<bool>,
   /// The host the server signs into presigned URLs, when it discloses one.
-  /// Withheld by cloud deployments on purpose.
+  /// Optional: a deployment need not publish it.
   pub storage_endpoint: Option<String>,
   /// Whether that host answered *this device*. `None` when there was nothing
   /// to probe.

@@ -309,6 +309,19 @@ impl AutoUpdater {
 
         // Check if profile is currently running
         if profile.process_id.is_some() {
+          // A pending entry is matched on the profile's current version alone,
+          // so recording one for an older build would downgrade the profile the
+          // moment it closes, and would pin that older binary against cleanup.
+          if !self.is_version_newer(new_version, &profile.version) {
+            log::debug!(
+              "Not queuing {} for running profile {}: not newer than {}",
+              new_version,
+              profile.name,
+              profile.version
+            );
+            continue;
+          }
+
           // Store as pending update so it gets applied when browser closes
           log::info!(
             "Profile {} is running, storing pending update {} -> {}",
@@ -662,6 +675,7 @@ mod tests {
       last_sync: None,
       host_os: None,
       ephemeral: false,
+      temporary: false,
       extension_group_id: None,
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,

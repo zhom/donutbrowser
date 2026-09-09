@@ -1,4 +1,4 @@
-//! Turning a donutbrowser-infra HTTP failure into a stable, translatable code.
+//! Turning a cloud API HTTP failure into a stable, translatable code.
 //!
 //! Every cloud transport in this crate flattens its failures through
 //! `api_call_with_retry`, which needs a `String` so it can sniff for a 401.
@@ -55,7 +55,7 @@ pub struct FailureCodes {
 
 /// The desktop has no cloud session at all.
 pub const NOT_SIGNED_IN: &str = "CLOUD_NOT_SIGNED_IN";
-/// The request never reached donutbrowser-infra.
+/// The request never reached the cloud API.
 pub const UNREACHABLE: &str = "CLOUD_UNREACHABLE";
 /// The backend answered, but with nothing the user can act on.
 pub const UNAVAILABLE: &str = "CLOUD_REQUEST_FAILED";
@@ -243,8 +243,8 @@ mod tests {
 
   #[test]
   fn the_backends_own_code_wins_over_the_status_default() {
-    // The status table is a fallback for gateway pages. When infra names the
-    // failure, that name is the one the user's locale has a string for.
+    // The status table is a fallback for gateway pages. When the server names
+    // the failure, that name is the one the user's locale has a string for.
     let failure = classify(403, r#"{"code":"COOKIE_BOT_NOT_ENTITLED"}"#, CODES);
     assert_eq!(failure.code, "COOKIE_BOT_NOT_ENTITLED");
     assert_eq!(failure.status, 403);
@@ -261,8 +261,8 @@ mod tests {
 
   #[test]
   fn capacity_and_rate_limits_are_never_reported_as_a_fault() {
-    // 503 is "come back in a minute" — the fleet is four Windows hosts wide,
-    // so a busy fleet is normal and must not look like an outage.
+    // 503 is "come back in a minute" — remote capacity is finite, so a busy
+    // period is normal and must not look like an outage.
     assert_eq!(classify(503, "", CODES).code, NO_CAPACITY);
     assert_eq!(classify(429, "", CODES).code, RATE_LIMITED);
   }
@@ -298,10 +298,10 @@ mod tests {
 
   #[test]
   fn nested_params_are_read_because_that_is_the_shape_cookie_bot_sends() {
-    // `body(code, params)` in cookie-bot.errors.ts returns `{code, params}`,
-    // which Nest serialises verbatim. Reading only the top level dropped every
-    // interpolated value: the timezone the user typed, the site limit, the
-    // hours a team had actually spent.
+    // The cookie-bot routes send every interpolated value nested under
+    // `params`. Reading only the top level dropped every one of them: the
+    // timezone the user typed, the site limit, the hours a team had actually
+    // spent.
     let failure = classify(
       400,
       r#"{"code":"COOKIE_BOT_INVALID_TIMEZONE","params":{"timezone":"Europe/Nowhere"}}"#,
