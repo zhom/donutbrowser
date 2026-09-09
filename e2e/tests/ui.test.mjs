@@ -2495,3 +2495,310 @@ test("the synchroniser panel lists a live session and its controls act on the re
     }
   });
 });
+
+const TIPS_DIALOG = '[data-slot="tips-dialog"]';
+
+async function openTipsFromRail(app) {
+  await app.clickSelector('[aria-label="More"]');
+  await app.waitFor(
+    () =>
+      app.execute(`return Boolean(document.querySelector("[role='menu']"));`),
+    { description: "More menu" },
+  );
+  await app.clickSelector('[data-slot="rail-open-tips"]');
+  await app.waitFor(
+    () =>
+      app.execute(
+        `return document.querySelector(arguments[0])?.dataset.mode === "browse";`,
+        [TIPS_DIALOG],
+      ),
+    { description: "the tips catalog" },
+  );
+}
+
+test("tips open from the rail, walk the catalog, and deep-link into the feature", async () => {
+  await withApp("ui-tips-browse", async (app) => {
+    await openTipsFromRail(app);
+    assert.ok(await app.visibleTextIncludes(en.tips.items.dnsBlocklist.title));
+
+    // Every essential is listed; a plan tip needs a plan, and there is none.
+    const listed = await app.execute(
+      `return [...document.querySelectorAll('[data-slot="tips-list-item"]')].map((node) => node.dataset.tipId);`,
+    );
+    assert.ok(listed.includes("dnsBlocklist"));
+    assert.ok(listed.includes("trash"));
+    assert.ok(!listed.includes("cookieBot"));
+    assert.ok(!listed.includes("team"));
+
+    // The drawing is live SVG in the scene panel, not a picture.
+    assert.equal(
+      await app.execute(
+        `return document.querySelectorAll('[data-slot="tip-scene-panel"] svg[data-slot="tip-scene"]').length;`,
+      ),
+      1,
+    );
+
+    await app.clickSelector('[data-slot="tip-next"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector('[data-slot="tip-detail"]')?.dataset.tipId === "proxyCheck";`,
+        ),
+      { description: "the second tip" },
+    );
+    assert.ok(await app.visibleTextIncludes(en.tips.items.proxyCheck.title));
+
+    // Picking from the catalog moves the sliding indicator onto that entry.
+    await app.clickSelector(
+      '[data-slot="tips-list-item"][data-tip-id="trash"]',
+    );
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return Boolean(document.querySelector('[data-slot="tips-list-item"][data-tip-id="trash"] [data-slot="tips-list-indicator"]'));`,
+        ),
+      { description: "the indicator on the chosen tip" },
+    );
+    assert.ok(await app.visibleTextIncludes(en.tips.items.trash.title));
+    assert.equal(
+      await app.execute(
+        `return document.querySelectorAll('[data-slot="tips-list-indicator"]').length;`,
+      ),
+      1,
+      "exactly one entry is marked current",
+    );
+    await app.capture("tips-browse");
+
+    // Seen tips are remembered, so the automatic flow never repeats them.
+    await app.waitFor(
+      async () => {
+        const state = await app.invoke("get_tips_state");
+        return ["dnsBlocklist", "proxyCheck", "trash"].every((id) =>
+          state.seen.includes(id),
+        );
+      },
+      { description: "seen tips persisted" },
+    );
+
+    // The action lands inside the feature: the DNS tip opens settings on
+    // its DNS section, and the dialog is gone by then.
+    await app.clickSelector(
+      '[data-slot="tips-list-item"][data-tip-id="dnsBlocklist"]',
+    );
+    await app.clickSelector('[data-slot="tip-action"]');
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.activeElement?.dataset?.settingsSection === "dns";`,
+        ),
+      { description: "the DNS settings section focused" },
+    );
+    assert.equal(
+      await app.execute(
+        `return Boolean(document.querySelector(arguments[0]));`,
+        [TIPS_DIALOG],
+      ),
+      false,
+    );
+
+    // The chord opens the catalog too, and the switch turns the automatic
+    // flow off and persists that.
+    await app.pressShortcut({
+      ...(process.platform === "darwin" ? { meta: true } : { ctrl: true }),
+      shift: true,
+      key: "h",
+    });
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector(arguments[0])?.dataset.mode === "browse";`,
+          [TIPS_DIALOG],
+        ),
+      { description: "the tips catalog from the keyboard" },
+    );
+    assert.equal(
+      await app.execute(
+        `return document.querySelector('[data-slot="tips-auto-show"]').getAttribute("data-state");`,
+      ),
+      "unchecked",
+      "the harness seeds the automatic flow off",
+    );
+    await app.clickSelector('[data-slot="tips-auto-show"]');
+    await app.waitFor(
+      async () => (await app.invoke("get_tips_state")).auto_show === true,
+      { description: "the preference persisted" },
+    );
+    await dismissSurface(app);
+    await app.waitFor(
+      () =>
+        app.execute(`return !document.querySelector(arguments[0]);`, [
+          TIPS_DIALOG,
+        ]),
+      { description: "the dialog closed" },
+    );
+  });
+});
+
+test("a tip opens by itself once the app settles, then waits a day", async () => {
+  await withApp(
+    "ui-tips-auto",
+    async (app) => {
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector(arguments[0])?.dataset.mode === "single";`,
+            [TIPS_DIALOG],
+          ),
+        { description: "the automatic tip", timeoutMs: 30_000 },
+      );
+      assert.ok(
+        await app.visibleTextIncludes(en.tips.items.dnsBlocklist.title),
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelectorAll('[data-slot="tips-list-item"]').length;`,
+        ),
+        0,
+        "the single card carries no catalog",
+      );
+      await app.capture("tips-auto");
+      await app.waitFor(
+        async () => {
+          const state = await app.invoke("get_tips_state");
+          return (
+            state.seen.includes("dnsBlocklist") && state.auto_due === false
+          );
+        },
+        { description: "the automatic tip recorded" },
+      );
+
+      await dismissSurface(app);
+      await app.waitFor(
+        () =>
+          app.execute(`return !document.querySelector(arguments[0]);`, [
+            TIPS_DIALOG,
+          ]),
+        { description: "the dialog closed" },
+      );
+
+      // A restart within the day shows nothing: one tip a day.
+      await app.restart();
+      await app.waitForText("No profiles yet");
+      await new Promise((resolve) => setTimeout(resolve, 4_500));
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector(arguments[0]));`,
+          [TIPS_DIALOG],
+        ),
+        false,
+      );
+    },
+    { settings: { tips_auto_show: true } },
+  );
+});
+
+test("a freshly paid account is welcomed once and walked to its plan tips", async () => {
+  await withApp("ui-paid-welcome", async (app) => {
+    await app.waitForText("No profiles yet");
+    try {
+      // A pro account that signed in a moment ago, as the desktop would hold
+      // it after a device-code login. Only the IPC read of the cached user is
+      // stubbed; the plan observation and the tips state run for real.
+      await stubCommand(app, "cloud_get_user", {
+        logged_in_at: new Date().toISOString(),
+        user: {
+          id: "ui-paid-welcome",
+          email: "paid@example.test",
+          plan: "pro",
+          planPeriod: "monthly",
+          subscriptionStatus: "active",
+          profileLimit: 50,
+          cloudProfilesUsed: 0,
+          proxyBandwidthLimitMb: 0,
+          proxyBandwidthUsedMb: 0,
+          proxyBandwidthExtraMb: 0,
+          isPrimaryDevice: true,
+        },
+      });
+      await app.invoke("plugin:event|emit", {
+        event: "cloud-auth-changed",
+        payload: null,
+      });
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return Boolean(document.querySelector('[data-slot="paid-welcome"]'));`,
+          ),
+        { description: "the paid welcome" },
+      );
+      assert.ok(
+        await app.visibleTextIncludes(
+          en.paidWelcome.title.replace("{{plan}}", "Pro"),
+        ),
+      );
+      assert.deepEqual(
+        await app.execute(
+          `return [...document.querySelectorAll('[data-slot="paid-welcome-item"]')].map((node) => node.dataset.tipId);`,
+        ),
+        ["cloudBackup", "cookieBot", "crossOs", "automation", "agent"],
+        "every capability the plan grants, in catalog order, and nothing it lacks",
+      );
+      await app.capture("paid-welcome");
+
+      // A row opens the catalog on that tip, with the plan tips now listed.
+      await app.clickSelector(
+        '[data-slot="paid-welcome-item"][data-tip-id="cookieBot"]',
+      );
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('[data-slot="tip-detail"]')?.dataset.tipId === "cookieBot";`,
+          ),
+        { description: "the Cookie Bot tip" },
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-slot="paid-welcome"]'));`,
+        ),
+        false,
+      );
+      const listed = await app.execute(
+        `return [...document.querySelectorAll('[data-slot="tips-list-item"]')].map((node) => node.dataset.tipId);`,
+      );
+      assert.ok(listed.includes("cookieBot") && listed.includes("agent"));
+      assert.ok(listed.includes("dnsBlocklist"));
+      await app.capture("tips-plan-catalog");
+      await dismissSurface(app);
+      await app.waitFor(
+        () =>
+          app.execute(`return !document.querySelector(arguments[0]);`, [
+            TIPS_DIALOG,
+          ]),
+        { description: "the catalog closed" },
+      );
+
+      // Greeted once: the same account signing in again is not welcomed twice.
+      await app.invoke("plugin:event|emit", {
+        event: "cloud-auth-changed",
+        payload: null,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-slot="paid-welcome"]'));`,
+        ),
+        false,
+      );
+      assert.equal(
+        await app.invoke("observe_cloud_plan", {
+          userId: "ui-paid-welcome",
+          paid: true,
+          freshLogin: true,
+        }),
+        false,
+      );
+    } finally {
+      await restoreStubs(app);
+    }
+  });
+});

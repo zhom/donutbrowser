@@ -40,10 +40,10 @@ pub const FIELD_IDS: [&str; 9] = [
   "postal_code",
 ];
 
-/// FNV-1a with the salt folded into the initial state, then splitmix64, so
-/// neighbouring salts do not produce visibly related values.
-fn draw(seed: &str, salt: u64) -> u64 {
-  let mut hash = 0xcbf2_9ce4_8422_2325u64 ^ salt;
+/// FNV-1a with the stream number folded into the initial state, then
+/// splitmix64, so neighbouring streams do not produce visibly related values.
+fn draw(seed: &str, stream: u64) -> u64 {
+  let mut hash = 0xcbf2_9ce4_8422_2325u64 ^ stream;
   for byte in seed.as_bytes() {
     hash ^= u64::from(*byte);
     hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
@@ -54,8 +54,8 @@ fn draw(seed: &str, salt: u64) -> u64 {
   z ^ (z >> 31)
 }
 
-fn pick<'a>(seed: &str, salt: u64, options: &[&'a str]) -> &'a str {
-  options[(draw(seed, salt) % options.len() as u64) as usize]
+fn pick<'a>(seed: &str, stream: u64, options: &[&'a str]) -> &'a str {
+  options[(draw(seed, stream) % options.len() as u64) as usize]
 }
 
 const GIVEN_NAMES: [&str; 32] = [

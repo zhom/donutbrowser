@@ -405,6 +405,19 @@ fn err_code(code: &str) -> Box<dyn std::error::Error> {
   serde_json::json!({ "code": code }).to_string().into()
 }
 
+/// A filesystem path named by an automation client (REST or MCP).
+///
+/// Automation loads an extension from whatever folder or archive the caller
+/// names, so the location is the caller's to choose. What a request may not
+/// do is climb: a `..` component is refused before the path is touched, and
+/// the path is then used exactly as given.
+pub fn client_named_path(raw: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+  if raw.contains("..") {
+    return Err(err_code("EXTENSION_PATH_INVALID"));
+  }
+  Ok(PathBuf::from(raw))
+}
+
 /// Validate that `dir` is a loadable unpacked extension and return its parsed
 /// manifest.
 fn validate_unpacked_dir(dir: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {

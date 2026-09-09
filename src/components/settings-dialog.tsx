@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import Color from "color";
+import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
@@ -49,11 +50,13 @@ import {
 } from "@/components/ui/select";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { translateBackendError } from "@/lib/backend-errors";
 import { effectivePlanOf } from "@/lib/entitlements";
+import { MOTION_SPRING_POSITION } from "@/lib/motion";
 import {
   applyThemeColors,
   clearThemeColors,
@@ -111,6 +114,8 @@ interface SettingsDialogProps {
   onClose: () => void;
   onIntegrationsOpen?: () => void;
   subPage?: boolean;
+  /** A section to scroll to and focus as soon as the page opens. */
+  initialSection?: string | null;
 }
 
 export function SettingsDialog({
@@ -118,6 +123,7 @@ export function SettingsDialog({
   onClose,
   onIntegrationsOpen,
   subPage,
+  initialSection = null,
 }: SettingsDialogProps) {
   const [settings, setSettings] = useState<AppSettings>({
     set_as_default_browser: false,
@@ -145,8 +151,19 @@ export function SettingsDialog({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [search, setSearch] = useState("");
-  const [jumpTo, setJumpTo] = useState<string | null>(null);
+  const [jumpTo, setJumpTo] = useState<string | null>(initialSection);
   const sectionsRef = useRef<HTMLFieldSetElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  // The section the reader is in, so the nav can point at it. A click pins
+  // its target until the reader scrolls away, because the last sections can
+  // never reach the top of the scroller on their own.
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const pinnedSectionRef = useRef<{ id: string; scrollTop: number } | null>(
+    null,
+  );
+  const reduceMotion = useReducedMotion();
+  const inputModality = useInputModality();
+  const animateNav = !reduceMotion && inputModality === "pointer";
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [isClearingTraffic, setIsClearingTraffic] = useState(false);
@@ -884,6 +901,44 @@ export function SettingsDialog({
   });
   const sectionVisible = (id: string) =>
     matchingSections.some(([key]) => key === id);
+  const visibleSectionIds = matchingSections.map(([id]) => id).join(",");
+
+  const syncActiveSection = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const root = sectionsRef.current;
+    if (!scroller || !root) return;
+    const nodes = [
+      ...root.querySelectorAll<HTMLElement>("[data-settings-section]"),
+    ].filter((node) => !node.hidden);
+    if (nodes.length === 0) {
+      setActiveSection(null);
+      return;
+    }
+    const pinned = pinnedSectionRef.current;
+    if (pinned && Math.abs(scroller.scrollTop - pinned.scrollTop) < 4) {
+      setActiveSection(pinned.id);
+      return;
+    }
+    pinnedSectionRef.current = null;
+    const atBottom =
+      scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+    if (atBottom) {
+      setActiveSection(nodes[nodes.length - 1].dataset.settingsSection ?? null);
+      return;
+    }
+    const threshold = scroller.getBoundingClientRect().top + 12;
+    let current = nodes[0];
+    for (const node of nodes) {
+      if (node.getBoundingClientRect().top <= threshold) current = node;
+      else break;
+    }
+    setActiveSection(current.dataset.settingsSection ?? null);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the section list changes with the search filter and the settings load, and the sync must run again then
+  useEffect(() => {
+    syncActiveSection();
+  }, [syncActiveSection, visibleSectionIds, isLoading]);
 
   useEffect(() => {
     if (!jumpTo) return;
@@ -892,6 +947,13 @@ export function SettingsDialog({
     );
     section?.scrollIntoView({ block: "start" });
     section?.focus({ preventScroll: true });
+    if (scrollerRef.current) {
+      pinnedSectionRef.current = {
+        id: jumpTo,
+        scrollTop: scrollerRef.current.scrollTop,
+      };
+    }
+    setActiveSection(jumpTo);
     setJumpTo(null);
   }, [jumpTo]);
 
@@ -924,21 +986,46 @@ export function SettingsDialog({
             />
             <nav
               aria-label={t("settings.title")}
-              className="flex flex-wrap gap-x-3 gap-y-1"
+              className="flex flex-wrap gap-x-1 gap-y-1"
             >
-              {sections.map(([id, label]) => (
-                <button
-                  type="button"
-                  key={id}
-                  onClick={() => {
-                    setSearch("");
-                    setJumpTo(id);
-                  }}
-                  className="rounded-sm py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  {t(label)}
-                </button>
-              ))}
+              {sections.map(([id, label]) => {
+                const active = activeSection === id;
+                return (
+                  <button
+                    type="button"
+                    key={id}
+                    data-slot="settings-nav-item"
+                    data-section={id}
+                    aria-current={active ? "location" : undefined}
+                    onClick={() => {
+                      setSearch("");
+                      setJumpTo(id);
+                    }}
+                    className={cn(
+                      "relative isolate rounded-md px-2 py-1 text-xs transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-ring",
+                      active
+                        ? "text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        aria-hidden="true"
+                        data-slot="settings-nav-indicator"
+                        layoutId={
+                          animateNav ? "settings-nav-indicator" : undefined
+                        }
+                        initial={false}
+                        transition={
+                          animateNav ? MOTION_SPRING_POSITION : { duration: 0 }
+                        }
+                        className="absolute inset-0 -z-10 rounded-md bg-accent"
+                      />
+                    )}
+                    {t(label)}
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
@@ -946,6 +1033,8 @@ export function SettingsDialog({
               side gutters); the width cap lives on the inner column. Fusing
               them was the dead-wheel-zone bug. */}
           <div
+            ref={scrollerRef}
+            onScroll={syncActiveSection}
             className={cn(
               "min-h-0 flex-1 overflow-y-auto",
               subPage ? "py-2" : "py-4",

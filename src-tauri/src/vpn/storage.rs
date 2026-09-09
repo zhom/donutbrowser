@@ -77,9 +77,7 @@ impl VpnStorage {
     };
     let encryption_key = if key_path.exists() {
       if let Ok(key_data) = fs::read(&key_path) {
-        if key_data.len() == 32 {
-          let mut key = [0u8; 32];
-          key.copy_from_slice(&key_data);
+        if let Ok(key) = <[u8; 32]>::try_from(key_data.as_slice()) {
           key
         } else {
           let key: [u8; 32] = rand::rng().random();

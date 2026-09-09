@@ -2,12 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
-use aes_gcm::{
-  aead::{Aead, KeyInit},
-  Aes256Gcm, Key, Nonce,
-};
-use rand::RngExt;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
   pub column: String,    // Column to sort by: "name", "browser", "status"
@@ -98,6 +92,26 @@ pub struct AppSettings {
   /// `profile::trash::configured_retention_days`.
   #[serde(default = "default_trash_retention_days")]
   pub trash_retention_days: u32,
+  /// Feature tips. Whether one tip the user has not seen yet may open by
+  /// itself shortly after launch. Off is the user's choice, made in the tips
+  /// dialog.
+  #[serde(default = "default_tips_auto_show")]
+  pub tips_auto_show: bool,
+  /// Ids of the tips that have been shown, in the automatic or the browse
+  /// flow, so the automatic flow never repeats one.
+  #[serde(default)]
+  pub tips_seen: Vec<String>,
+  /// Unix seconds of the last tip that opened by itself. Paces the automatic
+  /// flow to one tip a day at most.
+  #[serde(default)]
+  pub tips_last_auto_shown_at: Option<u64>,
+  /// Cloud user ids that have had the paid-plan welcome.
+  #[serde(default)]
+  pub paid_welcome_seen_for: Vec<String>,
+  /// The plan status last observed per cloud user id, `"free"` or `"paid"`.
+  /// A change from free to paid is what earns the paid-plan welcome.
+  #[serde(default)]
+  pub cloud_plan_memory: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -117,6 +131,18 @@ fn default_api_port() -> u16 {
 fn default_trash_retention_days() -> u32 {
   crate::profile::trash::DEFAULT_RETENTION_DAYS
 }
+
+fn default_tips_auto_show() -> bool {
+  true
+}
+
+/// How long the automatic tip flow waits between two tips, so a busy day of
+/// restarts does not turn into a tip on every launch.
+pub const TIPS_AUTO_INTERVAL_SECS: u64 = 20 * 60 * 60;
+
+/// The plan status remembered per cloud user.
+const PLAN_STATUS_PAID: &str = "paid";
+const PLAN_STATUS_FREE: &str = "free";
 
 impl Default for AppSettings {
   fn default() -> Self {
@@ -144,6 +170,11 @@ impl Default for AppSettings {
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
       trash_retention_days: crate::profile::trash::DEFAULT_RETENTION_DAYS,
+      tips_auto_show: true,
+      tips_seen: Vec::new(),
+      tips_last_auto_shown_at: None,
+      paid_welcome_seen_for: Vec::new(),
+      cloud_plan_memory: std::collections::HashMap::new(),
     }
   }
 }
@@ -158,6 +189,20 @@ pub struct StoredMcpRemoteKey {
 }
 
 pub struct SettingsManager;
+
+/// Write `content` to `path` in one step: to a sibling first, then renamed
+/// into place. A reader that opens the file mid-write, and there are several
+/// at startup, sees the old settings or the new ones, never an empty file
+/// that parses as the defaults.
+fn write_whole(path: &std::path::Path, content: &[u8]) -> std::io::Result<()> {
+  let staging = path.with_extension("json.tmp");
+  fs::write(&staging, content)?;
+  if let Err(e) = fs::rename(&staging, path) {
+    let _ = fs::remove_file(&staging);
+    return Err(e);
+  }
+  Ok(())
+}
 
 impl SettingsManager {
   pub(crate) fn new() -> Self {
@@ -213,7 +258,7 @@ impl SettingsManager {
 
     let settings_file = self.get_settings_file();
     let json = serde_json::to_string_pretty(&on_disk)?;
-    fs::write(settings_file, json)?;
+    write_whole(&settings_file, json.as_bytes())?;
 
     Ok(())
   }
@@ -240,55 +285,23 @@ impl SettingsManager {
 
     let sorting_file = self.get_table_sorting_file();
     let json = serde_json::to_string_pretty(sorting)?;
-    fs::write(sorting_file, json)?;
+    write_whole(&sorting_file, json.as_bytes())?;
 
     Ok(())
   }
 
-  fn get_vault_password() -> String {
-    env!("DONUT_BROWSER_VAULT_PASSWORD").to_string()
-  }
-
-  /// Encrypt `secret` into `file` under the vault password.
+  /// Seal `secret` into `file`.
   ///
-  /// One implementation for every secret this manager keeps on disk. The API,
-  /// MCP and sync tokens each carried their own copy of this routine, and the
-  /// remote MCP credential would have been the fourth; the file layout is the
-  /// same for all of them and only the five-byte header tells them apart.
+  /// One implementation for every secret this manager keeps on disk, in
+  /// `crate::vault`: the API, MCP and sync tokens and the remote MCP
+  /// credential share the layout, and only the five-byte header tells them
+  /// apart.
   fn encrypt_to_file(
     file: &std::path::Path,
     header: &[u8; 5],
     secret: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(parent) = file.parent() {
-      std::fs::create_dir_all(parent)?;
-    }
-
-    let vault_password = Self::get_vault_password();
-    let salt_bytes: [u8; 16] = rand::rng().random();
-    let salt = crate::sync::encryption::encode_salt(&salt_bytes);
-    let key_bytes =
-      crate::sync::encryption::derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
-    let key = Key::<Aes256Gcm>::from(key_bytes);
-    let cipher = Aes256Gcm::new(&key);
-    let nonce_bytes: [u8; 12] = rand::rng().random();
-    let nonce = Nonce::from(nonce_bytes);
-    let ciphertext = cipher
-      .encrypt(&nonce, secret.as_bytes())
-      .map_err(|e| format!("Encryption failed: {e}"))?;
-
-    let mut file_data = Vec::new();
-    file_data.extend_from_slice(header);
-    file_data.push(2u8); // Version 2 (Argon2 + AES-GCM)
-    let salt_str = salt.as_str();
-    file_data.push(salt_str.len() as u8);
-    file_data.extend_from_slice(salt_str.as_bytes());
-    file_data.extend_from_slice(&nonce);
-    file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
-    file_data.extend_from_slice(&ciphertext);
-
-    std::fs::write(file, file_data)?;
-    crate::app_dirs::restrict_to_owner(file);
+    crate::vault::seal(file, &Self::magic(header), secret)?;
     Ok(())
   }
 
@@ -301,74 +314,15 @@ impl SettingsManager {
     file: &std::path::Path,
     header: &[u8; 5],
   ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    if !file.exists() {
-      return Ok(None);
-    }
+    Ok(crate::vault::open(file, &Self::magic(header))?)
+  }
 
-    let file_data = std::fs::read(file)?;
-
-    if file_data.len() < 6 || &file_data[0..5] != header {
-      return Ok(None);
-    }
-
-    let version = file_data[5];
-    if version != 2 {
-      return Ok(None);
-    }
-
-    let mut offset = 6;
-    if offset >= file_data.len() {
-      return Ok(None);
-    }
-    let salt_len = file_data[offset] as usize;
-    offset += 1;
-
-    if offset + salt_len > file_data.len() {
-      return Ok(None);
-    }
-    let salt_bytes = &file_data[offset..offset + salt_len];
-    let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
-    let salt_bytes = crate::sync::encryption::decode_salt(salt_str)?;
-    offset += salt_len;
-
-    if offset + 12 > file_data.len() {
-      return Ok(None);
-    }
-    let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
-      .try_into()
-      .map_err(|_| "Invalid nonce length")?;
-    let nonce = Nonce::from(nonce_bytes);
-    offset += 12;
-
-    if offset + 4 > file_data.len() {
-      return Ok(None);
-    }
-    let ciphertext_len = u32::from_le_bytes([
-      file_data[offset],
-      file_data[offset + 1],
-      file_data[offset + 2],
-      file_data[offset + 3],
-    ]) as usize;
-    offset += 4;
-
-    if offset + ciphertext_len > file_data.len() {
-      return Ok(None);
-    }
-    let ciphertext = &file_data[offset..offset + ciphertext_len];
-
-    let vault_password = Self::get_vault_password();
-    let key_bytes =
-      crate::sync::encryption::derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
-    let key = Key::<Aes256Gcm>::from(key_bytes);
-    let cipher = Aes256Gcm::new(&key);
-    let plaintext = cipher
-      .decrypt(&nonce, ciphertext)
-      .map_err(|_| "Decryption failed")?;
-
-    match String::from_utf8(plaintext) {
-      Ok(token) => Ok(Some(token)),
-      Err(_) => Ok(None),
-    }
+  /// The header plus the layout version every file of this manager carries.
+  fn magic(header: &[u8; 5]) -> [u8; 6] {
+    let mut magic = [0u8; 6];
+    magic[..5].copy_from_slice(header);
+    magic[5] = 2;
+    magic
   }
 
   fn remove_secret_file(file: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -959,6 +913,158 @@ pub async fn complete_onboarding() -> Result<(), String> {
     .map_err(|e| format!("Failed to save settings: {e}"))
 }
 
+/// What the tips dialog needs to decide what to open and what to skip.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct TipsState {
+  pub auto_show: bool,
+  pub seen: Vec<String>,
+  pub last_auto_shown_at: Option<u64>,
+  /// Whether the automatic flow may open a tip right now: it is switched on
+  /// and the last automatic tip is old enough.
+  pub auto_due: bool,
+}
+
+impl TipsState {
+  fn of(settings: &AppSettings, now: u64) -> Self {
+    Self {
+      auto_show: settings.tips_auto_show,
+      seen: settings.tips_seen.clone(),
+      last_auto_shown_at: settings.tips_last_auto_shown_at,
+      auto_due: settings.tips_auto_show
+        && settings
+          .tips_last_auto_shown_at
+          .is_none_or(|last| now.saturating_sub(last) >= TIPS_AUTO_INTERVAL_SECS),
+    }
+  }
+}
+
+/// Serialises every read-modify-write of the tips fields. Two tips shown in
+/// quick succession are two concurrent commands, and without this the second
+/// load could precede the first save and drop it.
+static TIPS_WRITE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn unix_now() -> u64 {
+  std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0)
+}
+
+/// Remembers a tip as shown. `auto` marks it as the tip that opened by
+/// itself, which restarts the daily pacing.
+fn record_tip_seen(settings: &mut AppSettings, tip_id: &str, auto: bool, now: u64) {
+  if !settings.tips_seen.iter().any(|id| id == tip_id) {
+    settings.tips_seen.push(tip_id.to_string());
+  }
+  if auto {
+    settings.tips_last_auto_shown_at = Some(now);
+  }
+}
+
+/// Records the plan status seen for a cloud account and answers whether the
+/// paid-plan welcome is due for it.
+///
+/// The welcome is for an account that just became paid: one this desktop last
+/// saw as free, or one it sees for the first time right after the user signed
+/// in (they bought a plan on the website and came back). An account that was
+/// already paid the last time anybody looked, or that turns up paid in an old
+/// session after an app update, is not new to its plan and is recorded as
+/// greeted without a dialog.
+fn paid_welcome_due(
+  settings: &mut AppSettings,
+  user_id: &str,
+  paid: bool,
+  fresh_login: bool,
+) -> bool {
+  let status = if paid {
+    PLAN_STATUS_PAID
+  } else {
+    PLAN_STATUS_FREE
+  };
+  let previous = settings
+    .cloud_plan_memory
+    .insert(user_id.to_string(), status.to_string());
+  if !paid {
+    return false;
+  }
+  if settings
+    .paid_welcome_seen_for
+    .iter()
+    .any(|id| id == user_id)
+  {
+    return false;
+  }
+  let due = match previous.as_deref() {
+    Some(PLAN_STATUS_FREE) => true,
+    Some(_) => false,
+    None => fresh_login,
+  };
+  settings.paid_welcome_seen_for.push(user_id.to_string());
+  due
+}
+
+#[tauri::command]
+pub async fn get_tips_state() -> Result<TipsState, String> {
+  let manager = SettingsManager::instance();
+  let settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  Ok(TipsState::of(&settings, unix_now()))
+}
+
+#[tauri::command]
+pub async fn mark_tip_seen(tip_id: String, auto: bool) -> Result<TipsState, String> {
+  let _serial = TIPS_WRITE
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner());
+  let manager = SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  let now = unix_now();
+  record_tip_seen(&mut settings, &tip_id, auto, now);
+  manager
+    .save_settings(&settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))?;
+  Ok(TipsState::of(&settings, now))
+}
+
+#[tauri::command]
+pub async fn set_tips_auto_show(enabled: bool) -> Result<TipsState, String> {
+  let _serial = TIPS_WRITE
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner());
+  let manager = SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  settings.tips_auto_show = enabled;
+  manager
+    .save_settings(&settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))?;
+  Ok(TipsState::of(&settings, unix_now()))
+}
+
+#[tauri::command]
+pub async fn observe_cloud_plan(
+  user_id: String,
+  paid: bool,
+  fresh_login: bool,
+) -> Result<bool, String> {
+  let _serial = TIPS_WRITE
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner());
+  let manager = SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  let due = paid_welcome_due(&mut settings, &user_id, paid, fresh_login);
+  manager
+    .save_settings(&settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))?;
+  Ok(due)
+}
+
 #[tauri::command]
 pub fn get_system_language() -> String {
   sys_locale::get_locale()
@@ -1029,6 +1135,83 @@ mod tests {
   #[test]
   fn test_settings_manager_creation() {
     let (_manager, _temp_dir, _guard) = create_test_settings_manager();
+  }
+
+  #[test]
+  fn tips_state_defaults_to_automatic_and_due() {
+    let settings = AppSettings::default();
+    let state = TipsState::of(&settings, 1_000_000);
+    assert!(state.auto_show);
+    assert!(state.seen.is_empty());
+    assert_eq!(state.last_auto_shown_at, None);
+    assert!(state.auto_due, "a fresh install owes its first tip");
+  }
+
+  #[test]
+  fn tips_seen_dedupes_and_paces_the_automatic_flow() {
+    let mut settings = AppSettings::default();
+    record_tip_seen(&mut settings, "dns", false, 100);
+    record_tip_seen(&mut settings, "dns", false, 200);
+    assert_eq!(settings.tips_seen, vec!["dns".to_string()]);
+    assert_eq!(
+      settings.tips_last_auto_shown_at, None,
+      "a browsed tip must not restart the daily pacing"
+    );
+
+    record_tip_seen(&mut settings, "proxy", true, 1_000);
+    assert_eq!(settings.tips_last_auto_shown_at, Some(1_000));
+    assert!(
+      !TipsState::of(&settings, 1_000 + TIPS_AUTO_INTERVAL_SECS - 1).auto_due,
+      "the next automatic tip waits a day"
+    );
+    assert!(TipsState::of(&settings, 1_000 + TIPS_AUTO_INTERVAL_SECS).auto_due);
+
+    settings.tips_auto_show = false;
+    assert!(
+      !TipsState::of(&settings, 1_000 + TIPS_AUTO_INTERVAL_SECS * 3).auto_due,
+      "switched off means never due"
+    );
+  }
+
+  #[test]
+  fn paid_welcome_is_due_once_when_an_account_turns_paid() {
+    let mut settings = AppSettings::default();
+    assert!(!paid_welcome_due(&mut settings, "u1", false, true));
+    assert!(
+      settings.paid_welcome_seen_for.is_empty(),
+      "a free account is not greeted, so nothing is recorded"
+    );
+    assert!(
+      paid_welcome_due(&mut settings, "u1", true, false),
+      "free to paid is the upgrade the welcome exists for"
+    );
+    assert!(!paid_welcome_due(&mut settings, "u1", true, true), "once");
+    assert_eq!(settings.paid_welcome_seen_for, vec!["u1".to_string()]);
+  }
+
+  #[test]
+  fn paid_welcome_greets_a_fresh_sign_in_but_not_an_old_paid_session() {
+    let mut settings = AppSettings::default();
+    assert!(
+      paid_welcome_due(&mut settings, "bought-on-web", true, true),
+      "first sight right after signing in: they came back from checkout"
+    );
+
+    assert!(
+      !paid_welcome_due(&mut settings, "long-paid", true, false),
+      "an app update on a machine that was already paid is not a new plan"
+    );
+    assert!(
+      !paid_welcome_due(&mut settings, "long-paid", true, true),
+      "and it is recorded as greeted, so it never fires later"
+    );
+    assert_eq!(
+      settings
+        .cloud_plan_memory
+        .get("long-paid")
+        .map(String::as_str),
+      Some(PLAN_STATUS_PAID)
+    );
   }
 
   #[test]
@@ -1105,6 +1288,11 @@ mod tests {
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
       trash_retention_days: 14,
+      tips_auto_show: true,
+      tips_seen: Vec::new(),
+      tips_last_auto_shown_at: None,
+      paid_welcome_seen_for: Vec::new(),
+      cloud_plan_memory: std::collections::HashMap::new(),
     };
 
     let save_result = manager.save_settings(&test_settings);

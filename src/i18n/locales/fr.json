@@ -1992,7 +1992,9 @@
     "historyTitle": "Vérifications récentes",
     "historyEmpty": "Aucune vérification enregistrée pour l'instant.",
     "historyOk": "Réussie",
-    "historyFailed": "Échouée"
+    "historyFailed": "Échouée",
+    "trendLabel": "Latence des {{count}} derniers tests, le plus récent à droite",
+    "trendPeak": "Le plus lent : {{ms}} ms"
   },
   "vpnCheck": {
     "valid": "La configuration VPN « {{name}} » est valide",
@@ -2351,7 +2353,8 @@
     "syncSessionUnavailable": "La session de synchronisation est inaccessible pour le moment.",
     "syncDisplayUnavailable": "La taille de l'écran n'a pas pu être lue, les fenêtres ne peuvent donc pas être rangées.",
     "syncDisplayTooSmall": "L'écran est trop petit pour {{windows}} fenêtres dans cette disposition.",
-    "syncArrangeFailed": "Aucune fenêtre n'a pu être déplacée."
+    "syncArrangeFailed": "Aucune fenêtre n'a pu être déplacée.",
+    "extensionPathInvalid": "Ce chemin n'est pas autorisé : il contient « .. »."
   },
   "rail": {
     "profiles": "Profils",
@@ -2368,7 +2371,9 @@
       "about": "À propos de Donut Browser",
       "aboutHint": "Version et informations sur l'application",
       "trash": "Corbeille",
-      "trashHint": "Restaurer des profils supprimés"
+      "trashHint": "Restaurer des profils supprimés",
+      "tips": "Astuces",
+      "tipsHint": "Découverte des fonctions"
     },
     "network": "Réseau",
     "integrations": "Intégrations",
@@ -2485,7 +2490,8 @@
     "goSettings": "Aller à Paramètres",
     "goCookieBot": "Cookie Bot",
     "goTrash": "Aller à la Corbeille",
-    "goAgent": "Aller à Agent"
+    "goAgent": "Aller à Agent",
+    "openTips": "Ouvrir les astuces"
   },
   "closeConfirm": {
     "title": "Fermer Donut Browser ?",
@@ -3368,5 +3374,143 @@
     "urlPlaceholder": "https://exemple.com",
     "folderPlaceholder": "Facultatif",
     "saved": "Favoris du groupe enregistrés"
+  },
+  "tips": {
+    "title": "Astuces",
+    "essentials": "Essentiels",
+    "planSection": "Inclus dans votre offre",
+    "count": "{{current}} sur {{total}}",
+    "previous": "Astuce précédente",
+    "next": "Astuce suivante",
+    "done": "Terminé",
+    "autoShow": "Afficher une astuce au démarrage de Donut",
+    "items": {
+      "dnsBlocklist": {
+        "label": "Blocage DNS",
+        "title": "Bloquez les publicités et les traqueurs avant leur chargement",
+        "body": "Chaque profil peut avoir sa propre liste de blocage DNS. Choisissez un niveau dans la colonne DNS du profil ; les niveaux élevés bloquent aussi les domaines de pistage et de logiciels malveillants au niveau du réseau.",
+        "action": "Ouvrir les réglages DNS"
+      },
+      "proxyCheck": {
+        "label": "Test de proxy",
+        "title": "Vérifiez un proxy avant de lancer",
+        "body": "Le test de connexion indique l'IP de sortie, le pays, la latence et si l'UDP passe. Lancez-le depuis la page Réseau ou une ligne de profil, et consultez l'historique des tests pour repérer un proxy qui se dégrade.",
+        "action": "Ouvrir Réseau"
+      },
+      "groups": {
+        "label": "Groupes",
+        "title": "Changez de groupe au clavier",
+        "body": "Les groupes rassemblent les profils liés, et chaque groupe reçoit un numéro : {{mod}}+1 à {{mod}}+9 change la liste instantanément.",
+        "action": "Ouvrir Groupes"
+      },
+      "commandPalette": {
+        "label": "Palette de commandes",
+        "title": "Chaque page est à un raccourci",
+        "body": "{{mod}}+K ouvre la palette de commandes. Tapez quelques lettres d'une page ou d'une action, puis appuyez sur Entrée.",
+        "action": "Ouvrir la palette"
+      },
+      "fingerprintGate": {
+        "label": "Contrôle d'empreinte",
+        "title": "Gardez l'empreinte cohérente avec la sortie",
+        "body": "Avant un lancement, Donut compare le fuseau horaire et la langue de la sortie du proxy avec l'empreinte du profil et bloque toute incohérence. Corrigez l'empreinte, ou désactivez le blocage dans Avancé si vous savez ce que vous faites.",
+        "action": "Ouvrir les réglages avancés"
+      },
+      "profilePassword": {
+        "label": "Mot de passe de profil",
+        "title": "Verrouillez un profil avec un mot de passe",
+        "body": "Un profil protégé par mot de passe est chiffré sur le disque et déchiffré uniquement pendant son exécution. Définissez le mot de passe depuis le menu du profil.",
+        "action": "Ouvrir Profils"
+      },
+      "clearOnClose": {
+        "label": "Effacer à la fermeture",
+        "title": "Repartez de zéro à chaque fois",
+        "body": "Avec Effacer à la fermeture, un profil abandonne ses cookies, son stockage et son historique quand sa fenêtre se ferme. Idéal pour les sessions ponctuelles et les machines partagées.",
+        "action": "Ouvrir Profils"
+      },
+      "defaultBrowser": {
+        "label": "Navigateur par défaut",
+        "title": "Ouvrez chaque lien dans le bon profil",
+        "body": "Faites de Donut votre navigateur par défaut et chaque lien venant d'une autre application demandera quel profil doit l'ouvrir.",
+        "action": "Ouvrir les réglages du navigateur par défaut"
+      },
+      "extensionGroups": {
+        "label": "Groupes d'extensions",
+        "title": "Partagez un même jeu d'extensions entre profils",
+        "body": "Placez les extensions dans un groupe d'extensions et assignez le groupe aux profils. Modifiez le groupe une fois et chaque profil suit à son prochain lancement.",
+        "action": "Ouvrir Extensions"
+      },
+      "selfHostedSync": {
+        "label": "Synchro auto-hébergée",
+        "title": "Sauvegardez sur votre propre serveur",
+        "body": "Pointez Donut vers un serveur donut-sync auto-hébergé et les profils, proxys et groupes s'y répliquent. Ajoutez un mot de passe de bout en bout et le serveur ne verra jamais que du texte chiffré.",
+        "action": "Ouvrir Compte"
+      },
+      "trash": {
+        "label": "Corbeille",
+        "title": "Les profils supprimés attendent dans la corbeille",
+        "body": "Un profil supprimé reste 30 jours dans la corbeille par défaut et revient avec tout son contenu. La durée de conservation se règle dans les réglages avancés.",
+        "action": "Ouvrir Corbeille"
+      },
+      "localApi": {
+        "label": "API et MCP",
+        "title": "Automatisez Donut depuis des scripts et des agents",
+        "body": "L'API REST locale et le serveur MCP permettent aux scripts et aux agents IA de lister, créer et configurer des profils. Activez-les dans Intégrations et copiez le jeton.",
+        "action": "Ouvrir Intégrations"
+      },
+      "importProfiles": {
+        "label": "Importer",
+        "title": "Importez des profils depuis Chrome, Edge ou Brave",
+        "body": "L'import copie les cookies, les identifiants et les extensions d'un profil Chromium ou d'une archive vers un nouveau profil Donut, prêt à lancer.",
+        "action": "Ouvrir Importer"
+      },
+      "cloudBackup": {
+        "label": "Synchro cloud",
+        "title": "Vos profils sur tous vos appareils",
+        "body": "La synchronisation cloud sauvegarde les profils, proxys et groupes et les restaure sur une autre machine. Activez-la par profil depuis la colonne de synchronisation.",
+        "action": "Ouvrir Compte"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "Chauffez vos profils pendant la nuit",
+        "body": "Cookie Bot navigue sur de vrais sites selon un planning depuis un hôte distant, pour qu'un profil neuf se construise un historique naturel avant que vous l'utilisiez.",
+        "action": "Ouvrir Cookie Bot"
+      },
+      "crossOs": {
+        "label": "Empreinte multi-OS",
+        "title": "Présentez-vous sous n'importe quel système",
+        "body": "Une empreinte multi-OS permet à un profil d'annoncer macOS, Windows ou Linux quelle que soit la machine. Choisissez la plateforme à la création ou à la modification de l'empreinte.",
+        "action": "Ouvrir Profils"
+      },
+      "automation": {
+        "label": "Automatisation",
+        "title": "Lancez et pilotez des profils depuis du code",
+        "body": "Les points de terminaison run, open-url et kill démarrent de vrais profils depuis vos scripts, et chaque profil lancé expose un point de terminaison CDP pour Playwright ou Puppeteer.",
+        "action": "Ouvrir Intégrations"
+      },
+      "agent": {
+        "label": "Agent",
+        "title": "Confiez les clics à un agent",
+        "body": "Décrivez une tâche et l'agent pilote un profil étape par étape, enregistre ce qu'il a fait et peut le rejouer comme une recette.",
+        "action": "Ouvrir Agent"
+      },
+      "team": {
+        "label": "Verrous d'équipe",
+        "title": "Partagez des profils sans collision",
+        "body": "Dans une équipe, un profil en cours d'exécution est verrouillé pour les autres et libéré à sa fermeture. La page Compte montre qui détient quoi.",
+        "action": "Ouvrir Compte"
+      },
+      "remoteControl": {
+        "label": "Contrôle à distance",
+        "title": "Pilotez ce poste depuis donutbrowser.com",
+        "body": "Avec le contrôle à distance activé, les agents du site web atteignent les profils de cette machine par un pont sortant. Activez-le dans Intégrations.",
+        "action": "Ouvrir Intégrations"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "Bienvenue dans {{plan}}",
+    "body": "Votre offre vient de débloquer ceci. Chaque astuce montre une fonction en action.",
+    "cta": "Montrez-moi",
+    "later": "Plus tard"
   }
 }

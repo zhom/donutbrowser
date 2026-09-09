@@ -711,7 +711,7 @@ impl ProfileImporter {
       .collect();
 
     let total = items.len();
-    let mut results = Vec::with_capacity(total);
+    let mut results = Vec::new();
     let mut imported_count = 0usize;
     let mut skipped_count = 0usize;
     let mut failed_count = 0usize;
@@ -857,10 +857,10 @@ impl ProfileImporter {
 
     let profile_id = uuid::Uuid::new_v4();
     let profiles_dir = self.profile_manager.get_profiles_dir();
-    let new_profile_uuid_dir = profiles_dir.join(profile_id.to_string());
-    let new_profile_data_dir = new_profile_uuid_dir.join("profile");
+    let new_profile_dir = profiles_dir.join(profile_id.to_string());
+    let new_profile_data_dir = new_profile_dir.join("profile");
 
-    create_dir_all(&new_profile_uuid_dir)?;
+    create_dir_all(&new_profile_dir)?;
     create_dir_all(&new_profile_data_dir)?;
 
     // Profile dirs can be multiple GB and the migration hits SQLite and the
@@ -884,7 +884,7 @@ impl ProfileImporter {
         // every other error path here, or the half-copied — possibly multi-GB
         // — directory is orphaned with no metadata pointing at it, so nothing
         // ever reclaims it.
-        let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+        let _ = fs::remove_dir_all(&new_profile_dir);
         return Err(
           serde_json::json!({
             "code": "INTERNAL_ERROR",
@@ -898,7 +898,7 @@ impl ProfileImporter {
     let report = match migrate_result {
       Ok(report) => report,
       Err(e) => {
-        let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+        let _ = fs::remove_dir_all(&new_profile_dir);
         // Structured codes (an unimportable source, a running browser) pass
         // through so the frontend can translate them; anything else is
         // internal.
@@ -915,7 +915,7 @@ impl ProfileImporter {
     let version = match self.get_default_version_for_browser(mapped) {
       Ok(version) => version,
       Err(e) => {
-        let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+        let _ = fs::remove_dir_all(&new_profile_dir);
         return Err(e);
       }
     };
@@ -1013,7 +1013,7 @@ impl ProfileImporter {
             };
           }
           Err(e) => {
-            let _ = fs::remove_dir_all(&new_profile_uuid_dir);
+            let _ = fs::remove_dir_all(&new_profile_dir);
             return Err(
               serde_json::json!({
                 "code": "INTERNAL_ERROR",
@@ -1099,9 +1099,9 @@ impl ProfileImporter {
         new_profile_name,
         source_path.display(),
         report.cookies_migrated,
-        report.passwords_migrated,
+        report.logins_migrated,
         report.history_entries,
-        report.cookies_unrecoverable + report.passwords_unrecoverable,
+        report.cookies_unrecoverable + report.logins_unrecoverable,
         report.warnings
       );
     }

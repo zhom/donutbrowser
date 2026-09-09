@@ -39,6 +39,43 @@ static UUID_RE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("valid UUID regex")
 });
 
+/// A caller-supplied string as it may appear in a log line: control
+/// characters, a newline above all, are shown escaped, so no request can
+/// forge a second log entry or hide the end of the real one.
+pub struct Plain<'a>(pub &'a str);
+
+impl std::fmt::Display for Plain<'_> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use std::fmt::Write;
+    for c in self.0.chars() {
+      if c.is_control() {
+        for escaped in c.escape_default() {
+          f.write_char(escaped)?;
+        }
+      } else {
+        f.write_char(c)?;
+      }
+    }
+    Ok(())
+  }
+}
+
+/// The first characters of an identifier: enough to match log lines up by
+/// eye, and not the whole value, which for a session is a bearer of sorts.
+pub struct ShortId<'a>(pub &'a str);
+
+impl std::fmt::Display for ShortId<'_> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    const SHOWN: usize = 8;
+    let shown: String = Plain(self.0).to_string().chars().take(SHOWN).collect();
+    f.write_str(&shown)?;
+    if self.0.chars().count() > SHOWN {
+      f.write_str("\u{2026}")?;
+    }
+    Ok(())
+  }
+}
+
 pub fn url_label(value: &str) -> String {
   url::Url::parse(value)
     .map(|parsed| format!("{}://<redacted>", parsed.scheme()))
@@ -65,6 +102,22 @@ pub fn text(value: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn plain_escapes_every_control_character() {
+    assert_eq!(Plain("wayfern").to_string(), "wayfern");
+    assert_eq!(
+      Plain("1.0\nINFO forged line\r\t").to_string(),
+      "1.0\\nINFO forged line\\r\\t"
+    );
+  }
+
+  #[test]
+  fn short_id_keeps_a_prefix_and_marks_the_cut() {
+    assert_eq!(ShortId("abcdef").to_string(), "abcdef");
+    assert_eq!(ShortId("0123456789abcdef").to_string(), "01234567\u{2026}");
+    assert_eq!(ShortId("ab\ncd").to_string(), "ab\\ncd");
+  }
 
   #[test]
   fn redacts_sensitive_log_content() {

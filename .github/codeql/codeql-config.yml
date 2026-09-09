@@ -1,0 +1,16 @@
+name: "Donut Browser CodeQL configuration"
+
+queries:
+  - uses: security-extended
+
+# Test and tooling code is not shipped. Its literals are test vectors and
+# fixtures, and the E2E harness downloads its own driver and browser bundle,
+# which the scanner reads as production secrets and untrusted writes.
+paths-ignore:
+  - e2e
+  - src-tauri/tests
+  - "**/*_tests.rs"
+  - "**/*.test.mjs"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.spec.ts"

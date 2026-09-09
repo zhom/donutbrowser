@@ -31,6 +31,7 @@ export interface ShortcutDef {
 export type ShortcutId =
   | "openPalette"
   | "openShortcuts"
+  | "openTips"
   | "importProfile"
   | "goProfiles"
   | "goProxies"
@@ -58,6 +59,15 @@ export const SHORTCUTS: ShortcutDef[] = [
     group: "actions",
     key: "/",
     mod: true,
+  },
+  {
+    // Mod+Shift+H, "hints". Plain Mod+H hides the window on macOS.
+    id: "openTips",
+    labelKey: "shortcuts.openTips",
+    group: "actions",
+    key: "h",
+    mod: true,
+    shift: true,
   },
   {
     id: "importProfile",

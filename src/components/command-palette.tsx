@@ -12,6 +12,7 @@ import {
   LuCookie,
   LuInfo,
   LuKeyboard,
+  LuLightbulb,
   LuPlay,
   LuPlug,
   LuPlus,
@@ -65,6 +66,7 @@ interface CommandPaletteProps {
 const ICONS: Record<ShortcutId, React.ComponentType<{ className?: string }>> = {
   openPalette: LuKeyboard,
   openShortcuts: LuKeyboard,
+  openTips: LuLightbulb,
   importProfile: FaDownload,
   goProfiles: LuUser,
   goProxies: FiWifi,

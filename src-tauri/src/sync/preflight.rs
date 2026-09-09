@@ -282,7 +282,7 @@ mod tests {
     // Exercises the real probe against a host that cannot resolve, which is
     // what a container-only endpoint looks like from the desktop.
     let client = probe_client();
-    let error = probe_storage_endpoint(&client, "http://minio.invalid:9000")
+    let error = probe_storage_endpoint(&client, "https://minio.invalid:9000")
       .await
       .expect_err("an unresolvable host must not report as reachable");
     assert!(
@@ -313,7 +313,7 @@ mod tests {
     // names and a bare "connection failed", and could not tell that the host
     // their server had signed into every URL was one only the server could
     // resolve.
-    let url = "http://minio.invalid:9000/donut/profiles/p1/Cookies?X-Amz-Signature=abc";
+    let url = "https://minio.invalid:9000/donut/profiles/p1/Cookies?X-Amz-Signature=abc";
     let error = probe_client()
       .put(url)
       .body(b"payload".to_vec())

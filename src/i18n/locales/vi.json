@@ -1982,7 +1982,9 @@
     "historyTitle": "Các lần kiểm tra gần đây",
     "historyEmpty": "Chưa có lần kiểm tra nào được ghi lại.",
     "historyOk": "Đạt",
-    "historyFailed": "Thất bại"
+    "historyFailed": "Thất bại",
+    "trendLabel": "Độ trễ của {{count}} lần kiểm tra gần nhất, mới nhất ở bên phải",
+    "trendPeak": "Chậm nhất: {{ms}} ms"
   },
   "vpnCheck": {
     "valid": "Cấu hình VPN \"{{name}}\" hợp lệ",
@@ -2341,7 +2343,8 @@
     "syncSessionUnavailable": "Hiện không truy cập được phiên đồng bộ.",
     "syncDisplayUnavailable": "Không đọc được kích thước màn hình nên không xếp được cửa sổ.",
     "syncDisplayTooSmall": "Màn hình quá nhỏ cho {{windows}} cửa sổ theo cách xếp đó.",
-    "syncArrangeFailed": "Không cửa sổ nào được di chuyển."
+    "syncArrangeFailed": "Không cửa sổ nào được di chuyển.",
+    "extensionPathInvalid": "Đường dẫn đó không được phép: nó chứa '..'."
   },
   "rail": {
     "profiles": "Profile",
@@ -2358,7 +2361,9 @@
       "about": "Giới thiệu về Donut Browser",
       "aboutHint": "Phiên bản và thông tin ứng dụng",
       "trash": "Thùng rác",
-      "trashHint": "Khôi phục hồ sơ đã xóa"
+      "trashHint": "Khôi phục hồ sơ đã xóa",
+      "tips": "Mẹo",
+      "tipsHint": "Hướng dẫn tính năng"
     },
     "network": "Mạng",
     "integrations": "Tích hợp",
@@ -2475,7 +2480,8 @@
     "goSettings": "Đi đến Cài đặt",
     "goCookieBot": "Cookie Bot",
     "goTrash": "Đi tới Thùng rác",
-    "goAgent": "Đến Tác nhân"
+    "goAgent": "Đến Tác nhân",
+    "openTips": "Mở mẹo"
   },
   "closeConfirm": {
     "title": "Đóng Donut Browser?",
@@ -3335,5 +3341,143 @@
     "urlPlaceholder": "https://vidu.com",
     "folderPlaceholder": "Tùy chọn",
     "saved": "Đã lưu dấu trang của nhóm"
+  },
+  "tips": {
+    "title": "Mẹo",
+    "essentials": "Cơ bản",
+    "planSection": "Có trong gói của bạn",
+    "count": "{{current}} / {{total}}",
+    "previous": "Mẹo trước",
+    "next": "Mẹo tiếp theo",
+    "done": "Xong",
+    "autoShow": "Hiện một mẹo khi Donut khởi động",
+    "items": {
+      "dnsBlocklist": {
+        "label": "Chặn DNS",
+        "title": "Chặn quảng cáo và trình theo dõi trước khi tải",
+        "body": "Mỗi hồ sơ có thể mang danh sách chặn DNS riêng. Chọn một mức trong cột DNS của hồ sơ; các mức cao hơn còn chặn tên miền theo dõi và mã độc ngay ở tầng mạng.",
+        "action": "Mở cài đặt DNS"
+      },
+      "proxyCheck": {
+        "label": "Kiểm tra proxy",
+        "title": "Kiểm tra proxy trước khi khởi chạy",
+        "body": "Kiểm tra kết nối cho biết IP đầu ra, quốc gia, độ trễ và UDP có đi qua hay không. Chạy từ trang Mạng hoặc từ một hàng hồ sơ, và xem lịch sử kiểm tra để phát hiện proxy đang xuống cấp.",
+        "action": "Mở Mạng"
+      },
+      "groups": {
+        "label": "Nhóm",
+        "title": "Chuyển nhóm bằng bàn phím",
+        "body": "Nhóm giữ các hồ sơ liên quan ở cùng nhau, và mỗi nhóm có một số: {{mod}}+1 đến {{mod}}+9 chuyển danh sách ngay lập tức.",
+        "action": "Mở Nhóm"
+      },
+      "commandPalette": {
+        "label": "Bảng lệnh",
+        "title": "Mọi trang chỉ cách một tổ hợp phím",
+        "body": "{{mod}}+K mở bảng lệnh. Gõ vài chữ cái của một trang hoặc thao tác rồi nhấn Enter.",
+        "action": "Mở bảng lệnh"
+      },
+      "fingerprintGate": {
+        "label": "Kiểm tra dấu vân tay",
+        "title": "Giữ dấu vân tay khớp với điểm ra",
+        "body": "Trước khi khởi chạy, Donut so sánh múi giờ và ngôn ngữ của điểm ra proxy với dấu vân tay của hồ sơ và chặn khi không khớp. Hãy sửa dấu vân tay, hoặc tắt kiểm tra trong Nâng cao nếu bạn biết mình đang làm gì.",
+        "action": "Mở cài đặt nâng cao"
+      },
+      "profilePassword": {
+        "label": "Mật khẩu hồ sơ",
+        "title": "Khóa hồ sơ bằng mật khẩu",
+        "body": "Hồ sơ được bảo vệ bằng mật khẩu được mã hóa trên đĩa và chỉ được giải mã khi đang chạy. Đặt mật khẩu từ menu của hồ sơ.",
+        "action": "Mở Hồ sơ"
+      },
+      "clearOnClose": {
+        "label": "Xóa khi đóng",
+        "title": "Bắt đầu sạch sẽ mỗi lần",
+        "body": "Với Xóa khi đóng, hồ sơ bỏ cookie, bộ nhớ và lịch sử khi cửa sổ của nó đóng lại. Phù hợp cho phiên dùng một lần và máy dùng chung.",
+        "action": "Mở Hồ sơ"
+      },
+      "defaultBrowser": {
+        "label": "Trình duyệt mặc định",
+        "title": "Mở mọi liên kết trong đúng hồ sơ",
+        "body": "Đặt Donut làm trình duyệt mặc định và mỗi liên kết từ ứng dụng khác sẽ hỏi nên mở bằng hồ sơ nào.",
+        "action": "Mở cài đặt trình duyệt mặc định"
+      },
+      "extensionGroups": {
+        "label": "Nhóm tiện ích",
+        "title": "Dùng chung một bộ tiện ích cho nhiều hồ sơ",
+        "body": "Đưa tiện ích vào một nhóm tiện ích và gán nhóm đó cho các hồ sơ. Đổi nhóm một lần và mọi hồ sơ sẽ theo ở lần khởi chạy tiếp theo.",
+        "action": "Mở Tiện ích"
+      },
+      "selfHostedSync": {
+        "label": "Đồng bộ tự lưu trữ",
+        "title": "Sao lưu lên máy chủ của riêng bạn",
+        "body": "Trỏ Donut đến máy chủ donut-sync tự lưu trữ và hồ sơ, proxy, nhóm sẽ được phản chiếu lên đó. Thêm mật khẩu đầu cuối và máy chủ chỉ thấy văn bản đã mã hóa.",
+        "action": "Mở Tài khoản"
+      },
+      "trash": {
+        "label": "Thùng rác",
+        "title": "Hồ sơ đã xóa chờ trong thùng rác",
+        "body": "Hồ sơ đã xóa nằm trong thùng rác 30 ngày theo mặc định và quay lại với đầy đủ nội dung. Thời gian lưu giữ nằm trong cài đặt nâng cao.",
+        "action": "Mở Thùng rác"
+      },
+      "localApi": {
+        "label": "API và MCP",
+        "title": "Tự động hóa Donut từ script và tác nhân",
+        "body": "REST API cục bộ và máy chủ MCP cho phép script và tác nhân AI liệt kê, tạo và cấu hình hồ sơ. Bật chúng trong Tích hợp và sao chép mã thông báo.",
+        "action": "Mở Tích hợp"
+      },
+      "importProfiles": {
+        "label": "Nhập",
+        "title": "Mang hồ sơ từ Chrome, Edge hoặc Brave sang",
+        "body": "Nhập sao chép cookie, thông tin đăng nhập và tiện ích từ hồ sơ Chromium hoặc tệp nén vào một hồ sơ Donut mới, sẵn sàng khởi chạy.",
+        "action": "Mở Nhập"
+      },
+      "cloudBackup": {
+        "label": "Đồng bộ đám mây",
+        "title": "Hồ sơ của bạn trên mọi thiết bị",
+        "body": "Đồng bộ đám mây sao lưu hồ sơ, proxy và nhóm rồi khôi phục trên máy khác. Bật cho từng hồ sơ từ cột đồng bộ.",
+        "action": "Mở Tài khoản"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "Làm nóng hồ sơ qua đêm",
+        "body": "Cookie Bot duyệt các trang thật theo lịch từ một máy chủ từ xa, để hồ sơ mới tích lũy lịch sử tự nhiên trước khi bạn dùng.",
+        "action": "Mở Cookie Bot"
+      },
+      "crossOs": {
+        "label": "Dấu vân tay đa hệ điều hành",
+        "title": "Xuất hiện như bất kỳ hệ điều hành nào",
+        "body": "Dấu vân tay đa hệ điều hành cho phép hồ sơ báo là macOS, Windows hoặc Linux dù chạy trên máy nào. Chọn nền tảng khi tạo hoặc chỉnh sửa dấu vân tay.",
+        "action": "Mở Hồ sơ"
+      },
+      "automation": {
+        "label": "Tự động hóa",
+        "title": "Khởi chạy và điều khiển hồ sơ từ mã",
+        "body": "Các điểm cuối run, open-url và kill khởi động hồ sơ thật từ script của bạn, và mỗi hồ sơ đã khởi chạy cung cấp một điểm cuối CDP cho Playwright hoặc Puppeteer.",
+        "action": "Mở Tích hợp"
+      },
+      "agent": {
+        "label": "Tác nhân",
+        "title": "Giao việc nhấp chuột cho tác nhân",
+        "body": "Mô tả một nhiệm vụ và tác nhân sẽ điều khiển hồ sơ từng bước, ghi lại những gì đã làm và có thể phát lại như một công thức.",
+        "action": "Mở Tác nhân"
+      },
+      "team": {
+        "label": "Khóa nhóm",
+        "title": "Chia sẻ hồ sơ mà không xung đột",
+        "body": "Trong nhóm, hồ sơ đang chạy bị khóa với mọi người khác và được giải phóng khi đóng. Trang Tài khoản cho biết ai đang giữ gì.",
+        "action": "Mở Tài khoản"
+      },
+      "remoteControl": {
+        "label": "Điều khiển từ xa",
+        "title": "Điều khiển máy này từ donutbrowser.com",
+        "body": "Khi bật điều khiển từ xa, các tác nhân trên trang web tiếp cận hồ sơ của máy này qua một cầu nối đi ra. Bật trong Tích hợp.",
+        "action": "Mở Tích hợp"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "Chào mừng đến với {{plan}}",
+    "body": "Gói của bạn vừa mở khóa những tính năng này. Mỗi mẹo cho thấy một tính năng đang hoạt động.",
+    "cta": "Cho tôi xem",
+    "later": "Để sau"
   }
 }

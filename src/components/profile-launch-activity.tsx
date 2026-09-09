@@ -45,6 +45,7 @@ export function ProfileLaunchActivity({
       <OperationFlow
         label={t("appFeedback.launchActivity")}
         active={active}
+        busy={!terminal}
         failed={current.stage === "failed"}
         steps={[
           {

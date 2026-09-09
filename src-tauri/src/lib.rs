@@ -121,6 +121,7 @@ mod mcp_remote;
 mod mcp_server;
 mod tag_manager;
 mod team_lock;
+mod vault;
 mod version_updater;
 pub mod vpn;
 mod vpn_extension_detect;
@@ -167,8 +168,9 @@ use downloader::{cancel_download, download_browser};
 use settings_manager::{
   complete_onboarding, dismiss_window_resize_warning, get_app_settings, get_onboarding_completed,
   get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
-  get_window_resize_warning_dismissed, open_log_directory, read_log_files, save_app_settings,
-  save_sync_settings, save_table_sorting_settings,
+  get_tips_state, get_window_resize_warning_dismissed, mark_tip_seen, observe_cloud_plan,
+  open_log_directory, read_log_files, save_app_settings, save_sync_settings,
+  save_table_sorting_settings, set_tips_auto_show,
 };
 
 use sync::{
@@ -3480,6 +3482,10 @@ pub fn run_with_builder(
       get_window_resize_warning_dismissed,
       get_onboarding_completed,
       complete_onboarding,
+      get_tips_state,
+      mark_tip_seen,
+      set_tips_auto_show,
+      observe_cloud_plan,
       data_root::get_data_root_info,
       data_root::move_data_root,
       data_root::clear_data_root_choice,

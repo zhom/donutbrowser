@@ -19,7 +19,9 @@ use base64::{
 /// silently lock every user out of their encrypted data, so the defaults are
 /// pinned by the test below rather than trusted.
 pub fn derive_vault_key(password: &[u8], salt: &[u8]) -> Result<[u8; 32], String> {
-  let mut key = [0u8; 32];
+  // Filled by the KDF. It starts as noise rather than zeros so that no
+  // failure path can ever hand back an all-zero key.
+  let mut key: [u8; 32] = rand::rng().random();
   Argon2::default()
     .hash_password_into(password, salt, &mut key)
     .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
@@ -42,9 +44,6 @@ use rand::RngExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-const E2E_FILE_HEADER: &[u8] = b"DBE2E";
-const E2E_FILE_VERSION: u8 = 1;
-
 /// Argon2id is intentionally expensive (~80–150 ms per call). During an
 /// encryption rollover, every synced entity (proxy, group, vpn, extension,
 /// extension group, profile metadata) goes through `derive_profile_key`,
@@ -61,10 +60,7 @@ fn password_fingerprint(pwd: &str) -> [u8; 32] {
   use sha2::{Digest, Sha256};
   let mut hasher = Sha256::new();
   hasher.update(pwd.as_bytes());
-  let result = hasher.finalize();
-  let mut out = [0u8; 32];
-  out.copy_from_slice(&result);
-  out
+  hasher.finalize().into()
 }
 
 fn invalidate_key_cache() {
@@ -77,122 +73,16 @@ fn get_e2e_password_path() -> std::path::PathBuf {
   crate::app_dirs::settings_dir().join("e2e_password.dat")
 }
 
-fn get_vault_password() -> String {
-  env!("DONUT_BROWSER_VAULT_PASSWORD").to_string()
-}
+/// Header plus layout version of the sync password file.
+const E2E_MAGIC: [u8; 6] = *b"DBE2E\x01";
 
 pub fn store_e2e_password(password: &str) -> Result<(), String> {
   invalidate_key_cache();
-  let file_path = get_e2e_password_path();
-
-  if let Some(parent) = file_path.parent() {
-    std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
-  }
-
-  let vault_password = get_vault_password();
-  let salt_bytes: [u8; 16] = rand::rng().random();
-  let salt = encode_salt(&salt_bytes);
-  let key_bytes = derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
-  let key = Key::<Aes256Gcm>::from(key_bytes);
-  let cipher = Aes256Gcm::new(&key);
-  let nonce_bytes: [u8; 12] = rand::rng().random();
-  let nonce = aes_gcm::Nonce::from(nonce_bytes);
-
-  let ciphertext = cipher
-    .encrypt(&nonce, password.as_bytes())
-    .map_err(|e| format!("Encryption failed: {e}"))?;
-
-  let mut file_data = Vec::new();
-  file_data.extend_from_slice(E2E_FILE_HEADER);
-  file_data.push(E2E_FILE_VERSION);
-
-  let salt_str = salt.as_str();
-  file_data.push(salt_str.len() as u8);
-  file_data.extend_from_slice(salt_str.as_bytes());
-  file_data.extend_from_slice(&nonce);
-  file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
-  file_data.extend_from_slice(&ciphertext);
-
-  std::fs::write(&file_path, file_data)
-    .map_err(|e| format!("Failed to write e2e password file: {e}"))?;
-  crate::app_dirs::restrict_to_owner(std::path::Path::new(&file_path));
-
-  Ok(())
+  crate::vault::seal(&get_e2e_password_path(), &E2E_MAGIC, password)
 }
 
 pub fn load_e2e_password() -> Result<Option<String>, String> {
-  let file_path = get_e2e_password_path();
-  if !file_path.exists() {
-    return Ok(None);
-  }
-
-  let file_data =
-    std::fs::read(&file_path).map_err(|e| format!("Failed to read e2e password file: {e}"))?;
-
-  if file_data.len() < E2E_FILE_HEADER.len() + 1 {
-    return Ok(None);
-  }
-
-  if &file_data[..E2E_FILE_HEADER.len()] != E2E_FILE_HEADER {
-    return Ok(None);
-  }
-
-  let version = file_data[E2E_FILE_HEADER.len()];
-  if version != E2E_FILE_VERSION {
-    return Ok(None);
-  }
-
-  let mut offset = E2E_FILE_HEADER.len() + 1;
-
-  if offset >= file_data.len() {
-    return Ok(None);
-  }
-  let salt_len = file_data[offset] as usize;
-  offset += 1;
-
-  if offset + salt_len > file_data.len() {
-    return Ok(None);
-  }
-  let salt_str = std::str::from_utf8(&file_data[offset..offset + salt_len])
-    .map_err(|_| "Invalid salt encoding")?;
-  offset += salt_len;
-
-  let salt_bytes = decode_salt(salt_str)?;
-
-  if offset + 12 > file_data.len() {
-    return Ok(None);
-  }
-  let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
-    .try_into()
-    .map_err(|_| "Invalid nonce")?;
-  let nonce = aes_gcm::Nonce::from(nonce_bytes);
-  offset += 12;
-
-  if offset + 4 > file_data.len() {
-    return Ok(None);
-  }
-  let ciphertext_len =
-    u32::from_le_bytes(file_data[offset..offset + 4].try_into().unwrap()) as usize;
-  offset += 4;
-
-  if offset + ciphertext_len > file_data.len() {
-    return Ok(None);
-  }
-  let ciphertext = &file_data[offset..offset + ciphertext_len];
-
-  let vault_password = get_vault_password();
-  let key_bytes = derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
-  let key = Key::<Aes256Gcm>::from(key_bytes);
-  let cipher = Aes256Gcm::new(&key);
-
-  let plaintext = cipher
-    .decrypt(&nonce, ciphertext)
-    .map_err(|e| format!("Decryption failed: {e}"))?;
-
-  let password =
-    String::from_utf8(plaintext).map_err(|e| format!("Invalid UTF-8 in password: {e}"))?;
-
-  Ok(Some(password))
+  crate::vault::open(&get_e2e_password_path(), &E2E_MAGIC)
 }
 
 pub fn has_e2e_password() -> bool {
@@ -381,138 +271,9 @@ async fn enforce_team_owner_for_encryption_change() -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_encrypt_decrypt_roundtrip() {
-    let key = [42u8; 32];
-    let plaintext = b"Hello, World!";
-    let encrypted = encrypt_bytes(&key, plaintext).unwrap();
-    let decrypted = decrypt_bytes(&key, &encrypted).unwrap();
-    assert_eq!(decrypted, plaintext);
-  }
-
-  #[test]
-  fn test_encrypt_decrypt_empty_data() {
-    let key = [1u8; 32];
-    let plaintext = b"";
-    let encrypted = encrypt_bytes(&key, plaintext).unwrap();
-    let decrypted = decrypt_bytes(&key, &encrypted).unwrap();
-    assert_eq!(decrypted, plaintext.to_vec());
-  }
-
-  #[test]
-  fn test_encrypt_decrypt_large_data() {
-    let key = [7u8; 32];
-    let plaintext = vec![0xABu8; 1_048_576]; // 1MB
-    let encrypted = encrypt_bytes(&key, &plaintext).unwrap();
-    let decrypted = decrypt_bytes(&key, &encrypted).unwrap();
-    assert_eq!(decrypted, plaintext);
-  }
-
-  #[test]
-  fn test_different_keys_different_ciphertext() {
-    let key1 = [1u8; 32];
-    let key2 = [2u8; 32];
-    let plaintext = b"same data";
-    let encrypted1 = encrypt_bytes(&key1, plaintext).unwrap();
-    let encrypted2 = encrypt_bytes(&key2, plaintext).unwrap();
-    // Nonces are random so ciphertexts will differ regardless,
-    // but decrypting with wrong key should fail
-    assert!(decrypt_bytes(&key2, &encrypted1).is_err());
-    assert!(decrypt_bytes(&key1, &encrypted2).is_err());
-  }
-
-  #[test]
-  fn test_nonce_uniqueness() {
-    let key = [5u8; 32];
-    let plaintext = b"same data encrypted twice";
-    let encrypted1 = encrypt_bytes(&key, plaintext).unwrap();
-    let encrypted2 = encrypt_bytes(&key, plaintext).unwrap();
-    // Different nonces should produce different ciphertext
-    assert_ne!(encrypted1, encrypted2);
-    // But both should decrypt to the same plaintext
-    assert_eq!(
-      decrypt_bytes(&key, &encrypted1).unwrap(),
-      decrypt_bytes(&key, &encrypted2).unwrap()
-    );
-  }
-
-  #[test]
-  fn test_wrong_key_fails() {
-    let key = [10u8; 32];
-    let wrong_key = [20u8; 32];
-    let plaintext = b"secret data";
-    let encrypted = encrypt_bytes(&key, plaintext).unwrap();
-    assert!(decrypt_bytes(&wrong_key, &encrypted).is_err());
-  }
-
-  #[test]
-  fn test_key_derivation_deterministic() {
-    let salt = generate_salt();
-    let key1 = derive_profile_key("my_password", &salt).unwrap();
-    let key2 = derive_profile_key("my_password", &salt).unwrap();
-    assert_eq!(key1, key2);
-  }
-
-  #[test]
-  fn test_key_derivation_different_salts() {
-    let salt1 = generate_salt();
-    let salt2 = generate_salt();
-    let key1 = derive_profile_key("my_password", &salt1).unwrap();
-    let key2 = derive_profile_key("my_password", &salt2).unwrap();
-    assert_ne!(key1, key2);
-  }
-
-  #[test]
-  fn test_salt_generation_unique() {
-    let salt1 = generate_salt();
-    let salt2 = generate_salt();
-    assert_ne!(salt1, salt2);
-  }
-
-  #[test]
-  fn test_password_storage_roundtrip() {
-    let password = "test_password_12345";
-    store_e2e_password(password).unwrap();
-    assert!(has_e2e_password());
-    let loaded = load_e2e_password().unwrap();
-    assert_eq!(loaded, Some(password.to_string()));
-    remove_e2e_password().unwrap();
-    assert!(!has_e2e_password());
-  }
-
-  #[test]
-  fn test_decrypt_too_short_data() {
-    let key = [1u8; 32];
-    assert!(decrypt_bytes(&key, &[0u8; 5]).is_err());
-  }
-}
+#[path = "encryption_tests.rs"]
+mod tests;
 
 #[cfg(test)]
-mod vault_key_tests {
-  use super::{decode_salt, derive_vault_key, encode_salt};
-
-  /// A stored vault is only readable while this vector holds. It pins the
-  /// Argon2id parameters and the salt encoding together: a dependency bump
-  /// that changed either would fail here instead of at the user's data.
-  #[test]
-  fn vault_key_derivation_is_pinned() {
-    let key = derive_vault_key(b"correct horse battery staple", &[7u8; 16]).unwrap();
-    let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
-    assert_eq!(
-      hex,
-      "799f12b9e17710824482d829835acb69f5a9355bf774c4f07342823b11b90928"
-    );
-  }
-
-  #[test]
-  fn salt_encoding_round_trips_without_padding() {
-    let salt = [0u8, 1, 2, 3, 250, 251, 252, 253, 254, 255, 9, 8, 7, 6, 5, 4];
-    let encoded = encode_salt(&salt);
-    assert!(!encoded.contains('='), "PHC B64 carries no padding");
-    assert_eq!(decode_salt(&encoded).unwrap(), salt);
-    assert!(decode_salt("not*valid").is_err());
-  }
-}
+#[path = "encryption_vault_key_tests.rs"]
+mod vault_key_tests;

@@ -32,6 +32,7 @@ donutbrowser/
 ├── src/                              # Next.js frontend
 │   ├── app/                          # App router (page.tsx, layout.tsx)
 │   ├── components/                   # 50+ React components (dialogs, tables, UI)
+│   │   └── tips/                     # Feature tips: SVG scene primitives and one looping scene per tip
 │   ├── hooks/                        # Event-driven React hooks
 │   ├── i18n/locales/                 # Translations (en, es, fr, ja, ko, pt, ru, tr, vi, zh)
 │   ├── generated/                    # Build-generated third-party license inventory
@@ -60,7 +61,8 @@ donutbrowser/
 │   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management
 │   │   ├── downloader.rs           # Browser binary downloader
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)
-│   │   ├── settings_manager.rs     # App settings persistence
+│   │   ├── settings_manager.rs     # App settings persistence (atomic writes), tips + paid-welcome state
+│   │   ├── vault.rs                # Per-install key that seals local secrets; opens legacy build-password seals once
 │   │   ├── data_root.rs            # Moving the data directory (copy, verify, then delete) + the pointer read at startup
 │   │   ├── cookie_manager.rs       # Cookie import/export
 │   │   ├── profile_importer.rs     # Bulk profile import (Chromium-family detection, ZIP, batch)
@@ -269,6 +271,42 @@ When a tabbed sub-page dialog needs to be opened to a specific tab by an externa
 ```
 
 Reference implementations: `proxy-management-dialog.tsx`, `extension-management-dialog.tsx`, `integrations-dialog.tsx`. The owning page in `src/app/page.tsx` keeps one piece of `useState` per dialog (`proxyManagementInitialTab`, `extensionManagementInitialTab`, `integrationsInitialTab`) and flips it on repeated shortcut presses.
+
+## Feature tips and the paid welcome
+
+Tips are short feature walkthroughs: a looping SVG scene, a title, two or
+three lines of copy, and a button into the feature. The catalog is
+`src/lib/tips.ts` (ids, deep-link actions, the plan capability a tip needs);
+scenes live in `src/components/tips/scenes-*.tsx` and are mapped in
+`scene-for.tsx`; the dialog is `src/components/tips-dialog.tsx`; the flow
+(what to open when) is `src/hooks/use-tips.ts`. State (`tips_auto_show`,
+`tips_seen`, `tips_last_auto_shown_at`, `paid_welcome_seen_for`,
+`cloud_plan_memory`) is in `AppSettings`, behind the `get_tips_state`,
+`mark_tip_seen`, `set_tips_auto_show` and `observe_cloud_plan` commands.
+
+- One unseen tip opens by itself at most once a day, only after a settled
+  launch (onboarding done, terms accepted, nothing modal open), never in the
+  first-run session. The E2E harness seeds `tips_auto_show: false`; a test
+  that wants the automatic tip passes `settings: { tips_auto_show: true }`.
+- Plan tips carry `requires`; they are listed only when the signed-in plan
+  grants the capability. The paid welcome opens once per account when the
+  backend sees it turn paid (free -> paid, or a paid account first seen right
+  after signing in); `paid_welcome_due` in `settings_manager.rs` is the rule.
+- Adding a tip: append to `TIPS`, write the scene, add
+  `tips.items.<id>.{label,title,body,action}` to every locale, and run
+  `pnpm test:tips`, which checks every locale carries every tip.
+- Scenes are decorative and loop on their own clock (`useScene`); they show
+  their resting frame under reduced motion and never hide the copy.
+
+## Timelines (`OperationFlow`)
+
+`src/components/ui/operation-flow.tsx` draws any measured operation as a row
+of stations: settled stations wear a check, the current one is a ring (a
+cross when `failed`), later ones wait as dots, wires fill as stations settle,
+and `busy` sends a pulse along the wire into the station being worked on.
+Pass `active` as the station the operation is AT, and `failed` when it
+stopped there: a proxy check that cannot connect is `active={1}` (the proxy),
+not the device. Reaching the last station with nothing failed settles the row.
 
 ## Keyboard shortcuts
 

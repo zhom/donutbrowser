@@ -1,6 +1,7 @@
 use super::engine::SyncEngine;
 use super::subscription::SyncWorkItem;
 use crate::events;
+use crate::log_redaction::Plain;
 use crate::profile::ProfileManager;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -241,7 +242,7 @@ impl SyncScheduler {
       );
       log::debug!(
         "Profile {} is running, queued sync for after stop",
-        profile_id
+        Plain(&profile_id)
       );
     } else {
       // Profile is not running - sync immediately (set stopped_at to past)
@@ -252,7 +253,7 @@ impl SyncScheduler {
           queued: true,
         },
       );
-      log::debug!("Profile {} queued for immediate sync", profile_id);
+      log::debug!("Profile {} queued for immediate sync", Plain(&profile_id));
     }
   }
 

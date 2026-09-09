@@ -3120,7 +3120,7 @@ this line has no colon\r\n\
     ] {
       assert!(
         !as_text.contains(secret),
-        "{secret:?} reached the wire in the clear on an httpstls upstream"
+        "a CONNECT detail or credential reached the wire in the clear on an httpstls upstream"
       );
     }
   }

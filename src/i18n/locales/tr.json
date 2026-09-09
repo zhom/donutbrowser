@@ -1982,7 +1982,9 @@
     "historyTitle": "Son denetimler",
     "historyEmpty": "Henüz kayıtlı denetim yok.",
     "historyOk": "Başarılı",
-    "historyFailed": "Başarısız"
+    "historyFailed": "Başarısız",
+    "trendLabel": "Son {{count}} kontrolün gecikmesi, en yenisi sağda",
+    "trendPeak": "En yavaş: {{ms}} ms"
   },
   "vpnCheck": {
     "valid": "\"{{name}}\" VPN yapılandırması geçerli",
@@ -2341,7 +2343,8 @@
     "syncSessionUnavailable": "Eşitleme oturumuna şu anda erişilemiyor.",
     "syncDisplayUnavailable": "Ekran boyutu okunamadı, bu yüzden pencereler yerleştirilemiyor.",
     "syncDisplayTooSmall": "Ekran, o düzende {{windows}} pencere için fazla küçük.",
-    "syncArrangeFailed": "Hiçbir pencere taşınamadı."
+    "syncArrangeFailed": "Hiçbir pencere taşınamadı.",
+    "extensionPathInvalid": "Bu yol kullanılamaz: '..' içeriyor."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2358,7 +2361,9 @@
       "about": "Donut Browser Hakkında",
       "aboutHint": "Sürüm ve uygulama bilgileri",
       "trash": "Çöp Kutusu",
-      "trashHint": "Silinen profilleri geri yükle"
+      "trashHint": "Silinen profilleri geri yükle",
+      "tips": "İpuçları",
+      "tipsHint": "Özellik turları"
     },
     "network": "Ağ",
     "integrations": "Entegrasyonlar",
@@ -2475,7 +2480,8 @@
     "goSettings": "Ayarlar'a git",
     "goCookieBot": "Cookie Bot",
     "goTrash": "Çöp Kutusuna git",
-    "goAgent": "Ajan'a git"
+    "goAgent": "Ajan'a git",
+    "openTips": "İpuçlarını aç"
   },
   "closeConfirm": {
     "title": "Donut Browser kapatılsın mı?",
@@ -3335,5 +3341,143 @@
     "urlPlaceholder": "https://ornek.com",
     "folderPlaceholder": "İsteğe bağlı",
     "saved": "Grup yer imleri kaydedildi"
+  },
+  "tips": {
+    "title": "İpuçları",
+    "essentials": "Temeller",
+    "planSection": "Planınıza dahil",
+    "count": "{{current}} / {{total}}",
+    "previous": "Önceki ipucu",
+    "next": "Sonraki ipucu",
+    "done": "Bitti",
+    "autoShow": "Donut açılırken bir ipucu göster",
+    "items": {
+      "dnsBlocklist": {
+        "label": "DNS engelleme",
+        "title": "Reklamları ve izleyicileri yüklenmeden engelleyin",
+        "body": "Her profilin kendi DNS engel listesi olabilir. Profilin DNS sütunundan bir düzey seçin; yüksek düzeyler izleme ve kötü amaçlı yazılım alan adlarını da ağ katmanında durdurur.",
+        "action": "DNS ayarlarını aç"
+      },
+      "proxyCheck": {
+        "label": "Proxy kontrolü",
+        "title": "Başlatmadan önce proxy'yi kontrol edin",
+        "body": "Bağlantı testi çıkış IP'sini, ülkeyi, gecikmeyi ve UDP'nin geçip geçmediğini bildirir. Ağ sayfasından veya bir profil satırından çalıştırın ve bozulmaya başlayan bir proxy'yi geçmiş kontrollerden fark edin.",
+        "action": "Ağ'ı aç"
+      },
+      "groups": {
+        "label": "Gruplar",
+        "title": "Gruplar arasında klavyeyle geçin",
+        "body": "Gruplar ilişkili profilleri bir arada tutar ve her grubun bir numarası vardır: {{mod}}+1 ile {{mod}}+9 listeyi anında değiştirir.",
+        "action": "Grupları aç"
+      },
+      "commandPalette": {
+        "label": "Komut paleti",
+        "title": "Her sayfa tek bir kısayol uzağınızda",
+        "body": "{{mod}}+K komut paletini açar. Bir sayfanın veya eylemin birkaç harfini yazıp Enter'a basın.",
+        "action": "Paleti aç"
+      },
+      "fingerprintGate": {
+        "label": "Parmak izi denetimi",
+        "title": "Parmak izini çıkışla tutarlı tutun",
+        "body": "Başlatmadan önce Donut, proxy çıkışının saat dilimi ve dilini profilin parmak iziyle karşılaştırır ve uyuşmazlığı durdurur. Parmak izini düzeltin ya da ne yaptığınızı biliyorsanız Gelişmiş'ten bu denetimi kapatın.",
+        "action": "Gelişmiş ayarları aç"
+      },
+      "profilePassword": {
+        "label": "Profil parolası",
+        "title": "Bir profili parolayla kilitleyin",
+        "body": "Parola korumalı bir profil diskte şifrelenir ve yalnızca çalışırken çözülür. Parolayı profil menüsünden belirleyin.",
+        "action": "Profilleri aç"
+      },
+      "clearOnClose": {
+        "label": "Kapatınca temizle",
+        "title": "Her seferinde temiz başlayın",
+        "body": "Kapatınca temizle açıkken profil, penceresi kapandığında çerezlerini, depolamasını ve geçmişini siler. Tek seferlik oturumlar ve ortak bilgisayarlar için idealdir.",
+        "action": "Profilleri aç"
+      },
+      "defaultBrowser": {
+        "label": "Varsayılan tarayıcı",
+        "title": "Her bağlantıyı doğru profilde açın",
+        "body": "Donut'u varsayılan tarayıcınız yapın; başka bir uygulamadan gelen her bağlantı hangi profilde açılacağını sorar.",
+        "action": "Varsayılan tarayıcı ayarlarını aç"
+      },
+      "extensionGroups": {
+        "label": "Uzantı grupları",
+        "title": "Tek bir uzantı setini profiller arasında paylaşın",
+        "body": "Uzantıları bir uzantı grubuna koyun ve grubu profillere atayın. Grubu bir kez değiştirin; her profil bir sonraki başlatmada bunu izler.",
+        "action": "Uzantıları aç"
+      },
+      "selfHostedSync": {
+        "label": "Kendi eşitlemeniz",
+        "title": "Kendi sunucunuza yedekleyin",
+        "body": "Donut'u kendi barındırdığınız bir donut-sync sunucusuna yönlendirin; profiller, proxy'ler ve gruplar oraya yansıtılır. Uçtan uca bir parola ekleyin, sunucu yalnızca şifreli metin görsün.",
+        "action": "Hesabı aç"
+      },
+      "trash": {
+        "label": "Çöp kutusu",
+        "title": "Silinen profiller çöp kutusunda bekler",
+        "body": "Silinen bir profil varsayılan olarak 30 gün çöp kutusunda kalır ve içindeki her şeyle geri gelir. Saklama süresi Gelişmiş ayarlardadır.",
+        "action": "Çöp kutusunu aç"
+      },
+      "localApi": {
+        "label": "API ve MCP",
+        "title": "Donut'u betikler ve ajanlarla otomatikleştirin",
+        "body": "Yerel REST API ve MCP sunucusu, betiklerin ve yapay zekâ ajanlarının profilleri listelemesine, oluşturmasına ve yapılandırmasına izin verir. Entegrasyonlar'dan açın ve belirteci kopyalayın.",
+        "action": "Entegrasyonları aç"
+      },
+      "importProfiles": {
+        "label": "İçe aktarma",
+        "title": "Chrome, Edge veya Brave'den profil getirin",
+        "body": "İçe aktarma, bir Chromium profilinden veya arşivden çerezleri, oturum bilgilerini ve uzantıları başlatmaya hazır yeni bir Donut profiline kopyalar.",
+        "action": "İçe aktarmayı aç"
+      },
+      "cloudBackup": {
+        "label": "Bulut eşitleme",
+        "title": "Profilleriniz her cihazda",
+        "body": "Bulut eşitleme profilleri, proxy'leri ve grupları yedekler ve başka bir makinede geri yükler. Eşitleme sütunundan profil başına açın.",
+        "action": "Hesabı aç"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "Profilleri gece boyunca ısıtın",
+        "body": "Cookie Bot uzak bir ana bilgisayardan bir programa göre gerçek siteleri gezer; böylece yeni bir profil siz kullanmadan önce doğal bir geçmiş oluşturur.",
+        "action": "Cookie Bot'u aç"
+      },
+      "crossOs": {
+        "label": "Çapraz OS parmak izi",
+        "title": "Herhangi bir işletim sistemi gibi görünün",
+        "body": "Çapraz işletim sistemi parmak izi, profilin hangi makinede çalışırsa çalışsın macOS, Windows veya Linux bildirmesini sağlar. Parmak izini oluştururken veya düzenlerken platformu seçin.",
+        "action": "Profilleri aç"
+      },
+      "automation": {
+        "label": "Otomasyon",
+        "title": "Profilleri koddan başlatın ve yönetin",
+        "body": "run, open-url ve kill uç noktaları betiklerinizden gerçek profiller başlatır; başlatılan her profil Playwright veya Puppeteer için bir CDP uç noktası sunar.",
+        "action": "Entegrasyonları aç"
+      },
+      "agent": {
+        "label": "Ajan",
+        "title": "Tıklamaları bir ajana bırakın",
+        "body": "Bir görevi tarif edin; ajan profili adım adım yönetir, yaptıklarını kaydeder ve bunu bir tarif olarak yeniden oynatabilir.",
+        "action": "Ajanı aç"
+      },
+      "team": {
+        "label": "Ekip kilitleri",
+        "title": "Profilleri çakışmadan paylaşın",
+        "body": "Bir ekipte çalışan bir profil diğerleri için kilitlenir ve kapandığında serbest bırakılır. Hesap sayfası kimin neyi tuttuğunu gösterir.",
+        "action": "Hesabı aç"
+      },
+      "remoteControl": {
+        "label": "Uzaktan denetim",
+        "title": "Bu masaüstünü donutbrowser.com'dan yönetin",
+        "body": "Uzaktan denetim açıkken web sitesindeki ajanlar bu makinenin profillerine giden yönlü bir köprü üzerinden ulaşır. Entegrasyonlar'dan açın.",
+        "action": "Entegrasyonları aç"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "{{plan}} planına hoş geldiniz",
+    "body": "Planınız bunların kilidini açtı. Her ipucu birini çalışırken gösterir.",
+    "cta": "Göster",
+    "later": "Sonra"
   }
 }

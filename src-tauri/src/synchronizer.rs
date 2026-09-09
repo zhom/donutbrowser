@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::sync::Mutex as AsyncMutex;
 
+use crate::log_redaction::ShortId;
 use crate::profile::manager::ProfileManager;
 use crate::profile::types::BrowserProfile;
 
@@ -777,7 +778,7 @@ impl SynchronizerManager {
       tokio::select! {
           _ = cancel_rx.changed() => {
               if *cancel_rx.borrow() {
-                  log::info!("Synchronizer session {session_id}: cancelled");
+                  log::info!("Synchronizer session {}: cancelled", ShortId(&session_id));
                   break;
               }
           }
@@ -827,7 +828,10 @@ impl SynchronizerManager {
     }
 
     // Leader closed or session cancelled — kill all followers
-    log::info!("Synchronizer session {session_id}: stopping all followers");
+    log::info!(
+      "Synchronizer session {}: stopping all followers",
+      ShortId(&session_id)
+    );
     let follower_ids: Vec<String> = {
       let inner = manager.lock().await;
       if let Some(session) = inner.sessions.get(&session_id) {
@@ -1145,7 +1149,8 @@ impl SynchronizerManager {
     let info = session.info();
     let _ = app_handle.emit("sync-session-changed", &info);
     log::info!(
-      "Synchronizer session {session_id}: mirroring {}",
+      "Synchronizer session {}: mirroring {}",
+      ShortId(session_id),
       if paused { "paused" } else { "resumed" }
     );
     Ok(info)
@@ -1239,7 +1244,8 @@ impl SynchronizerManager {
       return Err(serde_json::json!({ "code": "SYNC_ARRANGE_FAILED" }).to_string());
     }
     log::info!(
-      "Synchronizer session {session_id}: placed {placed} of {} windows",
+      "Synchronizer session {}: placed {placed} of {} windows",
+      ShortId(session_id),
       follower_ids.len()
     );
     Ok(info)

@@ -71,11 +71,89 @@ test("fresh app renders, completes onboarding, persists settings, and never touc
       assert.ok(system && typeof system === "object");
       assert.equal(typeof (await app.invoke("read_log_files")), "string");
 
+      // Feature tips: what was seen, the one-a-day pacing, and the decision
+      // behind the paid-plan welcome all live in the settings file.
+      const tips = await app.invoke("get_tips_state");
+      assert.equal(tips.auto_show, true);
+      assert.deepEqual(tips.seen, []);
+      assert.equal(tips.auto_due, true, "a fresh install owes its first tip");
+      const marked = await app.invoke("mark_tip_seen", {
+        tipId: "dnsBlocklist",
+        auto: true,
+      });
+      assert.deepEqual(marked.seen, ["dnsBlocklist"]);
+      assert.equal(typeof marked.last_auto_shown_at, "number");
+      assert.equal(marked.auto_due, false, "one automatic tip a day");
+      const browsed = await app.invoke("mark_tip_seen", {
+        tipId: "proxyCheck",
+        auto: false,
+      });
+      assert.deepEqual(browsed.seen, ["dnsBlocklist", "proxyCheck"]);
+      assert.equal(
+        browsed.last_auto_shown_at,
+        marked.last_auto_shown_at,
+        "a browsed tip must not restart the pacing",
+      );
+      const quiet = await app.invoke("set_tips_auto_show", { enabled: false });
+      assert.equal(quiet.auto_show, false);
+      assert.equal(quiet.auto_due, false);
+      assert.equal(
+        await app.invoke("observe_cloud_plan", {
+          userId: "acct-free",
+          paid: false,
+          freshLogin: true,
+        }),
+        false,
+        "a free account is never greeted",
+      );
+      assert.equal(
+        await app.invoke("observe_cloud_plan", {
+          userId: "acct-free",
+          paid: true,
+          freshLogin: false,
+        }),
+        true,
+        "free to paid is the upgrade the welcome exists for",
+      );
+      assert.equal(
+        await app.invoke("observe_cloud_plan", {
+          userId: "acct-free",
+          paid: true,
+          freshLogin: true,
+        }),
+        false,
+        "and it is greeted once",
+      );
+      assert.equal(
+        await app.invoke("observe_cloud_plan", {
+          userId: "acct-web",
+          paid: true,
+          freshLogin: true,
+        }),
+        true,
+        "a paid account first seen right after signing in came from checkout",
+      );
+      assert.equal(
+        await app.invoke("observe_cloud_plan", {
+          userId: "acct-old",
+          paid: true,
+          freshLogin: false,
+        }),
+        false,
+        "a paid account in an old session is not new to its plan",
+      );
+
       await app.restart();
       const afterRestart = await app.invoke("get_app_settings");
       assert.equal(afterRestart.theme, "dark");
       assert.equal(afterRestart.language, "en");
       assert.equal(afterRestart.onboarding_completed, true);
+      assert.deepEqual(afterRestart.tips_seen, ["dnsBlocklist", "proxyCheck"]);
+      assert.equal(afterRestart.tips_auto_show, false);
+      assert.deepEqual((await app.invoke("get_tips_state")).seen, [
+        "dnsBlocklist",
+        "proxyCheck",
+      ]);
 
       const settingsFile = path.join(
         app.dataRoot,

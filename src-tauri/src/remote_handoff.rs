@@ -28,6 +28,7 @@
 //!   and the work is sitting in cloud storage. This is the window that used to
 //!   be wide open.
 
+use crate::log_redaction::ShortId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -287,8 +288,9 @@ pub fn reconcile(live_session_ids: &std::collections::HashSet<String>) -> Vec<St
       .collect();
     for (profile_id, session_id) in stale {
       log::info!(
-        "Remote session {session_id} for profile {profile_id} ended while this machine was not \
-         watching; its work is still in cloud storage"
+        "Remote session {} for profile {profile_id} ended while this machine was not \
+         watching; its work is still in cloud storage",
+        ShortId(&session_id)
       );
       store.insert(
         profile_id.clone(),

@@ -111,7 +111,7 @@ async fn socks5_udp_associate(settings: &ProxySettings) -> std::io::Result<UdpSu
     .username
     .as_deref()
     .filter(|user| !user.is_empty())
-    .map(|user| (user, settings.password.as_deref().unwrap_or("")));
+    .map(|user| (user, settings.password.as_deref().unwrap_or_default()));
 
   let greeting: Vec<u8> = match credentials {
     Some(_) => vec![SOCKS5, 2, AUTH_NONE, AUTH_USERPASS],

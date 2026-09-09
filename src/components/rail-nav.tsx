@@ -12,6 +12,7 @@ import {
   LuCookie,
   LuInfo,
   LuKeyboard,
+  LuLightbulb,
   LuPlug,
   LuPuzzle,
   LuTrash2,
@@ -218,6 +219,8 @@ interface RailNavProps {
   currentPage: AppPage;
   onNavigate: (page: AppPage) => void;
   onOpenAbout: () => void;
+  /** Opens the feature tips catalog. */
+  onOpenTips: () => void;
   /**
    * A remote session is running right now. The Cookie Bot item carries a dot so
    * the state is legible from every other page — an overnight job you cannot
@@ -291,6 +294,7 @@ export function RailNav({
   currentPage,
   onNavigate,
   onOpenAbout,
+  onOpenTips,
   cookieBotRunning = false,
 }: RailNavProps) {
   const { t } = useTranslation();
@@ -496,6 +500,28 @@ export function RailNav({
                 </span>
               </button>
             ))}
+            <button
+              type="button"
+              role="menuitem"
+              data-slot="rail-open-tips"
+              onClick={() => {
+                setMoreOpen(false);
+                onOpenTips();
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
+            >
+              <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
+                <LuLightbulb className="size-3" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-xs font-medium text-foreground">
+                  {t("rail.more.tips")}
+                </span>
+                <span className="truncate text-[10px] text-muted-foreground">
+                  {t("rail.more.tipsHint")}
+                </span>
+              </span>
+            </button>
             <button
               type="button"
               role="menuitem"

@@ -37,13 +37,20 @@ fn main() {
     println!("cargo:rustc-env=BUILD_VERSION=dev-{version}");
   }
 
-  // Inject vault password at build time
-  if let Ok(vault_password) = std::env::var("DONUT_BROWSER_VAULT_PASSWORD") {
-    println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD={vault_password}");
-  } else {
-    // Use default password if environment variable is not set
-    println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD=donutbrowser-api-vault-password");
-  }
+  // The sealing password of every build before the per-install vault key.
+  // Still compiled in so an update can open the files those builds sealed
+  // and re-seal them under the installation's own key (see `src/vault.rs`).
+  // It reaches the crate through a file in OUT_DIR rather than a rustc-env
+  // line, so the build log never carries it.
+  let legacy_vault_password = std::env::var("DONUT_BROWSER_VAULT_PASSWORD")
+    .unwrap_or_else(|_| "donutbrowser-api-vault-password".to_string());
+  let out_dir = std::env::var("OUT_DIR").expect("cargo sets OUT_DIR for build scripts");
+  std::fs::write(
+    std::path::Path::new(&out_dir).join("legacy_vault_password.txt"),
+    legacy_vault_password,
+  )
+  .expect("write the legacy vault password for include_str!");
+  println!("cargo:rerun-if-env-changed=DONUT_BROWSER_VAULT_PASSWORD");
 
   // Tell Cargo to rebuild if the proxy binary source changes
   println!("cargo:rerun-if-changed=src/bin/proxy_server.rs");

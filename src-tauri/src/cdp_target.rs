@@ -16,6 +16,7 @@
 //! never holds any credential or hostname belonging to the machine the browser
 //! runs on. That boundary is why this is a relay and not a direct connection.
 
+use crate::log_redaction::ShortId;
 use crate::profile::types::BrowserProfile;
 use serde_json::Value;
 use std::time::Duration;
@@ -88,7 +89,7 @@ impl CdpTarget {
   pub fn describe(&self) -> String {
     match self {
       Self::Local { .. } => "local browser".to_string(),
-      Self::Remote { session_id, .. } => format!("remote session {session_id}"),
+      Self::Remote { session_id, .. } => format!("remote session {}", ShortId(session_id)),
     }
   }
 }
@@ -212,7 +213,7 @@ pub async fn resolve(profile: &BrowserProfile) -> Result<CdpTarget, ResolveError
     log::info!(
       "Driving profile '{}' through remote session {}",
       profile.name,
-      session.session_id
+      ShortId(&session.session_id)
     );
     return Ok(CdpTarget::Remote {
       ws_url: endpoint.ws_url,
@@ -720,7 +721,10 @@ impl CdpTarget {
       } => {
         let mut connection = dial_relay(ws_url, bearer).await?;
         if let Err(e) = connection.attach_to_page().await {
-          log::warn!("Could not attach to a page in remote session {session_id}: {e}");
+          log::warn!(
+            "Could not attach to a page in remote session {}: {e}",
+            ShortId(session_id)
+          );
           return Err(e);
         }
         Ok(connection)

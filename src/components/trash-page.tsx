@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuLock, LuRotateCcw, LuTrash2 } from "react-icons/lu";
@@ -27,10 +28,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useInputModality } from "@/hooks/use-input-modality";
 import { useTrashEvents } from "@/hooks/use-trash-events";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import { formatBytes } from "@/lib/format-bytes";
+import { MOTION_EASE_OUT } from "@/lib/motion";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile, TrashedProfileSummary } from "@/types";
@@ -46,6 +49,51 @@ const SECONDS_PER_DAY = 24 * 60 * 60;
 /** Whole days left before the entry is purged, never below zero. */
 function daysUntil(expiresAt: number, nowSeconds: number): number {
   return Math.max(0, Math.ceil((expiresAt - nowSeconds) / SECONDS_PER_DAY));
+}
+
+/**
+ * The retention period as a ring that drains from the top: what is left of
+ * it reads at a glance beside the day count, and an entry about to go is the
+ * one whose ring is nearly gone.
+ */
+function RetentionRing({
+  deletedAt,
+  expiresAt,
+  nowSeconds,
+  warning,
+}: {
+  deletedAt: number;
+  expiresAt: number;
+  nowSeconds: number;
+  warning: boolean;
+}) {
+  const reduceMotion = useReducedMotion();
+  const modality = useInputModality();
+  const animate = !reduceMotion && modality === "pointer";
+  const total = Math.max(1, expiresAt - deletedAt);
+  const left = Math.max(0, Math.min(1, (expiresAt - nowSeconds) / total));
+  return (
+    <svg
+      data-slot="trash-retention-ring"
+      viewBox="0 0 16 16"
+      className="size-3.5 shrink-0 -rotate-90"
+      fill="none"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx={8} cy={8} r={6} className="stroke-border" />
+      <motion.circle
+        cx={8}
+        cy={8}
+        r={6}
+        className={warning ? "stroke-warning-text" : "stroke-foreground"}
+        initial={animate ? { pathLength: 0 } : false}
+        animate={{ pathLength: left }}
+        transition={{ duration: animate ? 0.6 : 0, ease: MOTION_EASE_OUT }}
+      />
+    </svg>
+  );
 }
 
 export function TrashPage({ isOpen, onClose, subPage }: TrashPageProps) {
@@ -265,9 +313,17 @@ export function TrashPage({ isOpen, onClose, subPage }: TrashPageProps) {
                                 : "text-muted-foreground",
                             )}
                           >
-                            {daysLeft === 0
-                              ? t("trash.expiresToday")
-                              : t("trash.expiresIn", { count: daysLeft })}
+                            <span className="inline-flex items-center gap-1.5">
+                              <RetentionRing
+                                deletedAt={entry.deleted_at}
+                                expiresAt={entry.expires_at}
+                                nowSeconds={nowSeconds}
+                                warning={daysLeft <= 1}
+                              />
+                              {daysLeft === 0
+                                ? t("trash.expiresToday")
+                                : t("trash.expiresIn", { count: daysLeft })}
+                            </span>
                           </TableCell>
                           <TableCell className="hidden @xl:table-cell text-right text-sm tabular-nums text-muted-foreground">
                             {formatBytes(entry.size_bytes)}

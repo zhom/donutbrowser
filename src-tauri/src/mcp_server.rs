@@ -23,6 +23,7 @@ use crate::browser::ProxySettings;
 use crate::cdp_target::{CdpError, CdpTarget};
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::group_manager::GROUP_MANAGER;
+use crate::log_redaction::ShortId;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::settings_manager::SettingsManager;
@@ -2479,7 +2480,7 @@ impl McpServer {
       let mut inner = self.inner.lock().await;
       match inner.sessions.remove(session_id) {
         Some(session) => {
-          log::info!("[mcp] Session terminated: {session_id}");
+          log::info!("[mcp] Session terminated: {}", ShortId(session_id));
           session.cached_pages
         }
         None => return,
@@ -2501,8 +2502,9 @@ impl McpServer {
     .is_err()
     {
       log::debug!(
-        "[mcp] Session {session_id} ended before its element caches could be cleared; the \
-         page-side slot cap will reclaim them"
+        "[mcp] Session {} ended before its element caches could be cleared; the \
+         page-side slot cap will reclaim them",
+        ShortId(session_id)
       );
     }
   }
@@ -4606,7 +4608,7 @@ impl McpServer {
       "instructions": "Donut Browser MCP server. Use tools/list to discover available browser automation tools."
     });
 
-    log::info!("[mcp] New session initialized: {}", session_id);
+    log::info!("[mcp] New session initialized: {}", ShortId(&session_id));
     Ok((session_id, (id, result)))
   }
 
@@ -7605,9 +7607,14 @@ impl McpServer {
       .get("link")
       .and_then(|v| v.as_bool())
       .unwrap_or(false);
+    let path = crate::extension_manager::client_named_path(path).map_err(|e| McpError {
+      code: -32602,
+      message: format!("Invalid path: {e}"),
+      data: None,
+    })?;
     let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     let extension = mgr
-      .add_extension_from_path(name, std::path::Path::new(path), link)
+      .add_extension_from_path(name, &path, link)
       .map_err(|e| McpError {
         code: -32000,
         message: format!("Failed to add extension: {e}"),
@@ -7651,11 +7658,18 @@ impl McpServer {
       .get("link")
       .and_then(|v| v.as_bool())
       .unwrap_or(false);
+    let path = path
+      .map(|path| {
+        crate::extension_manager::client_named_path(path).map_err(|e| McpError {
+          code: -32602,
+          message: format!("Invalid path: {e}"),
+          data: None,
+        })
+      })
+      .transpose()?;
     let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     let extension = match path {
-      Some(path) => {
-        mgr.update_extension_from_path(extension_id, name, std::path::Path::new(path), link)
-      }
+      Some(path) => mgr.update_extension_from_path(extension_id, name, &path, link),
       None => mgr.update_extension(extension_id, name, None, None),
     }
     .map_err(|e| McpError {

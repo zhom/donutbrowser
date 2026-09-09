@@ -1992,7 +1992,9 @@
     "historyTitle": "Comprobaciones recientes",
     "historyEmpty": "Todavía no hay comprobaciones registradas.",
     "historyOk": "Correcta",
-    "historyFailed": "Fallida"
+    "historyFailed": "Fallida",
+    "trendLabel": "Latencia de las últimas {{count}} comprobaciones, la más reciente a la derecha",
+    "trendPeak": "Más lenta: {{ms}} ms"
   },
   "vpnCheck": {
     "valid": "La configuración de VPN \"{{name}}\" es válida",
@@ -2351,7 +2353,8 @@
     "syncSessionUnavailable": "No se puede acceder ahora a la sesión de sincronización.",
     "syncDisplayUnavailable": "No se pudo leer el tamaño de la pantalla, así que las ventanas no se pueden ordenar.",
     "syncDisplayTooSmall": "La pantalla es demasiado pequeña para {{windows}} ventanas en esa disposición.",
-    "syncArrangeFailed": "No se pudo mover ninguna ventana."
+    "syncArrangeFailed": "No se pudo mover ninguna ventana.",
+    "extensionPathInvalid": "Esa ruta no está permitida: contiene '..'."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2368,7 +2371,9 @@
       "about": "Acerca de Donut Browser",
       "aboutHint": "Versión e información de la aplicación",
       "trash": "Papelera",
-      "trashHint": "Restaurar perfiles eliminados"
+      "trashHint": "Restaurar perfiles eliminados",
+      "tips": "Consejos",
+      "tipsHint": "Recorridos por las funciones"
     },
     "network": "Red",
     "integrations": "Integraciones",
@@ -2485,7 +2490,8 @@
     "goSettings": "Ir a Configuración",
     "goCookieBot": "Cookie Bot",
     "goTrash": "Ir a la Papelera",
-    "goAgent": "Ir a Agente"
+    "goAgent": "Ir a Agente",
+    "openTips": "Abrir consejos"
   },
   "closeConfirm": {
     "title": "¿Cerrar Donut Browser?",
@@ -3368,5 +3374,143 @@
     "urlPlaceholder": "https://ejemplo.com",
     "folderPlaceholder": "Opcional",
     "saved": "Marcadores del grupo guardados"
+  },
+  "tips": {
+    "title": "Consejos",
+    "essentials": "Básicos",
+    "planSection": "Incluido en tu plan",
+    "count": "{{current}} de {{total}}",
+    "previous": "Consejo anterior",
+    "next": "Siguiente consejo",
+    "done": "Listo",
+    "autoShow": "Mostrar un consejo al iniciar Donut",
+    "items": {
+      "dnsBlocklist": {
+        "label": "Bloqueo DNS",
+        "title": "Bloquea anuncios y rastreadores antes de que carguen",
+        "body": "Cada perfil puede llevar su propia lista de bloqueo DNS. Elige un nivel en la columna DNS del perfil; los niveles altos también detienen dominios de rastreo y malware a nivel de red.",
+        "action": "Abrir ajustes de DNS"
+      },
+      "proxyCheck": {
+        "label": "Comprobar proxy",
+        "title": "Comprueba un proxy antes de lanzar",
+        "body": "La comprobación de conexión informa la IP de salida, el país, la latencia y si pasa UDP. Ejecútala desde la página Red o desde una fila de perfil, y revisa el historial de comprobaciones para detectar un proxy que empieza a fallar.",
+        "action": "Abrir Red"
+      },
+      "groups": {
+        "label": "Grupos",
+        "title": "Cambia de grupo con el teclado",
+        "body": "Los grupos mantienen juntos los perfiles relacionados, y cada grupo recibe un número: {{mod}}+1 a {{mod}}+9 cambia la lista al instante.",
+        "action": "Abrir Grupos"
+      },
+      "commandPalette": {
+        "label": "Paleta de comandos",
+        "title": "Cada página está a un atajo de distancia",
+        "body": "{{mod}}+K abre la paleta de comandos. Escribe unas letras de una página o una acción y pulsa Intro.",
+        "action": "Abrir la paleta"
+      },
+      "fingerprintGate": {
+        "label": "Control de huella",
+        "title": "Mantén la huella coherente con la salida",
+        "body": "Antes de lanzar, Donut compara la zona horaria y el idioma de la salida del proxy con la huella del perfil y detiene cualquier discrepancia. Corrige la huella o desactiva el bloqueo en Avanzado si sabes lo que haces.",
+        "action": "Abrir ajustes avanzados"
+      },
+      "profilePassword": {
+        "label": "Contraseña de perfil",
+        "title": "Protege un perfil con contraseña",
+        "body": "Un perfil protegido con contraseña se cifra en disco y solo se descifra mientras se ejecuta. Define la contraseña desde el menú del perfil.",
+        "action": "Abrir Perfiles"
+      },
+      "clearOnClose": {
+        "label": "Limpiar al cerrar",
+        "title": "Empieza limpio cada vez",
+        "body": "Con Limpiar al cerrar, un perfil descarta sus cookies, almacenamiento e historial al cerrar su ventana. Ideal para sesiones puntuales y equipos compartidos.",
+        "action": "Abrir Perfiles"
+      },
+      "defaultBrowser": {
+        "label": "Navegador predeterminado",
+        "title": "Abre cada enlace en el perfil correcto",
+        "body": "Haz de Donut tu navegador predeterminado y cada enlace de otra aplicación preguntará qué perfil debe abrirlo.",
+        "action": "Abrir ajustes del navegador predeterminado"
+      },
+      "extensionGroups": {
+        "label": "Grupos de extensiones",
+        "title": "Comparte un mismo conjunto de extensiones entre perfiles",
+        "body": "Pon las extensiones en un grupo de extensiones y asigna el grupo a los perfiles. Cambia el grupo una vez y cada perfil lo sigue en su próximo lanzamiento.",
+        "action": "Abrir Extensiones"
+      },
+      "selfHostedSync": {
+        "label": "Sincronización propia",
+        "title": "Haz copias en tu propio servidor",
+        "body": "Apunta Donut a un servidor donut-sync autoalojado y los perfiles, proxies y grupos se replicarán en él. Añade una contraseña de extremo a extremo y el servidor solo verá texto cifrado.",
+        "action": "Abrir Cuenta"
+      },
+      "trash": {
+        "label": "Papelera",
+        "title": "Los perfiles eliminados esperan en la papelera",
+        "body": "Un perfil eliminado permanece en la papelera 30 días de forma predeterminada y vuelve con todo su contenido. El periodo de retención está en los ajustes avanzados.",
+        "action": "Abrir Papelera"
+      },
+      "localApi": {
+        "label": "API y MCP",
+        "title": "Automatiza Donut desde scripts y agentes",
+        "body": "La API REST local y el servidor MCP permiten que scripts y agentes de IA listen, creen y configuren perfiles. Actívalos en Integraciones y copia el token.",
+        "action": "Abrir Integraciones"
+      },
+      "importProfiles": {
+        "label": "Importar",
+        "title": "Trae perfiles desde Chrome, Edge o Brave",
+        "body": "La importación copia cookies, inicios de sesión y extensiones de un perfil Chromium o de un archivo a un nuevo perfil de Donut, listo para lanzar.",
+        "action": "Abrir Importar"
+      },
+      "cloudBackup": {
+        "label": "Sincronización en la nube",
+        "title": "Tus perfiles en todos tus dispositivos",
+        "body": "La sincronización en la nube respalda perfiles, proxies y grupos y los restaura en otra máquina. Actívala por perfil desde la columna de sincronización.",
+        "action": "Abrir Cuenta"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "Calienta perfiles durante la noche",
+        "body": "Cookie Bot navega por sitios reales según un horario desde un host remoto, para que un perfil nuevo construya un historial natural antes de que lo uses.",
+        "action": "Abrir Cookie Bot"
+      },
+      "crossOs": {
+        "label": "Huella multi-SO",
+        "title": "Preséntate como cualquier sistema operativo",
+        "body": "Una huella multi-SO permite que un perfil informe macOS, Windows o Linux sea cual sea la máquina donde se ejecuta. Elige la plataforma al crear o editar la huella.",
+        "action": "Abrir Perfiles"
+      },
+      "automation": {
+        "label": "Automatización",
+        "title": "Lanza y controla perfiles desde código",
+        "body": "Los endpoints run, open-url y kill inician perfiles reales desde tus scripts, y cada perfil lanzado expone un endpoint CDP para Playwright o Puppeteer.",
+        "action": "Abrir Integraciones"
+      },
+      "agent": {
+        "label": "Agente",
+        "title": "Deja los clics a un agente",
+        "body": "Describe una tarea y el agente controla un perfil paso a paso, registra lo que hizo y puede repetirlo como una receta.",
+        "action": "Abrir Agente"
+      },
+      "team": {
+        "label": "Bloqueos de equipo",
+        "title": "Comparte perfiles sin choques",
+        "body": "En un equipo, un perfil en ejecución queda bloqueado para los demás y se libera al cerrarse. La página Cuenta muestra quién tiene cada uno.",
+        "action": "Abrir Cuenta"
+      },
+      "remoteControl": {
+        "label": "Control remoto",
+        "title": "Controla este equipo desde donutbrowser.com",
+        "body": "Con el control remoto activado, los agentes del sitio web llegan a los perfiles de esta máquina a través de un puente saliente. Actívalo en Integraciones.",
+        "action": "Abrir Integraciones"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "Te damos la bienvenida a {{plan}}",
+    "body": "Tu plan acaba de desbloquear esto. Cada consejo muestra una función en acción.",
+    "cta": "Enséñame",
+    "later": "Más tarde"
   }
 }

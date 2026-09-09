@@ -1982,7 +1982,9 @@
     "historyTitle": "最近的检测",
     "historyEmpty": "尚无检测记录。",
     "historyOk": "通过",
-    "historyFailed": "失败"
+    "historyFailed": "失败",
+    "trendLabel": "最近 {{count}} 次检查的延迟，最新的在右侧",
+    "trendPeak": "最慢：{{ms}} ms"
   },
   "vpnCheck": {
     "valid": "VPN「{{name}}」配置有效",
@@ -2341,7 +2343,8 @@
     "syncSessionUnavailable": "目前无法访问该同步会话。",
     "syncDisplayUnavailable": "无法读取显示器尺寸，因此不能排列窗口。",
     "syncDisplayTooSmall": "显示器太小，无法以该布局排列 {{windows}} 个窗口。",
-    "syncArrangeFailed": "没有窗口被移动。"
+    "syncArrangeFailed": "没有窗口被移动。",
+    "extensionPathInvalid": "该路径不允许使用：它包含“..”。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2358,7 +2361,9 @@
       "about": "关于 Donut Browser",
       "aboutHint": "版本和应用信息",
       "trash": "回收站",
-      "trashHint": "恢复已删除的配置文件"
+      "trashHint": "恢复已删除的配置文件",
+      "tips": "小贴士",
+      "tipsHint": "功能演示"
     },
     "network": "网络",
     "integrations": "集成",
@@ -2475,7 +2480,8 @@
     "goSettings": "转到设置",
     "goCookieBot": "Cookie Bot",
     "goTrash": "前往回收站",
-    "goAgent": "前往智能体"
+    "goAgent": "前往智能体",
+    "openTips": "打开小贴士"
   },
   "closeConfirm": {
     "title": "关闭 Donut Browser？",
@@ -3335,5 +3341,143 @@
     "urlPlaceholder": "https://example.com",
     "folderPlaceholder": "可选",
     "saved": "分组书签已保存"
+  },
+  "tips": {
+    "title": "小贴士",
+    "essentials": "基础",
+    "planSection": "您的套餐已包含",
+    "count": "{{current}} / {{total}}",
+    "previous": "上一条",
+    "next": "下一条",
+    "done": "完成",
+    "autoShow": "Donut 启动时显示一条小贴士",
+    "items": {
+      "dnsBlocklist": {
+        "label": "DNS 拦截",
+        "title": "在加载前拦截广告和跟踪器",
+        "body": "每个配置文件都可以有自己的 DNS 拦截列表。在配置文件的 DNS 列中选择级别；更高的级别还会在网络层拦截跟踪和恶意软件域名。",
+        "action": "打开 DNS 设置"
+      },
+      "proxyCheck": {
+        "label": "代理检查",
+        "title": "启动前先检查代理",
+        "body": "连接检查会报告出口 IP、国家、延迟以及 UDP 是否可用。可从“网络”页面或配置文件行运行，并通过历史检查记录发现正在变差的代理。",
+        "action": "打开网络"
+      },
+      "groups": {
+        "label": "分组",
+        "title": "用键盘切换分组",
+        "body": "分组将相关的配置文件放在一起，每个分组都有编号：{{mod}}+1 到 {{mod}}+9 可立即切换列表。",
+        "action": "打开分组"
+      },
+      "commandPalette": {
+        "label": "命令面板",
+        "title": "任何页面只需一个快捷键",
+        "body": "{{mod}}+K 打开命令面板。输入页面或操作的几个字母，然后按 Enter。",
+        "action": "打开命令面板"
+      },
+      "fingerprintGate": {
+        "label": "指纹检查",
+        "title": "让指纹与出口保持一致",
+        "body": "启动前，Donut 会将代理出口的时区和语言与配置文件的指纹进行比较，并阻止不一致的启动。请修正指纹，或者在确认无误的情况下于“高级”中关闭此检查。",
+        "action": "打开高级设置"
+      },
+      "profilePassword": {
+        "label": "配置文件密码",
+        "title": "用密码锁定配置文件",
+        "body": "受密码保护的配置文件在磁盘上加密，仅在运行时解密。可在配置文件菜单中设置密码。",
+        "action": "打开配置文件"
+      },
+      "clearOnClose": {
+        "label": "关闭时清除",
+        "title": "每次都从干净状态开始",
+        "body": "开启“关闭时清除”后，窗口关闭时配置文件会丢弃 Cookie、存储和历史记录。适合一次性会话和共用电脑。",
+        "action": "打开配置文件"
+      },
+      "defaultBrowser": {
+        "label": "默认浏览器",
+        "title": "让每个链接在正确的配置文件中打开",
+        "body": "将 Donut 设为默认浏览器后，来自其他应用的每个链接都会询问应由哪个配置文件打开。",
+        "action": "打开默认浏览器设置"
+      },
+      "extensionGroups": {
+        "label": "扩展组",
+        "title": "在多个配置文件间共用一套扩展",
+        "body": "把扩展放进扩展组，再将该组分配给配置文件。修改一次分组，每个配置文件都会在下次启动时跟随。",
+        "action": "打开扩展"
+      },
+      "selfHostedSync": {
+        "label": "自托管同步",
+        "title": "备份到自己的服务器",
+        "body": "将 Donut 指向自托管的 donut-sync 服务器，配置文件、代理和分组就会镜像到那里。再加上端到端密码，服务器只会看到密文。",
+        "action": "打开账户"
+      },
+      "trash": {
+        "label": "回收站",
+        "title": "已删除的配置文件在回收站等候",
+        "body": "已删除的配置文件默认在回收站保留 30 天，并可连同全部内容一起恢复。保留期限在高级设置中。",
+        "action": "打开回收站"
+      },
+      "localApi": {
+        "label": "API 与 MCP",
+        "title": "用脚本和智能体自动化 Donut",
+        "body": "本地 REST API 和 MCP 服务器可让脚本和 AI 智能体列出、创建和配置配置文件。在“集成”中开启并复制令牌。",
+        "action": "打开集成"
+      },
+      "importProfiles": {
+        "label": "导入",
+        "title": "从 Chrome、Edge 或 Brave 迁移配置文件",
+        "body": "导入会把 Chromium 配置文件或压缩包中的 Cookie、登录信息和扩展复制到新的 Donut 配置文件，随时可以启动。",
+        "action": "打开导入"
+      },
+      "cloudBackup": {
+        "label": "云同步",
+        "title": "让配置文件出现在每台设备上",
+        "body": "云同步会备份配置文件、代理和分组，并在另一台电脑上恢复。可在同步列中按配置文件开启。",
+        "action": "打开账户"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "夜间养号",
+        "body": "Cookie Bot 会从远程主机按计划浏览真实网站，让新配置文件在您使用之前积累自然的历史记录。",
+        "action": "打开 Cookie Bot"
+      },
+      "crossOs": {
+        "label": "跨系统指纹",
+        "title": "伪装成任意操作系统",
+        "body": "跨系统指纹可让配置文件在任何电脑上都报告为 macOS、Windows 或 Linux。在创建或编辑指纹时选择平台。",
+        "action": "打开配置文件"
+      },
+      "automation": {
+        "label": "自动化",
+        "title": "用代码启动和驱动配置文件",
+        "body": "run、open-url 和 kill 端点可从脚本启动真实的配置文件，每个已启动的配置文件都会提供供 Playwright 或 Puppeteer 使用的 CDP 端点。",
+        "action": "打开集成"
+      },
+      "agent": {
+        "label": "智能体",
+        "title": "把点击交给智能体",
+        "body": "描述一个任务，智能体就会一步步驱动配置文件，记录它做了什么，并能作为配方重放。",
+        "action": "打开智能体"
+      },
+      "team": {
+        "label": "团队锁定",
+        "title": "共享配置文件而不冲突",
+        "body": "在团队中，正在运行的配置文件会对其他人锁定，关闭后释放。账户页面会显示谁在使用什么。",
+        "action": "打开账户"
+      },
+      "remoteControl": {
+        "label": "远程控制",
+        "title": "从 donutbrowser.com 控制这台电脑",
+        "body": "开启远程控制后，网站上的智能体可通过出站桥接访问这台电脑的配置文件。在“集成”中开启。",
+        "action": "打开集成"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "欢迎使用 {{plan}}",
+    "body": "您的套餐刚刚解锁了这些功能。每条小贴士都会演示其中一项。",
+    "cta": "带我看看",
+    "later": "稍后"
   }
 }

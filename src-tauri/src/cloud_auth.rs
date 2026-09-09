@@ -1,15 +1,10 @@
-use aes_gcm::{
-  aead::{Aead, KeyInit},
-  Aes256Gcm, Key, Nonce,
-};
 use chrono::Utc;
 use lazy_static::lazy_static;
-use rand::RngExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::Mutex;
 
 use crate::browser::ProxySettings;
@@ -378,114 +373,21 @@ impl CloudAuthManager {
     SettingsManager::instance().get_settings_dir()
   }
 
-  fn get_vault_password() -> String {
-    env!("DONUT_BROWSER_VAULT_PASSWORD").to_string()
+  // --- Encrypted file storage (shared with settings_manager.rs via crate::vault) ---
+
+  fn magic(header: &[u8; 5]) -> [u8; 6] {
+    let mut magic = [0u8; 6];
+    magic[..5].copy_from_slice(header);
+    magic[5] = 2;
+    magic
   }
 
-  // --- Encrypted file storage (same pattern as settings_manager.rs) ---
-
-  fn encrypt_and_store(file_path: &PathBuf, header: &[u8; 5], data: &str) -> Result<(), String> {
-    if let Some(parent) = file_path.parent() {
-      fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
-    }
-
-    let vault_password = Self::get_vault_password();
-    let salt_bytes: [u8; 16] = rand::rng().random();
-    let salt = crate::sync::encryption::encode_salt(&salt_bytes);
-    let key_bytes =
-      crate::sync::encryption::derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
-    let key = Key::<Aes256Gcm>::from(key_bytes);
-    let cipher = Aes256Gcm::new(&key);
-    let nonce_bytes: [u8; 12] = rand::rng().random();
-    let nonce = Nonce::from(nonce_bytes);
-    let ciphertext = cipher
-      .encrypt(&nonce, data.as_bytes())
-      .map_err(|e| format!("Encryption failed: {e}"))?;
-
-    let mut file_data = Vec::new();
-    file_data.extend_from_slice(header);
-    file_data.push(2u8);
-    let salt_str = salt.as_str();
-    file_data.push(salt_str.len() as u8);
-    file_data.extend_from_slice(salt_str.as_bytes());
-    file_data.extend_from_slice(&nonce);
-    file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
-    file_data.extend_from_slice(&ciphertext);
-
-    fs::write(file_path, file_data).map_err(|e| format!("Failed to write file: {e}"))?;
-    crate::app_dirs::restrict_to_owner(file_path);
-    Ok(())
+  fn encrypt_and_store(file_path: &Path, header: &[u8; 5], data: &str) -> Result<(), String> {
+    crate::vault::seal(file_path, &Self::magic(header), data)
   }
 
-  fn decrypt_from_file(file_path: &PathBuf, header: &[u8; 5]) -> Result<Option<String>, String> {
-    if !file_path.exists() {
-      return Ok(None);
-    }
-
-    let file_data = fs::read(file_path).map_err(|e| format!("Failed to read file: {e}"))?;
-
-    if file_data.len() < 6 || &file_data[0..5] != header {
-      return Ok(None);
-    }
-
-    let version = file_data[5];
-    if version != 2 {
-      return Ok(None);
-    }
-
-    let mut offset = 6;
-    if offset >= file_data.len() {
-      return Ok(None);
-    }
-    let salt_len = file_data[offset] as usize;
-    offset += 1;
-
-    if offset + salt_len > file_data.len() {
-      return Ok(None);
-    }
-    let salt_bytes = &file_data[offset..offset + salt_len];
-    let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
-    let salt_bytes = crate::sync::encryption::decode_salt(salt_str)?;
-    offset += salt_len;
-
-    if offset + 12 > file_data.len() {
-      return Ok(None);
-    }
-    let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
-      .try_into()
-      .map_err(|_| "Invalid nonce length".to_string())?;
-    let nonce = Nonce::from(nonce_bytes);
-    offset += 12;
-
-    if offset + 4 > file_data.len() {
-      return Ok(None);
-    }
-    let ciphertext_len = u32::from_le_bytes([
-      file_data[offset],
-      file_data[offset + 1],
-      file_data[offset + 2],
-      file_data[offset + 3],
-    ]) as usize;
-    offset += 4;
-
-    if offset + ciphertext_len > file_data.len() {
-      return Ok(None);
-    }
-    let ciphertext = &file_data[offset..offset + ciphertext_len];
-
-    let vault_password = Self::get_vault_password();
-    let key_bytes =
-      crate::sync::encryption::derive_vault_key(vault_password.as_bytes(), &salt_bytes)?;
-    let key = Key::<Aes256Gcm>::from(key_bytes);
-    let cipher = Aes256Gcm::new(&key);
-    let plaintext = cipher
-      .decrypt(&nonce, ciphertext)
-      .map_err(|_| "Decryption failed".to_string())?;
-
-    match String::from_utf8(plaintext) {
-      Ok(token) => Ok(Some(token)),
-      Err(_) => Ok(None),
-    }
+  fn decrypt_from_file(file_path: &Path, header: &[u8; 5]) -> Result<Option<String>, String> {
+    crate::vault::open(file_path, &Self::magic(header))
   }
 
   // --- Token storage methods ---

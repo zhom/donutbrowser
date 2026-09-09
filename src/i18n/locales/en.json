@@ -1982,7 +1982,9 @@
     "historyTitle": "Recent checks",
     "historyEmpty": "No checks recorded yet.",
     "historyOk": "Passed",
-    "historyFailed": "Failed"
+    "historyFailed": "Failed",
+    "trendLabel": "Latency of the last {{count}} checks, newest on the right",
+    "trendPeak": "Slowest: {{ms}} ms"
   },
   "vpnCheck": {
     "valid": "VPN \"{{name}}\" configuration is valid",
@@ -2341,7 +2343,8 @@
     "syncSessionUnavailable": "The sync session cannot be reached right now.",
     "syncDisplayUnavailable": "The display size could not be read, so the windows cannot be arranged.",
     "syncDisplayTooSmall": "The display is too small for {{windows}} windows in that layout.",
-    "syncArrangeFailed": "No window could be moved."
+    "syncArrangeFailed": "No window could be moved.",
+    "extensionPathInvalid": "That path is not allowed: it contains '..'."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2358,7 +2361,9 @@
       "about": "About Donut Browser",
       "aboutHint": "Version and app information",
       "trash": "Trash",
-      "trashHint": "Restore deleted profiles"
+      "trashHint": "Restore deleted profiles",
+      "tips": "Tips",
+      "tipsHint": "Feature walkthroughs"
     },
     "network": "Network",
     "integrations": "Integrations",
@@ -2475,7 +2480,8 @@
     "goSettings": "Go to Settings",
     "goCookieBot": "Cookie Bot",
     "goTrash": "Go to Trash",
-    "goAgent": "Go to Agent"
+    "goAgent": "Go to Agent",
+    "openTips": "Open tips"
   },
   "closeConfirm": {
     "title": "Close Donut Browser?",
@@ -3335,5 +3341,143 @@
     "urlPlaceholder": "https://example.com",
     "folderPlaceholder": "Optional",
     "saved": "Group bookmarks saved"
+  },
+  "tips": {
+    "title": "Tips",
+    "essentials": "Essentials",
+    "planSection": "Included in your plan",
+    "count": "{{current}} of {{total}}",
+    "previous": "Previous tip",
+    "next": "Next tip",
+    "done": "Done",
+    "autoShow": "Show a tip when Donut starts",
+    "items": {
+      "dnsBlocklist": {
+        "label": "DNS blocking",
+        "title": "Block ads and trackers before they load",
+        "body": "Every profile can carry its own DNS blocklist. Pick a level in the profile's DNS column; the higher levels also stop tracking and malware domains at the network level.",
+        "action": "Open DNS settings"
+      },
+      "proxyCheck": {
+        "label": "Proxy check",
+        "title": "Check a proxy before you launch",
+        "body": "The connection check reports the exit IP, country, latency and whether UDP passes. Run it from the Network page or a profile row, and read the trail of past checks to spot a proxy that is going bad.",
+        "action": "Open Network"
+      },
+      "groups": {
+        "label": "Groups",
+        "title": "Switch groups from the keyboard",
+        "body": "Groups keep related profiles together, and each group gets a number: {{mod}}+1 to {{mod}}+9 switches the list instantly.",
+        "action": "Open Groups"
+      },
+      "commandPalette": {
+        "label": "Command palette",
+        "title": "Every page is one chord away",
+        "body": "{{mod}}+K opens the command palette. Type a few letters of a page or an action and press Enter.",
+        "action": "Open the palette"
+      },
+      "fingerprintGate": {
+        "label": "Fingerprint gate",
+        "title": "Keep the fingerprint true to the exit",
+        "body": "Before a launch, Donut compares the proxy exit's timezone and language with the profile's fingerprint and stops a mismatch. Fix the fingerprint, or turn the gate off under Advanced if you know what you are doing.",
+        "action": "Open Advanced settings"
+      },
+      "profilePassword": {
+        "label": "Profile password",
+        "title": "Lock a profile with a password",
+        "body": "A password-protected profile is encrypted on disk and decrypted only while it runs. Set the password from the profile's menu.",
+        "action": "Open Profiles"
+      },
+      "clearOnClose": {
+        "label": "Clear on close",
+        "title": "Start clean every time",
+        "body": "With Clear on close, a profile drops its cookies, storage and history when its window closes. Good for one-off sessions and shared machines.",
+        "action": "Open Profiles"
+      },
+      "defaultBrowser": {
+        "label": "Default browser",
+        "title": "Open every link in the right profile",
+        "body": "Make Donut your default browser and each link from another app asks which profile should open it.",
+        "action": "Open default browser settings"
+      },
+      "extensionGroups": {
+        "label": "Extension groups",
+        "title": "Share one extension set across profiles",
+        "body": "Put extensions in an extension group and assign the group to profiles. Change the group once and every profile follows at its next launch.",
+        "action": "Open Extensions"
+      },
+      "selfHostedSync": {
+        "label": "Self-hosted sync",
+        "title": "Back up to your own server",
+        "body": "Point Donut at a self-hosted donut-sync server and profiles, proxies and groups mirror to it. Add an end-to-end password and the server only ever sees ciphertext.",
+        "action": "Open Account"
+      },
+      "trash": {
+        "label": "Trash",
+        "title": "Deleted profiles wait in the trash",
+        "body": "A deleted profile stays in the trash for 30 days by default and comes back with everything in it. The retention period is under Advanced settings.",
+        "action": "Open Trash"
+      },
+      "localApi": {
+        "label": "API and MCP",
+        "title": "Automate Donut from scripts and agents",
+        "body": "The local REST API and MCP server let scripts and AI agents list, create and configure profiles. Turn them on under Integrations and copy the token.",
+        "action": "Open Integrations"
+      },
+      "importProfiles": {
+        "label": "Import",
+        "title": "Bring profiles over from Chrome, Edge or Brave",
+        "body": "Import copies cookies, logins and extensions from a Chromium profile or an archive into a new Donut profile, ready to launch.",
+        "action": "Open Import"
+      },
+      "cloudBackup": {
+        "label": "Cloud sync",
+        "title": "Your profiles on every device",
+        "body": "Cloud sync backs up profiles, proxies and groups and restores them on another machine. Turn it on per profile from the sync column.",
+        "action": "Open Account"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "Warm profiles overnight",
+        "body": "Cookie Bot browses real sites on a schedule from a remote host, so a fresh profile builds a natural history before you use it.",
+        "action": "Open Cookie Bot"
+      },
+      "crossOs": {
+        "label": "Cross-OS fingerprint",
+        "title": "Present as any operating system",
+        "body": "A cross-OS fingerprint lets a profile report macOS, Windows or Linux whatever machine it runs on. Pick the platform when you create or edit the fingerprint.",
+        "action": "Open Profiles"
+      },
+      "automation": {
+        "label": "Automation",
+        "title": "Launch and drive profiles from code",
+        "body": "The run, open-url and kill endpoints start real profiles from your scripts, and every launched profile exposes a CDP endpoint for Playwright or Puppeteer.",
+        "action": "Open Integrations"
+      },
+      "agent": {
+        "label": "Agent",
+        "title": "Hand the clicking to an agent",
+        "body": "Describe a task and the agent drives a profile step by step, records what it did and can replay it as a recipe.",
+        "action": "Open Agent"
+      },
+      "team": {
+        "label": "Team locks",
+        "title": "Share profiles without collisions",
+        "body": "In a team, a running profile is locked for everyone else and released when it closes. The Account page shows who holds what.",
+        "action": "Open Account"
+      },
+      "remoteControl": {
+        "label": "Remote control",
+        "title": "Drive this desktop from donutbrowser.com",
+        "body": "With remote control on, agents on the website reach this machine's profiles over an outbound bridge. Turn it on under Integrations.",
+        "action": "Open Integrations"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "Welcome to {{plan}}",
+    "body": "Your plan just unlocked these. Each tip shows one of them working.",
+    "cta": "Show me",
+    "later": "Later"
   }
 }

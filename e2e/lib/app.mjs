@@ -71,6 +71,7 @@ export class AppSession {
     seedDownloadedBrowser = false,
     onboardingCompleted = true,
     wayfernTermsAccepted = true,
+    settings = {},
   }) {
     this.name = name;
     this.root = root;
@@ -84,6 +85,8 @@ export class AppSession {
     this.seedDownloadedBrowser = seedDownloadedBrowser;
     this.onboardingCompleted = onboardingCompleted;
     this.wayfernTermsAccepted = wayfernTermsAccepted;
+    // Extra keys for the seeded app_settings.json, on top of the defaults.
+    this.settings = settings;
     this.session = null;
   }
 
@@ -138,6 +141,10 @@ export class AppSession {
             commercial_trial_acknowledged: true,
             window_resize_warning_dismissed: true,
             disable_auto_updates: true,
+            // A tip opening by itself mid-test is a modal nobody asked for;
+            // the tips suite turns it back on for the one session that wants it.
+            tips_auto_show: false,
+            ...this.settings,
           },
           null,
           2,
@@ -591,6 +598,7 @@ export function appFromEnvironment(name, options = {}) {
     seedDownloadedBrowser: options.seedDownloadedBrowser,
     onboardingCompleted: options.onboardingCompleted,
     wayfernTermsAccepted: options.wayfernTermsAccepted,
+    settings: options.settings,
   });
 }
 

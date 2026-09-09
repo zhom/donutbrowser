@@ -9,6 +9,7 @@ use crate::api_client::ApiClient;
 use crate::browser::{create_browser, BrowserType};
 use crate::browser_version_manager::DownloadInfo;
 use crate::events;
+use crate::log_redaction::Plain;
 
 // Maximum time to wait for the next chunk of a streaming download before treating
 // the connection as stalled. Converts an indefinite hang into a terminal error so
@@ -705,7 +706,11 @@ impl Downloader {
         return Ok(version);
       } else {
         // Registry says it's downloaded but files don't exist - clean up registry
-        log::info!("Registry indicates {browser_str} {version} is downloaded, but files are missing. Cleaning up registry entry.");
+        log::info!(
+          "Registry indicates {} {} is downloaded, but files are missing. Cleaning up registry entry.",
+          Plain(&browser_str),
+          Plain(&version)
+        );
         self.registry.remove_browser(&browser_str, &version);
         self
           .registry
@@ -811,7 +816,11 @@ impl Downloader {
           // Do not remove the archive here. We keep it until verification succeeds.
         }
         Err(e) => {
-          log::error!("Extraction failed for {browser_str} {version}: {e}");
+          log::error!(
+            "Extraction failed for {} {}: {e}",
+            Plain(&browser_str),
+            Plain(&version)
+          );
 
           // Delete the corrupt/invalid archive so a fresh download happens next time
           if download_path.exists() {
@@ -857,7 +866,11 @@ impl Downloader {
     let _ = events::emit("download-progress", &progress);
 
     // Verify the browser was downloaded correctly
-    log::info!("Verifying download for browser: {browser_str}, version: {version}");
+    log::info!(
+      "Verifying download for browser: {}, version: {}",
+      Plain(&browser_str),
+      Plain(&version)
+    );
 
     // Use the browser's own verification method
     if !browser.is_version_downloaded(&version, &binaries_dir) {
@@ -912,7 +925,11 @@ impl Downloader {
         .registry
         .mark_download_completed(&browser_str, &version, browser_dir.clone())
     {
-      log::warn!("Warning: Could not mark {browser_str} {version} as completed in registry: {e}");
+      log::warn!(
+        "Warning: Could not mark {} {} as completed in registry: {e}",
+        Plain(&browser_str),
+        Plain(&version)
+      );
     }
     self
       .registry

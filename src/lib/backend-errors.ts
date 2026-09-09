@@ -39,6 +39,7 @@ export type BackendErrorCode =
   | "EXTENSION_UNSUPPORTED_FILE_TYPE"
   | "EXTENSION_DIR_NOT_FOUND"
   | "EXTENSION_NOT_A_DIRECTORY"
+  | "EXTENSION_PATH_INVALID"
   | "EXTENSION_MANIFEST_MISSING"
   | "EXTENSION_MANIFEST_INVALID"
   | "EXTENSION_DIR_TOO_LARGE"
@@ -395,6 +396,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.extensionDirNotFound");
     case "EXTENSION_NOT_A_DIRECTORY":
       return t("backendErrors.extensionNotADirectory");
+    case "EXTENSION_PATH_INVALID":
+      return t("backendErrors.extensionPathInvalid");
     case "EXTENSION_MANIFEST_MISSING":
       return t("backendErrors.extensionManifestMissing");
     case "EXTENSION_MANIFEST_INVALID":

@@ -1982,7 +1982,9 @@
     "historyTitle": "최근 검사",
     "historyEmpty": "아직 기록된 검사가 없습니다.",
     "historyOk": "성공",
-    "historyFailed": "실패"
+    "historyFailed": "실패",
+    "trendLabel": "최근 {{count}}회 확인의 지연 시간, 오른쪽이 최신",
+    "trendPeak": "가장 느림: {{ms}} ms"
   },
   "vpnCheck": {
     "valid": "VPN \"{{name}}\" 구성이 유효합니다",
@@ -2341,7 +2343,8 @@
     "syncSessionUnavailable": "지금은 동기화 세션에 접근할 수 없습니다.",
     "syncDisplayUnavailable": "화면 크기를 읽지 못해 창을 정렬할 수 없습니다.",
     "syncDisplayTooSmall": "그 배치로 창 {{windows}}개를 놓기에는 화면이 너무 작습니다.",
-    "syncArrangeFailed": "옮겨진 창이 없습니다."
+    "syncArrangeFailed": "옮겨진 창이 없습니다.",
+    "extensionPathInvalid": "그 경로는 사용할 수 없습니다. '..'이 포함되어 있습니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -2358,7 +2361,9 @@
       "about": "Donut Browser 정보",
       "aboutHint": "버전 및 앱 정보",
       "trash": "휴지통",
-      "trashHint": "삭제한 프로필 복원"
+      "trashHint": "삭제한 프로필 복원",
+      "tips": "팁",
+      "tipsHint": "기능 안내"
     },
     "network": "네트워크",
     "integrations": "통합",
@@ -2475,7 +2480,8 @@
     "goSettings": "설정으로 이동",
     "goCookieBot": "Cookie Bot",
     "goTrash": "휴지통으로 이동",
-    "goAgent": "에이전트로 이동"
+    "goAgent": "에이전트로 이동",
+    "openTips": "팁 열기"
   },
   "closeConfirm": {
     "title": "Donut Browser를 닫으시겠습니까?",
@@ -3335,5 +3341,143 @@
     "urlPlaceholder": "https://example.com",
     "folderPlaceholder": "선택 사항",
     "saved": "그룹 북마크를 저장했습니다"
+  },
+  "tips": {
+    "title": "팁",
+    "essentials": "기본",
+    "planSection": "내 플랜에 포함",
+    "count": "{{current}} / {{total}}",
+    "previous": "이전 팁",
+    "next": "다음 팁",
+    "done": "완료",
+    "autoShow": "Donut 시작 시 팁 표시",
+    "items": {
+      "dnsBlocklist": {
+        "label": "DNS 차단",
+        "title": "광고와 추적기를 로드 전에 차단",
+        "body": "프로필마다 자체 DNS 차단 목록을 가질 수 있습니다. 프로필의 DNS 열에서 수준을 선택하세요. 높은 수준은 추적 및 악성코드 도메인도 네트워크 단계에서 막습니다.",
+        "action": "DNS 설정 열기"
+      },
+      "proxyCheck": {
+        "label": "프록시 확인",
+        "title": "실행 전에 프록시 확인",
+        "body": "연결 확인은 출구 IP, 국가, 지연 시간, UDP 통과 여부를 알려줍니다. 네트워크 페이지나 프로필 행에서 실행하고, 지난 확인 기록으로 상태가 나빠지는 프록시를 찾아내세요.",
+        "action": "네트워크 열기"
+      },
+      "groups": {
+        "label": "그룹",
+        "title": "키보드로 그룹 전환",
+        "body": "그룹은 관련 프로필을 한데 모으고, 각 그룹에는 번호가 붙습니다. {{mod}}+1부터 {{mod}}+9까지로 목록을 즉시 전환합니다.",
+        "action": "그룹 열기"
+      },
+      "commandPalette": {
+        "label": "명령 팔레트",
+        "title": "모든 페이지가 단축키 하나 거리",
+        "body": "{{mod}}+K로 명령 팔레트를 엽니다. 페이지나 작업 이름을 몇 글자 입력하고 Enter를 누르세요.",
+        "action": "팔레트 열기"
+      },
+      "fingerprintGate": {
+        "label": "핑거프린트 검사",
+        "title": "핑거프린트를 출구와 일치시키기",
+        "body": "실행 전에 Donut은 프록시 출구의 시간대와 언어를 프로필 핑거프린트와 비교하고 불일치가 있으면 실행을 막습니다. 핑거프린트를 고치거나, 잘 알고 있다면 고급 설정에서 게이트를 끄세요.",
+        "action": "고급 설정 열기"
+      },
+      "profilePassword": {
+        "label": "프로필 비밀번호",
+        "title": "비밀번호로 프로필 잠그기",
+        "body": "비밀번호로 보호된 프로필은 디스크에서 암호화되고 실행 중에만 복호화됩니다. 프로필 메뉴에서 비밀번호를 설정하세요.",
+        "action": "프로필 열기"
+      },
+      "clearOnClose": {
+        "label": "닫을 때 지우기",
+        "title": "매번 깨끗하게 시작",
+        "body": "닫을 때 지우기를 켜면 창이 닫힐 때 프로필의 쿠키, 저장소, 기록이 삭제됩니다. 일회성 세션과 공용 컴퓨터에 좋습니다.",
+        "action": "프로필 열기"
+      },
+      "defaultBrowser": {
+        "label": "기본 브라우저",
+        "title": "모든 링크를 알맞은 프로필에서 열기",
+        "body": "Donut을 기본 브라우저로 설정하면 다른 앱에서 온 링크마다 어떤 프로필로 열지 물어봅니다.",
+        "action": "기본 브라우저 설정 열기"
+      },
+      "extensionGroups": {
+        "label": "확장 그룹",
+        "title": "하나의 확장 프로그램 세트를 여러 프로필과 공유",
+        "body": "확장 프로그램을 확장 그룹에 넣고 그 그룹을 프로필에 할당하세요. 그룹을 한 번 바꾸면 각 프로필이 다음 실행 때 따라갑니다.",
+        "action": "확장 프로그램 열기"
+      },
+      "selfHostedSync": {
+        "label": "자체 호스팅 동기화",
+        "title": "내 서버에 백업",
+        "body": "자체 호스팅한 donut-sync 서버를 지정하면 프로필, 프록시, 그룹이 그곳에 미러링됩니다. 종단 간 비밀번호를 추가하면 서버는 암호문만 봅니다.",
+        "action": "계정 열기"
+      },
+      "trash": {
+        "label": "휴지통",
+        "title": "삭제된 프로필은 휴지통에서 대기",
+        "body": "삭제된 프로필은 기본적으로 30일 동안 휴지통에 남고 내용 그대로 복원됩니다. 보관 기간은 고급 설정에 있습니다.",
+        "action": "휴지통 열기"
+      },
+      "localApi": {
+        "label": "API와 MCP",
+        "title": "스크립트와 에이전트로 Donut 자동화",
+        "body": "로컬 REST API와 MCP 서버로 스크립트와 AI 에이전트가 프로필을 나열, 생성, 설정할 수 있습니다. 통합에서 켜고 토큰을 복사하세요.",
+        "action": "통합 열기"
+      },
+      "importProfiles": {
+        "label": "가져오기",
+        "title": "Chrome, Edge, Brave에서 프로필 가져오기",
+        "body": "가져오기는 Chromium 프로필이나 아카이브의 쿠키, 로그인 정보, 확장 프로그램을 새 Donut 프로필로 복사해 바로 실행할 수 있게 합니다.",
+        "action": "가져오기 열기"
+      },
+      "cloudBackup": {
+        "label": "클라우드 동기화",
+        "title": "모든 기기에 내 프로필",
+        "body": "클라우드 동기화는 프로필, 프록시, 그룹을 백업하고 다른 컴퓨터에서 복원합니다. 동기화 열에서 프로필별로 켜세요.",
+        "action": "계정 열기"
+      },
+      "cookieBot": {
+        "label": "Cookie Bot",
+        "title": "밤사이 프로필 워밍",
+        "body": "Cookie Bot은 원격 호스트에서 일정에 따라 실제 사이트를 탐색해, 새 프로필이 사용 전에 자연스러운 기록을 쌓게 합니다.",
+        "action": "Cookie Bot 열기"
+      },
+      "crossOs": {
+        "label": "크로스 OS 핑거프린트",
+        "title": "어떤 운영체제로든 보이기",
+        "body": "크로스 OS 핑거프린트를 쓰면 어떤 컴퓨터에서 실행하든 프로필이 macOS, Windows, Linux로 보고할 수 있습니다. 핑거프린트를 만들거나 편집할 때 플랫폼을 고르세요.",
+        "action": "프로필 열기"
+      },
+      "automation": {
+        "label": "자동화",
+        "title": "코드에서 프로필 실행과 제어",
+        "body": "run, open-url, kill 엔드포인트는 스크립트에서 실제 프로필을 시작하고, 실행된 각 프로필은 Playwright나 Puppeteer용 CDP 엔드포인트를 제공합니다.",
+        "action": "통합 열기"
+      },
+      "agent": {
+        "label": "에이전트",
+        "title": "클릭은 에이전트에게",
+        "body": "작업을 설명하면 에이전트가 프로필을 단계별로 조작하고, 수행한 내용을 기록하며, 레시피로 다시 실행할 수 있습니다.",
+        "action": "에이전트 열기"
+      },
+      "team": {
+        "label": "팀 잠금",
+        "title": "충돌 없이 프로필 공유",
+        "body": "팀에서는 실행 중인 프로필이 다른 사람에게 잠기고 닫히면 해제됩니다. 계정 페이지에서 누가 무엇을 쓰는지 볼 수 있습니다.",
+        "action": "계정 열기"
+      },
+      "remoteControl": {
+        "label": "원격 제어",
+        "title": "donutbrowser.com에서 이 데스크톱 제어",
+        "body": "원격 제어를 켜면 웹사이트의 에이전트가 아웃바운드 브리지를 통해 이 컴퓨터의 프로필에 접근합니다. 통합에서 켜세요.",
+        "action": "통합 열기"
+      }
+    }
+  },
+  "paidWelcome": {
+    "title": "{{plan}}에 오신 것을 환영합니다",
+    "body": "플랜으로 다음 기능이 열렸습니다. 각 팁에서 실제 동작을 볼 수 있습니다.",
+    "cta": "보여주기",
+    "later": "나중에"
   }
 }

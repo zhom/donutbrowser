@@ -23,6 +23,7 @@ import {
 import { translateBackendError } from "@/lib/backend-errors";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import { runProxyCheck, useProxyCheck } from "@/lib/proxy-check-store";
+import { cn } from "@/lib/utils";
 import type { ProxyCheckHistoryEntry, StoredProxy, UdpSupport } from "@/types";
 
 const COPIED_MARK_MS = 1600;
@@ -71,6 +72,83 @@ export function ProxyUdpBadge({ proxy }: { proxy: StoredProxy }) {
         <p>{t(UDP_TOOLTIP_KEYS[verdict])}</p>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** How many remembered checks the strip draws; the list below keeps them all. */
+const TREND_BARS = 40;
+
+/**
+ * The remembered checks as one thin bar per check, oldest on the left, so a
+ * proxy that is slowing down or starting to fail shows as a shape before
+ * anyone reads a line. A failed check has no latency and carries a cross at
+ * the baseline instead of a bar; the newest check is the dark one.
+ */
+function LatencyStrip({ history }: { history: ProxyCheckHistoryEntry[] }) {
+  const { t } = useTranslation();
+  const entries = history.slice(0, TREND_BARS).reverse();
+  const peak = entries.reduce(
+    (max, entry) =>
+      entry.ok && typeof entry.latency_ms === "number"
+        ? Math.max(max, entry.latency_ms)
+        : max,
+    0,
+  );
+  if (entries.length < 2 || peak === 0) return null;
+  return (
+    <div data-slot="proxy-check-trend" className="space-y-1">
+      <div
+        role="img"
+        aria-label={t("proxyCheck.trendLabel", { count: entries.length })}
+        className="flex h-10 items-end gap-0.5"
+      >
+        {entries.map((entry, index) => {
+          const latest = index === entries.length - 1;
+          const ms =
+            entry.ok && typeof entry.latency_ms === "number"
+              ? entry.latency_ms
+              : null;
+          return (
+            <Tooltip key={`${entry.timestamp}-${index}`}>
+              <TooltipTrigger asChild>
+                <span
+                  data-slot="proxy-check-bar"
+                  data-ok={entry.ok}
+                  className="flex h-full w-1.5 flex-col justify-end"
+                >
+                  {ms === null ? (
+                    <FiX
+                      aria-hidden="true"
+                      className="size-1.5 shrink-0 text-destructive-text"
+                    />
+                  ) : (
+                    <span
+                      className={cn(
+                        "w-full rounded-t-[3px]",
+                        latest ? "bg-foreground" : "bg-muted-foreground/45",
+                      )}
+                      style={{ height: `${Math.max(8, (ms / peak) * 100)}%` }}
+                    />
+                  )}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {ms === null
+                    ? t("proxyCheck.historyFailed")
+                    : t("proxyCheck.latencyValue", { ms })}
+                  {" · "}
+                  {formatRelativeTime(entry.timestamp)}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-muted-foreground tabular-nums">
+        {t("proxyCheck.trendPeak", { ms: peak })}
+      </p>
+    </div>
   );
 }
 
@@ -302,7 +380,9 @@ export function ProxyCheckButton({
         <h3 className="break-words text-sm font-medium">{proxy.name}</h3>
         <OperationFlow
           label={t("appFeedback.routeDetails")}
-          active={checking ? 1 : result?.is_valid ? 2 : 0}
+          // A failed check stops at the proxy: the device end is fine.
+          active={checking ? 1 : result?.is_valid ? 2 : result ? 1 : 0}
+          busy={checking}
           failed={!checking && !!result && !result.is_valid}
           steps={[
             {
@@ -419,6 +499,7 @@ export function ProxyCheckButton({
           <h4 className="font-medium text-foreground">
             {t("proxyCheck.historyTitle")}
           </h4>
+          {history && <LatencyStrip history={history} />}
           {history && history.length > 0 ? (
             <ul className="max-h-48 divide-y divide-border overflow-y-auto">
               {history.map((entry, index) => (

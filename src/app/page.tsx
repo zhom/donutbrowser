@@ -28,6 +28,7 @@ import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
 import { ONBOARDING_TOUR } from "@/components/onboarding-provider";
+import { PaidWelcomeDialog } from "@/components/paid-welcome-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import {
   type GateDecision,
@@ -53,6 +54,7 @@ import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
 import { SynchronizerPanel } from "@/components/synchronizer-panel";
 import { ThankYouDialog } from "@/components/thank-you-dialog";
+import { TipsDialog } from "@/components/tips-dialog";
 import { TrashPage } from "@/components/trash-page";
 import { WayfernConfigDialog } from "@/components/wayfern-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
@@ -69,6 +71,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useSyncSessions } from "@/hooks/use-sync-session";
+import { useTips } from "@/hooks/use-tips";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
@@ -96,6 +99,7 @@ import {
   SHORTCUTS,
   type ShortcutId,
 } from "@/lib/shortcuts";
+import type { TipAction } from "@/lib/tips";
 import {
   dismissToast,
   showErrorToast,
@@ -340,8 +344,31 @@ export default function Home() {
   } = useCommercialTrial();
 
   // Cloud auth for cross-OS unlock
-  const { user: cloudUser } = useCloudAuth();
+  const { user: cloudUser, loggedInAt: cloudLoggedInAt } = useCloudAuth();
   const crossOsUnlocked = getEntitlements(cloudUser).crossOsFingerprints;
+  // Shown once when the commercial trial runs out; modal, so it goes first.
+  const commercialTrialModalOpen =
+    !termsLoading &&
+    termsAccepted === true &&
+    trialStatus?.type === "Expired" &&
+    !trialAcknowledged &&
+    !crossOsUnlocked;
+  // Feature tips and the paid-plan welcome wait for a settled app: not the
+  // first-run session, terms accepted, nothing modal in the way.
+  const tipsFlow = useTips({
+    cloudUser,
+    loggedInAt: cloudLoggedInAt,
+    ready:
+      firstRunOnboarding === false &&
+      !profilesLoading &&
+      !welcomeOpen &&
+      !thankYouOpen &&
+      !isOnbordaVisible &&
+      !termsLoading &&
+      termsAccepted === true &&
+      !commercialTrialModalOpen,
+  });
+  const { openTips, closeTips } = tipsFlow;
   // Bulk run/stop is a paid (browser automation) feature, matching the
   // /v1/profiles/batch/run API gate. Free/solo users see the bulk Run/Stop
   // actions disabled with a Pro badge.
@@ -396,6 +423,10 @@ export default function Home() {
   const [agentInitialTab, setAgentInitialTab] = useState<AgentTab>("run");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  // A settings section to land on, set by a tip's action for one opening.
+  const [settingsInitialSection, setSettingsInitialSection] = useState<
+    string | null
+  >(null);
   const [trashPageOpen, setTrashPageOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
@@ -531,6 +562,7 @@ export default function Home() {
     setCookieBotDialogOpen(false);
     setAgentDialogOpen(false);
     setTrashPageOpen(false);
+    setSettingsInitialSection(null);
 
     setCurrentPage(page);
     switch (page) {
@@ -579,11 +611,35 @@ export default function Home() {
     }
   }, []);
 
+  const runTipAction = useCallback(
+    (action: TipAction) => {
+      closeTips();
+      switch (action.kind) {
+        case "page":
+          handleRailNavigate(action.page);
+          break;
+        case "settings":
+          // The navigation clears the section; setting it afterwards in the
+          // same batch is what makes it win.
+          handleRailNavigate("settings");
+          setSettingsInitialSection(action.section);
+          break;
+        case "palette":
+          setCommandPaletteOpen(true);
+          break;
+      }
+    },
+    [closeTips, handleRailNavigate],
+  );
+
   const runShortcut = useCallback(
     (id: ShortcutId) => {
       switch (id) {
         case "openPalette":
           setCommandPaletteOpen(true);
+          break;
+        case "openTips":
+          openTips();
           break;
         case "openShortcuts":
           handleRailNavigate("shortcuts");
@@ -675,7 +731,13 @@ export default function Home() {
           break;
       }
     },
-    [handleRailNavigate, currentPage, proxyManagementInitialTab, cloudUser],
+    [
+      handleRailNavigate,
+      currentPage,
+      proxyManagementInitialTab,
+      cloudUser,
+      openTips,
+    ],
   );
 
   // Ordered list the digit shortcuts and palette consume. "__all__" is index 1
@@ -2216,6 +2278,7 @@ export default function Home() {
             onOpenAbout={() => {
               setAboutDialogOpen(true);
             }}
+            onOpenTips={() => openTips()}
             cookieBotRunning={Object.keys(cookieBotLiveSessions).length > 0}
           />
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -2303,6 +2366,7 @@ export default function Home() {
                   setCurrentPage("integrations");
                 }}
                 subPage={currentPage === "settings"}
+                initialSection={settingsInitialSection}
               />
             )}
 
@@ -2515,6 +2579,34 @@ export default function Home() {
         <ThankYouDialog
           isOpen={thankYouOpen}
           onClose={() => setThankYouOpen(false)}
+        />
+        <TipsDialog
+          key={tipsFlow.dialog.session}
+          open={tipsFlow.dialog.open}
+          mode={tipsFlow.dialog.mode}
+          tips={tipsFlow.tips}
+          seen={tipsFlow.seen}
+          initialTipId={tipsFlow.dialog.initialTipId}
+          auto={tipsFlow.dialog.auto}
+          autoShow={tipsFlow.autoShow}
+          onOpenChange={(open) => {
+            if (!open) closeTips();
+          }}
+          onTipShown={tipsFlow.markSeen}
+          onAutoShowChange={(enabled) => void tipsFlow.setAutoShow(enabled)}
+          onAction={runTipAction}
+        />
+        <PaidWelcomeDialog
+          open={tipsFlow.paidWelcome.open}
+          plan={tipsFlow.paidWelcome.plan}
+          tips={tipsFlow.planTips}
+          onOpenChange={(open) => {
+            if (!open) tipsFlow.dismissPaidWelcome();
+          }}
+          onOpenTip={(id) => {
+            tipsFlow.dismissPaidWelcome();
+            openTips(id);
+          }}
         />
 
         <CloneProfileDialog
@@ -2768,13 +2860,7 @@ export default function Home() {
 
         {/* Commercial Trial Modal - shown once when trial expires (skip for paid users) */}
         <CommercialTrialModal
-          isOpen={
-            !termsLoading &&
-            termsAccepted === true &&
-            trialStatus?.type === "Expired" &&
-            !trialAcknowledged &&
-            !crossOsUnlocked
-          }
+          isOpen={commercialTrialModalOpen}
           onClose={checkTrialStatus}
         />
 

@@ -5,6 +5,8 @@ import type { CloudAuthState, CloudUser } from "@/types";
 
 interface UseCloudAuthReturn {
   user: CloudUser | null;
+  /** When this desktop signed in, as the backend recorded it. */
+  loggedInAt: string | null;
   isLoggedIn: boolean;
   isLoading: boolean;
   exchangeDeviceCode: (code: string) => Promise<CloudAuthState>;
@@ -77,6 +79,7 @@ export function useCloudAuth(): UseCloudAuthReturn {
 
   return {
     user: authState?.user ?? null,
+    loggedInAt: authState?.logged_in_at ?? null,
     isLoggedIn: authState !== null,
     isLoading,
     exchangeDeviceCode,

@@ -1,6 +1,7 @@
 use crate::browser::ProxySettings;
 use crate::events;
 use crate::group_manager::GROUP_MANAGER;
+use crate::log_redaction::ShortId;
 use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
@@ -2542,7 +2543,8 @@ fn resolve_extension_source(
       Ok(Some(ExtensionSource::Upload { file_name, data }))
     }
     (None, Some(path)) => Ok(Some(ExtensionSource::LocalPath {
-      path: std::path::PathBuf::from(path),
+      path: crate::extension_manager::client_named_path(&path)
+        .map_err(|_| extension_request_error("EXTENSION_PATH_INVALID"))?,
       link,
     })),
     (None, None) => Ok(None),
@@ -3472,7 +3474,10 @@ async fn pump_cdp(session_id: String, client: WebSocket, upstream: crate::cdp_ta
     () = to_relay => {}
     () = to_client => {}
   }
-  log::info!("CDP proxy for remote session {session_id} closed");
+  log::info!(
+    "CDP proxy for remote session {} closed",
+    ShortId(&session_id)
+  );
 }
 
 // API Handler - Every remote session this account currently owns
@@ -4159,7 +4164,7 @@ async fn batch_run_profiles(
     .list_profiles()
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-  let mut results = Vec::with_capacity(request.profile_ids.len());
+  let mut results = Vec::new();
   for profile_id in &request.profile_ids {
     let fail = |error: &str| BatchRunResult {
       profile_id: profile_id.clone(),
@@ -4285,7 +4290,7 @@ async fn batch_stop_profiles(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
 
-  let mut results = Vec::with_capacity(request.profile_ids.len());
+  let mut results = Vec::new();
   for profile_id in &request.profile_ids {
     let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
       results.push(BatchStopResult {

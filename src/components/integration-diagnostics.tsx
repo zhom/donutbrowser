@@ -72,10 +72,26 @@ export function IntegrationDiagnostics({
       </div>
       <OperationFlow
         label={t("appFeedback.connectionTest")}
-        active={busy ? 1 : result?.authorized ? 2 : result?.reachable ? 1 : 0}
+        // The station the probe stopped at: nothing configured stops at
+        // "configured", unreachable at "reachable", a refused token at
+        // "authorized".
+        active={
+          busy
+            ? 1
+            : !result
+              ? 0
+              : !result.configured
+                ? 0
+                : result.reachable === false
+                  ? 1
+                  : 2
+        }
+        busy={busy}
         failed={
           !!result &&
-          (result.reachable === false || result.authorized === false)
+          (!result.configured ||
+            result.reachable === false ||
+            result.authorized === false)
         }
         steps={[
           {

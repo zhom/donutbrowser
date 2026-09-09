@@ -367,9 +367,52 @@ fn badge_fonts() -> std::sync::Arc<resvg::usvg::fontdb::Database> {
     .get_or_init(|| {
       let mut db = resvg::usvg::fontdb::Database::new();
       db.load_system_fonts();
+      if let Some(family) = badge_sans_family(&db) {
+        db.set_sans_serif_family(family);
+      }
       std::sync::Arc::new(db)
     })
     .clone()
+}
+
+/// The family the badge's `sans-serif` resolves to.
+///
+/// The database names Arial for the generic family, which macOS and Windows
+/// have and a Linux desktop usually does not: Ubuntu ships Noto, DejaVu,
+/// Liberation and Ubuntu instead. An unresolved family draws no initial at
+/// all, so the first family that is actually installed is chosen, and failing
+/// every known name, any installed font at all.
+fn badge_sans_family(db: &resvg::usvg::fontdb::Database) -> Option<String> {
+  use resvg::usvg::fontdb::{Family, Query, Stretch, Style, Weight};
+  const PREFERRED: [&str; 10] = [
+    "Arial",
+    "Helvetica Neue",
+    "Helvetica",
+    "Segoe UI",
+    "Noto Sans",
+    "DejaVu Sans",
+    "Liberation Sans",
+    "Ubuntu",
+    "Cantarell",
+    "Roboto",
+  ];
+  let installed = |name: &str| {
+    db.query(&Query {
+      families: &[Family::Name(name)],
+      weight: Weight::NORMAL,
+      stretch: Stretch::Normal,
+      style: Style::Normal,
+    })
+    .is_some()
+  };
+  PREFERRED
+    .iter()
+    .find(|name| installed(name))
+    .map(|name| name.to_string())
+    .or_else(|| {
+      db.faces()
+        .find_map(|face| face.families.first().map(|(name, _)| name.clone()))
+    })
 }
 
 /// The first letter (or digit) of a profile name, upper-cased, for its badge.

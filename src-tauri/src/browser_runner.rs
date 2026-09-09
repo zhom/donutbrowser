@@ -2,6 +2,7 @@ use crate::browser::ProxySettings;
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
+use crate::log_redaction::ShortId;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::{WayfernConfig, WayfernManager};
@@ -1076,7 +1077,8 @@ impl BrowserRunner {
     };
 
     log::info!(
-      "Stopping remote session {session_id} for profile {} ({profile_id})",
+      "Stopping remote session {} for profile {} ({profile_id})",
+      ShortId(&session_id),
       profile.name
     );
     crate::remote_session::end_remote_session(&session_id)
@@ -1085,7 +1087,10 @@ impl BrowserRunner {
         // Surfaced rather than swallowed. A failure here means the browser is
         // STILL RUNNING; reporting success would tell the user their profile is
         // free when a remote host is still writing to it.
-        log::warn!("Failed to stop remote session {session_id}: {e}");
+        log::warn!(
+          "Failed to stop remote session {}: {e}",
+          ShortId(&session_id)
+        );
         e.to_error_json().into()
       })?;
 

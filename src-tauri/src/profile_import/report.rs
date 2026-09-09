@@ -40,8 +40,12 @@ pub struct ProfileImportReport {
   pub cookies_migrated: usize,
   /// Cookies carried over as rows but whose value could not be recovered.
   pub cookies_unrecoverable: usize,
-  pub passwords_migrated: usize,
-  pub passwords_unrecoverable: usize,
+  /// Saved logins whose secret is readable in the new profile. `passwords_migrated` on the wire.
+  #[serde(rename = "passwords_migrated")]
+  pub logins_migrated: usize,
+  /// Saved logins carried as rows whose secret could not be recovered. `passwords_unrecoverable` on the wire.
+  #[serde(rename = "passwords_unrecoverable")]
+  pub logins_unrecoverable: usize,
   /// Saved cards / IBANs / autofill secrets re-encrypted.
   pub payment_methods_migrated: usize,
   pub payment_methods_unrecoverable: usize,
@@ -66,7 +70,7 @@ impl ProfileImportReport {
   /// should present the import as a success or as a warning.
   pub fn is_empty_import(&self) -> bool {
     self.cookies_migrated == 0
-      && self.passwords_migrated == 0
+      && self.logins_migrated == 0
       && self.history_entries == 0
       && self.bookmarks == 0
       && self.local_storage_origins == 0

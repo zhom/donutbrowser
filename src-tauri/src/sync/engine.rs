@@ -5,6 +5,7 @@ use super::manifest::{
 };
 use super::types::*;
 use crate::events;
+use crate::log_redaction::Plain;
 use crate::profile::types::{BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
 use crate::settings_manager::SettingsManager;
@@ -3555,7 +3556,7 @@ pub async fn set_profile_sync_mode(
       let _ = engine.client.delete(&manifest_key, None).await;
       log::info!(
         "Deleted remote manifest for profile {} due to sync mode change ({:?} -> {:?})",
-        profile_id,
+        Plain(&profile_id),
         old_mode,
         new_mode
       );
@@ -3658,9 +3659,13 @@ pub async fn set_profile_sync_mode(
       match SyncEngine::create_from_settings(&app_handle).await {
         Ok(engine) => {
           if let Err(e) = engine.delete_profile(&profile_id).await {
-            log::warn!("Failed to delete profile {} from sync: {}", profile_id, e);
+            log::warn!(
+              "Failed to delete profile {} from sync: {}",
+              Plain(&profile_id),
+              e
+            );
           } else {
-            log::info!("Profile {} deleted from sync service", profile_id);
+            log::info!("Profile {} deleted from sync service", Plain(&profile_id));
           }
         }
         Err(e) => {

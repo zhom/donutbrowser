@@ -1016,7 +1016,7 @@ impl ProfileManager {
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     let mut seen = std::collections::HashSet::new();
-    let mut deduped: Vec<String> = Vec::with_capacity(tags.len());
+    let mut deduped: Vec<String> = Vec::new();
     for t in tags.into_iter() {
       if seen.insert(t.clone()) {
         deduped.push(t);

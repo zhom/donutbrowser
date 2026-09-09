@@ -192,6 +192,10 @@ export function ImportProfileDialog({
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState<ProfileImportProgress | null>(null);
   const activeImportItems = useRef<ImportProfileItem[]>([]);
+  // Each run's summary toast gets its own id. Re-using one id after
+  // dismissing it merges the new toast into the one still sliding out, and
+  // a fast retry's summary was never seen.
+  const resultsToastId = useRef<string | null>(null);
   const [sourceProgress, setSourceProgress] = useState<
     Record<string, ProfileImportProgress["status"]>
   >({});
@@ -404,7 +408,7 @@ export function ImportProfileDialog({
       setCurrentStep("importing");
       setIsImporting(true);
       setProgress(null);
-      toast.dismiss("profile-import-results");
+      if (resultsToastId.current) toast.dismiss(resultsToastId.current);
       // A retry covers only the failed subset, so the earlier results are still
       // the truth for everything else and must not be thrown away.
       const previous = retryPaths ? result : null;
@@ -435,13 +439,14 @@ export function ImportProfileDialog({
               ? toast.warning
               : toast.error
             : toast.success;
+        resultsToastId.current = `profile-import-results-${Date.now()}`;
         notify(
           t("importProfile.resultsSummary", {
             imported: combined.imported_count,
             skipped: combined.skipped_count,
             failed: combined.failed_count,
           }),
-          { id: "profile-import-results" },
+          { id: resultsToastId.current },
         );
         if (
           batchResult.imported_count > 0 &&
@@ -977,6 +982,7 @@ export function ImportProfileDialog({
                 <OperationFlow
                   label={t("importProfile.importingTitle")}
                   active={isImporting ? 1 : 2}
+                  busy={isImporting}
                   failed={!isImporting && !!result?.failed_count}
                   steps={[
                     {
