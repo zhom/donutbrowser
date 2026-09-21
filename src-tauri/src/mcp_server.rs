@@ -5530,7 +5530,8 @@ impl McpServer {
 
     // Pick the latest downloaded version for this browser
     let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-    let versions = registry.get_downloaded_versions(browser);
+    let mut versions = registry.get_downloaded_versions(browser);
+    versions.sort_by(|a, b| crate::api_client::compare_versions(b, a));
     let version = versions.first().ok_or_else(|| McpError {
       code: -32000,
       message: format!("No downloaded version found for {browser}. Download it first."),

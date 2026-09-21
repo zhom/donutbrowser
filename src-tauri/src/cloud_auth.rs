@@ -993,25 +993,11 @@ impl CloudAuthManager {
     self.entitlements().await.map(|e| e.active).unwrap_or(false)
   }
 
-  /// Whether this session's plan entitles it to a Wayfern automation token.
-  ///
-  /// The token IS the automation entitlement, so this is `browser_automation`
-  /// and NOT `has_active_paid_subscription`. Gating the mint on "any active
-  /// plan" meant a Solo account — active, paying, and deliberately sold without
-  /// automation or fingerprint editing — asked for a token on every startup,
-  /// every login and every 10-hour refresh, collected a 403 each time, and got
-  /// the "account temporarily restricted" toast that belongs to the
-  /// multiple-device rule. Nothing was restricted; the plan simply does not
-  /// include the feature.
-  ///
   /// Reads the entitlement directly rather than going through
   /// `can_use_browser_automation`, whose e2e override would send the browser
   /// suite off to the live API for a token it already has as a test value.
   pub async fn is_entitled_to_wayfern_token(&self) -> bool {
-    self
-      .entitlements()
-      .await
-      .is_some_and(|e| e.active && e.browser_automation)
+    self.entitlements().await.is_some_and(|e| e.active)
   }
 
   /// Non-async version that uses try_lock, defaults to false if lock can't be acquired.
@@ -1326,9 +1312,7 @@ impl CloudAuthManager {
     if !self.is_entitled_to_wayfern_token().await {
       // Ok(()) here means callers log nothing, so a session that declined to
       // mint left no trace at all and looked identical to one that succeeded.
-      log::info!(
-        "Skipping wayfern token request: the cached plan does not include browser automation"
-      );
+      log::info!("Skipping wayfern token request: the cached plan is not active");
       self.clear_wayfern_token().await;
       return Ok(());
     }

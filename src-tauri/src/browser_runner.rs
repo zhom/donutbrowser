@@ -23,15 +23,22 @@ static PROFILE_LAUNCH_LOCKS: LazyLock<
 /// automation tools give a navigation rather than a loopback-sized one.
 const REMOTE_NAVIGATE_TIMEOUT_SECS: u64 = 30;
 
+async fn profile_launch_lock(profile_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+  let mut locks = PROFILE_LAUNCH_LOCKS.lock().await;
+  locks
+    .entry(profile_id.to_string())
+    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+    .clone()
+}
+
 async fn lock_profile_launch(profile_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
-  let lock = {
-    let mut locks = PROFILE_LAUNCH_LOCKS.lock().await;
-    locks
-      .entry(profile_id.to_string())
-      .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-      .clone()
-  };
-  lock.lock_owned().await
+  profile_launch_lock(profile_id).await.lock_owned().await
+}
+
+pub(crate) async fn try_lock_profile_launch(
+  profile_id: &str,
+) -> Option<tokio::sync::OwnedMutexGuard<()>> {
+  profile_launch_lock(profile_id).await.try_lock_owned().ok()
 }
 
 fn emit_launch_stage(profile: &BrowserProfile, stage: &str, error: Option<&str>) {
@@ -237,6 +244,16 @@ impl BrowserRunner {
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Handle Wayfern profiles using WayfernManager
     if profile.browser == "wayfern" {
+      let _launch_in_progress = crate::wayfern_identity_storage::yield_to_launch().await;
+      let converted;
+      let profile = if crate::wayfern_identity_storage::needs_conversion(profile) {
+        converted = crate::wayfern_identity_storage::convert_for_launch(profile)
+          .await
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+        &converted
+      } else {
+        profile
+      };
       // Get or create wayfern config
       let mut wayfern_config = profile.wayfern_config.clone().unwrap_or_else(|| {
         log::info!(
@@ -491,48 +508,12 @@ impl BrowserRunner {
         wayfern_config.proxy
       );
 
-      // Check if we need to generate a device for this launch.
-      //
-      // Three cases share the block: the user asked for a fresh device on
-      // every launch, the profile stores none at all, or the profile is legacy
-      // — a whole device payload and no identity — on a browser that speaks
-      // the identity API. The second is how a clone arrives here, since
-      // cloning clears both the payload and the identity so the clone gets an
-      // independent device instead of the browser's default.
-      //
-      // The third is the migration to identity-only storage: donutbrowser
-      // holds no device on disk, and a payload cannot become an identity
-      // locally, because only the browser mints an id and the id it mints
-      // derives its own device. That one-time rotation is the cost of the
-      // payload leaving disk, and it happens once because the minted id is
-      // persisted below.
       let mut updated_profile = profile.clone();
-      // A profile that stores a whole device BESIDE an identity needs no new
-      // device, only its payload folded into overrides and location. This runs
-      // before the launch reads the config, and the migrated shape is what
-      // gets persisted below.
-      if crate::wayfern_manager::WayfernManager::migrate_identity_config(&mut wayfern_config) {
-        let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
-        crate::wayfern_manager::WayfernManager::migrate_identity_config(&mut cfg);
-        updated_profile.wayfern_config = Some(cfg);
-        log::info!(
-          "Migrated Wayfern profile {} to identity-only storage",
-          profile.name
-        );
-      }
       let randomize_requested = wayfern_config.randomize_fingerprint_on_launch == Some(true);
-      let migrating_payload = wayfern_config.identity_id.is_none()
-        && wayfern_config.fingerprint.is_some()
-        && crate::wayfern_manager::supports_identity_api(&profile.version);
-      let needs_device = migrating_payload
-        || (wayfern_config.fingerprint.is_none() && wayfern_config.identity_id.is_none());
+      let needs_device = crate::wayfern_identity_storage::stored_shape(&wayfern_config)
+        == crate::wayfern_identity_storage::StoredShape::Empty;
       if randomize_requested || needs_device {
-        if migrating_payload && !randomize_requested {
-          log::info!(
-            "Migrating Wayfern profile {} from a stored device to an identity",
-            profile.name
-          );
-        } else if needs_device && !randomize_requested {
+        if needs_device && !randomize_requested {
           log::info!(
             "No stored device for Wayfern profile {}; generating one",
             profile.name
@@ -563,17 +544,11 @@ impl BrowserRunner {
           .generate_fingerprint_config(&app_handle, profile, &config_for_generation)
           .await
           .map_err(|e| {
-            let detail = e.to_string();
-            // BOTH refusal texts, because a profile may be on either browser
-            // version. Older builds word the generation-limit refusal
-            // differently, and matching only one wording leaves those users
-            // staring at a raw CDP string, which is the exact defect this
-            // mapping exists to remove.
-            if detail.contains("generation limit reached") || detail.contains("Too many profiles") {
-              crate::backend_error_with_detail("WAYFERN_GENERATION_LIMIT_REACHED", detail)
-            } else {
-              crate::backend_error_with_detail("WAYFERN_FINGERPRINT_GENERATION_FAILED", detail)
-            }
+            crate::wayfern_manager::wayfern_failure(
+              &e.to_string(),
+              "WAYFERN_FINGERPRINT_GENERATION_FAILED",
+              config_for_generation.os.as_deref(),
+            )
           })?;
 
         let geolocation_applied = generated.geolocation_applied;
@@ -1399,6 +1374,7 @@ impl BrowserRunner {
           updated_profile = p;
         }
       }
+      crate::wayfern_identity_storage::request_conversion_pass();
 
       log::info!(
         "Emitting profile events for successful Wayfern kill: {}",

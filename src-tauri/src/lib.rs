@@ -103,6 +103,7 @@ pub mod sync;
 mod synchronizer;
 pub mod traffic_stats;
 mod wayfern_cdp;
+mod wayfern_identity_storage;
 mod wayfern_manager;
 mod wayfern_persona;
 mod wayfern_terms;
@@ -1996,7 +1997,13 @@ async fn generate_sample_fingerprint(
         identity_id: generated.identity_id,
         location: generated.location,
       })
-      .map_err(|e| format!("Failed to generate fingerprint: {e}"))
+      .map_err(|e| {
+        crate::wayfern_manager::wayfern_failure(
+          &e.to_string(),
+          "WAYFERN_FINGERPRINT_GENERATION_FAILED",
+          config.os.as_deref(),
+        )
+      })
   } else {
     Err(format!(
       "Unsupported browser for fingerprint generation: {browser}"
@@ -3003,6 +3010,7 @@ pub fn run_with_builder(
             log::error!("Startup: failed to bump profiles to latest installed versions: {e}");
           }
         }
+        wayfern_identity_storage::request_conversion_pass();
       }
 
       if !e2e_automation_enabled() {

@@ -10,7 +10,14 @@ use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 use url::Url;
 
+static METADATA_WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
+  let _serialized = METADATA_WRITES.lock().unwrap_or_else(|e| e.into_inner());
+  atomic_write_locked(path, data)
+}
+
+fn atomic_write_locked(path: &Path, data: &[u8]) -> std::io::Result<()> {
   let tmp = path.with_extension(match path.extension().and_then(|e| e.to_str()) {
     Some(ext) => format!("{ext}.tmp"),
     None => "tmp".to_string(),
@@ -37,6 +44,62 @@ fn normalize_network_id(id: Option<String>) -> Option<String> {
 
 pub struct ProfileManager {
   wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
+}
+
+fn merge_submitted_wayfern_config(
+  stored: Option<&WayfernConfig>,
+  mut config: WayfernConfig,
+) -> WayfernConfig {
+  let mut keeps_identity_view = false;
+  if let Some(stored) = stored {
+    if config.identity_id.is_none()
+      && (config.fingerprint.is_some() || config.identity_overrides.is_some())
+    {
+      config.identity_id = stored.identity_id.clone();
+    }
+    keeps_identity_view = config.identity_id.is_some()
+      && stored.identity_id == config.identity_id
+      && stored.fingerprint.is_some()
+      && config.fingerprint.is_some();
+    if keeps_identity_view {
+      if config.identity_baseline.is_none() {
+        config.identity_baseline = stored.identity_baseline.clone();
+      }
+      if config.identity_overrides.is_none() {
+        config.identity_overrides = stored.identity_overrides.clone();
+      }
+      if config.location.is_none() {
+        config.location = stored.location.clone();
+      }
+    } else if config.identity_id.is_some() {
+      if config.location.is_none() {
+        config.location = stored.location.clone();
+      }
+      if config.identity_overrides.is_none() {
+        config.identity_overrides = stored.identity_overrides.clone();
+      }
+      if let Some(fingerprint) = config.fingerprint.take() {
+        if let Some(object) =
+          crate::wayfern_manager::WayfernManager::fingerprint_object(&fingerprint)
+        {
+          let overrides =
+            crate::wayfern_manager::WayfernManager::overrides_from_explicit_fingerprint(&object);
+          config.identity_overrides = if overrides.is_empty() {
+            None
+          } else {
+            serde_json::to_string(&overrides).ok()
+          };
+          if config.location.is_none() {
+            config.location = crate::wayfern_manager::WayfernManager::location_of(&object);
+          }
+        }
+      }
+    }
+  }
+  if !keeps_identity_view {
+    config.identity_baseline = None;
+  }
+  config
 }
 
 impl ProfileManager {
@@ -199,12 +262,7 @@ impl ProfileManager {
       let mut geolocation_applied = true;
 
       // A caller-supplied device is a set of explicit field choices, not a
-      // payload to store. On a browser with the identity API it becomes the
-      // identity's overrides and its location, and the device is minted from a
-      // freshly created identity below like any other profile's. A browser
-      // without that API has nowhere to put the choices, so there it stays the
-      // stored payload.
-      let supplied_device = if crate::wayfern_manager::supports_identity_api(version) {
+      let supplied_device = if crate::wayfern_manager::supports_wayfern_152(version) {
         config
           .fingerprint
           .take()
@@ -389,6 +447,32 @@ impl ProfileManager {
     }
 
     Ok(profile)
+  }
+
+  pub fn save_profile_unchanged(
+    &self,
+    expected: &BrowserProfile,
+    profile: &BrowserProfile,
+  ) -> Result<bool, Box<dyn std::error::Error>> {
+    let profile_file = self
+      .get_profiles_dir()
+      .join(profile.id.to_string())
+      .join("metadata.json");
+    let json = serde_json::to_string_pretty(profile)?;
+    let expected_json = serde_json::to_string_pretty(expected)?;
+    let _serialized = METADATA_WRITES.lock().unwrap_or_else(|e| e.into_inner());
+    let current = fs::read_to_string(&profile_file)?;
+    if serde_json::from_str::<serde_json::Value>(&current)?
+      != serde_json::from_str::<serde_json::Value>(&expected_json)?
+    {
+      return Ok(false);
+    }
+    atomic_write_locked(&profile_file, json.as_bytes())?;
+    drop(_serialized);
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
+    Ok(true)
   }
 
   pub fn save_profile(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
@@ -940,6 +1024,10 @@ impl ProfileManager {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
+    if profile.browser == "wayfern" {
+      crate::wayfern_identity_storage::request_conversion_pass();
+    }
+
     Ok(profile)
   }
 
@@ -1381,7 +1469,7 @@ impl ProfileManager {
     &self,
     app_handle: tauri::AppHandle,
     profile_id: &str,
-    mut config: WayfernConfig,
+    config: WayfernConfig,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by ID
     let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
@@ -1413,47 +1501,7 @@ impl ProfileManager {
       );
     }
 
-    // The identity is internal state, so a caller that edits the fingerprint
-    // through the API or MCP will not send it back. Dropping it would silently
-    // re-mint the device on the next launch and throw the edit away with it,
-    // which is the opposite of what an override is for. Carry it forward unless
-    // the caller either supplied its own or cleared the fingerprint outright.
-    if let Some(stored) = profile.wayfern_config.as_ref() {
-      if config.identity_id.is_none()
-        && (config.fingerprint.is_some() || config.identity_overrides.is_some())
-      {
-        config.identity_id = stored.identity_id.clone();
-      }
-      if config.identity_id.is_some() {
-        if config.location.is_none() {
-          config.location = stored.location.clone();
-        }
-        if config.identity_overrides.is_none() {
-          config.identity_overrides = stored.identity_overrides.clone();
-        }
-        // A WHOLE fingerprint sent for an identity-backed profile (an older UI
-        // or an API/MCP caller) is an explicit set of fields: it becomes the
-        // override map and is never stored as a device.
-        if let Some(fingerprint) = config.fingerprint.take() {
-          if let Some(object) =
-            crate::wayfern_manager::WayfernManager::fingerprint_object(&fingerprint)
-          {
-            let overrides =
-              crate::wayfern_manager::WayfernManager::overrides_from_explicit_fingerprint(&object);
-            config.identity_overrides = if overrides.is_empty() {
-              None
-            } else {
-              serde_json::to_string(&overrides).ok()
-            };
-            if config.location.is_none() {
-              config.location = crate::wayfern_manager::WayfernManager::location_of(&object);
-            }
-          }
-        }
-      }
-    }
-    // The baseline is a legacy field; nothing writes it any more.
-    config.identity_baseline = None;
+    let config = merge_submitted_wayfern_config(profile.wayfern_config.as_ref(), config);
 
     // Update the Wayfern configuration
     profile.wayfern_config = Some(config);
@@ -1911,6 +1959,7 @@ impl ProfileManager {
             {
               latest = updated;
             }
+            crate::wayfern_identity_storage::request_conversion_pass();
 
             if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
@@ -1928,6 +1977,91 @@ mod tests {
   use super::*;
 
   use tempfile::TempDir;
+
+  const VIEW: &str = r#"{"platform":"Win32","hardwareConcurrency":8,"timezone":"Europe/Berlin"}"#;
+  const EDITED_VIEW: &str =
+    r#"{"platform":"Win32","hardwareConcurrency":16,"timezone":"Europe/Berlin"}"#;
+
+  fn stored_view() -> WayfernConfig {
+    WayfernConfig {
+      identity_id: Some("id-1".to_string()),
+      fingerprint: Some(VIEW.to_string()),
+      identity_baseline: Some(VIEW.to_string()),
+      ..Default::default()
+    }
+  }
+
+  #[test]
+  fn a_submitted_config_keeps_a_stored_identity_view() {
+    let stored = stored_view();
+    let submitted = WayfernConfig {
+      fingerprint: Some(VIEW.to_string()),
+      identity_overrides: Some(r#"{"doNotTrack":"1"}"#.to_string()),
+      ..Default::default()
+    };
+    let merged = merge_submitted_wayfern_config(Some(&stored), submitted);
+    assert_eq!(merged.identity_id.as_deref(), Some("id-1"));
+    assert_eq!(merged.fingerprint.as_deref(), Some(VIEW));
+    assert_eq!(merged.identity_baseline.as_deref(), Some(VIEW));
+    assert_eq!(
+      merged.identity_overrides.as_deref(),
+      Some(r#"{"doNotTrack":"1"}"#)
+    );
+
+    let edited = WayfernConfig {
+      fingerprint: Some(EDITED_VIEW.to_string()),
+      ..Default::default()
+    };
+    let merged = merge_submitted_wayfern_config(Some(&stored), edited);
+    assert_eq!(merged.fingerprint.as_deref(), Some(EDITED_VIEW));
+    assert_eq!(merged.identity_baseline.as_deref(), Some(VIEW));
+    assert!(merged.identity_overrides.is_none());
+  }
+
+  #[test]
+  fn a_submitted_fingerprint_for_a_plain_identity_becomes_overrides() {
+    let stored = WayfernConfig {
+      identity_id: Some("id-1".to_string()),
+      location: Some(r#"{"timezone":"Europe/Berlin"}"#.to_string()),
+      ..Default::default()
+    };
+    let submitted = WayfernConfig {
+      fingerprint: Some(EDITED_VIEW.to_string()),
+      ..Default::default()
+    };
+    let merged = merge_submitted_wayfern_config(Some(&stored), submitted);
+    assert_eq!(merged.identity_id.as_deref(), Some("id-1"));
+    assert!(merged.fingerprint.is_none());
+    assert!(merged.identity_baseline.is_none());
+    let overrides =
+      crate::wayfern_manager::WayfernManager::stored_object(merged.identity_overrides.as_deref());
+    assert_eq!(
+      overrides.get("hardwareConcurrency"),
+      Some(&serde_json::json!(16))
+    );
+    assert!(overrides.get("timezone").is_none());
+    assert_eq!(
+      merged.location.as_deref(),
+      Some(r#"{"timezone":"Europe/Berlin"}"#)
+    );
+  }
+
+  #[test]
+  fn a_submitted_payload_without_a_stored_identity_stays_a_payload() {
+    let stored = WayfernConfig {
+      fingerprint: Some(VIEW.to_string()),
+      ..Default::default()
+    };
+    let submitted = WayfernConfig {
+      fingerprint: Some(EDITED_VIEW.to_string()),
+      identity_baseline: Some(VIEW.to_string()),
+      ..Default::default()
+    };
+    let merged = merge_submitted_wayfern_config(Some(&stored), submitted);
+    assert!(merged.identity_id.is_none());
+    assert_eq!(merged.fingerprint.as_deref(), Some(EDITED_VIEW));
+    assert!(merged.identity_baseline.is_none());
+  }
 
   fn create_test_profile_manager() -> (&'static ProfileManager, TempDir) {
     let temp_dir = TempDir::new().unwrap();

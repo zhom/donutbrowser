@@ -1289,11 +1289,25 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
         // it cannot be proven safe, which is an upstream failure, not the
         // caller's fault.
         StatusCode::SERVICE_UNAVAILABLE
-      } else if code.ends_with("_REQUIRES_PRO") || code.ends_with("_PAYMENT_REQUIRED") {
+      } else if code.ends_with("_REQUIRES_PRO")
+        || code.ends_with("_PAYMENT_REQUIRED")
+        || code.ends_with("_REQUIRES_PLAN")
+      {
         // Paid-feature gates (FINGERPRINT_REQUIRES_PRO, PROXY_PAYMENT_REQUIRED).
         // Mapping them here lets the gate live in the shared manager instead of
         // being re-implemented in each handler to get the status right.
         StatusCode::PAYMENT_REQUIRED
+      } else if code == "WAYFERN_INSTANCE_LIMIT_REACHED"
+        || code == "WAYFERN_GENERATION_LIMIT_REACHED"
+      {
+        StatusCode::TOO_MANY_REQUESTS
+      } else if code == "WAYFERN_PLAN_CHECK_UNAVAILABLE"
+        || code == "WAYFERN_GENERATION_UNAVAILABLE"
+        || code == "WAYFERN_BROWSER_BUSY"
+      {
+        StatusCode::SERVICE_UNAVAILABLE
+      } else if code == "WAYFERN_BROWSER_EXITED" {
+        StatusCode::INTERNAL_SERVER_ERROR
       } else {
         // Validation-style codes (NAME_CANNOT_BE_EMPTY, GROUP_ALREADY_EXISTS,
         // WAYFERN_VERSION_NOT_AVAILABLE, ...).
@@ -5942,6 +5956,43 @@ mod tests {
     ] {
       let (status, body) = manager_error_response(serde_json::json!({ "code": code }).to_string());
       assert_eq!(status, StatusCode::CONFLICT, "{code} must be a 409");
+      assert!(body.contains(code), "{code} must reach the caller");
+    }
+  }
+
+  #[test]
+  fn wayfern_refusals_carry_a_status_a_client_can_act_on() {
+    for (code, expected) in [
+      (
+        "WAYFERN_CROSS_OS_REQUIRES_PLAN",
+        StatusCode::PAYMENT_REQUIRED,
+      ),
+      (
+        "WAYFERN_CUSTOM_FINGERPRINT_REQUIRES_PLAN",
+        StatusCode::PAYMENT_REQUIRED,
+      ),
+      (
+        "WAYFERN_INSTANCE_LIMIT_REACHED",
+        StatusCode::TOO_MANY_REQUESTS,
+      ),
+      (
+        "WAYFERN_GENERATION_LIMIT_REACHED",
+        StatusCode::TOO_MANY_REQUESTS,
+      ),
+      (
+        "WAYFERN_PLAN_CHECK_UNAVAILABLE",
+        StatusCode::SERVICE_UNAVAILABLE,
+      ),
+      (
+        "WAYFERN_GENERATION_UNAVAILABLE",
+        StatusCode::SERVICE_UNAVAILABLE,
+      ),
+      ("WAYFERN_BROWSER_BUSY", StatusCode::SERVICE_UNAVAILABLE),
+      ("WAYFERN_BROWSER_EXITED", StatusCode::INTERNAL_SERVER_ERROR),
+      ("WAYFERN_IDENTITY_REFUSED", StatusCode::BAD_REQUEST),
+    ] {
+      let (status, body) = manager_error_response(serde_json::json!({ "code": code }).to_string());
+      assert_eq!(status, expected, "{code}");
       assert!(body.contains(code), "{code} must reach the caller");
     }
   }

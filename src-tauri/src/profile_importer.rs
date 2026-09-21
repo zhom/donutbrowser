@@ -924,10 +924,7 @@ impl ProfileImporter {
       let mut config = wayfern_config.unwrap_or_default();
 
       // A caller-supplied device is a set of explicit field choices, not a
-      // payload to store: on a browser with the identity API it becomes the
-      // identity's overrides and its location, and the device is minted from a
-      // freshly created identity below.
-      let supplied_device = if crate::wayfern_manager::supports_identity_api(&version) {
+      let supplied_device = if crate::wayfern_manager::supports_wayfern_152(&version) {
         config
           .fingerprint
           .take()
@@ -1116,6 +1113,8 @@ impl ProfileImporter {
     let downloaded_versions = self
       .downloaded_browsers_registry
       .get_downloaded_versions(browser_type);
+    let mut downloaded_versions = downloaded_versions;
+    downloaded_versions.sort_by(|a, b| crate::api_client::compare_versions(b, a));
 
     if let Some(version) = downloaded_versions.first() {
       return Ok(version.clone());

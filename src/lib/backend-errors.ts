@@ -207,16 +207,18 @@ export type BackendErrorCode =
   // can have. `detail` carries the underlying browser error for support.
   | "WAYFERN_FINGERPRINT_APPLY_FAILED"
   | "WAYFERN_FINGERPRINT_GENERATION_FAILED"
-  // Its own code rather than a generation failure: the block applies to the
-  // whole account rather than one profile, so "try again" is wrong advice, and
-  // a user whose every profile refuses at once has to be told this is one
-  // limit and not a broken install.
   | "WAYFERN_GENERATION_LIMIT_REACHED"
   // A cross-OS claim needs an active signed-in session, so an expired or
   // offline one cannot apply it. Distinct from the generic apply failure because
   // signing in again is the fix; `detail` names the claimed OS.
   | "WAYFERN_CROSS_OS_REQUIRES_PLAN"
   | "WAYFERN_IDENTITY_REFUSED"
+  | "WAYFERN_INSTANCE_LIMIT_REACHED"
+  | "WAYFERN_PLAN_CHECK_UNAVAILABLE"
+  | "WAYFERN_CUSTOM_FINGERPRINT_REQUIRES_PLAN"
+  | "WAYFERN_GENERATION_UNAVAILABLE"
+  | "WAYFERN_BROWSER_BUSY"
+  | "WAYFERN_BROWSER_EXITED"
   | "PROFILE_EXPORT_FAILED"
   | "PROFILE_EXPORT_TOO_LARGE"
   | "PROFILE_IMPORT_FAILED"
@@ -759,6 +761,20 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "WAYFERN_IDENTITY_REFUSED":
       return t("backendErrors.wayfernIdentityRefused", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "WAYFERN_INSTANCE_LIMIT_REACHED":
+      return t("backendErrors.wayfernInstanceLimitReached");
+    case "WAYFERN_PLAN_CHECK_UNAVAILABLE":
+      return t("backendErrors.wayfernPlanCheckUnavailable");
+    case "WAYFERN_CUSTOM_FINGERPRINT_REQUIRES_PLAN":
+      return t("backendErrors.wayfernCustomFingerprintRequiresPlan");
+    case "WAYFERN_GENERATION_UNAVAILABLE":
+      return t("backendErrors.wayfernGenerationUnavailable");
+    case "WAYFERN_BROWSER_BUSY":
+      return t("backendErrors.wayfernBrowserBusy");
+    case "WAYFERN_BROWSER_EXITED":
+      return t("backendErrors.wayfernBrowserExited", {
         detail: parsed.params?.detail ?? "",
       });
     case "PROFILE_EXPORT_FAILED":
