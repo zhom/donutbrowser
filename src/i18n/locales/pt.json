@@ -2292,6 +2292,7 @@
     "wayfernPlanCheckUnavailable": "Não foi possível verificar o seu plano agora. Tente novamente em instantes.",
     "wayfernCustomFingerprintRequiresPlan": "O seu plano não inclui impressões digitais personalizadas.",
     "wayfernGenerationUnavailable": "Não foi possível criar uma impressão digital agora. Tente novamente mais tarde.",
+    "profileGenerationLimitReached": "Você criou 100 perfis na última hora, o limite do plano Pro. Aguarde cerca de {{minutes}} minutos antes de criar outro.",
     "wayfernBrowserBusy": "O navegador estava ocupado com a aplicação de uma impressão digital. Tente novamente.",
     "wayfernBrowserExited": "O navegador fechou durante a inicialização. {{detail}}",
     "profileExportFailed": "Não foi possível exportar este perfil. {{detail}}",
@@ -2589,6 +2590,10 @@
   "wayfernBlocked": {
     "title": "Automação do navegador pausada",
     "description": "A automação do navegador funciona em um dispositivo por vez e outro dispositivo com a sessão ativa está usando-a. Saia da conta nesse dispositivo e inicie o perfil novamente."
+  },
+  "profileGenerationLimit": {
+    "title": "Limite de perfis por hora atingido",
+    "description": "O seu plano Pro permite 100 novos perfis por hora. A criação fica pausada até a janela reiniciar, para que a sua conta não seja bloqueada."
   },
   "wayfernConfigDialog": {
     "titleView": "Ver configurações de impressão digital - {{name}} ({{browser}})",

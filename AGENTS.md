@@ -63,7 +63,6 @@ donutbrowser/
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)
 │   │   ├── settings_manager.rs     # App settings persistence (atomic writes), tips + paid-welcome state
 │   │   ├── vault.rs                # Per-install key that seals local secrets; opens legacy build-password seals once
-│   │   ├── data_root.rs            # Moving the data directory (copy, verify, then delete) + the pointer read at startup
 │   │   ├── cookie_manager.rs       # Cookie import/export
 │   │   ├── profile_importer.rs     # Bulk profile import (Chromium-family detection, ZIP, batch)
 │   │   ├── fingerprint_consistency.rs # Launch-time proxy exit vs fingerprint timezone/language check

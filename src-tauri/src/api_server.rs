@@ -1299,6 +1299,7 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
         StatusCode::PAYMENT_REQUIRED
       } else if code == "WAYFERN_INSTANCE_LIMIT_REACHED"
         || code == "WAYFERN_GENERATION_LIMIT_REACHED"
+        || code == "PROFILE_GENERATION_LIMIT_REACHED"
       {
         StatusCode::TOO_MANY_REQUESTS
       } else if code == "WAYFERN_PLAN_CHECK_UNAVAILABLE"
@@ -1438,6 +1439,8 @@ async fn get_profile(
 ///   `"linux"`, `"android"`, `"ios"`). Omit it to match the host. Any other
 ///   OS is cross-OS spoofing and needs an active Pro plan; 402 otherwise.
 ///   A `wayfern_config` that fails to parse is a 400, never a silent default.
+/// - Pro accounts may generate 100 profiles per rolling hour; the 101st is
+///   refused with 429 and a `retryAfterSeconds` in the body.
 #[utoipa::path(
   post,
   path = "/v1/profiles",
@@ -1447,6 +1450,7 @@ async fn get_profile(
     (status = 400, description = "Invalid browser, invalid wayfern_config, or no downloaded version available"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Selected proxy requires payment, or a cross-OS fingerprint requires Pro"),
+    (status = 429, description = "Hourly profile generation limit reached; the body carries retryAfterSeconds"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -1602,10 +1606,14 @@ async fn create_profile(
         profile: ApiProfile::from(&profile),
       }))
     }
-    Err(e) => Err((
-      StatusCode::BAD_REQUEST,
-      format!("Failed to create profile: {e}"),
-    )),
+    Err(e) => {
+      let (status, body) = manager_error_response(e);
+      if status == StatusCode::TOO_MANY_REQUESTS {
+        let _ = crate::events::emit_empty("profile-generation-limit-reached");
+      }
+      log::warn!("[api] Could not create profile '{}': {body}", request.name);
+      Err((status, body))
+    }
   }
 }
 

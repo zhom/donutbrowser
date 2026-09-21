@@ -32,9 +32,6 @@ export const commandCoverage = {
       "mark_tip_seen",
       "set_tips_auto_show",
       "observe_cloud_plan",
-      "data_root::get_data_root_info",
-      "data_root::move_data_root",
-      "data_root::clear_data_root_choice",
     ],
   },
   profileEntities: {

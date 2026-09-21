@@ -217,6 +217,9 @@ export type BackendErrorCode =
   | "WAYFERN_PLAN_CHECK_UNAVAILABLE"
   | "WAYFERN_CUSTOM_FINGERPRINT_REQUIRES_PLAN"
   | "WAYFERN_GENERATION_UNAVAILABLE"
+  // Donut's own hourly cap on Pro accounts, refused locally before the request
+  // reaches Wayfern. `retryAfterSeconds` says when the window reopens.
+  | "PROFILE_GENERATION_LIMIT_REACHED"
   | "WAYFERN_BROWSER_BUSY"
   | "WAYFERN_BROWSER_EXITED"
   | "PROFILE_EXPORT_FAILED"
@@ -235,23 +238,6 @@ export type BackendErrorCode =
   | "NO_E2E_PASSWORD_SET"
   | "TRASH_ENTRY_NOT_FOUND"
   | "TRASH_RESTORE_CONFLICT"
-  // Moving the data directory. Every refusal is its own code because every one
-  // of them has a different fix: close the browsers, wait for the sync, pick
-  // somewhere else, free some space.
-  | "DATA_ROOT_SAME_AS_CURRENT"
-  | "DATA_ROOT_DESTINATION_INSIDE_SOURCE"
-  | "DATA_ROOT_BROWSER_RUNNING"
-  | "DATA_ROOT_SYNC_IN_PROGRESS"
-  // `params.required` / `params.available`, both in bytes as strings.
-  | "DATA_ROOT_INSUFFICIENT_SPACE"
-  | "DATA_ROOT_DESTINATION_NOT_WRITABLE"
-  | "DATA_ROOT_DESTINATION_NOT_EMPTY"
-  | "DATA_ROOT_MOVE_IN_PROGRESS"
-  | "DATA_ROOT_COPY_FAILED"
-  // The copy did not match the source, so nothing was deleted. Its own code
-  // rather than a copy failure: the user's data is still where it was, and
-  // saying so is the whole point of verifying before deleting.
-  | "DATA_ROOT_VERIFY_FAILED"
   // Synchronised windows.
   | "SYNC_SESSION_NOT_FOUND"
   | "SYNC_FOLLOWER_NOT_FOUND"
@@ -771,6 +757,17 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.wayfernCustomFingerprintRequiresPlan");
     case "WAYFERN_GENERATION_UNAVAILABLE":
       return t("backendErrors.wayfernGenerationUnavailable");
+    case "PROFILE_GENERATION_LIMIT_REACHED": {
+      const seconds = Number.parseInt(
+        parsed.params?.retryAfterSeconds ?? "",
+        10,
+      );
+      return t("backendErrors.profileGenerationLimitReached", {
+        minutes: Number.isFinite(seconds)
+          ? Math.max(1, Math.ceil(seconds / 60))
+          : 60,
+      });
+    }
     case "WAYFERN_BROWSER_BUSY":
       return t("backendErrors.wayfernBrowserBusy");
     case "WAYFERN_BROWSER_EXITED":
@@ -817,34 +814,6 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.trashEntryNotFound");
     case "TRASH_RESTORE_CONFLICT":
       return t("backendErrors.trashRestoreConflict");
-    case "DATA_ROOT_SAME_AS_CURRENT":
-      return t("backendErrors.dataRootSameAsCurrent");
-    case "DATA_ROOT_DESTINATION_INSIDE_SOURCE":
-      return t("backendErrors.dataRootDestinationInsideSource");
-    case "DATA_ROOT_BROWSER_RUNNING":
-      return t("backendErrors.dataRootBrowserRunning");
-    case "DATA_ROOT_SYNC_IN_PROGRESS":
-      return t("backendErrors.dataRootSyncInProgress");
-    // The figures arrive already written out. This module is imported by a
-    // plain `node --test` run, so it stays free of project imports, and the
-    // one place that knows the byte counts formats them.
-    case "DATA_ROOT_INSUFFICIENT_SPACE":
-      return t("backendErrors.dataRootInsufficientSpace", {
-        required: parsed.params?.required ?? "",
-        available: parsed.params?.available ?? "",
-      });
-    case "DATA_ROOT_DESTINATION_NOT_WRITABLE":
-      return t("backendErrors.dataRootDestinationNotWritable");
-    case "DATA_ROOT_DESTINATION_NOT_EMPTY":
-      return t("backendErrors.dataRootDestinationNotEmpty");
-    case "DATA_ROOT_MOVE_IN_PROGRESS":
-      return t("backendErrors.dataRootMoveInProgress");
-    case "DATA_ROOT_COPY_FAILED":
-      return t("backendErrors.dataRootCopyFailed", {
-        detail: parsed.params?.detail ?? "",
-      });
-    case "DATA_ROOT_VERIFY_FAILED":
-      return t("backendErrors.dataRootVerifyFailed");
     case "SYNC_SESSION_NOT_FOUND":
       return t("backendErrors.syncSessionNotFound");
     case "SYNC_FOLLOWER_NOT_FOUND":

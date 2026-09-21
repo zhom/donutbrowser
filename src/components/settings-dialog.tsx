@@ -8,7 +8,6 @@ import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
-import { DataRootSetting } from "@/components/data-root-setting";
 import { DnsBlocklistDialog } from "@/components/dns-blocklist-dialog";
 import { LoadingButton } from "@/components/loading-button";
 import { useTheme } from "@/components/theme-provider";
@@ -83,17 +82,6 @@ interface AppSettings {
   keep_decrypted_profiles_in_ram?: boolean;
   fingerprint_gate_disabled?: boolean;
   vpn_extension_warning_disabled?: boolean;
-  trash_retention_days?: number;
-}
-
-/** Retention choices offered for the trash, in days. The backend clamps to 1..=365. */
-const TRASH_RETENTION_OPTIONS = [7, 14, 30, 90, 365];
-const DEFAULT_TRASH_RETENTION_DAYS = 30;
-
-/** The offered choices, plus the stored value when it is not one of them. */
-function trashRetentionOptions(current: number): number[] {
-  if (TRASH_RETENTION_OPTIONS.includes(current)) return TRASH_RETENTION_OPTIONS;
-  return [...TRASH_RETENTION_OPTIONS, current].sort((a, b) => a - b);
 }
 
 interface CustomThemeState {
@@ -844,10 +832,6 @@ export function SettingsDialog({
         ([key]) => Boolean(settings[key]) !== Boolean(originalSettings[key]),
       )
       .map(([, key]) => t(key)),
-    ...((settings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS) !==
-    (originalSettings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS)
-      ? [t("settings.trashRetention")]
-      : []),
   ];
   const hasChanges = pendingChanges.length > 0;
   const sections = [
@@ -875,7 +859,6 @@ export function SettingsDialog({
     ["dns", "dnsBlocklist.title", ["dnsBlocklist"]],
     ["encryption", "settings.encryption.title", ["settings.encryption"]],
     ["commercial", "settings.commercial.title", ["settings.commercial"]],
-    ["dataRoot", "settings.dataRoot.title", ["settings.dataRoot"]],
     [
       "advanced",
       "settings.advanced.title",
@@ -885,8 +868,6 @@ export function SettingsDialog({
         "settings.disableAutoUpdatesDescription",
         "settings.keepDecryptedProfilesInRam",
         "settings.keepDecryptedProfilesInRamDescription",
-        "settings.trashRetention",
-        "settings.trashRetentionDescription",
         "settings.privacy",
       ],
     ],
@@ -1656,19 +1637,6 @@ export function SettingsDialog({
                 </div>
               </div>
 
-              {/* Data directory Section */}
-              <div
-                data-settings-section="dataRoot"
-                tabIndex={-1}
-                hidden={!sectionVisible("dataRoot")}
-                className="scroll-mt-2 space-y-4 focus:outline-none"
-              >
-                <Label className="text-base font-medium">
-                  {t("settings.dataRoot.title")}
-                </Label>
-                <DataRootSetting />
-              </div>
-
               {/* Advanced Section */}
               <div
                 data-settings-section="advanced"
@@ -1728,44 +1696,6 @@ export function SettingsDialog({
                       {t("settings.keepDecryptedProfilesInRamDescription")}
                     </p>
                   </div>
-                </div>
-
-                <div className="grid gap-2 rounded-lg border p-3">
-                  <Label
-                    htmlFor="trash-retention-select"
-                    className="text-sm font-medium"
-                  >
-                    {t("settings.trashRetention")}
-                  </Label>
-                  <Select
-                    value={String(
-                      settings.trash_retention_days ??
-                        DEFAULT_TRASH_RETENTION_DAYS,
-                    )}
-                    onValueChange={(value) => {
-                      updateSetting("trash_retention_days", Number(value));
-                    }}
-                  >
-                    <SelectTrigger
-                      id="trash-retention-select"
-                      data-slot="trash-retention-select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trashRetentionOptions(
-                        settings.trash_retention_days ??
-                          DEFAULT_TRASH_RETENTION_DAYS,
-                      ).map((days) => (
-                        <SelectItem key={days} value={String(days)}>
-                          {t("settings.trashRetentionDays", { count: days })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {t("settings.trashRetentionDescription")}
-                  </p>
                 </div>
 
                 <LoadingButton

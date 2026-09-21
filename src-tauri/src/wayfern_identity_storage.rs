@@ -343,7 +343,11 @@ pub async fn convert_for_launch(profile: &BrowserProfile) -> Result<BrowserProfi
   if !needs_conversion(&current) {
     return Ok(current);
   }
-  let token = token_for_conversion().await?;
+  // A LAUNCH NEVER FAILS OVER PLAN STATE. A token that does not arrive means
+  // the caller is unentitled, signed out, or the verifier is briefly
+  // unreachable -- none of which is a reason the browser should not start. It
+  // proceeds without one and the browser drops what the plan does not carry.
+  let token = token_for_conversion().await.unwrap_or(None);
   let session = HeadlessWayfern::start(
     WayfernManager::instance(),
     &current,
@@ -352,11 +356,11 @@ pub async fn convert_for_launch(profile: &BrowserProfile) -> Result<BrowserProfi
   )
   .await
   .map_err(|e| wayfern_failure(&e.to_string(), "WAYFERN_FINGERPRINT_APPLY_FAILED", None))?;
-  let mut result = convert_and_save(&session, &current, false, true).await;
+  let mut result = convert_and_save(&session, &current, false, false).await;
   if matches!(result, Err(ConversionError::Changed)) {
     result = match read_profile(&profile.id) {
       Some(latest) if needs_conversion(&latest) && latest.version == current.version => {
-        convert_and_save(&session, &latest, false, true).await
+        convert_and_save(&session, &latest, false, false).await
       }
       Some(latest) if !needs_conversion(&latest) => Ok(latest),
       Some(_) => Err(ConversionError::Changed),
@@ -366,9 +370,24 @@ pub async fn convert_for_launch(profile: &BrowserProfile) -> Result<BrowserProfi
     };
   }
   session.stop().await;
+  launch_outcome(result, current)
+}
+
+/// What a conversion result means to the person clicking launch.
+///
+/// CONVERSION IS NOT A PRECONDITION FOR LAUNCHING. A refusal, a transient
+/// verifier failure and a browser that did not answer all mean the same thing
+/// here: nothing yet. The profile still has its stored device, so it opens on
+/// that and the background sweep converts it later, once whatever was briefly
+/// true has stopped being true. Returning an error instead turns "your plan
+/// does not include custom fingerprints" into "your browser does not start".
+fn launch_outcome(
+  result: Result<BrowserProfile, ConversionError>,
+  current: BrowserProfile,
+) -> Result<BrowserProfile, String> {
   match result {
     Ok(converted) => Ok(converted),
-    Err(ConversionError::Failed(reason)) => {
+    Err(ConversionError::Failed(reason)) | Err(ConversionError::Deferred(reason)) => {
       log::warn!(
         "Launching Wayfern profile {} on its stored device: {reason}",
         current.id
@@ -857,6 +876,38 @@ mod tests {
     assert!(launch_pending());
     drop(in_progress);
     assert!(!launch_pending());
+  }
+
+  #[test]
+  fn a_launch_never_fails_because_the_conversion_could_not_finish() {
+    // The rule this pins: plan state, a transient verifier failure and a
+    // browser that did not answer must all still open the profile on its
+    // stored device. Returning an error here is a launch outage, and it has
+    // reached a user twice.
+    let stored = profile_with("152.0.7977.64", WayfernConfig::default());
+
+    for refusal in [
+      ConversionError::Failed(crate::backend_error("WAYFERN_FINGERPRINT_APPLY_FAILED")),
+      ConversionError::Deferred(crate::backend_error("WAYFERN_PLAN_CHECK_UNAVAILABLE")),
+    ] {
+      let label = format!("{refusal:?}");
+      let outcome = launch_outcome(Err(refusal), stored.clone());
+      assert_eq!(
+        outcome.expect("the profile still launches").id,
+        stored.id,
+        "{label} must fall back to the stored device"
+      );
+    }
+
+    // A successful conversion is what the caller gets instead.
+    let converted = profile_with("152.0.7977.64", WayfernConfig::default());
+    let converted_id = converted.id;
+    assert_eq!(
+      launch_outcome(Ok(converted), stored.clone())
+        .expect("a converted profile launches")
+        .id,
+      converted_id
+    );
   }
 
   #[test]

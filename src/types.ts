@@ -676,28 +676,6 @@ export interface SyncSessionInfo {
 /** How the follower windows are placed on the host display. */
 export type SyncWindowLayout = "grid" | "columns" | "cascade";
 
-// Data directory
-export interface DataRootInfo {
-  active_path: string;
-  configured_path: string | null;
-  default_path: string;
-  size_bytes: number;
-  file_count: number;
-  overridden_by_environment: boolean;
-  restart_required: boolean;
-  app_directory_name: string;
-  active_path_missing: boolean;
-}
-
-export interface DataRootMoveProgress {
-  phase: "scanning" | "copying" | "verifying" | "cleaning" | "done";
-  copied_files: number;
-  total_files: number;
-  copied_bytes: number;
-  total_bytes: number;
-  destination: string;
-}
-
 // Traffic stats types
 export interface BandwidthDataPoint {
   timestamp: number;

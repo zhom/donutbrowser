@@ -2282,6 +2282,7 @@
     "wayfernPlanCheckUnavailable": "Planınız şu anda kontrol edilemedi. Kısa süre sonra yeniden deneyin.",
     "wayfernCustomFingerprintRequiresPlan": "Planınız özel parmak izlerini içermiyor.",
     "wayfernGenerationUnavailable": "Şu anda parmak izi oluşturulamadı. Daha sonra tekrar deneyin.",
+    "profileGenerationLimitReached": "Son bir saatte 100 profil oluşturdunuz; bu, Pro planının sınırıdır. Yenisini oluşturmadan önce yaklaşık {{minutes}} dakika bekleyin.",
     "wayfernBrowserBusy": "Tarayıcı bir parmak izi uygulamakla meşguldü. Tekrar deneyin.",
     "wayfernBrowserExited": "Tarayıcı başlatılırken kapandı. {{detail}}",
     "profileExportFailed": "Bu profil dışa aktarılamadı. {{detail}}",
@@ -2579,6 +2580,10 @@
   "wayfernBlocked": {
     "title": "Tarayıcı otomasyonu duraklatıldı",
     "description": "Tarayıcı otomasyonu aynı anda yalnızca tek bir cihazda çalışır ve şu anda oturum açmış başka bir cihaz tarafından kullanılıyor. O cihazdan çıkış yapın, ardından profili yeniden başlatın."
+  },
+  "profileGenerationLimit": {
+    "title": "Saatlik profil sınırına ulaşıldı",
+    "description": "Pro planınız saatte 100 yeni profile izin verir. Hesabınız engellenmesin diye oluşturma, yeni saat dilimine kadar duraklatıldı."
   },
   "wayfernConfigDialog": {
     "titleView": "Parmak İzi Ayarlarını Görüntüle - {{name}} ({{browser}})",

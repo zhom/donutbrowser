@@ -2282,6 +2282,7 @@
     "wayfernPlanCheckUnavailable": "目前无法检查你的套餐。请稍后再试。",
     "wayfernCustomFingerprintRequiresPlan": "你的套餐不包含自定义指纹。",
     "wayfernGenerationUnavailable": "目前无法创建指纹。请稍后再试。",
+    "profileGenerationLimitReached": "过去一小时内你已创建 100 个配置文件，已达 Pro 套餐上限。请等待约 {{minutes}} 分钟后再创建。",
     "wayfernBrowserBusy": "浏览器正忙于应用指纹。请重试。",
     "wayfernBrowserExited": "浏览器在启动过程中关闭了。{{detail}}",
     "profileExportFailed": "无法导出此配置文件。{{detail}}",
@@ -2579,6 +2580,10 @@
   "wayfernBlocked": {
     "title": "浏览器自动化已暂停",
     "description": "浏览器自动化一次只能在一台设备上运行，目前有另一台已登录的设备正在使用。请在该设备上退出登录，然后重新启动此配置文件。"
+  },
+  "profileGenerationLimit": {
+    "title": "已达到每小时的配置文件上限",
+    "description": "Pro 套餐每小时可新建 100 个配置文件。为避免账号被封禁，新建操作将暂停到下一个小时。"
   },
   "wayfernConfigDialog": {
     "titleView": "查看指纹设置 - {{name}} ({{browser}})",

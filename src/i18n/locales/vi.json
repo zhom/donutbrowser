@@ -2282,6 +2282,7 @@
     "wayfernPlanCheckUnavailable": "Hiện không thể kiểm tra gói của bạn. Hãy thử lại sau giây lát.",
     "wayfernCustomFingerprintRequiresPlan": "Gói của bạn không bao gồm dấu vân tay tùy chỉnh.",
     "wayfernGenerationUnavailable": "Hiện không thể tạo dấu vân tay. Vui lòng thử lại sau.",
+    "profileGenerationLimitReached": "Bạn đã tạo 100 hồ sơ trong giờ qua, đây là giới hạn của gói Pro. Hãy đợi khoảng {{minutes}} phút trước khi tạo hồ sơ tiếp theo.",
     "wayfernBrowserBusy": "Trình duyệt đang bận áp dụng dấu vân tay. Hãy thử lại.",
     "wayfernBrowserExited": "Trình duyệt đã đóng khi đang khởi động. {{detail}}",
     "profileExportFailed": "Không thể xuất hồ sơ này. {{detail}}",
@@ -2579,6 +2580,10 @@
   "wayfernBlocked": {
     "title": "Tự động hóa trình duyệt đã tạm dừng",
     "description": "Tự động hóa trình duyệt chỉ chạy trên một thiết bị tại một thời điểm và một thiết bị khác đang đăng nhập hiện đang sử dụng nó. Hãy đăng xuất trên thiết bị đó, rồi khởi chạy lại cấu hình."
+  },
+  "profileGenerationLimit": {
+    "title": "Đã đạt giới hạn hồ sơ mỗi giờ",
+    "description": "Gói Pro cho phép tạo 100 hồ sơ mới mỗi giờ. Việc tạo hồ sơ tạm dừng cho đến khi sang giờ mới để tài khoản của bạn không bị khóa."
   },
   "wayfernConfigDialog": {
     "titleView": "Xem cài đặt vân tay - {{name}} ({{browser}})",

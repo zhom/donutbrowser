@@ -2282,6 +2282,7 @@
     "wayfernPlanCheckUnavailable": "Could not check your plan right now. Try again in a moment.",
     "wayfernCustomFingerprintRequiresPlan": "Your plan does not include custom fingerprints.",
     "wayfernGenerationUnavailable": "Could not create a fingerprint right now. Try again later.",
+    "profileGenerationLimitReached": "You have created 100 profiles in the last hour, which is the limit on Pro. Wait about {{minutes}} minutes before creating another one.",
     "wayfernBrowserBusy": "The browser was busy applying a fingerprint. Try again.",
     "wayfernBrowserExited": "The browser closed while starting. {{detail}}",
     "profileExportFailed": "This profile could not be exported. {{detail}}",
@@ -2579,6 +2580,10 @@
   "wayfernBlocked": {
     "title": "Browser automation paused",
     "description": "Browser automation runs on one device at a time, and another signed-in device is currently using it. Sign out there, then relaunch the profile."
+  },
+  "profileGenerationLimit": {
+    "title": "Hourly profile limit reached",
+    "description": "Your Pro plan allows 100 new profiles per hour. Creation is paused until the hour rolls over, so your account is not blocked."
   },
   "wayfernConfigDialog": {
     "titleView": "View Fingerprint Settings - {{name}} ({{browser}})",

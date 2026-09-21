@@ -2292,6 +2292,7 @@
     "wayfernPlanCheckUnavailable": "No se pudo comprobar tu plan ahora mismo. Inténtalo de nuevo en un momento.",
     "wayfernCustomFingerprintRequiresPlan": "Tu plan no incluye huellas digitales personalizadas.",
     "wayfernGenerationUnavailable": "No se pudo crear una huella digital ahora mismo. Inténtalo de nuevo más tarde.",
+    "profileGenerationLimitReached": "Has creado 100 perfiles en la última hora, el límite del plan Pro. Espera unos {{minutes}} minutos antes de crear otro.",
     "wayfernBrowserBusy": "El navegador estaba ocupado aplicando una huella digital. Inténtalo de nuevo.",
     "wayfernBrowserExited": "El navegador se cerró mientras se iniciaba. {{detail}}",
     "profileExportFailed": "No se pudo exportar este perfil. {{detail}}",
@@ -2589,6 +2590,10 @@
   "wayfernBlocked": {
     "title": "Automatización del navegador en pausa",
     "description": "La automatización del navegador funciona en un solo dispositivo a la vez y otro dispositivo con la sesión abierta la está usando. Cierra la sesión allí y vuelve a iniciar el perfil."
+  },
+  "profileGenerationLimit": {
+    "title": "Límite de perfiles por hora alcanzado",
+    "description": "Tu plan Pro permite 100 perfiles nuevos por hora. La creación está en pausa hasta que avance la hora, para que tu cuenta no se bloquee."
   },
   "wayfernConfigDialog": {
     "titleView": "Ver configuración de huella - {{name}} ({{browser}})",

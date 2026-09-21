@@ -2292,6 +2292,7 @@
     "wayfernPlanCheckUnavailable": "Impossible de vérifier votre forfait pour le moment. Réessayez dans un instant.",
     "wayfernCustomFingerprintRequiresPlan": "Votre forfait n'inclut pas les empreintes personnalisées.",
     "wayfernGenerationUnavailable": "Impossible de créer une empreinte pour le moment. Réessayez plus tard.",
+    "profileGenerationLimitReached": "Vous avez créé 100 profils au cours de la dernière heure, la limite de l'offre Pro. Attendez environ {{minutes}} minutes avant d'en créer un autre.",
     "wayfernBrowserBusy": "Le navigateur était occupé à appliquer une empreinte. Réessayez.",
     "wayfernBrowserExited": "Le navigateur s'est fermé pendant le démarrage. {{detail}}",
     "profileExportFailed": "Ce profil n'a pas pu être exporté. {{detail}}",
@@ -2589,6 +2590,10 @@
   "wayfernBlocked": {
     "title": "Automatisation du navigateur en pause",
     "description": "L'automatisation du navigateur fonctionne sur un seul appareil à la fois, et un autre appareil connecté l'utilise actuellement. Déconnectez-vous sur cet appareil, puis relancez le profil."
+  },
+  "profileGenerationLimit": {
+    "title": "Limite horaire de profils atteinte",
+    "description": "Votre offre Pro permet 100 nouveaux profils par heure. La création est suspendue jusqu'au renouvellement de la fenêtre, afin que votre compte ne soit pas bloqué."
   },
   "wayfernConfigDialog": {
     "titleView": "Voir les paramètres d'empreinte - {{name}} ({{browser}})",

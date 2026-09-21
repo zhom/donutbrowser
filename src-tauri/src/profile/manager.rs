@@ -274,6 +274,23 @@ impl ProfileManager {
       // Generate a device if the profile has neither a legacy payload nor an
       // identity.
       if config.fingerprint.is_none() && config.identity_id.is_none() {
+        if let crate::profile_generation_limiter::GenerationOutcome::Limited { retry_after_secs } =
+          crate::profile_generation_limiter::record_profile_generation().await
+        {
+          let _ = std::fs::remove_dir_all(&profile_uuid_dir);
+          log::warn!(
+            "Refused to generate a fingerprint for '{name}': this account has generated its hourly maximum; retry in {retry_after_secs}s"
+          );
+          return Err(
+            serde_json::json!({
+              "code": "PROFILE_GENERATION_LIMIT_REACHED",
+              "params": { "retryAfterSeconds": retry_after_secs.to_string() }
+            })
+            .to_string()
+            .into(),
+          );
+        }
+
         log::info!("Generating fingerprint for Wayfern profile: {name}");
 
         // Create a temporary profile for fingerprint generation
@@ -336,9 +353,17 @@ impl ProfileManager {
             log::info!("Successfully generated fingerprint for Wayfern profile: {name}");
           }
           Err(e) => {
-            return Err(
-              format!("Failed to generate fingerprint for Wayfern profile '{name}': {e}").into(),
+            // Coded, not wrapped: re-`format!`ing the error here left a string
+            // no layer above could classify, so a refusal answered 400 with no
+            // trace of which rule refused.
+            let coded = crate::wayfern_manager::wayfern_failure(
+              &e.to_string(),
+              "WAYFERN_FINGERPRINT_GENERATION_FAILED",
+              config.os.as_deref(),
             );
+            let _ = std::fs::remove_dir_all(&profile_uuid_dir);
+            log::error!("Could not create Wayfern profile '{name}': {coded}");
+            return Err(coded.into());
           }
         }
       } else {
@@ -753,7 +778,6 @@ impl ProfileManager {
         &profiles_dir,
         &crate::profile::trash::trash_dir(),
         &profile,
-        crate::profile::trash::configured_retention_days(),
         crate::proxy_manager::now_secs(),
       )?;
     }

@@ -87,11 +87,6 @@ pub struct AppSettings {
   /// copy is always re-encrypted regardless of this flag.
   #[serde(default)]
   pub keep_decrypted_profiles_in_ram: bool,
-  /// How long a deleted profile stays in the trash before it is purged.
-  /// Clamped to 1..=365 on save; the sweeper reads it through
-  /// `profile::trash::configured_retention_days`.
-  #[serde(default = "default_trash_retention_days")]
-  pub trash_retention_days: u32,
   /// Feature tips. Whether one tip the user has not seen yet may open by
   /// itself shortly after launch. Off is the user's choice, made in the tips
   /// dialog.
@@ -126,10 +121,6 @@ fn default_theme() -> String {
 
 fn default_api_port() -> u16 {
   10108
-}
-
-fn default_trash_retention_days() -> u32 {
-  crate::profile::trash::DEFAULT_RETENTION_DAYS
 }
 
 fn default_tips_auto_show() -> bool {
@@ -169,7 +160,6 @@ impl Default for AppSettings {
       onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
-      trash_retention_days: crate::profile::trash::DEFAULT_RETENTION_DAYS,
       tips_auto_show: true,
       tips_seen: Vec::new(),
       tips_last_auto_shown_at: None,
@@ -648,9 +638,6 @@ pub async fn save_app_settings(
     settings.mcp_remote_enabled = false;
     settings.mcp_remote_key_id = None;
   }
-
-  settings.trash_retention_days =
-    crate::profile::trash::clamp_retention_days(settings.trash_retention_days);
 
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
@@ -1287,7 +1274,6 @@ mod tests {
       onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
-      trash_retention_days: 14,
       tips_auto_show: true,
       tips_seen: Vec::new(),
       tips_last_auto_shown_at: None,
@@ -1309,22 +1295,6 @@ mod tests {
     assert_eq!(
       loaded_settings.theme, "dark",
       "Loaded theme should match saved"
-    );
-    assert_eq!(loaded_settings.trash_retention_days, 14);
-  }
-
-  #[test]
-  fn trash_retention_defaults_when_the_settings_file_predates_it() {
-    let (manager, _temp_dir, _guard) = create_test_settings_manager();
-    let settings_dir = manager.get_settings_dir();
-    create_dir_all(&settings_dir).unwrap();
-    fs::write(manager.get_settings_file(), r#"{"theme":"light"}"#).unwrap();
-
-    let loaded = manager.load_settings().unwrap();
-    assert_eq!(loaded.theme, "light");
-    assert_eq!(
-      loaded.trash_retention_days,
-      crate::profile::trash::DEFAULT_RETENTION_DAYS
     );
   }
 

@@ -2282,6 +2282,7 @@
     "wayfernPlanCheckUnavailable": "現在、ご利用のプランを確認できません。しばらくしてからもう一度お試しください。",
     "wayfernCustomFingerprintRequiresPlan": "ご利用のプランにはカスタムフィンガープリントが含まれていません。",
     "wayfernGenerationUnavailable": "現在、フィンガープリントを作成できません。しばらくしてから再度お試しください。",
+    "profileGenerationLimitReached": "過去1時間に100件のプロファイルを作成しました。これはProプランの上限です。次の作成まで約{{minutes}}分お待ちください。",
     "wayfernBrowserBusy": "ブラウザーがフィンガープリントを適用中でした。もう一度お試しください。",
     "wayfernBrowserExited": "ブラウザーが起動中に終了しました。{{detail}}",
     "profileExportFailed": "このプロファイルを書き出せませんでした。{{detail}}",
@@ -2579,6 +2580,10 @@
   "wayfernBlocked": {
     "title": "ブラウザの自動化が一時停止しました",
     "description": "ブラウザの自動化は同時に1台のデバイスでのみ利用できます。現在、サインイン中の別のデバイスが使用しています。そのデバイスからサインアウトして、プロファイルを再起動してください。"
+  },
+  "profileGenerationLimit": {
+    "title": "1時間あたりのプロファイル上限に達しました",
+    "description": "Proプランでは1時間に100件の新規プロファイルを作成できます。アカウントがブロックされないよう、次の時間枠まで作成を一時停止します。"
   },
   "wayfernConfigDialog": {
     "titleView": "フィンガープリント設定を表示 - {{name}} ({{browser}})",

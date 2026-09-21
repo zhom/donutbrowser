@@ -2048,6 +2048,7 @@ export default function Home() {
     let unlistenProgress: (() => void) | undefined;
     let unlistenCompleted: (() => void) | undefined;
     let unlistenWayfernBlocked: (() => void) | undefined;
+    let unlistenGenerationLimit: (() => void) | undefined;
     let unlistenMcpLocalDeprecated: (() => void) | undefined;
     let unlistenMcpLocalMigrated: (() => void) | undefined;
 
@@ -2112,6 +2113,19 @@ export default function Home() {
         });
       });
 
+      unlistenGenerationLimit = await listen(
+        "profile-generation-limit-reached",
+        () => {
+          showToast({
+            id: "profile-generation-limit-reached",
+            type: "error",
+            title: t("profileGenerationLimit.title"),
+            description: t("profileGenerationLimit.description"),
+            duration: 15000,
+          });
+        },
+      );
+
       unlistenWayfernBlocked = await listen("wayfern-paid-blocked", () => {
         showToast({
           id: "wayfern-paid-blocked",
@@ -2160,6 +2174,7 @@ export default function Home() {
         unlistenProgress?.();
         unlistenCompleted?.();
         unlistenWayfernBlocked?.();
+        unlistenGenerationLimit?.();
         unlistenMcpLocalDeprecated?.();
         unlistenMcpLocalMigrated?.();
       }
@@ -2172,6 +2187,7 @@ export default function Home() {
       unlistenProgress?.();
       unlistenCompleted?.();
       unlistenWayfernBlocked?.();
+      unlistenGenerationLimit?.();
       unlistenMcpLocalDeprecated?.();
       unlistenMcpLocalMigrated?.();
     };

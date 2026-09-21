@@ -63,7 +63,6 @@ mod browser_runner;
 mod browser_version_manager;
 mod cdp_target;
 mod checksum;
-mod data_root;
 mod default_browser;
 pub mod dns_blocklist;
 mod downloaded_browsers_registry;
@@ -85,6 +84,7 @@ mod launch_gate_prefs;
 mod log_redaction;
 mod platform_browser;
 mod profile;
+mod profile_generation_limiter;
 mod profile_import;
 mod profile_importer;
 mod proxy_distribution;
@@ -3494,9 +3494,6 @@ pub fn run_with_builder(
       mark_tip_seen,
       set_tips_auto_show,
       observe_cloud_plan,
-      data_root::get_data_root_info,
-      data_root::move_data_root,
-      data_root::clear_data_root_choice,
       clear_all_version_cache_and_refetch,
       is_default_browser,
       open_url_with_profile,

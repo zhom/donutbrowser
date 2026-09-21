@@ -2282,6 +2282,7 @@
     "wayfernPlanCheckUnavailable": "지금은 요금제를 확인할 수 없습니다. 잠시 후 다시 시도하세요.",
     "wayfernCustomFingerprintRequiresPlan": "현재 요금제에는 사용자 지정 지문이 포함되어 있지 않습니다.",
     "wayfernGenerationUnavailable": "지금은 지문을 만들 수 없습니다. 나중에 다시 시도하세요.",
+    "profileGenerationLimitReached": "지난 1시간 동안 프로필 100개를 만들었습니다. Pro 요금제의 한도입니다. 약 {{minutes}}분 후에 다시 시도하세요.",
     "wayfernBrowserBusy": "브라우저가 지문을 적용하는 중이었습니다. 다시 시도하세요.",
     "wayfernBrowserExited": "브라우저가 시작되는 도중에 종료되었습니다. {{detail}}",
     "profileExportFailed": "이 프로필을 내보낼 수 없습니다. {{detail}}",
@@ -2579,6 +2580,10 @@
   "wayfernBlocked": {
     "title": "브라우저 자동화가 일시 중지됨",
     "description": "브라우저 자동화는 한 번에 기기 한 대에서만 실행되며, 현재 로그인된 다른 기기가 사용 중입니다. 해당 기기에서 로그아웃한 후 프로필을 다시 실행하세요."
+  },
+  "profileGenerationLimit": {
+    "title": "시간당 프로필 한도에 도달했습니다",
+    "description": "Pro 요금제는 시간당 100개의 새 프로필을 허용합니다. 계정이 차단되지 않도록 다음 시간대까지 생성을 일시 중지합니다."
   },
   "wayfernConfigDialog": {
     "titleView": "핑거프린트 설정 보기 - {{name}} ({{browser}})",

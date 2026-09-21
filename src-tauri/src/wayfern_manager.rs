@@ -463,154 +463,6 @@ pub fn is_temporary_wayfern_failure(coded: &str) -> bool {
   .any(|code| coded.contains(&format!("\"{code}\"")))
 }
 
-/// Fonts for the window badge, loaded from the system once per process. The
-/// load walks every font directory, which is far too slow to repeat per launch.
-fn badge_fonts() -> std::sync::Arc<resvg::usvg::fontdb::Database> {
-  static FONTS: std::sync::OnceLock<std::sync::Arc<resvg::usvg::fontdb::Database>> =
-    std::sync::OnceLock::new();
-  FONTS
-    .get_or_init(|| {
-      let mut db = resvg::usvg::fontdb::Database::new();
-      db.load_system_fonts();
-      if let Some(family) = badge_sans_family(&db) {
-        db.set_sans_serif_family(family);
-      }
-      std::sync::Arc::new(db)
-    })
-    .clone()
-}
-
-/// The family the badge's `sans-serif` resolves to.
-///
-/// The database names Arial for the generic family, which macOS and Windows
-/// have and a Linux desktop usually does not: Ubuntu ships Noto, DejaVu,
-/// Liberation and Ubuntu instead. An unresolved family draws no initial at
-/// all, so the first family that is actually installed is chosen, and failing
-/// every known name, any installed font at all.
-fn badge_sans_family(db: &resvg::usvg::fontdb::Database) -> Option<String> {
-  use resvg::usvg::fontdb::{Family, Query, Stretch, Style, Weight};
-  const PREFERRED: [&str; 10] = [
-    "Arial",
-    "Helvetica Neue",
-    "Helvetica",
-    "Segoe UI",
-    "Noto Sans",
-    "DejaVu Sans",
-    "Liberation Sans",
-    "Ubuntu",
-    "Cantarell",
-    "Roboto",
-  ];
-  let installed = |name: &str| {
-    db.query(&Query {
-      families: &[Family::Name(name)],
-      weight: Weight::NORMAL,
-      stretch: Stretch::Normal,
-      style: Style::Normal,
-    })
-    .is_some()
-  };
-  PREFERRED
-    .iter()
-    .find(|name| installed(name))
-    .map(|name| name.to_string())
-    .or_else(|| {
-      db.faces()
-        .find_map(|face| face.families.first().map(|(name, _)| name.clone()))
-    })
-}
-
-/// The first letter (or digit) of a profile name, upper-cased, for its badge.
-pub fn badge_initial(name: &str) -> String {
-  name
-    .chars()
-    .find(|c| c.is_alphanumeric())
-    .map(|c| c.to_uppercase().collect())
-    .unwrap_or_default()
-}
-
-/// Whether text on `color` (bare or `#`-prefixed RRGGBB) reads better dark.
-fn badge_wants_dark_ink(color: &str) -> bool {
-  let hex = color.trim().trim_start_matches('#');
-  if hex.len() != 6 {
-    return false;
-  }
-  let channel = |i: usize| {
-    u8::from_str_radix(&hex[i..i + 2], 16)
-      .map(|v| v as f64 / 255.0)
-      .unwrap_or(0.0)
-  };
-  // Relative luminance, sRGB weights; 0.6 keeps white ink on every mid tone.
-  0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4) > 0.6
-}
-
-/// Render the PNG a 152 browser shows as this profile's window, taskbar and
-/// Dock icon: the profile's frame colour with its initial. `None` when the
-/// badge cannot be rendered, in which case the browser keeps its stock icon.
-pub fn render_profile_icon(name: &str, color: &str) -> Option<Vec<u8>> {
-  use resvg::tiny_skia;
-  let hex = color.trim().trim_start_matches('#');
-  if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
-    return None;
-  }
-  let initial = badge_initial(name);
-  let ink = if badge_wants_dark_ink(hex) {
-    "#1b1b1b"
-  } else {
-    "#ffffff"
-  };
-  let escaped = initial
-    .replace('&', "&amp;")
-    .replace('<', "&lt;")
-    .replace('>', "&gt;");
-  let svg = format!(
-    r##"<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-<rect x="16" y="16" width="224" height="224" rx="56" fill="#{hex}"/>
-<text x="128" y="128" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-weight="700" font-size="140" fill="{ink}">{escaped}</text>
-</svg>"##
-  );
-  let options = resvg::usvg::Options {
-    fontdb: badge_fonts(),
-    ..Default::default()
-  };
-  let tree = resvg::usvg::Tree::from_str(&svg, &options).ok()?;
-  let mut pixmap = tiny_skia::Pixmap::new(256, 256)?;
-  resvg::render(
-    &tree,
-    tiny_skia::Transform::identity(),
-    &mut pixmap.as_mut(),
-  );
-  pixmap.encode_png().ok()
-}
-
-/// Write the profile's window badge beside its data directory and return the
-/// switch that hands it to a 152 browser. Older browsers get nothing.
-pub fn profile_icon_switch(
-  version: &str,
-  profile_path: &str,
-  name: &str,
-  color: &str,
-) -> Option<String> {
-  if !supports_wayfern_152(version) {
-    return None;
-  }
-  let png = render_profile_icon(name, color)?;
-  let dir = Path::new(profile_path)
-    .parent()
-    .map(Path::to_path_buf)
-    .unwrap_or_else(|| PathBuf::from(profile_path));
-  let path = dir.join("window-icon.png");
-  if let Err(e) = std::fs::write(&path, png) {
-    log::warn!(
-      "Could not write the window badge for profile {name} at {}: {e}; the browser keeps its stock icon",
-      path.display()
-    );
-    return None;
-  }
-  let path = path.canonicalize().unwrap_or(path);
-  Some(format!("--wayfern-profile-icon={}", path.display()))
-}
-
 /// Write the profile's persona beside its data directory and return the switch
 /// that hands it to a 152 browser. The document is DERIVED from `seed` with
 /// the user's edits applied, so it is stable per profile and unique to it.
@@ -918,26 +770,38 @@ impl HeadlessWayfern {
       return Err(e);
     }
 
-    let targets = match manager.get_cdp_targets(port).await {
-      Ok(targets) => targets,
-      Err(e) => {
+    // The debugging endpoint answers as soon as the process is up, which is
+    // BEFORE the first window exists, so the target list is legitimately empty
+    // for a moment and a single read races it. Poll until a page target
+    // appears, and stop early if the process dies so a refused start is
+    // reported as its own reason rather than as a timeout.
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+      if let Ok(Some(status)) = session.child.try_wait() {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let said = log.lines().join("\n");
         session.stop().await;
-        return Err(e);
+        return Err(early_exit_error(&said, &status).into());
       }
-    };
-    match targets
-      .into_iter()
-      .find(|t| t.target_type == "page")
-      .and_then(|t| t.websocket_debugger_url)
-    {
-      Some(url) => {
-        session.page_ws_url = url;
-        Ok(session)
-      }
-      None => {
+      let detail = match manager.get_cdp_targets(port).await {
+        Ok(targets) => {
+          if let Some(url) = targets
+            .into_iter()
+            .find(|t| t.target_type == "page")
+            .and_then(|t| t.websocket_debugger_url)
+          {
+            session.page_ws_url = url;
+            return Ok(session);
+          }
+          "the browser reported no page target".to_string()
+        }
+        Err(e) => e.to_string(),
+      };
+      if std::time::Instant::now() >= deadline {
         session.stop().await;
-        Err("No page target found for CDP".into())
+        return Err(format!("No page target found for CDP: {detail}").into());
       }
+      tokio::time::sleep(Duration::from_millis(100)).await;
     }
   }
 
@@ -2310,7 +2174,19 @@ impl WayfernManager {
         } else {
           "get fingerprint"
         };
-        return Err(format!("Failed to {what}: {e}").into());
+        let detail = e.to_string();
+        let coded = wayfern_failure(
+          &detail,
+          "WAYFERN_FINGERPRINT_GENERATION_FAILED",
+          config.os.as_deref(),
+        );
+        log::error!(
+          "Wayfern refused to {what} for profile {}: {} (browser said: {})",
+          profile.name,
+          coded,
+          cdp_error_message(&detail)
+        );
+        return Err(coded.into());
       }
     };
 
@@ -2746,12 +2622,6 @@ impl WayfernManager {
     args.extend(entitlement_cache_switch(
       &profile.version,
       &crate::app_dirs::cache_dir(),
-    ));
-    args.extend(profile_icon_switch(
-      &profile.version,
-      profile_path,
-      &profile.name,
-      profile_color,
     ));
     // The persona is a property of the profile, so an identity-backed profile
     // seeds it from the identity and a legacy one from its id: either way the
@@ -4139,57 +4009,6 @@ mod tests {
       expected.is_dir(),
       "the directory exists before the browser starts"
     );
-  }
-
-  #[test]
-  fn the_window_badge_is_a_decodable_png_in_the_profile_colour() {
-    assert_eq!(badge_initial("  donut shop"), "D");
-    assert_eq!(badge_initial("42 things"), "4");
-    assert_eq!(badge_initial("!!!"), "");
-    assert!(badge_wants_dark_ink("#f5e6a0"));
-    assert!(!badge_wants_dark_ink("#2b4c7e"));
-    assert_eq!(render_profile_icon("Any", "not a colour"), None);
-
-    let png = render_profile_icon("Donut", "#2b4c7e").expect("the badge renders");
-    let image = image::load_from_memory(&png)
-      .expect("a decodable PNG")
-      .into_rgba8();
-    assert_eq!((image.width(), image.height()), (256, 256));
-    // Inside the rounded square, away from the initial: the profile colour.
-    assert_eq!(image.get_pixel(40, 128).0, [0x2b, 0x4c, 0x7e, 0xff]);
-    // The corners stay transparent so the badge reads as a tile, not a sheet.
-    assert_eq!(image.get_pixel(2, 2).0[3], 0);
-    // The initial is drawn in white ink somewhere in the middle third when the
-    // machine has any font at all. Not sampled at the exact centre: that is
-    // the counter of a "D", which stays the fill colour.
-    if !badge_fonts().is_empty() {
-      let ink = (80..176)
-        .flat_map(|y| (80..176).map(move |x| (x, y)))
-        .any(|(x, y)| {
-          let p = image.get_pixel(x, y).0;
-          p[0] > 0xc0 && p[1] > 0xc0 && p[2] > 0xc0
-        });
-      assert!(ink, "the initial must be drawn in the middle of the badge");
-    }
-  }
-
-  #[test]
-  fn the_profile_icon_switch_writes_the_badge_beside_the_data_dir() {
-    let root = tempfile::tempdir().unwrap();
-    let data_dir = root.path().join("profile");
-    std::fs::create_dir_all(&data_dir).unwrap();
-    let data_dir = data_dir.to_string_lossy().to_string();
-    assert_eq!(
-      profile_icon_switch("151.0.7922.76", &data_dir, "Donut", "ebb5ad"),
-      None
-    );
-    let switch = profile_icon_switch("152.0.7977.64", &data_dir, "Donut", "ebb5ad").unwrap();
-    let expected = root.path().join("window-icon.png").canonicalize().unwrap();
-    assert_eq!(
-      switch,
-      format!("--wayfern-profile-icon={}", expected.display())
-    );
-    assert!(image::load_from_memory(&std::fs::read(expected).unwrap()).is_ok());
   }
 
   #[test]

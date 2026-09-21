@@ -1076,25 +1076,6 @@ test("cookie import/copy/export, profile encryption, and traffic-stat read/clear
 
 test("deleted profiles land in the trash and come back intact on restore", async () => {
   await withApp("entities-trash", async (app) => {
-    const initialSettings = await app.invoke("get_app_settings");
-    assert.equal(initialSettings.trash_retention_days, 30);
-    const savedSettings = await app.invoke("save_app_settings", {
-      settings: { ...initialSettings, trash_retention_days: 7 },
-    });
-    assert.equal(savedSettings.trash_retention_days, 7);
-    assert.equal(
-      (await app.invoke("get_app_settings")).trash_retention_days,
-      7,
-    );
-    // Out-of-range values are clamped, never rejected.
-    const clamped = await app.invoke("save_app_settings", {
-      settings: { ...savedSettings, trash_retention_days: 9000 },
-    });
-    assert.equal(clamped.trash_retention_days, 365);
-    await app.invoke("save_app_settings", {
-      settings: { ...clamped, trash_retention_days: 7 },
-    });
-
     assert.deepEqual(await app.invoke("list_trashed_profiles"), []);
 
     const group = await app.invoke("create_profile_group", {
@@ -1157,7 +1138,7 @@ test("deleted profiles land in the trash and come back intact on restore", async
     assert.equal(trashed[0].password_protected, false);
     assert.equal(
       trashed[0].expires_at - trashed[0].deleted_at,
-      7 * 24 * 60 * 60,
+      30 * 24 * 60 * 60,
     );
     assert.ok(trashed[0].size_bytes > 0);
     const trashDir = path.join(app.dataRoot, "data", "trash");

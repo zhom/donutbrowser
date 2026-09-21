@@ -5586,10 +5586,17 @@ impl McpServer {
         launch_hook,
       )
       .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to create profile: {e}"),
-        data: None,
+      .map_err(|e| {
+        let message = e.to_string();
+        if message.contains("PROFILE_GENERATION_LIMIT_REACHED") {
+          let _ = crate::events::emit_empty("profile-generation-limit-reached");
+        }
+        log::warn!("[mcp] Could not create profile '{name}': {message}");
+        McpError {
+          code: -32000,
+          message: format!("Failed to create profile: {message}"),
+          data: None,
+        }
       })?;
 
     if temporary {
