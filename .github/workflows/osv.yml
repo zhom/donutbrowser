@@ -23,6 +23,7 @@ on:
       - "pnpm-lock.yaml"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "osv-scanner.toml"
       - ".github/workflows/osv.yml"
   merge_group:
     branches: ["main"]
@@ -36,6 +37,8 @@ on:
       - "pnpm-lock.yaml"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "osv-scanner.toml"
+      - ".github/workflows/osv.yml"
 
 permissions:
   security-events: write
@@ -50,6 +53,7 @@ jobs:
     with:
       scan-args: |-
         -r
+        --config=osv-scanner.toml
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
         ./
@@ -61,6 +65,7 @@ jobs:
     with:
       scan-args: |-
         -r
+        --config=osv-scanner.toml
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
         ./

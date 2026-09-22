@@ -1,0 +1,58 @@
+# Advisories the scan may pass over, and why. This list is NOT a way to quiet a
+# real finding: every entry here is a transitive crate this repository cannot
+# move on its own, and every one carries a date at which it has to be looked at
+# again. Anything actionable must be fixed, not listed.
+#
+# `ignoreUntil` is a deadline, not a dismissal: once it passes the advisory
+# fails the scan again, which is the point. Re-check with
+#   docker run --rm -v "$PWD":/src -w /src ghcr.io/google/osv-scanner-action:v2.6.0 \
+#     --format=table -r --lockfile=pnpm-lock.yaml --lockfile=src-tauri/Cargo.lock ./
+
+# Fixed in glib 0.20, which the GTK stack under Tauri does not use yet. Pulled
+# in on Linux targets only, through tauri -> gtk -> glib, so it moves when Tauri
+# moves and not before.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+reason = "Transitive through Tauri's GTK stack; no version of Tauri ships glib 0.20 yet."
+ignoreUntil = 2026-12-31
+
+# The rest are RUSTSEC unmaintained notices, not exploitable defects. None has a
+# fixed version to move to, and all are transitive.
+
+# paste <- utoipa-axum, and <- rav1e/pulp in the image decoding stack.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "Unmaintained crate, no fix published; transitive through utoipa-axum and the image codecs."
+ignoreUntil = 2026-12-31
+
+# proc-macro-error <- Linux-only build dependencies under Tauri.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+reason = "Unmaintained crate, no fix published; transitive build dependency on Linux targets."
+ignoreUntil = 2026-12-31
+
+# unic-* <- urlpattern <- tauri-utils. One upstream family, five advisories.
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0081"
+reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
+ignoreUntil = 2026-12-31
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0075"
+reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
+ignoreUntil = 2026-12-31
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0080"
+reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
+ignoreUntil = 2026-12-31
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0100"
+reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
+ignoreUntil = 2026-12-31
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0098"
+reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
+ignoreUntil = 2026-12-31
