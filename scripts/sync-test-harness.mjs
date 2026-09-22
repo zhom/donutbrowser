@@ -3,7 +3,7 @@
  * Sync E2E Test Harness
  *
  * This script:
- * 1. Downloads and starts MinIO (S3-compatible storage)
+ * 1. Downloads and starts rclone's S3 server (S3-compatible storage)
  * 2. Builds and starts donut-sync server
  * 3. Runs the Rust sync e2e tests
  * 4. Cleans up all processes
@@ -11,8 +11,14 @@
  * Usage: node scripts/sync-test-harness.mjs
  */
 
-import { spawn, execSync } from "child_process";
-import { createWriteStream, existsSync, mkdirSync, chmodSync } from "fs";
+import { spawn, spawnSync, execSync } from "child_process";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  chmodSync,
+  renameSync,
+} from "fs";
 import { mkdir, rm, writeFile } from "fs/promises";
 import http from "http";
 import https from "https";
@@ -25,8 +31,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
 const CACHE_DIR = path.join(ROOT_DIR, ".cache", "sync-test");
 
-const MINIO_PORT = 9876;
-const MINIO_CONSOLE_PORT = 9877;
+const S3_PORT = 9876;
+const S3_ACCESS_KEY = "donuttestaccesskey";
+const S3_SECRET_KEY = "donuttestsecretkey";
+// Pinned so a fresh rclone release cannot change what CI runs underneath us.
+const RCLONE_VERSION = "v1.75.1";
 const SYNC_PORT = 3456;
 // Must be >= 24 chars and not a known default — the server's validateEnv()
 // rejects short/placeholder tokens and exits at startup otherwise.
@@ -85,88 +94,164 @@ async function downloadFile(url, dest) {
   });
 }
 
-function getMinioUrl() {
+function getRcloneAsset() {
   const platform = os.platform();
   const arch = os.arch();
 
   if (platform === "darwin") {
-    if (arch === "arm64") {
-      return "https://dl.min.io/server/minio/release/darwin-arm64/minio";
-    }
-    return "https://dl.min.io/server/minio/release/darwin-amd64/minio";
+    return `rclone-${RCLONE_VERSION}-osx-${arch === "arm64" ? "arm64" : "amd64"}`;
   } else if (platform === "linux") {
-    if (arch === "arm64") {
-      return "https://dl.min.io/server/minio/release/linux-arm64/minio";
-    }
-    return "https://dl.min.io/server/minio/release/linux-amd64/minio";
+    return `rclone-${RCLONE_VERSION}-linux-${arch === "arm64" ? "arm64" : "amd64"}`;
   } else if (platform === "win32") {
-    return "https://dl.min.io/server/minio/release/windows-amd64/minio.exe";
+    return `rclone-${RCLONE_VERSION}-windows-amd64`;
   }
 
   throw new Error(`Unsupported platform: ${platform}-${arch}`);
 }
 
-async function ensureMinioBinary() {
-  const isWindows = os.platform() === "win32";
-  const minioBin = path.join(CACHE_DIR, isWindows ? "minio.exe" : "minio");
-
-  if (existsSync(minioBin)) {
-    log("MinIO binary already cached");
-    return minioBin;
+// Mirrors src-tauri/download-xray.mjs: PowerShell owns zip extraction on
+// Windows, `unzip` everywhere else. Both are present on every runner this
+// harness targets.
+function extractZip(archive, destinationDir) {
+  if (os.platform() === "win32") {
+    const result = spawnSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Expand-Archive -LiteralPath $env:DONUT_RCLONE_ARCHIVE -DestinationPath $env:DONUT_RCLONE_DESTINATION -Force",
+      ],
+      {
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          DONUT_RCLONE_ARCHIVE: archive,
+          DONUT_RCLONE_DESTINATION: destinationDir,
+        },
+      },
+    );
+    if (result.status !== 0) {
+      throw new Error("Failed to extract the rclone archive");
+    }
+    return;
   }
 
-  log("Downloading MinIO binary...");
-  mkdirSync(CACHE_DIR, { recursive: true });
-
-  const url = getMinioUrl();
-  await downloadFile(url, minioBin);
-  if (!isWindows) {
-    chmodSync(minioBin, 0o755);
+  const result = spawnSync(
+    "unzip",
+    ["-qq", "-j", "-o", archive, "*/rclone", "-d", destinationDir],
+    { stdio: "inherit" },
+  );
+  if (result.status !== 0) {
+    throw new Error("Failed to extract the rclone archive");
   }
-
-  log("MinIO binary downloaded");
-  return minioBin;
 }
 
-async function startMinio(minioBin) {
-  const dataDir = path.join(CACHE_DIR, "minio-data");
+async function ensureS3Binary() {
+  const isWindows = os.platform() === "win32";
+  const binName = isWindows ? "rclone.exe" : "rclone";
+  const bin = path.join(CACHE_DIR, binName);
+
+  if (existsSync(bin)) {
+    log("rclone binary already cached");
+    return bin;
+  }
+
+  log("Downloading rclone binary...");
+  mkdirSync(CACHE_DIR, { recursive: true });
+
+  const asset = getRcloneAsset();
+  const archive = path.join(CACHE_DIR, `${asset}.zip`);
+  await downloadFile(
+    `https://github.com/rclone/rclone/releases/download/${RCLONE_VERSION}/${asset}.zip`,
+    archive,
+  );
+  extractZip(archive, CACHE_DIR);
+
+  if (isWindows) {
+    // Expand-Archive keeps the archive's own directory, so lift the binary out.
+    const nested = path.join(CACHE_DIR, asset, binName);
+    if (existsSync(nested)) {
+      renameSync(nested, bin);
+    }
+  }
+  if (!existsSync(bin)) {
+    throw new Error(`rclone archive did not contain ${binName}`);
+  }
+  if (!isWindows) {
+    chmodSync(bin, 0o755);
+  }
+
+  log("rclone binary downloaded");
+  return bin;
+}
+
+// MinIO used to play this part, but MinIO withdrew its community binaries and
+// every dl.min.io path now answers 410, which took this job down. rclone still
+// publishes a single binary per platform, and `rclone serve s3` speaks enough
+// of the API for these tests: path-style addressing, a static key pair, and
+// bucket creation (a bucket is a directory under the served root).
+async function startS3(bin) {
+  const dataDir = path.join(CACHE_DIR, "s3-data");
   await mkdir(dataDir, { recursive: true });
 
-  log(`Starting MinIO on port ${MINIO_PORT}...`);
+  log(`Starting rclone serve s3 on port ${S3_PORT}...`);
 
   const proc = spawn(
-    minioBin,
-    ["server", dataDir, "--address", `:${MINIO_PORT}`, "--console-address", `:${MINIO_CONSOLE_PORT}`],
+    bin,
+    [
+      "serve",
+      "s3",
+      dataDir,
+      "--addr",
+      `127.0.0.1:${S3_PORT}`,
+      "--auth-key",
+      `${S3_ACCESS_KEY},${S3_SECRET_KEY}`,
+      "--force-path-style",
+      "--vfs-cache-mode",
+      "writes",
+    ],
     {
-      env: {
-        ...process.env,
-        MINIO_ROOT_USER: "minioadmin",
-        MINIO_ROOT_PASSWORD: "minioadmin",
-      },
+      env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
-    }
+    },
   );
 
   processes.push(proc);
 
   proc.stdout.on("data", (data) => {
     if (process.env.VERBOSE) {
-      console.log(`[minio] ${data.toString().trim()}`);
+      console.log(`[s3] ${data.toString().trim()}`);
     }
   });
 
+  let lastStderr = "";
   proc.stderr.on("data", (data) => {
+    lastStderr = data.toString();
     if (process.env.VERBOSE) {
-      console.error(`[minio] ${data.toString().trim()}`);
+      console.error(`[s3] ${lastStderr.trim()}`);
     }
   });
 
   proc.on("error", (err) => {
-    error(`MinIO error: ${err.message}`);
+    error(`rclone error: ${err.message}`);
   });
 
-  await waitForHealth(`http://localhost:${MINIO_PORT}/minio/health/live`, 30000);
-  log("MinIO is ready");
+  // Without this, a server that refuses to start (a busy port, most often)
+  // surfaces as a bare 30s timeout with the reason buried behind VERBOSE.
+  let exitReason = null;
+  proc.on("exit", (code) => {
+    exitReason = `rclone exited with code ${code}: ${lastStderr.trim() || "no output"}`;
+  });
+
+  // No health endpoint: an unauthenticated list is answered once the listener
+  // is up, and any HTTP status proves that much.
+  await waitForListening(
+    `http://127.0.0.1:${S3_PORT}/`,
+    30000,
+    () => exitReason,
+  );
+  log("S3 storage is ready");
 
   return proc;
 }
@@ -200,9 +285,9 @@ async function startDonutSync() {
       ...process.env,
       PORT: String(SYNC_PORT),
       SYNC_TOKEN,
-      S3_ENDPOINT: `http://localhost:${MINIO_PORT}`,
-      S3_ACCESS_KEY_ID: "minioadmin",
-      S3_SECRET_ACCESS_KEY: "minioadmin",
+      S3_ENDPOINT: `http://127.0.0.1:${S3_PORT}`,
+      S3_ACCESS_KEY_ID: S3_ACCESS_KEY,
+      S3_SECRET_ACCESS_KEY: S3_SECRET_KEY,
       S3_BUCKET: "donut-sync-test",
       S3_FORCE_PATH_STYLE: "true",
     },
@@ -248,6 +333,38 @@ async function waitForHealth(url, timeoutMs) {
             }
           })
           .on("error", reject);
+      });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+
+  throw new Error(`Timeout waiting for ${url}`);
+}
+
+async function waitForListening(url, timeoutMs, failureReason = () => null) {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const reason = failureReason();
+    if (reason) {
+      throw new Error(reason);
+    }
+    try {
+      await new Promise((resolve, reject) => {
+        // A per-attempt timeout matters: something else holding the port can
+        // accept the connection and then never answer, and without this the
+        // loop would wait on that one request forever instead of noticing
+        // that our own server is gone.
+        const req = http.get(url, (res) => {
+          res.resume();
+          resolve();
+        });
+        req.setTimeout(2000, () => {
+          req.destroy(new Error("probe timed out"));
+        });
+        req.on("error", reject);
       });
       return;
     } catch {
@@ -311,8 +428,8 @@ async function main() {
   });
 
   try {
-    const minioBin = await ensureMinioBinary();
-    await startMinio(minioBin);
+    const s3Bin = await ensureS3Binary();
+    await startS3(s3Bin);
     await buildDonutSync();
     await startDonutSync();
 

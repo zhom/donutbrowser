@@ -11,7 +11,9 @@
 # rather than from here.
 services:
   minio:
-    image: minio/minio:latest
+    # quay.io, not Docker Hub: the `minio/minio` Hub repository no longer serves
+    # anonymous pulls, so a Hub reference fails CI with "pull access denied".
+    image: quay.io/minio/minio:latest
     ports:
       - "8987:9000"
       - "8988:9001"

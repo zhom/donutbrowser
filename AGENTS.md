@@ -148,7 +148,7 @@ the Rust sync harness only). It needs a MinIO on port 8987:
 ```bash
 docker run -d --rm --name minio -p 8987:9000 \
   -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-  minio/minio:latest server /data
+  quay.io/minio/minio:latest server /data
 SYNC_TOKEN=test-sync-token S3_ENDPOINT=http://127.0.0.1:8987 \
   S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin \
   S3_BUCKET=donut-sync-test S3_FORCE_PATH_STYLE=true \

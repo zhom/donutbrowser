@@ -50,7 +50,6 @@ jobs:
     with:
       scan-args: |-
         -r
-        --skip-git
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
         ./
@@ -62,7 +61,6 @@ jobs:
     with:
       scan-args: |-
         -r
-        --skip-git
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
         ./
