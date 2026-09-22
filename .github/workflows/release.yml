@@ -24,7 +24,7 @@ jobs:
     with:
       scan-args: |-
         -r
-        --skip-git
+        --config=osv-scanner.toml
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
         ./
