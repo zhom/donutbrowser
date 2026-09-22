@@ -1,6 +1,41 @@
 # Changelog
 
 
+## v0.31.0 (2026-09-22)
+
+### Features
+
+- add tips
+
+### Refactoring
+
+- cleanup
+- cleanup
+- cleanup
+- cleanup
+- cleanup
+
+### Maintenance
+
+- chore: version bump
+- chore: ci
+- chore: linting
+- chore: linting
+- chore: update dependencies
+- ci(deps): bump the github-actions group with 6 updates
+- ci(deps): bump the github-actions group with 2 updates (#607)
+- ci(deps): bump the github-actions group with 2 updates (#599)
+- ci(deps): bump anomalyco/opencode/github in the github-actions group (#593)
+- chore: update flake.nix for v0.30.0 [skip ci] (#591)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group
+- deps(deps): bump the frontend-dependencies group across 1 directory with 150 updates
+- deps(deps): bump next from 16.3.2 to 16.3.3 (#603)
+- deps(rust)(deps): bump the rust-dependencies group (#600)
+
+
 ## v0.30.0 (2026-08-27)
 
 ### Features
