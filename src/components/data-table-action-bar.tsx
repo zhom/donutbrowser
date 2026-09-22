@@ -1,6 +1,7 @@
 "use client";
 
-import type { Table } from "@tanstack/react-table";
+import type { RowData } from "@tanstack/react-table";
+import type { LegacyTable as Table } from "@tanstack/react-table/legacy";
 import { motion, useReducedMotion } from "motion/react";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -16,14 +17,14 @@ import { useInputModality } from "@/hooks/use-input-modality";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-interface DataTableActionBarProps<TData>
+interface DataTableActionBarProps<TData extends RowData>
   extends React.ComponentProps<typeof motion.div> {
   table: Table<TData>;
   visible?: boolean;
   portalContainer?: Element | DocumentFragment | null;
 }
 
-function DataTableActionBar<TData>({
+function DataTableActionBar<TData extends RowData>({
   table,
   visible: visibleProp,
   portalContainer: portalContainerProp,
@@ -136,11 +137,11 @@ function DataTableActionBarAction({
   );
 }
 
-interface DataTableActionBarSelectionProps<TData> {
+interface DataTableActionBarSelectionProps<TData extends RowData> {
   table: Table<TData>;
 }
 
-function DataTableActionBarSelection<TData>({
+function DataTableActionBarSelection<TData extends RowData>({
   table,
 }: DataTableActionBarSelectionProps<TData>) {
   const { t } = useTranslation();

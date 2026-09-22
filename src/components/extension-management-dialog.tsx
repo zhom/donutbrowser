@@ -1,14 +1,16 @@
 "use client";
 
 import {
-  type ColumnDef,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
   type RowSelectionState,
   type SortingState,
-  useReactTable,
 } from "@tanstack/react-table";
+import {
+  type LegacyColumnDef as ColumnDef,
+  getCoreRowModel,
+  getSortedRowModel,
+  useLegacyTable as useReactTable,
+} from "@tanstack/react-table/legacy";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";

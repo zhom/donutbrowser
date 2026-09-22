@@ -2182,7 +2182,7 @@ impl WayfernManager {
         );
         log::error!(
           "Wayfern refused to {what} for profile {}: {} (browser said: {})",
-          profile.name,
+          crate::log_redaction::Plain(&profile.name),
           coded,
           cdp_error_message(&detail)
         );

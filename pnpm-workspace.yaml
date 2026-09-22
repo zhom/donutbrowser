@@ -41,6 +41,7 @@ overrides:
 
 allowBuilds:
   '@nestjs/core': true
+  '@parcel/watcher': false
   sharp: true
   unrs-resolver: true
 

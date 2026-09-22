@@ -1,7 +1,7 @@
 use crate::browser::ProxySettings;
 use crate::events;
 use crate::group_manager::GROUP_MANAGER;
-use crate::log_redaction::ShortId;
+use crate::log_redaction::{Plain, ShortId};
 use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
@@ -1611,7 +1611,10 @@ async fn create_profile(
       if status == StatusCode::TOO_MANY_REQUESTS {
         let _ = crate::events::emit_empty("profile-generation-limit-reached");
       }
-      log::warn!("[api] Could not create profile '{}': {body}", request.name);
+      log::warn!(
+        "[api] Could not create profile '{}': {body}",
+        Plain(&request.name)
+      );
       Err((status, body))
     }
   }

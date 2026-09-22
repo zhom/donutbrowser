@@ -356,11 +356,19 @@
     "license": "Apache-2.0"
   },
   {
+    "name": "@tanstack/react-store",
+    "license": "MIT"
+  },
+  {
     "name": "@tanstack/react-table",
     "license": "MIT"
   },
   {
     "name": "@tanstack/react-virtual",
+    "license": "MIT"
+  },
+  {
+    "name": "@tanstack/store",
     "license": "MIT"
   },
   {
@@ -440,10 +448,6 @@
     "license": "MIT"
   },
   {
-    "name": "@types/js-cookie",
-    "license": "MIT"
-  },
-  {
     "name": "@types/jsesc",
     "license": "MIT"
   },
@@ -462,6 +466,10 @@
   {
     "name": "@types/use-sync-external-store",
     "license": "MIT"
+  },
+  {
+    "name": "@typescript/typescript-darwin-arm64",
+    "license": "Apache-2.0"
   },
   {
     "name": "adler2",
@@ -622,6 +630,14 @@
   {
     "name": "avif-serialize",
     "license": "BSD-3-Clause"
+  },
+  {
+    "name": "aws-lc-rs",
+    "license": "ISC AND (Apache-2.0 OR ISC)"
+  },
+  {
+    "name": "aws-lc-sys",
+    "license": "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)"
   },
   {
     "name": "axum",
@@ -916,6 +932,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "core_detect",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "cpubits",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1084,10 +1104,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "der",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "deranged",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1189,10 +1205,6 @@
   },
   {
     "name": "dynosaur_derive",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "ed25519",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -1704,10 +1716,6 @@
     "license": "ISC"
   },
   {
-    "name": "intersection-observer",
-    "license": "Apache-2.0"
-  },
-  {
     "name": "ip_network",
     "license": "BSD-2-Clause"
   },
@@ -1969,6 +1977,18 @@
   },
   {
     "name": "muda",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "multiversion",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "multiversion-macros",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "multiversion_no_op",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -2264,10 +2284,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "pkcs8",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "plist",
     "license": "MIT"
   },
@@ -2520,10 +2536,6 @@
     "license": "Apache-2.0 AND ISC"
   },
   {
-    "name": "ring-compat",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "roxmltree",
     "license": "Apache-2.0 OR MIT"
   },
@@ -2554,6 +2566,10 @@
   {
     "name": "rustls-webpki",
     "license": "ISC"
+  },
+  {
+    "name": "rustversion",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "ryu",
@@ -2720,16 +2736,16 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "signature",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "simd-adler32",
     "license": "MIT"
   },
   {
     "name": "simd_helpers",
     "license": "MIT"
+  },
+  {
+    "name": "simdutf8",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "simplecss",
@@ -2786,10 +2802,6 @@
   {
     "name": "spin",
     "license": "MIT"
-  },
-  {
-    "name": "spki",
-    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "stable_deref_trait",
@@ -2986,10 +2998,6 @@
   {
     "name": "tinyvec",
     "license": "Zlib OR Apache-2.0 OR MIT"
-  },
-  {
-    "name": "tinyvec_macros",
-    "license": "MIT OR Apache-2.0 OR Zlib"
   },
   {
     "name": "tokio",

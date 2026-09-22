@@ -18,8 +18,8 @@
     "test:e2e": "NODE_OPTIONS='--experimental-vm-modules' jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1133.0",
-    "@aws-sdk/s3-request-presigner": "^3.1133.0",
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@nestjs/common": "^12.0.3",
     "@nestjs/config": "^12.0.0",
     "@nestjs/core": "^12.0.3",
@@ -29,22 +29,22 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@nestjs/cli": "^12.0.1",
-    "@nestjs/schematics": "^12.0.2",
+    "@nestjs/cli": "^12.0.3",
+    "@nestjs/schematics": "^12.0.3",
     "@nestjs/testing": "^12.0.3",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.2",
     "@types/supertest": "^7.2.1",
-    "jest": "^30.5.1",
+    "jest": "^30.5.2",
     "source-map-support": "^0.5.21",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.12",
     "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   },
   "jest": {
     "moduleFileExtensions": [

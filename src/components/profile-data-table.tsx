@@ -1,16 +1,19 @@
 "use client";
 
 import {
-  type ColumnDef,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
   type RowData,
   type RowSelectionState,
   type SortingState,
-  useReactTable,
-  type VisibilityState,
+  type TableFeatures,
+  type ColumnVisibilityState as VisibilityState,
 } from "@tanstack/react-table";
+import {
+  type LegacyColumnDef as ColumnDef,
+  getCoreRowModel,
+  getSortedRowModel,
+  useLegacyTable as useReactTable,
+} from "@tanstack/react-table/legacy";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
@@ -156,8 +159,12 @@ import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
 import { Skeleton } from "./ui/skeleton";
 
-declare module "@tanstack/react-table" {
-  interface ColumnMeta<TData extends RowData, TValue> {
+declare module "@tanstack/table-core" {
+  interface ColumnMeta<
+    TFeatures extends TableFeatures,
+    TData extends RowData,
+    TValue,
+  > {
     // Emit no width for this column so table-fixed hands it all remaining
     // space. Checking columnDef.size alone can't express this: TanStack
     // resolves an unspecified size to its 150px default.
@@ -3021,7 +3028,7 @@ export function ProfilesDataTable({
         // creation-date sorting needs no visible column.
         header: ({ table }) => {
           const meta = table.options.meta as TableMeta;
-          const sort = table.getState().sorting[0];
+          const sort = table.options.state?.sorting?.[0];
           const isActive = (id: string, desc: boolean) =>
             sort?.id === id && !!sort.desc === desc;
           return (
