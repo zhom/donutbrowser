@@ -1521,3 +1521,106 @@ test("an interactive launch continues the last session once the identity travels
     await app.close();
   }
 });
+
+test("a payload profile an older version stored launches and is stored as an identity", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const localWayfernVersion = cachedFixtureVersion(
+    process.env.DONUT_E2E_PROJECT_ROOT,
+  );
+  const app = appFromEnvironment("browser-legacy-payload", {
+    seedVersionCache: localWayfernVersion ?? false,
+    wayfernTermsAccepted: false,
+  });
+  let browserPid;
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    await app.invoke("accept_wayfern_terms");
+    const major = Number.parseInt(prepared.version.split(".")[0], 10);
+    if (major < 152) {
+      console.log(
+        `[donut-e2e] Wayfern ${prepared.version} converts no stored payload; skipping the legacy launch`,
+      );
+      return;
+    }
+
+    const profile = await createRealProfile(
+      app,
+      prepared.version,
+      "Stored By 0.30",
+    );
+
+    // The file as v0.30 wrote it: the whole device payload, no identity, and
+    // none of the fields added since. Its raw JSON never equals the profile it
+    // parses to, and comparing the two raw once refused every launch of such
+    // a profile as WAYFERN_BROWSER_BUSY.
+    const metadataFile = path.join(
+      app.dataRoot,
+      "data",
+      "profiles",
+      profile.id,
+      "metadata.json",
+    );
+    const stored = JSON.parse(await readFile(metadataFile, "utf8"));
+    // Set, so listing the profiles never rewrites the file in the new shape.
+    assert.equal(typeof stored.host_os, "string");
+    delete stored.temporary;
+    for (const key of [
+      "webrtc_mode",
+      "persona",
+      "camera_file",
+      "camera_crop",
+      "restore_session",
+      "identity_overrides",
+      "location",
+    ]) {
+      delete stored.wayfern_config[key];
+    }
+    stored.wayfern_config = JSON.parse(
+      await readFile(process.env.DONUT_E2E_LEGACY_CONFIG, "utf8"),
+    );
+    await writeFile(metadataFile, JSON.stringify(stored, null, 2));
+
+    const legacy = (await app.invoke("list_browser_profiles")).find(
+      (p) => p.id === profile.id,
+    );
+    assert.equal(legacy.wayfern_config.identity_id, null);
+    const launched = await app.invoke("launch_browser_profile", {
+      profile: legacy,
+    });
+    assert.ok(launched.process_id);
+    browserPid = launched.process_id;
+
+    const converted = (await app.invoke("list_browser_profiles")).find(
+      (p) => p.id === profile.id,
+    );
+    assert.equal(
+      typeof converted.wayfern_config.identity_id,
+      "string",
+      "the launch must store the payload profile as an identity",
+    );
+    assert.equal(
+      converted.wayfern_config.fingerprint,
+      undefined,
+      "a converted profile must store no device payload",
+    );
+    await app.invoke("kill_browser_profile", { profile: converted });
+    await waitForProcessExit(app, browserPid);
+    await app.invoke("delete_profile", { profileId: profile.id });
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    if (app.session && browserPid && processExists(browserPid)) {
+      const profile = (
+        await app.invoke("list_browser_profiles").catch(() => [])
+      ).find((item) => item.process_id === browserPid);
+      if (profile)
+        await app.invoke("kill_browser_profile", { profile }).catch(() => {});
+    }
+    await app.close();
+  }
+});

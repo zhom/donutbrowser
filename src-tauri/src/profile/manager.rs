@@ -31,6 +31,15 @@ fn atomic_write_locked(path: &Path, data: &[u8]) -> std::io::Result<()> {
   fs::rename(&tmp, path)
 }
 
+/// Whether a metadata.json still holds `expected`, compared as this version
+/// reads it. A file an older version wrote lacks every field added since, so
+/// its raw JSON never equals the profile it parses to, and a raw compare
+/// reports a change on every call.
+fn holds_profile(content: &str, expected: &BrowserProfile) -> Result<bool, serde_json::Error> {
+  let stored: BrowserProfile = serde_json::from_str(content)?;
+  Ok(serde_json::to_value(&stored)? == serde_json::to_value(expected)?)
+}
+
 /// Collapse an empty proxy/VPN id to `None`.
 ///
 /// REST and MCP clients send `""` to detach a proxy or VPN, since omitting the
@@ -484,12 +493,9 @@ impl ProfileManager {
       .join(profile.id.to_string())
       .join("metadata.json");
     let json = serde_json::to_string_pretty(profile)?;
-    let expected_json = serde_json::to_string_pretty(expected)?;
     let _serialized = METADATA_WRITES.lock().unwrap_or_else(|e| e.into_inner());
     let current = fs::read_to_string(&profile_file)?;
-    if serde_json::from_str::<serde_json::Value>(&current)?
-      != serde_json::from_str::<serde_json::Value>(&expected_json)?
-    {
+    if !holds_profile(&current, expected)? {
       return Ok(false);
     }
     atomic_write_locked(&profile_file, json.as_bytes())?;
@@ -2085,6 +2091,24 @@ mod tests {
     assert!(merged.identity_id.is_none());
     assert_eq!(merged.fingerprint.as_deref(), Some(EDITED_VIEW));
     assert!(merged.identity_baseline.is_none());
+  }
+
+  #[test]
+  fn a_file_an_older_version_wrote_holds_the_profile_it_reads_as() {
+    // No `temporary` and none of the newer Wayfern fields, as v0.30 wrote it.
+    let legacy = r#"{
+      "id": "7b0f7c9e-3f55-4c1b-9d7e-0f2f1f0c5a11",
+      "name": "Old",
+      "browser": "wayfern",
+      "version": "152.0.7977.64",
+      "wayfern_config": { "fingerprint": "{}", "os": "macos", "identity_id": null }
+    }"#;
+    let expected: BrowserProfile = serde_json::from_str(legacy).unwrap();
+    assert!(holds_profile(legacy, &expected).unwrap());
+
+    let mut changed = expected.clone();
+    changed.wayfern_config.as_mut().unwrap().identity_id = Some("id-1".to_string());
+    assert!(!holds_profile(legacy, &changed).unwrap());
   }
 
   fn create_test_profile_manager() -> (&'static ProfileManager, TempDir) {
