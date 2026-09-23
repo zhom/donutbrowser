@@ -196,6 +196,21 @@ fn cdp_error(error: CdpError) -> McpError {
   }
 }
 
+/// Replace the engine's plan refusal with the server's device refusal.
+///
+/// A desktop the server will not give a Wayfern token, because another desktop
+/// on the account is the primary one, launches the engine without a token, and
+/// the engine then refuses every command as "requires a paid Donut Browser
+/// plan", which is false for a paying account.
+fn explain_engine_refusal(mut error: McpError, device_refusal: Option<String>) -> McpError {
+  if error.message.contains("requires a paid Donut Browser plan") {
+    if let Some(reason) = device_refusal {
+      error.message = reason;
+    }
+  }
+  error
+}
+
 const DEFAULT_MCP_PORT: u16 = 51080;
 
 /// The event the desktop turns into the "local MCP is being removed" dialog.
@@ -4713,7 +4728,10 @@ impl McpServer {
       });
     }
 
-    let result = self.dispatch_tool_call(caller, tool_name, &arguments).await;
+    let result = self
+      .dispatch_tool_call(caller, tool_name, &arguments)
+      .await
+      .map_err(|error| explain_engine_refusal(error, CLOUD_AUTH.wayfern_device_refusal()));
     let elapsed_ms = started.elapsed().as_millis();
     match &result {
       Ok(_) => {
@@ -9728,6 +9746,36 @@ lazy_static::lazy_static! {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn an_engine_plan_refusal_is_explained_by_a_device_refusal() {
+    let engine = || {
+      McpError {
+      code: -32000,
+      message: r#"CDP error: {"code":-32000,"message":"Browser automation requires a paid Donut Browser plan."}"#
+        .to_string(),
+      data: None,
+    }
+    };
+    let device = "Browser automation is restricted to your primary device. Log out other devices to use it here.";
+    assert_eq!(
+      explain_engine_refusal(engine(), Some(device.to_string())).message,
+      device
+    );
+    assert_eq!(
+      explain_engine_refusal(engine(), None).message,
+      engine().message
+    );
+    let other = McpError {
+      code: -32000,
+      message: "Profile not found".to_string(),
+      data: None,
+    };
+    assert_eq!(
+      explain_engine_refusal(other, Some(device.to_string())).message,
+      "Profile not found"
+    );
+  }
 
   #[tokio::test]
   async fn the_local_tombstone_answers_gone_with_a_removal_message() {

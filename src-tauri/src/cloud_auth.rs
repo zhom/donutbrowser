@@ -343,6 +343,10 @@ pub struct CloudAuthManager {
   state: Mutex<Option<CloudAuthState>>,
   refresh_lock: tokio::sync::Mutex<()>,
   wayfern_token: Mutex<Option<String>>,
+  /// The server's reason for refusing this desktop a Wayfern token under a
+  /// device rule, until a token is acquired again. The engine reports a
+  /// missing token as a plan problem; this is what lets MCP say the real one.
+  wayfern_device_refusal: std::sync::Mutex<Option<String>>,
 }
 
 lazy_static! {
@@ -365,6 +369,7 @@ impl CloudAuthManager {
       state: Mutex::new(state),
       refresh_lock: tokio::sync::Mutex::new(()),
       wayfern_token: Mutex::new(None),
+      wayfern_device_refusal: std::sync::Mutex::new(None),
     }
   }
 
@@ -932,6 +937,7 @@ impl CloudAuthManager {
   pub async fn logout(&self) -> Result<(), String> {
     // Clear wayfern token
     self.clear_wayfern_token().await;
+    self.set_wayfern_device_refusal(None);
 
     // Disconnect profile lock manager
     crate::team_lock::PROFILE_LOCK.disconnect().await;
@@ -1376,6 +1382,7 @@ impl CloudAuthManager {
           // a lockout that does not exist and hides the real answer, which is
           // that their plan does not include browser automation.
           if is_device_restriction(&e) {
+            self.set_wayfern_device_refusal(Some(refusal_message(&e)));
             let _ = crate::events::emit_empty("wayfern-paid-blocked");
           }
         }
@@ -1385,6 +1392,7 @@ impl CloudAuthManager {
 
     let mut wt = self.wayfern_token.lock().await;
     *wt = Some(token);
+    self.set_wayfern_device_refusal(None);
     log::info!("Wayfern token acquired");
     Ok(())
   }
@@ -1409,6 +1417,20 @@ impl CloudAuthManager {
   pub async fn clear_wayfern_token(&self) {
     let mut wt = self.wayfern_token.lock().await;
     *wt = None;
+  }
+
+  fn set_wayfern_device_refusal(&self, refusal: Option<String>) {
+    if let Ok(mut current) = self.wayfern_device_refusal.lock() {
+      *current = refusal;
+    }
+  }
+
+  pub fn wayfern_device_refusal(&self) -> Option<String> {
+    self
+      .wayfern_device_refusal
+      .lock()
+      .ok()
+      .and_then(|current| current.clone())
   }
 
   /// Background loop that refreshes the sync token periodically
@@ -1505,6 +1527,21 @@ impl CloudAuthManager {
 /// the user can clear themselves, which is what the toast asks them to do.
 fn is_device_restriction(error: &str) -> bool {
   error.contains("primary device") || error.contains("requires the desktop app")
+}
+
+/// The `message` of the JSON body in a refused token request, or the whole
+/// error when the body is not JSON.
+fn refusal_message(error: &str) -> String {
+  error
+    .find('{')
+    .and_then(|start| serde_json::from_str::<serde_json::Value>(&error[start..]).ok())
+    .and_then(|body| {
+      body
+        .get("message")
+        .and_then(|m| m.as_str())
+        .map(str::to_string)
+    })
+    .unwrap_or_else(|| error.to_string())
 }
 
 fn solve_pow(prefix: &str, difficulty: u32) -> Option<String> {
@@ -1879,6 +1916,19 @@ pub async fn restart_sync_service(app_handle: tauri::AppHandle) -> Result<(), St
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_refused_token_request_yields_the_servers_message() {
+    let refused = r#"Wayfern token request failed (403 Forbidden): {"message":"Browser automation is restricted to your primary device. Log out other devices to use it here.","error":"Forbidden","statusCode":403}"#;
+    assert_eq!(
+      refusal_message(refused),
+      "Browser automation is restricted to your primary device. Log out other devices to use it here."
+    );
+    assert_eq!(
+      refusal_message("Failed to request wayfern token: timeout"),
+      "Failed to request wayfern token: timeout"
+    );
+  }
 
   fn active_solo() -> Entitlements {
     derive_entitlements("solo", Some("monthly"), "active", 20)
