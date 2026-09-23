@@ -75,7 +75,9 @@ export class AuthGuard implements CanActivate {
     if (!resp.ok) {
       throw new Error(`team-scope resolver returned ${resp.status}`);
     }
-    const value = (await resp.json()) as TeamScope | null;
+    // A user with no team is answered with an empty body, not `null`.
+    const body = await resp.text();
+    const value = (body ? JSON.parse(body) : null) as TeamScope | null;
 
     // Bound the cache; a coarse clear is fine since entries are cheap to rebuild.
     if (this.teamScopeCache.size > 10_000) this.teamScopeCache.clear();
