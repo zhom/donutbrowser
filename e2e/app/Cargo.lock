@@ -6954,9 +6954,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-wd"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91c8c1ae91949adcbc3ec51b341ab6b845a1ecfb67613dd3be04974e617f06b9"
+checksum = "c8c1f7fdec628ecc7bb4afea5c7acdb51520304f9b7138eaa7264537e56438d6"
 dependencies = [
  "async-trait",
  "axum",
