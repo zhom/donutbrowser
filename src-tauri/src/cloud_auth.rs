@@ -109,8 +109,8 @@ fn derive_entitlements(
   // one row where cookie_bot and browser_automation disagree, which is why
   // cookie_bot can no longer be derived from browser_automation below.
   //
-  // remote_control is enterprise-only, and is withheld from the unrecognized
-  // row rather than granted with the rest. Everything else here defaults
+  // remote_control belongs to pro, team and enterprise, and is withheld from
+  // the unrecognized row rather than granted with the rest. Everything else here defaults
   // generous so a comped account is never locked out of what it is paying for;
   // an internet-facing hook into this machine is the one capability where
   // guessing "probably yes" is not the safe direction to guess in.
@@ -126,7 +126,8 @@ fn derive_entitlements(
   ) = match plan {
     "solo" => (false, false, true, false, true, false, false, false),
     "enterprise" => (true, true, true, true, true, true, true, true),
-    "team" => (true, true, true, true, true, true, false, true),
+    "team" => (true, true, true, true, true, true, true, true),
+    "pro" => (true, true, true, false, true, true, true, true),
     _ => (true, true, true, false, true, true, false, true),
   };
   Entitlements {
@@ -1910,6 +1911,17 @@ mod tests {
     }
     // An inactive subscription buys nothing, whatever the plan says.
     assert!(!derive_entitlements("pro", Some("monthly"), "canceled", 50).agent_automation);
+  }
+
+  #[test]
+  fn remote_control_is_granted_to_pro_team_and_enterprise_only() {
+    for plan in ["pro", "team", "enterprise"] {
+      let derived = derive_entitlements(plan, Some("monthly"), "active", 50);
+      assert!(derived.remote_control, "{plan} should get remote control");
+    }
+    assert!(!active_solo().remote_control);
+    assert!(!derive_entitlements("some-comped-plan", Some("monthly"), "active", 50).remote_control);
+    assert!(!derive_entitlements("pro", Some("monthly"), "canceled", 50).remote_control);
   }
 
   #[test]

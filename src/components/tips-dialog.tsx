@@ -25,7 +25,10 @@ export type TipsDialogMode = "browse" | "single";
 
 interface TipsDialogProps {
   open: boolean;
-  /** `browse` shows the whole catalog beside the tip; `single` is one card. */
+  /**
+   * `browse` shows the whole catalog beside the tip and pages through it;
+   * `single` is one card and nothing more, the way the automatic flow opens.
+   */
   mode: TipsDialogMode;
   tips: TipDefinition[];
   seen: string[];
@@ -50,7 +53,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 /**
  * Feature tips: a drawing of the feature in motion, a few lines on what it
  * does for the user, and a button into the place it lives. The catalog on
- * the left is only there in browse mode; the automatic flow is one card.
+ * the left and the pager are only there in browse mode; the automatic flow
+ * is one card that closes when the user is done with it.
  */
 export function TipsDialog({
   open,
@@ -79,6 +83,7 @@ export function TipsDialog({
   const [index, setIndex] = useState(initialIndex);
   const [direction, setDirection] = useState<1 | -1>(1);
   const tip = tips[Math.min(index, Math.max(0, total - 1))];
+  const single = mode === "single";
   const mod = isMacOS() ? "⌘" : "Ctrl";
 
   // Each tip is reported once as it comes on screen, so the automatic flow
@@ -93,8 +98,9 @@ export function TipsDialog({
   if (!tip) return null;
 
   const keys = tipTextKeys(tip.id);
-  const isLast = index >= total - 1;
+  const finishes = single || index >= total - 1;
   const go = (next: number) => {
+    if (single) return;
     const clamped = Math.max(0, Math.min(total - 1, next));
     if (clamped === index) return;
     setDirection(clamped > index ? 1 : -1);
@@ -153,39 +159,46 @@ export function TipsDialog({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="size-8 p-0 text-muted-foreground hover:text-foreground"
-            aria-label={t("tips.previous")}
-            data-slot="tip-previous"
-            disabled={index === 0}
-            onClick={() => go(index - 1)}
-          >
-            <LuChevronLeft className="size-4" />
-          </Button>
-          <span
-            className="min-w-[5ch] text-center text-xs text-muted-foreground tabular-nums"
-            aria-live="polite"
-          >
-            {t("tips.count", { current: index + 1, total })}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="size-8 p-0 text-muted-foreground hover:text-foreground"
-            aria-label={t("tips.next")}
-            data-slot="tip-next"
-            disabled={isLast}
-            onClick={() => go(index + 1)}
-          >
-            <LuChevronRight className="size-4" />
-          </Button>
-        </div>
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-3",
+          single ? "justify-end" : "justify-between",
+        )}
+      >
+        {!single && (
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-8 p-0 text-muted-foreground hover:text-foreground"
+              aria-label={t("tips.previous")}
+              data-slot="tip-previous"
+              disabled={index === 0}
+              onClick={() => go(index - 1)}
+            >
+              <LuChevronLeft className="size-4" />
+            </Button>
+            <span
+              className="min-w-[5ch] text-center text-xs text-muted-foreground tabular-nums"
+              aria-live="polite"
+            >
+              {t("tips.count", { current: index + 1, total })}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="size-8 p-0 text-muted-foreground hover:text-foreground"
+              aria-label={t("tips.next")}
+              data-slot="tip-next"
+              disabled={index >= total - 1}
+              onClick={() => go(index + 1)}
+            >
+              <LuChevronRight className="size-4" />
+            </Button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -201,11 +214,11 @@ export function TipsDialog({
             size="sm"
             data-slot="tip-advance"
             onClick={() => {
-              if (isLast) onOpenChange(false);
+              if (finishes) onOpenChange(false);
               else go(index + 1);
             }}
           >
-            {t(isLast ? "tips.done" : "tips.next")}
+            {t(finishes ? "tips.done" : "tips.next")}
           </Button>
         </div>
       </div>
@@ -237,7 +250,7 @@ export function TipsDialog({
           mode === "browse" ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
         onKeyDown={(event) => {
-          if (isTypingTarget(event.target)) return;
+          if (single || isTypingTarget(event.target)) return;
           if (event.key === "ArrowRight") {
             event.preventDefault();
             go(index + 1);

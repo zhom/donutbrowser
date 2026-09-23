@@ -133,7 +133,7 @@ export interface Entitlements {
   remoteInteractive: boolean;
   /**
    * May drive this desktop from donutbrowser.com, the remote MCP endpoint and
-   * the API in front of it. Enterprise only.
+   * the API in front of it. Pro, Team and Enterprise.
    *
    * Read by the UI to explain why a connected desktop cannot be driven. The
    * bridge itself never gates on it: the server decides who may send work.

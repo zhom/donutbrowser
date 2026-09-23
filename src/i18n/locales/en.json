@@ -875,7 +875,6 @@
       "enabled": "Remote control enabled",
       "disabled": "Remote control disabled",
       "toggleFailed": "Could not change remote control",
-      "notEntitled": "Remote control needs the Enterprise plan. Contact us to enable remote control.",
       "endpointLabel": "Remote MCP endpoint",
       "endpointCopied": "Endpoint copied",
       "endpointDescription": "Point an MCP client here with the credential above as its bearer token. One instance per account: the first app to connect keeps the slot.",
@@ -2297,7 +2296,7 @@
     "mcpRemoteRequiresSignIn": "Sign in to your Donut account before enabling remote control.",
     "mcpRemoteUnauthorized": "Donut cloud refused this device's credentials. Sign out and sign in again.",
     "mcpRemoteSlotTaken": "Another Donut instance on this account is already connected. Only one at a time can be controlled remotely.",
-    "mcpRemoteNotEntitled": "This plan does not include remote control. Contact us to enable it.",
+    "mcpRemoteNotEntitled": "Remote MCP requires the Pro plan or higher.",
     "mcpRemoteUnreachable": "Cannot reach Donut cloud right now. Reconnecting automatically.",
     "mcpRemoteKeyMissing": "This device has no remote MCP credential yet. Create one first, then add the client again.",
     "mcpRemoteKeyLimit": "This account already has the most MCP credentials it can hold. Revoke one on the account page and try again.",
@@ -2315,7 +2314,7 @@
     "remoteSessionNotDrivable": "This remote session is not ready to be driven yet. Wait until it reports live.",
     "remotePlatformUnsupported": "Remote sessions run on macOS, Windows or Linux hosts only. This profile's platform is {{platform}}.",
     "remoteProfileNotSynced": "This profile has not finished uploading to cloud sync yet. Wait for its first sync to complete, then try again.",
-    "mcpLocalRemoved": "Donut's local MCP server has been removed. Use remote MCP instead — set it up in Settings > Integrations and connect to it from anywhere.",
+    "mcpLocalRemoved": "Donut's local MCP server has been removed. MCP is now remote and requires the Pro plan or higher.",
     "trashEntryNotFound": "This profile is no longer in the trash.",
     "trashRestoreConflict": "A profile with the same ID already exists, so this one cannot be restored.",
     "agentNotEntitled": "Your plan does not include the agent.",
@@ -2560,7 +2559,7 @@
         "proxy": "Proxy Support (HTTP/SOCKS5)",
         "vpn": "VPN Support (WireGuard)",
         "profiles": "Unlimited Local Profiles",
-        "api": "Profile Management API & MCP",
+        "api": "Profile Management API",
         "openSource": "Open Source",
         "groups": "Profile Groups",
         "cookies": "Cookie Import & Export"
@@ -3036,9 +3035,35 @@
     "title": "Local MCP has been removed",
     "description": "Donut now uses remote MCP, which you can connect to from anywhere. Set it up under the Remote MCP tab and point your AI clients there."
   },
-  "mcpLocalMigrated": {
-    "title": "Moved to remote MCP",
-    "description": "{{count}} MCP client was moved from the removed local server to remote MCP."
+  "mcpMigration": {
+    "title": "Move to remote MCP",
+    "doneTitle": "Moved to remote MCP",
+    "body": "The local MCP server is gone. Remote MCP connects your AI clients to this browser through Donut cloud, so they keep working from anywhere while Donut is open.",
+    "changes": "Donut points these clients at the remote endpoint with a private credential. Nothing else in their settings changes.",
+    "changesNone": "No AI client on this computer uses the local server. Donut turns on remote MCP and creates a credential for the clients you set up yourself.",
+    "start": "Move to remote MCP",
+    "notNow": "Not now",
+    "done": "Done",
+    "stepBridge": "Remote MCP",
+    "stepClients": "Clients",
+    "bridgeWorking": "Turning on",
+    "bridgeOn": "On",
+    "credentialWorking": "Creating",
+    "clientsProgress": "{{moved}} of {{total}} moved",
+    "clientsNone": "None to move",
+    "clientMoving": "Moving",
+    "clientMoved": "Moved",
+    "clientFailed": "Not changed",
+    "summary_one": "{{count}} client now uses remote MCP.",
+    "summary_other": "{{count}} clients now use remote MCP.",
+    "failed_one": "{{count}} client was not changed. Retry, or set it up by hand with the details below.",
+    "failed_other": "{{count}} clients were not changed. Retry, or set them up by hand with the details below.",
+    "manual": "For any other client, use this endpoint with the credential as its bearer token.",
+    "credentialCopied": "Credential copied",
+    "localServer": "The local server now only tells old clients that it moved. You can turn it off.",
+    "localServerOff": "Turn off local server",
+    "localServerIsOff": "Local server is off",
+    "localServerOffFailed": "Could not turn off the local server"
   },
   "appFeedback": {
     "saveFailed": "Could not save settings",
@@ -3361,7 +3386,7 @@
     "previous": "Previous tip",
     "next": "Next tip",
     "done": "Done",
-    "autoShow": "Show a tip when Donut starts",
+    "autoShow": "Show a tip every few days",
     "items": {
       "dnsBlocklist": {
         "label": "DNS blocking",
@@ -3432,7 +3457,7 @@
       "localApi": {
         "label": "API and MCP",
         "title": "Automate Donut from scripts and agents",
-        "body": "The local REST API and MCP server let scripts and AI agents list, create and configure profiles. Turn them on under Integrations and copy the token.",
+        "body": "The local REST API lets scripts list, create and configure profiles. Turn it on under Integrations and copy the token.",
         "action": "Open Integrations"
       },
       "importProfiles": {

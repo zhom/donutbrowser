@@ -875,7 +875,6 @@
       "enabled": "Uzaktan kontrol açıldı",
       "disabled": "Uzaktan kontrol kapatıldı",
       "toggleFailed": "Uzaktan kontrol değiştirilemedi",
-      "notEntitled": "Uzaktan kontrol için Enterprise planı gerekir. Uzaktan kontrolü etkinleştirmek için bize ulaşın.",
       "endpointLabel": "Uzak MCP uç noktası",
       "endpointCopied": "Uç nokta kopyalandı",
       "endpointDescription": "Bir MCP istemcisini yukarıdaki kimlik bilgisini bearer belirteci olarak kullanarak buraya yönlendirin. Hesap başına bir örnek: yeri ilk bağlanan uygulama tutar.",
@@ -2297,7 +2296,7 @@
     "mcpRemoteRequiresSignIn": "Uzaktan kontrolü açmadan önce Donut hesabınıza giriş yapın.",
     "mcpRemoteUnauthorized": "Donut cloud bu cihazın kimlik bilgilerini reddetti. Çıkış yapıp yeniden giriş yapın.",
     "mcpRemoteSlotTaken": "Bu hesapta başka bir Donut örneği zaten bağlı. Aynı anda yalnızca biri uzaktan kontrol edilebilir.",
-    "mcpRemoteNotEntitled": "Bu plan uzaktan kontrolü içermiyor. Etkinleştirmek için bize ulaşın.",
+    "mcpRemoteNotEntitled": "Uzak MCP, Pro veya daha üst bir plan gerektirir.",
     "mcpRemoteUnreachable": "Şu anda Donut cloud'a ulaşılamıyor. Otomatik olarak yeniden bağlanılıyor.",
     "mcpRemoteKeyMissing": "Bu cihazda henüz uzak MCP kimlik bilgisi yok. Önce bir tane oluşturun, ardından istemciyi yeniden ekleyin.",
     "mcpRemoteKeyLimit": "Bu hesap tutabileceği en fazla MCP kimlik bilgisine zaten sahip. Hesap sayfasından birini iptal edip yeniden deneyin.",
@@ -2315,7 +2314,7 @@
     "remoteSessionNotDrivable": "Bu uzak oturum henüz yönetilmeye hazır değil. Etkin duruma gelmesini bekleyin.",
     "remotePlatformUnsupported": "Uzak oturumlar yalnızca macOS, Windows veya Linux sunucularında çalışır. Bu profilin platformu {{platform}}.",
     "remoteProfileNotSynced": "Bu profil buluta yüklenmeyi henüz tamamlamadı. İlk eşitlemenin bitmesini bekleyip tekrar deneyin.",
-    "mcpLocalRemoved": "Donut'un yerel MCP sunucusu kaldırıldı. Bunun yerine uzak MCP kullanın: Ayarlar > Entegrasyonlar'dan kurun ve her yerden bağlanın.",
+    "mcpLocalRemoved": "Donut'un yerel MCP sunucusu kaldırıldı. MCP artık uzaktan çalışıyor ve Pro veya daha üst bir plan gerektiriyor.",
     "trashEntryNotFound": "Bu profil artık çöp kutusunda değil.",
     "trashRestoreConflict": "Aynı kimliğe sahip bir profil zaten var, bu nedenle bu profil geri yüklenemez.",
     "agentNotEntitled": "Planınız ajanı içermiyor.",
@@ -2560,7 +2559,7 @@
         "proxy": "Proxy Desteği (HTTP/SOCKS5)",
         "vpn": "VPN Desteği (WireGuard)",
         "profiles": "Sınırsız Yerel Profil",
-        "api": "Profil Yönetimi API'si ve MCP",
+        "api": "Profil Yönetimi API'si",
         "openSource": "Açık Kaynak",
         "groups": "Profil Grupları",
         "cookies": "Çerez İçe/Dışa Aktarma"
@@ -3036,9 +3035,35 @@
     "title": "Yerel MCP kaldırıldı",
     "description": "Donut artık her yerden bağlanabileceğiniz uzak MCP kullanıyor. Uzak MCP sekmesinden kurun ve yapay zeka istemcilerinizi oraya yönlendirin."
   },
-  "mcpLocalMigrated": {
-    "title": "Uzak MCP'ye taşındı",
-    "description": "{{count}} MCP istemcisi, kaldırılan yerel sunucudan uzak MCP'ye taşındı."
+  "mcpMigration": {
+    "title": "Uzak MCP'ye geç",
+    "doneTitle": "Uzak MCP'ye taşındı",
+    "body": "Yerel MCP sunucusu kaldırıldı. Uzak MCP, yapay zeka istemcilerinizi Donut bulutu üzerinden bu tarayıcıya bağlar; böylece Donut açık olduğu sürece her yerden çalışmaya devam ederler.",
+    "changes": "Donut bu istemcileri özel bir kimlik bilgisiyle uzak uç noktaya yönlendirir. Ayarlarında başka hiçbir şey değişmez.",
+    "changesNone": "Bu bilgisayarda yerel sunucuyu kullanan yapay zeka istemcisi yok. Donut uzak MCP'yi açar ve kendiniz kuracağınız istemciler için bir kimlik bilgisi oluşturur.",
+    "start": "Uzak MCP'ye geç",
+    "notNow": "Şimdi değil",
+    "done": "Bitti",
+    "stepBridge": "Uzak MCP",
+    "stepClients": "İstemciler",
+    "bridgeWorking": "Açılıyor",
+    "bridgeOn": "Açık",
+    "credentialWorking": "Oluşturuluyor",
+    "clientsProgress": "{{total}} istemciden {{moved}} tanesi taşındı",
+    "clientsNone": "Taşınacak istemci yok",
+    "clientMoving": "Taşınıyor",
+    "clientMoved": "Taşındı",
+    "clientFailed": "Değişmedi",
+    "summary_one": "{{count}} istemci artık uzak MCP kullanıyor.",
+    "summary_other": "{{count}} istemci artık uzak MCP kullanıyor.",
+    "failed_one": "{{count}} istemci değiştirilemedi. Yeniden deneyin veya aşağıdaki bilgilerle elle kurun.",
+    "failed_other": "{{count}} istemci değiştirilemedi. Yeniden deneyin veya aşağıdaki bilgilerle elle kurun.",
+    "manual": "Diğer istemciler için bu uç noktayı kullanın ve kimlik bilgisini bearer belirteci olarak girin.",
+    "credentialCopied": "Kimlik bilgisi kopyalandı",
+    "localServer": "Yerel sunucu artık eski istemcilere yalnızca taşındığını bildiriyor. Kapatabilirsiniz.",
+    "localServerOff": "Yerel sunucuyu kapat",
+    "localServerIsOff": "Yerel sunucu kapalı",
+    "localServerOffFailed": "Yerel sunucu kapatılamadı"
   },
   "appFeedback": {
     "saveFailed": "Ayarlar kaydedilemedi",
@@ -3361,7 +3386,7 @@
     "previous": "Önceki ipucu",
     "next": "Sonraki ipucu",
     "done": "Bitti",
-    "autoShow": "Donut açılırken bir ipucu göster",
+    "autoShow": "Birkaç günde bir ipucu göster",
     "items": {
       "dnsBlocklist": {
         "label": "DNS engelleme",
@@ -3432,7 +3457,7 @@
       "localApi": {
         "label": "API ve MCP",
         "title": "Donut'u betikler ve ajanlarla otomatikleştirin",
-        "body": "Yerel REST API ve MCP sunucusu, betiklerin ve yapay zekâ ajanlarının profilleri listelemesine, oluşturmasına ve yapılandırmasına izin verir. Entegrasyonlar'dan açın ve belirteci kopyalayın.",
+        "body": "Yerel REST API, betiklerin profilleri listelemesine, oluşturmasına ve yapılandırmasına izin verir. Entegrasyonlar'dan açın ve belirteci kopyalayın.",
         "action": "Entegrasyonları aç"
       },
       "importProfiles": {

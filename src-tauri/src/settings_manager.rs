@@ -96,10 +96,14 @@ pub struct AppSettings {
   /// flow, so the automatic flow never repeats one.
   #[serde(default)]
   pub tips_seen: Vec<String>,
-  /// Unix seconds of the last tip that opened by itself. Paces the automatic
-  /// flow to one tip a day at most.
+  /// Unix seconds of the last tip that opened by itself.
   #[serde(default)]
   pub tips_last_auto_shown_at: Option<u64>,
+  /// Unix seconds before which no tip opens by itself. Drawn once, when an
+  /// automatic tip opens, a random 2 to 5 days later, so a restart keeps the
+  /// same wait.
+  #[serde(default)]
+  pub tips_next_auto_show_at: Option<u64>,
   /// Cloud user ids that have had the paid-plan welcome.
   #[serde(default)]
   pub paid_welcome_seen_for: Vec<String>,
@@ -107,6 +111,10 @@ pub struct AppSettings {
   /// A change from free to paid is what earns the paid-plan welcome.
   #[serde(default)]
   pub cloud_plan_memory: std::collections::HashMap<String, String>,
+  /// Cloud user ids that have been offered the move from local MCP to remote
+  /// MCP, so the move dialog opens by itself at most once per account.
+  #[serde(default)]
+  pub mcp_migration_offered_for: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -127,9 +135,11 @@ fn default_tips_auto_show() -> bool {
   true
 }
 
-/// How long the automatic tip flow waits between two tips, so a busy day of
-/// restarts does not turn into a tip on every launch.
-pub const TIPS_AUTO_INTERVAL_SECS: u64 = 20 * 60 * 60;
+/// The automatic tip flow waits a random gap between two tips, drawn from
+/// this range (both ends included), so tips arrive now and then instead of on
+/// a fixed day and a busy day of restarts never turns into a tip per launch.
+pub const TIPS_AUTO_GAP_MIN_SECS: u64 = 2 * 24 * 60 * 60;
+pub const TIPS_AUTO_GAP_MAX_SECS: u64 = 5 * 24 * 60 * 60;
 
 /// The plan status remembered per cloud user.
 const PLAN_STATUS_PAID: &str = "paid";
@@ -163,8 +173,10 @@ impl Default for AppSettings {
       tips_auto_show: true,
       tips_seen: Vec::new(),
       tips_last_auto_shown_at: None,
+      tips_next_auto_show_at: None,
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
+      mcp_migration_offered_for: Vec::new(),
     }
   }
 }
@@ -633,6 +645,7 @@ pub async fn save_app_settings(
       settings.window_resize_warning_dismissed = current.window_resize_warning_dismissed;
       settings.mcp_remote_enabled = current.mcp_remote_enabled;
       settings.mcp_remote_key_id = current.mcp_remote_key_id;
+      settings.mcp_migration_offered_for = current.mcp_migration_offered_for;
     }
   } else {
     settings.mcp_remote_enabled = false;
@@ -906,23 +919,39 @@ pub struct TipsState {
   pub auto_show: bool,
   pub seen: Vec<String>,
   pub last_auto_shown_at: Option<u64>,
+  /// Unix seconds from which the next automatic tip may open, or `None`
+  /// before the first one.
+  pub next_auto_show_at: Option<u64>,
   /// Whether the automatic flow may open a tip right now: it is switched on
-  /// and the last automatic tip is old enough.
+  /// and the wait after the last automatic tip is over.
   pub auto_due: bool,
 }
 
 impl TipsState {
   fn of(settings: &AppSettings, now: u64) -> Self {
+    // Settings written before the random gap existed carry only the time of
+    // the last automatic tip; the shortest gap applies to those.
+    let next_auto_show_at = settings.tips_next_auto_show_at.or_else(|| {
+      settings
+        .tips_last_auto_shown_at
+        .map(|last| last.saturating_add(TIPS_AUTO_GAP_MIN_SECS))
+    });
     Self {
       auto_show: settings.tips_auto_show,
       seen: settings.tips_seen.clone(),
       last_auto_shown_at: settings.tips_last_auto_shown_at,
-      auto_due: settings.tips_auto_show
-        && settings
-          .tips_last_auto_shown_at
-          .is_none_or(|last| now.saturating_sub(last) >= TIPS_AUTO_INTERVAL_SECS),
+      next_auto_show_at,
+      auto_due: settings.tips_auto_show && next_auto_show_at.is_none_or(|next| now >= next),
     }
   }
+}
+
+/// When the next automatic tip may open, after one opened at `now`. `roll` is
+/// any random number; it selects a gap from `TIPS_AUTO_GAP_MIN_SECS` to
+/// `TIPS_AUTO_GAP_MAX_SECS`.
+fn next_auto_tip_at(now: u64, roll: u64) -> u64 {
+  let span = TIPS_AUTO_GAP_MAX_SECS - TIPS_AUTO_GAP_MIN_SECS + 1;
+  now.saturating_add(TIPS_AUTO_GAP_MIN_SECS + roll % span)
 }
 
 /// Serialises every read-modify-write of the tips fields. Two tips shown in
@@ -938,13 +967,20 @@ fn unix_now() -> u64 {
 }
 
 /// Remembers a tip as shown. `auto` marks it as the tip that opened by
-/// itself, which restarts the daily pacing.
-fn record_tip_seen(settings: &mut AppSettings, tip_id: &str, auto: bool, now: u64) {
+/// itself, which starts a new random wait (see `next_auto_tip_at`) unless
+/// one is still running, so a repeated report of the same tip draws nothing.
+fn record_tip_seen(settings: &mut AppSettings, tip_id: &str, auto: bool, now: u64, roll: u64) {
   if !settings.tips_seen.iter().any(|id| id == tip_id) {
     settings.tips_seen.push(tip_id.to_string());
   }
   if auto {
     settings.tips_last_auto_shown_at = Some(now);
+    if settings
+      .tips_next_auto_show_at
+      .is_none_or(|next| next <= now)
+    {
+      settings.tips_next_auto_show_at = Some(next_auto_tip_at(now, roll));
+    }
   }
 }
 
@@ -1009,7 +1045,7 @@ pub async fn mark_tip_seen(tip_id: String, auto: bool) -> Result<TipsState, Stri
     .load_settings()
     .map_err(|e| format!("Failed to load settings: {e}"))?;
   let now = unix_now();
-  record_tip_seen(&mut settings, &tip_id, auto, now);
+  record_tip_seen(&mut settings, &tip_id, auto, now, rand::random::<u64>());
   manager
     .save_settings(&settings)
     .map_err(|e| format!("Failed to save settings: {e}"))?;
@@ -1131,33 +1167,84 @@ mod tests {
     assert!(state.auto_show);
     assert!(state.seen.is_empty());
     assert_eq!(state.last_auto_shown_at, None);
+    assert_eq!(state.next_auto_show_at, None);
     assert!(state.auto_due, "a fresh install owes its first tip");
   }
 
   #[test]
+  fn the_gap_between_automatic_tips_is_two_to_five_days() {
+    const DAY: u64 = 24 * 60 * 60;
+    let now = 1_000;
+    assert_eq!(next_auto_tip_at(now, 0), now + 2 * DAY);
+    let span = TIPS_AUTO_GAP_MAX_SECS - TIPS_AUTO_GAP_MIN_SECS + 1;
+    assert_eq!(next_auto_tip_at(now, span - 1), now + 5 * DAY);
+    assert_eq!(next_auto_tip_at(now, span), now + 2 * DAY, "the roll wraps");
+    for roll in [1, 7, DAY, 3 * DAY + 11, u64::MAX / 3, u64::MAX] {
+      let next = next_auto_tip_at(now, roll);
+      assert!(
+        (now + 2 * DAY..=now + 5 * DAY).contains(&next),
+        "roll {roll} gave a gap of {} seconds",
+        next - now
+      );
+    }
+    assert_eq!(next_auto_tip_at(u64::MAX - 1, 5), u64::MAX, "no overflow");
+  }
+
+  #[test]
   fn tips_seen_dedupes_and_paces_the_automatic_flow() {
+    const DAY: u64 = 24 * 60 * 60;
     let mut settings = AppSettings::default();
-    record_tip_seen(&mut settings, "dns", false, 100);
-    record_tip_seen(&mut settings, "dns", false, 200);
+    record_tip_seen(&mut settings, "dns", false, 100, 0);
+    record_tip_seen(&mut settings, "dns", false, 200, 0);
     assert_eq!(settings.tips_seen, vec!["dns".to_string()]);
     assert_eq!(
       settings.tips_last_auto_shown_at, None,
-      "a browsed tip must not restart the daily pacing"
+      "a browsed tip must not start a wait"
     );
+    assert_eq!(settings.tips_next_auto_show_at, None);
 
-    record_tip_seen(&mut settings, "proxy", true, 1_000);
+    // A roll of one day past the minimum: this tip's gap is three days.
+    record_tip_seen(&mut settings, "proxy", true, 1_000, DAY);
     assert_eq!(settings.tips_last_auto_shown_at, Some(1_000));
-    assert!(
-      !TipsState::of(&settings, 1_000 + TIPS_AUTO_INTERVAL_SECS - 1).auto_due,
-      "the next automatic tip waits a day"
+    let next = 1_000 + 3 * DAY;
+    assert_eq!(settings.tips_next_auto_show_at, Some(next));
+    let state = TipsState::of(&settings, next - 1);
+    assert_eq!(state.next_auto_show_at, Some(next));
+    assert!(!state.auto_due, "the next automatic tip waits out the gap");
+    assert!(TipsState::of(&settings, next).auto_due);
+
+    // The same automatic tip reported again, or a browsed one, while the gap
+    // runs does not draw a new one.
+    record_tip_seen(&mut settings, "proxy", true, 1_500, 0);
+    record_tip_seen(&mut settings, "groups", false, 1_600, 0);
+    assert_eq!(settings.tips_next_auto_show_at, Some(next));
+
+    // Once the gap is over, the next automatic tip draws a fresh one.
+    record_tip_seen(&mut settings, "groups", true, next + 10, 0);
+    assert_eq!(
+      settings.tips_next_auto_show_at,
+      Some(next + 10 + TIPS_AUTO_GAP_MIN_SECS)
     );
-    assert!(TipsState::of(&settings, 1_000 + TIPS_AUTO_INTERVAL_SECS).auto_due);
 
     settings.tips_auto_show = false;
     assert!(
-      !TipsState::of(&settings, 1_000 + TIPS_AUTO_INTERVAL_SECS * 3).auto_due,
+      !TipsState::of(&settings, next + 10 * DAY).auto_due,
       "switched off means never due"
     );
+  }
+
+  #[test]
+  fn settings_from_before_the_random_gap_wait_the_shortest_gap() {
+    let settings: AppSettings =
+      serde_json::from_str(r#"{ "tips_last_auto_shown_at": 1000 }"#).expect("old settings parse");
+    assert_eq!(settings.tips_next_auto_show_at, None);
+    let state = TipsState::of(&settings, 1_000 + TIPS_AUTO_GAP_MIN_SECS - 1);
+    assert_eq!(
+      state.next_auto_show_at,
+      Some(1_000 + TIPS_AUTO_GAP_MIN_SECS)
+    );
+    assert!(!state.auto_due);
+    assert!(TipsState::of(&settings, 1_000 + TIPS_AUTO_GAP_MIN_SECS).auto_due);
   }
 
   #[test]
@@ -1277,8 +1364,10 @@ mod tests {
       tips_auto_show: true,
       tips_seen: Vec::new(),
       tips_last_auto_shown_at: None,
+      tips_next_auto_show_at: None,
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
+      mcp_migration_offered_for: Vec::new(),
     };
 
     let save_result = manager.save_settings(&test_settings);

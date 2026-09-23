@@ -118,6 +118,7 @@ mod cookie_manager;
 mod cookie_paste;
 pub mod events;
 mod mcp_integrations;
+mod mcp_migration;
 mod mcp_remote;
 mod mcp_server;
 mod tag_manager;
@@ -1365,103 +1366,25 @@ async fn add_mcp_to_agent(
     .map_err(|e| backend_error_with_detail("MCP_AGENT_INSTALL_FAILED", e))
 }
 
-/// Re-run the install for every client whose entry points at `endpoint`, so a
-/// rotated credential or a moved local port and token do not leave them
-/// talking to a dead target. Every client is attempted; the ids of the ones
-/// that could not be rewritten come back, each already logged with its reason.
-/// Ensure a remote MCP credential is stored, minting one when there is none.
-///
-/// Used to auto-migrate a paid user off the removed local endpoint. Mirrors the
-/// mint-then-store half of `rotate_mcp_remote_credential`; it does not rotate an
-/// existing key, because a working key is exactly what migration wants to keep.
-async fn ensure_remote_mcp_key() -> Result<(), String> {
-  let settings_manager = settings_manager::SettingsManager::instance();
-  let has_key = settings_manager
-    .get_mcp_remote_key()
-    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?
-    .is_some_and(|stored| !stored.key.is_empty());
-  if has_key {
-    return Ok(());
-  }
-  let grant = cloud_auth::CLOUD_AUTH
-    .create_mcp_key(&mcp_remote_key_label())
-    .await?;
-  settings_manager
-    .store_mcp_remote_key(&grant.key, &grant.id)
-    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))
-}
-
-/// Migrate away from the removed local MCP endpoint, once per launch.
-///
-/// A paid, signed-in user has their clients that still point at local rewritten
-/// to remote MCP (minting a remote key if they have none), so their agents keep
-/// working from anywhere with no action. Anyone else who still has local
-/// installed, or the legacy `mcp_enabled` flag on, gets the deprecation event
-/// the desktop turns into a gentle "local MCP is going away" notice — there is
-/// no paid remote endpoint to move them to.
-pub async fn migrate_local_mcp_clients(app_handle: tauri::AppHandle) {
-  let mut local_agents = mcp_integrations::agents_on_endpoint(mcp_integrations::McpEndpoint::Local);
-  if claude_desktop_status().endpoint == Some(mcp_integrations::McpEndpoint::Local) {
-    local_agents.push("claude-desktop".to_string());
-  }
-  let mcp_was_enabled = settings_manager::SettingsManager::instance()
-    .load_settings()
-    .map(|settings| settings.mcp_enabled)
-    .unwrap_or(false);
-  if local_agents.is_empty() && !mcp_was_enabled {
-    return;
-  }
-
-  let paid = cloud_auth::CLOUD_AUTH.is_logged_in().await
-    && cloud_auth::CLOUD_AUTH.has_active_paid_subscription().await;
-
-  if !local_agents.is_empty() && paid {
-    if let Err(e) = ensure_remote_mcp_key().await {
-      log::warn!("[mcp] Could not provision a remote MCP key to migrate local clients: {e}");
-      let _ = crate::events::emit_empty(mcp_server::LOCAL_MCP_DEPRECATED_EVENT);
-      return;
-    }
-    let target = match mcp_target_for(&app_handle, mcp_integrations::McpEndpoint::Remote).await {
-      Ok(target) => target,
-      Err(e) => {
-        log::warn!("[mcp] Could not resolve the remote MCP target for migration: {e}");
-        let _ = crate::events::emit_empty(mcp_server::LOCAL_MCP_DEPRECATED_EVENT);
-        return;
-      }
-    };
-    let mut migrated = 0usize;
-    let mut failed: Vec<String> = Vec::new();
-    for agent in &local_agents {
-      match install_mcp_agent(agent, &target) {
-        Ok(()) => migrated += 1,
-        Err(e) => {
-          log::warn!("[mcp] Could not migrate {agent} to remote MCP: {e}");
-          failed.push(agent.clone());
-        }
-      }
-    }
-    log::info!(
-      "[mcp] Migrated {migrated} local MCP client(s) to remote MCP ({} could not be rewritten)",
-      failed.len()
-    );
-    let _ = crate::events::emit(
-      "mcp-local-migrated",
-      serde_json::json!({ "migrated": migrated, "failed": failed }),
-    );
-  } else {
-    // Free or signed-out: nothing paid to migrate them to, so tell them plainly.
-    let _ = crate::events::emit_empty(mcp_server::LOCAL_MCP_DEPRECATED_EVENT);
-  }
-}
-
-pub async fn reinstall_mcp_agents(
-  app_handle: &tauri::AppHandle,
-  endpoint: mcp_integrations::McpEndpoint,
-) -> Vec<String> {
+/// Ids of every client whose Donut entry points at `endpoint`, Claude Desktop
+/// included (its bundle is inspected here, not by `mcp_integrations`).
+fn mcp_clients_on(endpoint: mcp_integrations::McpEndpoint) -> Vec<String> {
   let mut agents = mcp_integrations::agents_on_endpoint(endpoint);
   if claude_desktop_status().endpoint == Some(endpoint) {
     agents.push("claude-desktop".to_string());
   }
+  agents
+}
+
+/// Re-run the install for every client whose entry points at `endpoint`, so a
+/// rotated credential or a moved local port and token do not leave them
+/// talking to a dead target. Every client is attempted; the ids of the ones
+/// that could not be rewritten come back, each already logged with its reason.
+pub async fn reinstall_mcp_agents(
+  app_handle: &tauri::AppHandle,
+  endpoint: mcp_integrations::McpEndpoint,
+) -> Vec<String> {
+  let agents = mcp_clients_on(endpoint);
   let target = match mcp_target_for(app_handle, endpoint).await {
     Ok(target) => target,
     Err(e) => {
@@ -2822,11 +2745,10 @@ pub fn run_with_builder(
             .await;
         });
 
-        // Local MCP is removed. Move anyone still on it forward: paid users are
-        // migrated to remote MCP, everyone else is told it is going away.
-        let migrate_handle = app.handle().clone();
+        // Local MCP is removed. An account that can use remote MCP is offered
+        // the move in the app; everyone else still on it is told it is gone.
         tauri::async_runtime::spawn(async move {
-          migrate_local_mcp_clients(migrate_handle).await;
+          mcp_migration::announce_local_mcp_removal().await;
         });
 
         let settings_mgr = settings_manager::SettingsManager::instance();
@@ -3627,6 +3549,9 @@ pub fn run_with_builder(
       get_mcp_remote_credential,
       rotate_mcp_remote_credential,
       forget_mcp_remote_credential,
+      mcp_migration::get_mcp_migration_offer,
+      mcp_migration::mark_mcp_migration_offered,
+      mcp_migration::turn_off_local_mcp_server,
       // VPN commands
       import_vpn_config,
       list_vpn_configs,

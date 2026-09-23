@@ -5,25 +5,10 @@ import { listen } from "@tauri-apps/api/event";
 import { Eye, EyeOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { IconType } from "react-icons";
-import {
-  LuAppWindow,
-  LuCheck,
-  LuCloud,
-  LuCodeXml,
-  LuPlug,
-  LuTerminal,
-  LuTrash2,
-  LuZap,
-} from "react-icons/lu";
-import {
-  SiClaude,
-  SiCursor,
-  SiWindsurf,
-  SiZedindustries,
-} from "react-icons/si";
-import { VscVscode } from "react-icons/vsc";
+import { LuCheck, LuCloud, LuPlug, LuTrash2, LuZap } from "react-icons/lu";
 import { IntegrationDiagnostics } from "@/components/integration-diagnostics";
+import { AgentIcon } from "@/components/mcp-agent-icon";
+import { McpMigrationDialog } from "@/components/mcp-migration-dialog";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -45,20 +30,22 @@ import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
 import { canUseRemoteControl } from "@/lib/entitlements";
+import {
+  type AgentCategory,
+  credentialPrefixOf,
+  FX_AGENT_ID,
+  fxExportLine,
+  localMcpClients,
+  type McpAgentInfo,
+  type McpEndpoint,
+  type McpRemoteCredential,
+  type McpRemoteCredentialRotation,
+  type McpRemoteStatus,
+  REMOTE_MCP_URL,
+} from "@/lib/mcp";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import { CopyToClipboard } from "./ui/copy-to-clipboard";
-
-/** Where an agent points to drive this browser through Donut cloud. */
-const REMOTE_MCP_URL = "https://api.donutbrowser.com/api/mcp";
-
-/**
- * fx refuses a literal Authorization header in its config and reads the
- * bearer token from this variable instead, so its install cannot carry the
- * credential and the user has to export it themselves.
- */
-const FX_TOKEN_ENV = "DONUT_MCP_TOKEN";
-const FX_AGENT_ID = "fx";
 
 interface AppSettings {
   api_enabled: boolean;
@@ -77,57 +64,6 @@ interface McpConfig {
   token: string;
 }
 
-interface McpRemoteStatus {
-  enabled: boolean;
-  connected: boolean;
-  instanceId: string;
-  lastError: string | null;
-}
-
-/**
- * Only the prefix leaves the backend; the plaintext is installed into agent
- * configs by the app itself. Both spellings are read because the spec writes
- * the Rust field as `token_prefix` while the sibling status struct serialises
- * camelCase, and a mismatch here would silently render a present credential
- * as missing.
- */
-interface McpRemoteCredential {
-  present: boolean;
-  tokenPrefix?: string | null;
-  token_prefix?: string | null;
-}
-
-/**
- * What a rotation answers. The key is stored and installed by the time this
- * arrives; `failed_clients` are the ids of the clients whose config could not
- * be rewritten, for the user to retry, never a reason to mint again.
- */
-interface McpRemoteCredentialRotation
-  extends Pick<McpRemoteCredential, "tokenPrefix" | "token_prefix"> {
-  failed_clients?: string[];
-}
-
-function credentialPrefixOf(
-  credential: Pick<McpRemoteCredential, "tokenPrefix" | "token_prefix"> | null,
-): string | null {
-  return credential?.tokenPrefix ?? credential?.token_prefix ?? null;
-}
-
-type AgentCategory = "desktop-app" | "cli" | "editor" | "editor-ext";
-
-/** The two places a client can be pointed at; the `target` of `add_mcp_to_agent`. */
-type McpEndpoint = "local" | "remote";
-
-interface McpAgentInfo {
-  id: string;
-  display_name: string;
-  category: AgentCategory;
-  connected: boolean;
-  detected: boolean;
-  /** Which Donut endpoint the agent's existing entry points at, when connected. */
-  endpoint?: McpEndpoint | null;
-}
-
 type IntegrationsTab = "api" | "mcp" | "remote";
 
 function otherEndpoint(endpoint: McpEndpoint): McpEndpoint {
@@ -140,33 +76,6 @@ interface IntegrationsDialogProps {
   subPage?: boolean;
   /** Which tab is displayed when the dialog mounts; defaults to "api". */
   initialTab?: IntegrationsTab;
-}
-
-function AgentIcon({ category, id }: { category: AgentCategory; id: string }) {
-  const className = "size-5 shrink-0 text-muted-foreground";
-  const marks: Record<string, IconType> = {
-    "claude-desktop": SiClaude,
-    "claude-code": SiClaude,
-    cursor: SiCursor,
-    vscode: VscVscode,
-    windsurf: SiWindsurf,
-    zed: SiZedindustries,
-  };
-  const brand = marks[id];
-  if (brand) {
-    const Mark = brand;
-    return <Mark aria-hidden="true" className={className} />;
-  }
-  switch (category) {
-    case "desktop-app":
-      return <LuAppWindow className={className} />;
-    case "editor":
-      return <LuCodeXml className={className} />;
-    case "editor-ext":
-      return <LuPlug className={className} />;
-    case "cli":
-      return <LuTerminal className={className} />;
-  }
 }
 
 function categoryLabel(
@@ -220,6 +129,7 @@ export function IntegrationsDialog({
   const [activeTab, setActiveTab] = useState<IntegrationsTab>(initialTab);
   // Local MCP is removed; an in-app attempt to enable it opens this dialog.
   const [localDeprecatedOpen, setLocalDeprecatedOpen] = useState(false);
+  const [migrationOpen, setMigrationOpen] = useState(false);
   // Mod+I re-targets an open dialog through `initialTab`. The tabs are
   // controlled (see `shownTab`), so a remount would not adopt the new value;
   // this is React's adjust-state-on-prop-change form of the same thing.
@@ -247,7 +157,7 @@ export function IntegrationsDialog({
   const [serverEntitled, setServerEntitled] = useState<boolean | null>(null);
   const remoteEntitled = serverEntitled ?? canUseRemoteControl(user);
   // The local cache is only a placeholder until the server answers; treating
-  // "not yet known" as "no" renders an upgrade prompt at somebody who has paid.
+  // "not yet known" as "no" hides the endpoint from somebody who has paid.
   const remoteEntitlementKnown =
     serverEntitled !== null || (!authLoading && user !== null);
 
@@ -629,9 +539,14 @@ export function IntegrationsDialog({
     `     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \\`,
     `     ${REMOTE_MCP_URL}`,
   ].join("\n");
-  const fxExportLine = settings.mcp_remote_key
-    ? `export ${FX_TOKEN_ENV}=${settings.mcp_remote_key}`
-    : null;
+  const fxLine = fxExportLine(settings.mcp_remote_key);
+
+  // The move off the local server is offered here whenever it applies, on the
+  // server's word only: the once-per-account automatic offer does not limit it.
+  const migrationOffered =
+    isLoggedIn &&
+    serverEntitled === true &&
+    (settings.mcp_enabled || localMcpClients(agents).length > 0);
 
   // Remote control is not something a regular user is told about: the tab
   // exists only for an account entitled to it, or while the bridge is already
@@ -782,12 +697,12 @@ export function IntegrationsDialog({
                     <p className="text-xs text-muted-foreground">
                       {t("integrations.remote.fxHint")}
                     </p>
-                    {fxExportLine && (
+                    {fxLine && (
                       <CopyToClipboard
                         variant="ghost"
                         size="sm"
                         className="shrink-0"
-                        text={fxExportLine}
+                        text={fxLine}
                         successMessage={t("integrations.remote.fxExportCopied")}
                       />
                     )}
@@ -1130,99 +1045,87 @@ export function IntegrationsDialog({
                         )}
                     </div>
 
-                    {remote?.enabled && (
-                      <>
-                        {/* Everything below is gated on entitlement: handing an
-                        unentitled customer a URL, a credential or an "Add"
-                        button that can only answer 402 is the same
-                        wrong-diagnosis trap as telling them their desktop is
-                        offline. The warning explains why it is not shown. */}
-                        {remoteEntitlementKnown && !remoteEntitled && (
-                          <div className="rounded-md border border-warning/50 bg-warning/10 p-4">
-                            <p className="text-xs text-warning-text">
-                              {t("integrations.remote.notEntitled")}
+                    {/* Gated on entitlement: handing an unentitled customer a
+                    URL, a credential or an "Add" button that can only answer
+                    402 is the same wrong-diagnosis trap as telling them their
+                    desktop is offline. */}
+                    {remote?.enabled &&
+                      (remoteEntitled || !remoteEntitlementKnown) && (
+                        <>
+                          <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                                {t("integrations.remote.credentialLabel")}
+                              </Label>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isRotatingCredential}
+                                onClick={() => void handleRotateCredential()}
+                              >
+                                {credentialPresent
+                                  ? t("integrations.remote.credentialRotate")
+                                  : t("integrations.remote.credentialCreate")}
+                              </Button>
+                            </div>
+                            {credentialPresent ? (
+                              credentialPrefix && (
+                                <code className="w-fit rounded bg-muted px-2 py-1 font-mono text-[11px]">
+                                  {t("integrations.remote.credentialPrefix", {
+                                    prefix: credentialPrefix,
+                                  })}
+                                </code>
+                              )
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                {t("integrations.remote.credentialNone")}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {t("integrations.remote.credentialHint")}
                             </p>
                           </div>
-                        )}
 
-                        {(remoteEntitled || !remoteEntitlementKnown) && (
-                          <>
-                            <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                                  {t("integrations.remote.credentialLabel")}
-                                </Label>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={isRotatingCredential}
-                                  onClick={() => void handleRotateCredential()}
-                                >
-                                  {credentialPresent
-                                    ? t("integrations.remote.credentialRotate")
-                                    : t("integrations.remote.credentialCreate")}
-                                </Button>
-                              </div>
-                              {credentialPresent ? (
-                                credentialPrefix && (
-                                  <code className="w-fit rounded bg-muted px-2 py-1 font-mono text-[11px]">
-                                    {t("integrations.remote.credentialPrefix", {
-                                      prefix: credentialPrefix,
-                                    })}
-                                  </code>
-                                )
-                              ) : (
-                                <p className="text-xs text-muted-foreground">
-                                  {t("integrations.remote.credentialNone")}
-                                </p>
-                              )}
-                              <p className="text-xs text-muted-foreground">
-                                {t("integrations.remote.credentialHint")}
-                              </p>
-                            </div>
-
-                            <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                                  {t("integrations.remote.endpointLabel")}
-                                </Label>
-                                <CopyToClipboard
-                                  text={REMOTE_MCP_URL}
-                                  successMessage={t(
-                                    "integrations.remote.endpointCopied",
-                                  )}
-                                />
-                              </div>
-                              <Input
-                                value={REMOTE_MCP_URL}
-                                readOnly
-                                className="font-mono text-xs"
+                          <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                                {t("integrations.remote.endpointLabel")}
+                              </Label>
+                              <CopyToClipboard
+                                text={REMOTE_MCP_URL}
+                                successMessage={t(
+                                  "integrations.remote.endpointCopied",
+                                )}
                               />
-                              <p className="text-xs text-muted-foreground">
-                                {t("integrations.remote.endpointDescription")}
-                              </p>
                             </div>
+                            <Input
+                              value={REMOTE_MCP_URL}
+                              readOnly
+                              className="font-mono text-xs"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {t("integrations.remote.endpointDescription")}
+                            </p>
+                          </div>
 
-                            <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                                  {t("integrations.remote.exampleRequest")}
-                                </Label>
-                                <CopyToClipboard
-                                  text={remoteExampleRequest}
-                                  successMessage={t("common.buttons.copied")}
-                                />
-                              </div>
-                              <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
-                                {remoteExampleRequest}
-                              </pre>
+                          <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                                {t("integrations.remote.exampleRequest")}
+                              </Label>
+                              <CopyToClipboard
+                                text={remoteExampleRequest}
+                                successMessage={t("common.buttons.copied")}
+                              />
                             </div>
+                            <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
+                              {remoteExampleRequest}
+                            </pre>
+                          </div>
 
-                            {clientsGrid("remote")}
-                          </>
-                        )}
-                      </>
-                    )}
+                          {clientsGrid("remote")}
+                        </>
+                      )}
                   </AnimatedTabsContent>
                 )}
 
@@ -1238,17 +1141,31 @@ export function IntegrationsDialog({
                       {t("integrations.mcp.deprecatedBannerBody")}
                     </p>
                     <div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        className="mt-1"
-                        onClick={() => {
-                          setActiveTab("remote");
-                        }}
-                      >
-                        {t("integrations.mcp.deprecatedCta")}
-                      </Button>
+                      {migrationOffered ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-1"
+                          data-slot="mcp-migration-open"
+                          onClick={() => {
+                            setMigrationOpen(true);
+                          }}
+                        >
+                          {t("mcpMigration.start")}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="mt-1"
+                          onClick={() => {
+                            setActiveTab("remote");
+                          }}
+                        >
+                          {t("integrations.mcp.deprecatedCta")}
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -1356,6 +1273,17 @@ export function IntegrationsDialog({
           </div>
         </DialogContent>
       </Dialog>
+      <McpMigrationDialog
+        open={migrationOpen}
+        onOpenChange={setMigrationOpen}
+        onChanged={() => {
+          void loadSettings();
+          void loadAgents();
+          void loadRemoteStatus();
+          void loadCredential();
+          void loadMcpConfig();
+        }}
+      />
     </>
   );
 }

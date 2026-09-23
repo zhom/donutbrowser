@@ -349,7 +349,6 @@ test("the integrations page ships the Local API and MCP tabs and never names rem
       en.integrations.remote.enableLabel,
       en.integrations.remote.signInRequired,
       en.integrations.remote.endpointLabel,
-      en.integrations.remote.notEntitled,
     ]) {
       assert.ok(
         !html.includes(phrase),
@@ -2507,10 +2506,23 @@ test("tips open from the rail, walk the catalog, and deep-link into the feature"
   });
 });
 
-test("a tip opens by itself once the app settles, then waits a day", async () => {
+test("one tip for an unused feature opens by itself as a single card, then waits 2 to 5 days", async () => {
+  // Every tip but two is seen already, and the only profile blocks ads, so
+  // the DNS tip is in use and the trash tip is the one the automatic flow
+  // may open. The flow is switched on only after that profile exists.
+  const unseen = ["dnsBlocklist", "trash"];
+  const seen = Object.keys(en.tips.items).filter((id) => !unseen.includes(id));
   await withApp(
     "ui-tips-auto",
     async (app) => {
+      const profile = await createUiProfile(app, "Tips Blocker");
+      await app.invoke("update_profile_dns_blocklist", {
+        profileId: profile.id,
+        dnsBlocklist: "light",
+      });
+      await app.invoke("set_tips_auto_show", { enabled: true });
+      await app.restart();
+
       await app.waitFor(
         () =>
           app.execute(
@@ -2519,28 +2531,50 @@ test("a tip opens by itself once the app settles, then waits a day", async () =>
           ),
         { description: "the automatic tip", timeoutMs: 30_000 },
       );
-      assert.ok(
-        await app.visibleTextIncludes(en.tips.items.dnsBlocklist.title),
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('[data-slot="tip-detail"]')?.dataset.tipId;`,
+        ),
+        "trash",
+        "the DNS tip is skipped because a profile already blocks ads",
+      );
+      assert.ok(await app.visibleTextIncludes(en.tips.items.trash.title));
+      assert.deepEqual(
+        await app.execute(
+          `return ['tips-list-item', 'tip-previous', 'tip-next'].map((slot) => document.querySelectorAll('[data-slot="' + slot + '"]').length);`,
+        ),
+        [0, 0, 0],
+        "one tip at a time: no catalog and no pager",
       );
       assert.equal(
         await app.execute(
-          `return document.querySelectorAll('[data-slot="tips-list-item"]').length;`,
+          `return document.querySelector('[data-slot="tip-advance"]')?.textContent.trim();`,
         ),
-        0,
-        "the single card carries no catalog",
+        en.tips.done,
       );
       await app.capture("tips-auto");
-      await app.waitFor(
+
+      const state = await app.waitFor(
         async () => {
-          const state = await app.invoke("get_tips_state");
-          return (
-            state.seen.includes("dnsBlocklist") && state.auto_due === false
-          );
+          const current = await app.invoke("get_tips_state");
+          return current.seen.includes("trash") && current.auto_due === false
+            ? current
+            : null;
         },
         { description: "the automatic tip recorded" },
       );
+      assert.ok(
+        !state.seen.includes("dnsBlocklist"),
+        "the skipped tip stays unseen",
+      );
+      const gap = state.next_auto_show_at - state.last_auto_shown_at;
+      assert.ok(
+        gap >= 2 * 24 * 60 * 60 && gap <= 5 * 24 * 60 * 60,
+        `the next automatic tip waits 2 to 5 days, not ${gap} seconds`,
+      );
 
-      await dismissSurface(app);
+      // Done closes the card instead of walking to another tip.
+      await app.clickSelector('[data-slot="tip-advance"]');
       await app.waitFor(
         () =>
           app.execute(`return !document.querySelector(arguments[0]);`, [
@@ -2549,9 +2583,9 @@ test("a tip opens by itself once the app settles, then waits a day", async () =>
         { description: "the dialog closed" },
       );
 
-      // A restart within the day shows nothing: one tip a day.
+      // A restart inside the gap shows nothing, and keeps the same wait.
       await app.restart();
-      await app.waitForText("No profiles yet");
+      await app.waitForText("Tips Blocker");
       await new Promise((resolve) => setTimeout(resolve, 4_500));
       assert.equal(
         await app.execute(
@@ -2560,8 +2594,12 @@ test("a tip opens by itself once the app settles, then waits a day", async () =>
         ),
         false,
       );
+      assert.equal(
+        (await app.invoke("get_tips_state")).next_auto_show_at,
+        state.next_auto_show_at,
+      );
     },
-    { settings: { tips_auto_show: true } },
+    { settings: { tips_seen: seen } },
   );
 });
 
@@ -2667,6 +2705,379 @@ test("a freshly paid account is welcomed once and walked to its plan tips", asyn
       );
     } finally {
       await restoreStubs(app);
+    }
+  });
+});
+
+const MCP_MIGRATION = '[data-slot="mcp-migration"]';
+
+/**
+ * Fails `add_mcp_to_agent` for the listed agent ids with the given backend
+ * error, the way the Rust command rejects, and answers the rest with success.
+ * Installed on top of `stubCommand`, so `restoreStubs` removes it too.
+ */
+async function stubAgentInstall(app, failures) {
+  await app.execute(
+    `window.__donutInstallFailures = arguments[0];
+     if (!window.__donutInstallStubbed) {
+       window.__donutInstallStubbed = true;
+       const next = window.fetch;
+       window.fetch = function (input, init) {
+         const url = String(
+           typeof input === "string" ? input : (input && input.url) || "",
+         );
+         if (!url.endsWith("/add_mcp_to_agent")) {
+           return next.apply(window, arguments);
+         }
+         const payload = JSON.parse((init && init.body) || "null");
+         window.__donutStubbedCalls = window.__donutStubbedCalls ?? [];
+         window.__donutStubbedCalls.push({ command: "add_mcp_to_agent", payload });
+         const error = window.__donutInstallFailures[payload && payload.agentId];
+         return Promise.resolve(
+           new Response(JSON.stringify(error ?? null), {
+             status: 200,
+             headers: {
+               "content-type": "application/json",
+               "Tauri-Response": error ? "error" : "ok",
+             },
+           }),
+         );
+       };
+     }`,
+    [failures],
+  );
+}
+
+const migrationShown = (app) =>
+  app.execute(`return Boolean(document.querySelector(arguments[0]));`, [
+    MCP_MIGRATION,
+  ]);
+
+const migrationFlowState = (app) =>
+  app.execute(
+    `return document.querySelector(arguments[0] + ' [data-slot="operation-flow"]')?.dataset.state ?? null;`,
+    [MCP_MIGRATION],
+  );
+
+const migrationClientStates = (app) =>
+  app.execute(
+    `return Object.fromEntries([...document.querySelectorAll('[data-slot="mcp-migration-client"]')].map((node) => [node.dataset.agentId, node.dataset.state]));`,
+  );
+
+test("local MCP on a desktop that cannot use remote MCP is never offered the move", async () => {
+  await withApp(
+    "ui-mcp-migration-not-entitled",
+    async (app) => {
+      await app.waitForText("No profiles yet");
+      // A client still pointing at the removed loopback server, next to the
+      // legacy flag: local MCP is in use. Nobody is signed in.
+      const cursorConfig = path.join(app.root, "home", ".cursor", "mcp.json");
+      await mkdir(path.dirname(cursorConfig), { recursive: true });
+      await writeFile(
+        cursorConfig,
+        `${JSON.stringify({
+          mcpServers: {
+            "donut-browser": { url: "http://127.0.0.1:51080/mcp/e2e-token" },
+          },
+        })}\n`,
+      );
+      assert.deepEqual(await app.invoke("get_mcp_migration_offer"), {
+        eligible: false,
+        due: false,
+        local_server_enabled: true,
+        local_clients: ["cursor"],
+      });
+      // Without an account there is nobody to remember the offer for.
+      assert.match(
+        await app.invokeError("mark_mcp_migration_offered"),
+        /"code":"MCP_REMOTE_REQUIRES_SIGN_IN"/,
+      );
+      assert.deepEqual(
+        (await app.invoke("get_app_settings")).mcp_migration_offered_for,
+        [],
+      );
+
+      // Well past the moment a due offer opens, and nothing did.
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      assert.equal(await migrationShown(app), false);
+
+      // The MCP tab keeps its plain removal banner: no move, no plan pitch.
+      await app.clickSelector('[aria-label="Integrations"]');
+      await app.waitForText(en.integrations.tabMcp);
+      await app.clickText(en.integrations.tabMcp, { roles: ["tab"] });
+      await app.waitForText(en.integrations.mcp.deprecatedBannerTitle);
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-slot="mcp-migration-open"]'));`,
+        ),
+        false,
+        "the move is offered only to an account that can use remote MCP",
+      );
+      assert.ok(
+        await app.visibleTextIncludes(en.integrations.mcp.deprecatedCta),
+      );
+      await dismissSurface(app);
+
+      // Turning the local server off needs no account, clears the flag the
+      // next launch reads, and is safe to repeat.
+      await app.invoke("turn_off_local_mcp_server");
+      assert.equal((await app.invoke("get_app_settings")).mcp_enabled, false);
+      assert.equal(await app.invoke("get_mcp_server_status"), false);
+      await app.invoke("turn_off_local_mcp_server");
+      const offer = await app.invoke("get_mcp_migration_offer");
+      assert.equal(offer.local_server_enabled, false);
+      assert.deepEqual(offer.local_clients, ["cursor"]);
+    },
+    { settings: { mcp_enabled: true } },
+  );
+});
+
+test("an account that can use remote MCP is offered the move once, and it runs client by client with a retry", async () => {
+  await withApp("ui-mcp-migration", async (app) => {
+    await app.waitForText("No profiles yet");
+    const settings = await app.invoke("get_app_settings");
+    try {
+      // The cloud answers and the client rewrites are stubbed at the IPC
+      // layer: the harness has no account and must not touch real clients.
+      // Everything the dialog decides and shows runs for real.
+      await stubCommand(app, "get_mcp_migration_offer", {
+        eligible: true,
+        due: true,
+        local_server_enabled: true,
+        local_clients: ["cursor", "fx"],
+      });
+      await stubCommand(app, "mark_mcp_migration_offered", null);
+      await stubCommand(app, "list_mcp_agents", [
+        {
+          id: "cursor",
+          display_name: "Cursor",
+          category: "editor",
+          connected: true,
+          detected: true,
+          endpoint: "local",
+          token_env: null,
+        },
+        {
+          id: "fx",
+          display_name: "fx",
+          category: "cli",
+          connected: true,
+          detected: true,
+          endpoint: "local",
+          token_env: "DONUT_MCP_TOKEN",
+        },
+        {
+          id: "zed",
+          display_name: "Zed",
+          category: "editor",
+          connected: false,
+          detected: true,
+          endpoint: null,
+          token_env: null,
+        },
+      ]);
+      await stubCommand(app, "get_app_settings", {
+        ...settings,
+        mcp_enabled: true,
+        mcp_remote_key: "dmk_e2e0123456789abcdef",
+      });
+      const bridge = {
+        enabled: false,
+        connected: false,
+        instanceId: "ui-mcp-migration",
+        lastError: null,
+      };
+      await stubCommand(app, "get_mcp_remote_status", bridge);
+      await stubCommand(app, "start_mcp_remote_bridge", {
+        ...bridge,
+        enabled: true,
+      });
+      await stubCommand(app, "get_mcp_remote_credential", {
+        present: false,
+        token_prefix: null,
+      });
+      await stubCommand(app, "rotate_mcp_remote_credential", {
+        token_prefix: "dmk_e2e01234",
+        failed_clients: [],
+      });
+      await stubCommand(app, "turn_off_local_mcp_server", null);
+      await stubCommand(app, "get_remote_control_entitlement", true);
+      // Signed in two days ago, so this is not a fresh paid sign-in and the
+      // paid welcome stays out of the way.
+      await stubCommand(app, "cloud_get_user", {
+        logged_in_at: new Date(
+          Date.now() - 2 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        user: {
+          id: "ui-mcp-migration",
+          email: "remote@example.test",
+          plan: "pro",
+          planPeriod: "monthly",
+          subscriptionStatus: "active",
+          profileLimit: 50,
+          cloudProfilesUsed: 0,
+          proxyBandwidthLimitMb: 0,
+          proxyBandwidthUsedMb: 0,
+          proxyBandwidthExtraMb: 0,
+          isPrimaryDevice: true,
+        },
+      });
+      await stubAgentInstall(app, {
+        cursor: JSON.stringify({
+          code: "MCP_AGENT_INSTALL_FAILED",
+          params: { detail: "the config file is read-only" },
+        }),
+      });
+
+      // Signing in settles the account; the offer opens by itself.
+      await app.invoke("plugin:event|emit", {
+        event: "cloud-auth-changed",
+        payload: null,
+      });
+      await app.waitFor(() => migrationShown(app), {
+        description: "the remote MCP move offer",
+      });
+      assert.deepEqual(
+        await app.waitFor(
+          async () => {
+            const states = await migrationClientStates(app);
+            return Object.keys(states).length > 0 ? states : null;
+          },
+          { description: "the clients on the local server" },
+        ),
+        { cursor: "waiting", fx: "waiting" },
+        "only the clients on the local server are listed",
+      );
+      assert.ok(await app.visibleTextIncludes(en.mcpMigration.title));
+      assert.ok(await app.visibleTextIncludes(en.mcpMigration.changes));
+      await app.capture("mcp-migration-offer");
+
+      await app.clickSelector('[data-slot="mcp-migration-start"]');
+      await app.waitFor(
+        async () => (await migrationFlowState(app)) === "failed",
+        { description: "the move to finish with one client failed" },
+      );
+      assert.deepEqual(await migrationClientStates(app), {
+        cursor: "failed",
+        fx: "moved",
+      });
+      assert.ok(
+        await app.visibleTextIncludes(
+          en.backendErrors.mcpAgentInstallFailed.replace(
+            "{{detail}}",
+            "the config file is read-only",
+          ),
+        ),
+        "the failure is the translated backend error, per client",
+      );
+      assert.ok(await app.visibleTextIncludes(en.integrations.remote.fxHint));
+      assert.ok(
+        await app.visibleTextIncludes(
+          en.mcpMigration.failed_one.replace("{{count}}", "1"),
+        ),
+      );
+      assert.ok(
+        await app.visibleTextIncludes("https://api.donutbrowser.com/api/mcp"),
+        "the endpoint is shown for clients set up by hand",
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-slot="mcp-migration-local-off"]'));`,
+        ),
+        false,
+        "the local server is not offered for switch-off while a client still uses it",
+      );
+      await app.capture("mcp-migration-partial");
+
+      // Retry moves only what is left.
+      await stubAgentInstall(app, {});
+      await app.clickSelector('[data-slot="mcp-migration-start"]');
+      await app.waitFor(
+        async () => (await migrationFlowState(app)) === "done",
+        { description: "the retried move to finish" },
+      );
+      assert.deepEqual(await migrationClientStates(app), {
+        cursor: "moved",
+        fx: "moved",
+      });
+      assert.ok(await app.visibleTextIncludes(en.mcpMigration.doneTitle));
+      assert.ok(
+        await app.visibleTextIncludes(
+          en.mcpMigration.summary_other.replace("{{count}}", "2"),
+        ),
+      );
+
+      await app.clickSelector('[data-slot="mcp-migration-local-off"]');
+      await app.waitForText(en.mcpMigration.localServerIsOff);
+      await app.capture("mcp-migration-done");
+
+      const calls = await app.execute(
+        `return (window.__donutStubbedCalls ?? []).map((call) => ({ command: call.command, payload: call.payload }));`,
+      );
+      const called = (command) =>
+        calls.filter((call) => call.command === command);
+      assert.equal(called("mark_mcp_migration_offered").length, 1);
+      assert.equal(called("start_mcp_remote_bridge").length, 1);
+      assert.equal(
+        called("rotate_mcp_remote_credential").length,
+        1,
+        "the retry must not mint a second credential",
+      );
+      assert.deepEqual(
+        called("add_mcp_to_agent").map((call) => call.payload),
+        [
+          { agentId: "cursor", target: "remote" },
+          { agentId: "fx", target: "remote" },
+          { agentId: "cursor", target: "remote" },
+        ],
+      );
+      assert.equal(called("turn_off_local_mcp_server").length, 1);
+
+      await app.clickSelector('[data-slot="mcp-migration-done"]');
+      await app.waitFor(async () => !(await migrationShown(app)), {
+        description: "the move dialog closed",
+      });
+
+      // Once: the same account settling again does not reopen it.
+      await app.invoke("plugin:event|emit", {
+        event: "cloud-auth-changed",
+        payload: null,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      assert.equal(await migrationShown(app), false);
+
+      // The MCP tab offers the same move by hand.
+      await app.clickSelector('[aria-label="Integrations"]');
+      await app.waitForText(en.integrations.tabMcp);
+      await app.clickText(en.integrations.tabMcp, { roles: ["tab"] });
+      await app.clickSelector('[data-slot="mcp-migration-open"]');
+      assert.deepEqual(
+        await app.waitFor(
+          async () => {
+            const states = await migrationClientStates(app);
+            return Object.keys(states).length > 0 ? states : null;
+          },
+          { description: "the move opened from the MCP tab" },
+        ),
+        { cursor: "waiting", fx: "waiting" },
+        "every opening starts fresh",
+      );
+      await app.clickSelector('[data-slot="mcp-migration-dismiss"]');
+      await app.waitFor(async () => !(await migrationShown(app)), {
+        description: "the move dialog dismissed",
+      });
+      assert.equal(
+        await app.execute(
+          `return (window.__donutStubbedCalls ?? []).filter((call) => call.command === "mark_mcp_migration_offered").length;`,
+        ),
+        1,
+        "opening it by hand is not the once-per-account offer",
+      );
+      await dismissSurface(app);
+    } finally {
+      await restoreStubs(app);
+      await app.execute(`delete window.__donutInstallStubbed;
+        delete window.__donutInstallFailures;`);
     }
   });
 });

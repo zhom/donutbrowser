@@ -2291,9 +2291,9 @@ impl McpServer {
     log::info!("[mcp] Server started on port {}", actual_port);
 
     // Local MCP is removed: the listener above is a tombstone, so there is
-    // nothing to (re)install into a client here. Migrating clients that still
-    // point at the old local endpoint onto remote MCP is done once at startup
-    // (see `crate::migrate_local_mcp_clients`), not on every bind.
+    // nothing to (re)install into a client here. Clients that still point at
+    // the old local endpoint are moved to remote MCP from the app's move
+    // dialog (see `crate::mcp_migration`), not on any bind.
     let _ = installer_handle;
     Ok(actual_port)
   }

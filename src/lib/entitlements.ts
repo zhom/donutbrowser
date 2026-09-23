@@ -51,7 +51,7 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
     teamCollaboration: false,
     cookieBot: true,
     remoteInteractive: true,
-    remoteControl: false,
+    remoteControl: true,
     agentAutomation: true,
   },
   team: {
@@ -61,10 +61,9 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
     teamCollaboration: true,
     cookieBot: true,
     remoteInteractive: true,
-    remoteControl: false,
+    remoteControl: true,
     agentAutomation: true,
   },
-  // The only tier that may drive this desktop from donutbrowser.com.
   enterprise: {
     browserAutomation: true,
     crossOsFingerprints: true,
@@ -78,9 +77,8 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
 };
 
 // Unknown paid plan -> pro-level (never team), the conservative reading.
-// remoteControl is the one exception and is withheld: nobody is paying for a
-// capability that has no price, and an unrecognised plan string must not open
-// an internet-facing hook into this machine.
+// remoteControl is the one exception and is withheld: an unrecognised plan
+// string must not open an internet-facing hook into this machine.
 const DEFAULT_PAID: Capabilities = {
   browserAutomation: true,
   crossOsFingerprints: true,

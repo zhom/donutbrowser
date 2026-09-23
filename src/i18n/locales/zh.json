@@ -875,7 +875,6 @@
       "enabled": "已启用远程控制",
       "disabled": "已停用远程控制",
       "toggleFailed": "无法更改远程控制",
-      "notEntitled": "远程控制需要 Enterprise 套餐。请联系我们以启用远程控制。",
       "endpointLabel": "远程 MCP 端点",
       "endpointCopied": "已复制端点",
       "endpointDescription": "将 MCP 客户端指向此处，并使用上方的凭据作为 Bearer 令牌。每个账户一个实例：先连接的应用保留该名额。",
@@ -2297,7 +2296,7 @@
     "mcpRemoteRequiresSignIn": "启用远程控制前，请先登录 Donut 账户。",
     "mcpRemoteUnauthorized": "Donut 云拒绝了此设备的凭据。请退出登录后重新登录。",
     "mcpRemoteSlotTaken": "此账户已有另一个 Donut 实例连接。同一时间只能远程控制一个。",
-    "mcpRemoteNotEntitled": "此方案不包含远程控制。请联系我们开通。",
+    "mcpRemoteNotEntitled": "远程 MCP 需要 Pro 或更高方案。",
     "mcpRemoteUnreachable": "当前无法连接 Donut 云。正在自动重新连接。",
     "mcpRemoteKeyMissing": "此设备尚未保存远程 MCP 凭证。请先创建一个，然后重新添加客户端。",
     "mcpRemoteKeyLimit": "此账户持有的 MCP 凭据已达上限。请在账户页面撤销一个后再试。",
@@ -2315,7 +2314,7 @@
     "remoteSessionNotDrivable": "此远程会话尚未就绪，无法控制。请等待其变为在线状态。",
     "remotePlatformUnsupported": "远程会话仅在 macOS、Windows 或 Linux 主机上运行。此配置文件的平台是 {{platform}}。",
     "remoteProfileNotSynced": "此配置文件尚未完成上传到云同步。请等待首次同步完成后再试。",
-    "mcpLocalRemoved": "Donut 的本地 MCP 服务器已移除。请改用远程 MCP：在“设置 > 集成”中设置，即可从任何地方连接。",
+    "mcpLocalRemoved": "Donut 的本地 MCP 服务器已移除。MCP 现在以远程方式提供，需要 Pro 或更高方案。",
     "trashEntryNotFound": "此配置文件已不在回收站中。",
     "trashRestoreConflict": "已存在相同 ID 的配置文件，因此无法恢复。",
     "agentNotEntitled": "你的套餐不包含智能体。",
@@ -2560,7 +2559,7 @@
         "proxy": "代理支持（HTTP/SOCKS5）",
         "vpn": "VPN 支持（WireGuard）",
         "profiles": "无限本地配置文件",
-        "api": "配置文件管理 API 和 MCP",
+        "api": "配置文件管理 API",
         "openSource": "开源",
         "groups": "配置文件分组",
         "cookies": "Cookie 导入与导出"
@@ -3036,9 +3035,35 @@
     "title": "本地 MCP 已移除",
     "description": "Donut 现在使用远程 MCP，你可以从任何地方连接。请在“远程 MCP”标签页中设置，并将你的 AI 客户端指向它。"
   },
-  "mcpLocalMigrated": {
-    "title": "已迁移到远程 MCP",
-    "description": "已将 {{count}} 个 MCP 客户端从已移除的本地服务器迁移到远程 MCP。"
+  "mcpMigration": {
+    "title": "迁移到远程 MCP",
+    "doneTitle": "已迁移到远程 MCP",
+    "body": "本地 MCP 服务器已移除。远程 MCP 通过 Donut 云将你的 AI 客户端连接到此浏览器，只要 Donut 保持打开，它们在任何地方都能继续工作。",
+    "changes": "Donut 会使用专属凭据，将这些客户端指向远程端点。它们的其他设置不会改变。",
+    "changesNone": "此电脑上没有使用本地服务器的 AI 客户端。Donut 会开启远程 MCP，并为你手动配置的客户端创建凭据。",
+    "start": "迁移到远程 MCP",
+    "notNow": "暂不",
+    "done": "完成",
+    "stepBridge": "远程 MCP",
+    "stepClients": "客户端",
+    "bridgeWorking": "正在开启",
+    "bridgeOn": "已开启",
+    "credentialWorking": "正在创建",
+    "clientsProgress": "已迁移 {{moved}}/{{total}}",
+    "clientsNone": "无需迁移",
+    "clientMoving": "正在迁移",
+    "clientMoved": "已迁移",
+    "clientFailed": "未更改",
+    "summary_one": "{{count}} 个客户端现已使用远程 MCP。",
+    "summary_other": "{{count}} 个客户端现已使用远程 MCP。",
+    "failed_one": "{{count}} 个客户端未能更改。请重试，或使用下方信息手动配置。",
+    "failed_other": "{{count}} 个客户端未能更改。请重试，或使用下方信息手动配置。",
+    "manual": "对于其他客户端，请使用此端点，并将凭据作为 Bearer 令牌。",
+    "credentialCopied": "凭据已复制",
+    "localServer": "本地服务器现在只会告诉旧客户端它已迁移。你可以将其关闭。",
+    "localServerOff": "关闭本地服务器",
+    "localServerIsOff": "本地服务器已关闭",
+    "localServerOffFailed": "无法关闭本地服务器"
   },
   "appFeedback": {
     "saveFailed": "无法保存设置",
@@ -3361,7 +3386,7 @@
     "previous": "上一条",
     "next": "下一条",
     "done": "完成",
-    "autoShow": "Donut 启动时显示一条小贴士",
+    "autoShow": "每隔几天显示一条小贴士",
     "items": {
       "dnsBlocklist": {
         "label": "DNS 拦截",
@@ -3432,7 +3457,7 @@
       "localApi": {
         "label": "API 与 MCP",
         "title": "用脚本和智能体自动化 Donut",
-        "body": "本地 REST API 和 MCP 服务器可让脚本和 AI 智能体列出、创建和配置配置文件。在“集成”中开启并复制令牌。",
+        "body": "本地 REST API 可让脚本列出、创建和配置配置文件。在“集成”中开启并复制令牌。",
         "action": "打开集成"
       },
       "importProfiles": {

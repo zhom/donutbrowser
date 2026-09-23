@@ -875,7 +875,6 @@
       "enabled": "원격 제어를 켰습니다",
       "disabled": "원격 제어를 껐습니다",
       "toggleFailed": "원격 제어를 변경하지 못했습니다",
-      "notEntitled": "원격 제어에는 Enterprise 요금제가 필요합니다. 원격 제어 활성화는 문의해 주세요.",
       "endpointLabel": "원격 MCP 엔드포인트",
       "endpointCopied": "엔드포인트를 복사했습니다",
       "endpointDescription": "MCP 클라이언트를 여기로 지정하고 위의 자격 증명을 Bearer 토큰으로 사용하세요. 계정당 인스턴스 하나입니다. 먼저 연결한 앱이 자리를 유지합니다.",
@@ -2297,7 +2296,7 @@
     "mcpRemoteRequiresSignIn": "원격 제어를 켜기 전에 Donut 계정에 로그인하세요.",
     "mcpRemoteUnauthorized": "Donut 클라우드가 이 기기의 자격 증명을 거부했습니다. 로그아웃한 뒤 다시 로그인하세요.",
     "mcpRemoteSlotTaken": "이 계정의 다른 Donut 인스턴스가 이미 연결되어 있습니다. 한 번에 하나만 원격 제어할 수 있습니다.",
-    "mcpRemoteNotEntitled": "이 요금제에는 원격 제어가 포함되지 않습니다. 활성화하려면 문의하세요.",
+    "mcpRemoteNotEntitled": "원격 MCP는 Pro 요금제 이상이 필요합니다.",
     "mcpRemoteUnreachable": "지금은 Donut 클라우드에 연결할 수 없습니다. 자동으로 다시 연결합니다.",
     "mcpRemoteKeyMissing": "이 기기에는 아직 원격 MCP 자격 증명이 없습니다. 먼저 하나를 만든 다음 클라이언트를 다시 추가하세요.",
     "mcpRemoteKeyLimit": "이 계정은 보유할 수 있는 MCP 자격 증명 수의 상한에 이미 도달했습니다. 계정 페이지에서 하나를 취소한 뒤 다시 시도하세요.",
@@ -2315,7 +2314,7 @@
     "remoteSessionNotDrivable": "이 원격 세션은 아직 제어할 준비가 되지 않았습니다. 활성 상태가 될 때까지 기다리세요.",
     "remotePlatformUnsupported": "원격 세션은 macOS, Windows 또는 Linux 호스트에서만 실행됩니다. 이 프로필의 플랫폼은 {{platform}}입니다.",
     "remoteProfileNotSynced": "이 프로필은 아직 클라우드 동기화 업로드가 완료되지 않았습니다. 첫 동기화가 끝난 후 다시 시도하세요.",
-    "mcpLocalRemoved": "Donut의 로컬 MCP 서버가 제거되었습니다. 대신 원격 MCP를 사용하세요. 설정 > 통합에서 설정하면 어디서든 연결할 수 있습니다.",
+    "mcpLocalRemoved": "Donut의 로컬 MCP 서버가 제거되었습니다. 이제 MCP는 원격으로 제공되며 Pro 요금제 이상이 필요합니다.",
     "trashEntryNotFound": "이 프로필은 더 이상 휴지통에 없습니다.",
     "trashRestoreConflict": "같은 ID의 프로필이 이미 있어 복원할 수 없습니다.",
     "agentNotEntitled": "현재 요금제에는 에이전트가 포함되어 있지 않습니다.",
@@ -2560,7 +2559,7 @@
         "proxy": "프록시 지원 (HTTP/SOCKS5)",
         "vpn": "VPN 지원 (WireGuard)",
         "profiles": "무제한 로컬 프로필",
-        "api": "프로필 관리 API 및 MCP",
+        "api": "프로필 관리 API",
         "openSource": "오픈 소스",
         "groups": "프로필 그룹",
         "cookies": "쿠키 가져오기 및 내보내기"
@@ -3036,9 +3035,35 @@
     "title": "로컬 MCP가 제거되었습니다",
     "description": "이제 Donut은 어디서나 연결할 수 있는 원격 MCP를 사용합니다. 원격 MCP 탭에서 설정하고 AI 클라이언트를 그쪽으로 지정하세요."
   },
-  "mcpLocalMigrated": {
-    "title": "원격 MCP로 이동됨",
-    "description": "MCP 클라이언트 {{count}}개가 제거된 로컬 서버에서 원격 MCP로 이동되었습니다."
+  "mcpMigration": {
+    "title": "원격 MCP로 이동",
+    "doneTitle": "원격 MCP로 이동됨",
+    "body": "로컬 MCP 서버는 제거되었습니다. 원격 MCP는 Donut 클라우드를 통해 AI 클라이언트를 이 브라우저에 연결하므로, Donut이 열려 있는 동안 어디서나 계속 작동합니다.",
+    "changes": "Donut은 이 클라이언트들이 전용 자격 증명으로 원격 엔드포인트를 사용하도록 바꿉니다. 다른 설정은 바뀌지 않습니다.",
+    "changesNone": "이 컴퓨터에서 로컬 서버를 사용하는 AI 클라이언트가 없습니다. Donut이 원격 MCP를 켜고, 직접 설정할 클라이언트를 위한 자격 증명을 만듭니다.",
+    "start": "원격 MCP로 이동",
+    "notNow": "지금은 안 함",
+    "done": "완료",
+    "stepBridge": "원격 MCP",
+    "stepClients": "클라이언트",
+    "bridgeWorking": "켜는 중",
+    "bridgeOn": "켜짐",
+    "credentialWorking": "만드는 중",
+    "clientsProgress": "{{total}}개 중 {{moved}}개 이동됨",
+    "clientsNone": "이동할 항목 없음",
+    "clientMoving": "이동 중",
+    "clientMoved": "이동됨",
+    "clientFailed": "변경 안 됨",
+    "summary_one": "이제 클라이언트 {{count}}개가 원격 MCP를 사용합니다.",
+    "summary_other": "이제 클라이언트 {{count}}개가 원격 MCP를 사용합니다.",
+    "failed_one": "클라이언트 {{count}}개를 변경하지 못했습니다. 다시 시도하거나 아래 정보로 직접 설정하세요.",
+    "failed_other": "클라이언트 {{count}}개를 변경하지 못했습니다. 다시 시도하거나 아래 정보로 직접 설정하세요.",
+    "manual": "다른 클라이언트에는 이 엔드포인트를 사용하고 자격 증명을 베어러 토큰으로 넣으세요.",
+    "credentialCopied": "자격 증명을 복사했습니다",
+    "localServer": "로컬 서버는 이제 이전 클라이언트에 이동 사실만 알립니다. 끌 수 있습니다.",
+    "localServerOff": "로컬 서버 끄기",
+    "localServerIsOff": "로컬 서버가 꺼졌습니다",
+    "localServerOffFailed": "로컬 서버를 끄지 못했습니다"
   },
   "appFeedback": {
     "saveFailed": "설정을 저장하지 못했습니다",
@@ -3361,7 +3386,7 @@
     "previous": "이전 팁",
     "next": "다음 팁",
     "done": "완료",
-    "autoShow": "Donut 시작 시 팁 표시",
+    "autoShow": "며칠마다 팁 표시",
     "items": {
       "dnsBlocklist": {
         "label": "DNS 차단",
@@ -3432,7 +3457,7 @@
       "localApi": {
         "label": "API와 MCP",
         "title": "스크립트와 에이전트로 Donut 자동화",
-        "body": "로컬 REST API와 MCP 서버로 스크립트와 AI 에이전트가 프로필을 나열, 생성, 설정할 수 있습니다. 통합에서 켜고 토큰을 복사하세요.",
+        "body": "로컬 REST API로 스크립트가 프로필을 나열, 생성, 설정할 수 있습니다. 통합에서 켜고 토큰을 복사하세요.",
         "action": "통합 열기"
       },
       "importProfiles": {

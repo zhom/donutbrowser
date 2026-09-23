@@ -246,6 +246,15 @@ export const commandCoverage = {
       "synchronizer::arrange_sync_windows",
     ],
   },
+  mcpMigration: {
+    suite: "ui",
+    level: "integration",
+    commands: [
+      "mcp_migration::get_mcp_migration_offer",
+      "mcp_migration::mark_mcp_migration_offered",
+      "mcp_migration::turn_off_local_mcp_server",
+    ],
+  },
   syncAndEncryption: {
     suite: "sync",
     level: "integration",

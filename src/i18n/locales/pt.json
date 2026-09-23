@@ -879,7 +879,6 @@
       "enabled": "Controlo remoto ativado",
       "disabled": "Controlo remoto desativado",
       "toggleFailed": "Não foi possível alterar o controlo remoto",
-      "notEntitled": "O controle remoto requer o plano Enterprise. Fale conosco para habilitar o controle remoto.",
       "endpointLabel": "Ponto final MCP remoto",
       "endpointCopied": "Ponto final copiado",
       "endpointDescription": "Aponte um cliente MCP para aqui usando a credencial acima como token bearer. Uma instância por conta: a primeira aplicação a ligar-se mantém o lugar.",
@@ -2307,7 +2306,7 @@
     "mcpRemoteRequiresSignIn": "Inicie sessão na sua conta Donut antes de ativar o controlo remoto.",
     "mcpRemoteUnauthorized": "A Donut cloud recusou as credenciais deste dispositivo. Termine a sessão e inicie-a novamente.",
     "mcpRemoteSlotTaken": "Já existe outra instância do Donut ligada nesta conta. Só uma pode ser controlada remotamente de cada vez.",
-    "mcpRemoteNotEntitled": "Este plano não inclui controlo remoto. Contacte-nos para o ativar.",
+    "mcpRemoteNotEntitled": "O MCP remoto requer o plano Pro ou superior.",
     "mcpRemoteUnreachable": "Não é possível contactar a Donut cloud neste momento. A reconectar automaticamente.",
     "mcpRemoteKeyMissing": "Este dispositivo ainda não tem uma credencial MCP remota. Crie uma primeiro e adicione o cliente novamente.",
     "mcpRemoteKeyLimit": "Esta conta já tem o máximo de credenciais MCP que pode manter. Revogue uma na página da conta e tente novamente.",
@@ -2325,7 +2324,7 @@
     "remoteSessionNotDrivable": "Esta sessão remota ainda não está pronta para ser controlada. Aguarde até ficar ativa.",
     "remotePlatformUnsupported": "As sessões remotas funcionam apenas em hosts macOS, Windows ou Linux. A plataforma deste perfil é {{platform}}.",
     "remoteProfileNotSynced": "Este perfil ainda não terminou de ser enviado para a sincronização na nuvem. Aguarde a conclusão da primeira sincronização e tente novamente.",
-    "mcpLocalRemoved": "O servidor MCP local do Donut foi removido. Use o MCP remoto: configure em Configurações > Integrações e conecte-se de qualquer lugar.",
+    "mcpLocalRemoved": "O servidor MCP local do Donut foi removido. Agora o MCP é remoto e requer o plano Pro ou superior.",
     "trashEntryNotFound": "Este perfil não está mais na lixeira.",
     "trashRestoreConflict": "Já existe um perfil com o mesmo ID, então este não pode ser restaurado.",
     "agentNotEntitled": "O seu plano não inclui o agente.",
@@ -2570,7 +2569,7 @@
         "proxy": "Suporte a proxy (HTTP/SOCKS5)",
         "vpn": "Suporte a VPN (WireGuard)",
         "profiles": "Perfis locais ilimitados",
-        "api": "API de gerenciamento de perfis e MCP",
+        "api": "API de gerenciamento de perfis",
         "openSource": "Código aberto",
         "groups": "Grupos de perfis",
         "cookies": "Importar e exportar cookies"
@@ -3066,9 +3065,37 @@
     "title": "O MCP local foi removido",
     "description": "O Donut agora usa MCP remoto, ao qual você pode se conectar de qualquer lugar. Configure na aba MCP remoto e aponte seus clientes de IA para lá."
   },
-  "mcpLocalMigrated": {
-    "title": "Migrado para o MCP remoto",
-    "description": "{{count}} cliente MCP foi movido do servidor local removido para o MCP remoto."
+  "mcpMigration": {
+    "title": "Migrar para o MCP remoto",
+    "doneTitle": "Migrado para o MCP remoto",
+    "body": "O servidor MCP local foi removido. O MCP remoto conecta seus clientes de IA a este navegador pela nuvem do Donut, e eles continuam funcionando de qualquer lugar enquanto o Donut estiver aberto.",
+    "changes": "O Donut aponta estes clientes para o ponto final remoto com uma credencial privada. Nada mais muda nas configurações deles.",
+    "changesNone": "Nenhum cliente de IA deste computador usa o servidor local. O Donut ativa o MCP remoto e cria uma credencial para os clientes que você configurar.",
+    "start": "Migrar para o MCP remoto",
+    "notNow": "Agora não",
+    "done": "Concluído",
+    "stepBridge": "MCP remoto",
+    "stepClients": "Clientes",
+    "bridgeWorking": "Ativando",
+    "bridgeOn": "Ativado",
+    "credentialWorking": "Criando",
+    "clientsProgress": "{{moved}} de {{total}} migrados",
+    "clientsNone": "Nada para migrar",
+    "clientMoving": "Migrando",
+    "clientMoved": "Migrado",
+    "clientFailed": "Sem alteração",
+    "summary_one": "{{count}} cliente agora usa o MCP remoto.",
+    "summary_other": "{{count}} clientes agora usam o MCP remoto.",
+    "summary_many": "{{count}} clientes agora usam o MCP remoto.",
+    "failed_one": "{{count}} cliente não foi alterado. Tente de novo ou configure-o manualmente com os dados abaixo.",
+    "failed_other": "{{count}} clientes não foram alterados. Tente de novo ou configure-os manualmente com os dados abaixo.",
+    "failed_many": "{{count}} clientes não foram alterados. Tente de novo ou configure-os manualmente com os dados abaixo.",
+    "manual": "Para qualquer outro cliente, use este ponto final com a credencial como token bearer.",
+    "credentialCopied": "Credencial copiada",
+    "localServer": "O servidor local agora só avisa os clientes antigos de que foi movido. Você pode desativá-lo.",
+    "localServerOff": "Desativar servidor local",
+    "localServerIsOff": "O servidor local está desativado",
+    "localServerOffFailed": "Não foi possível desativar o servidor local"
   },
   "appFeedback": {
     "saveFailed": "Não foi possível salvar as configurações",
@@ -3394,7 +3421,7 @@
     "previous": "Dica anterior",
     "next": "Próxima dica",
     "done": "Concluído",
-    "autoShow": "Mostrar uma dica ao iniciar o Donut",
+    "autoShow": "Mostrar uma dica a cada poucos dias",
     "items": {
       "dnsBlocklist": {
         "label": "Bloqueio DNS",
@@ -3465,7 +3492,7 @@
       "localApi": {
         "label": "API e MCP",
         "title": "Automatize o Donut com scripts e agentes",
-        "body": "A API REST local e o servidor MCP permitem que scripts e agentes de IA listem, criem e configurem perfis. Ative-os em Integrações e copie o token.",
+        "body": "A API REST local permite que scripts listem, criem e configurem perfis. Ative-a em Integrações e copie o token.",
         "action": "Abrir Integrações"
       },
       "importProfiles": {

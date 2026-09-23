@@ -875,7 +875,6 @@
       "enabled": "リモート制御を有効にしました",
       "disabled": "リモート制御を無効にしました",
       "toggleFailed": "リモート制御を変更できませんでした",
-      "notEntitled": "リモート操作には Enterprise プランが必要です。リモート操作の有効化についてはお問い合わせください。",
       "endpointLabel": "リモート MCP エンドポイント",
       "endpointCopied": "エンドポイントをコピーしました",
       "endpointDescription": "MCP クライアントをここに向け、上の資格情報を Bearer トークンとして使用してください。1 アカウントにつき 1 インスタンスです。最初に接続したアプリが枠を保持します。",
@@ -2297,7 +2296,7 @@
     "mcpRemoteRequiresSignIn": "リモート制御を有効にする前に Donut アカウントにサインインしてください。",
     "mcpRemoteUnauthorized": "Donut クラウドがこのデバイスの資格情報を拒否しました。サインアウトして、もう一度サインインしてください。",
     "mcpRemoteSlotTaken": "このアカウントの別の Donut インスタンスがすでに接続されています。リモート制御できるのは同時に 1 台だけです。",
-    "mcpRemoteNotEntitled": "このプランにはリモート制御が含まれていません。有効化はお問い合わせください。",
+    "mcpRemoteNotEntitled": "リモート MCP には Pro プラン以上が必要です。",
     "mcpRemoteUnreachable": "現在 Donut クラウドに接続できません。自動的に再接続します。",
     "mcpRemoteKeyMissing": "このデバイスにはまだリモート MCP 資格情報がありません。先に作成してから、クライアントをもう一度追加してください。",
     "mcpRemoteKeyLimit": "このアカウントはすでに保持できる MCP 認証情報の上限に達しています。アカウントページで 1 つ取り消してから、もう一度お試しください。",
@@ -2315,7 +2314,7 @@
     "remoteSessionNotDrivable": "このリモートセッションはまだ操作できる状態ではありません。ライブになるまでお待ちください。",
     "remotePlatformUnsupported": "リモートセッションは macOS、Windows、Linux のホストでのみ実行できます。このプロファイルのプラットフォームは {{platform}} です。",
     "remoteProfileNotSynced": "このプロファイルはクラウド同期へのアップロードがまだ完了していません。最初の同期が完了してから、もう一度お試しください。",
-    "mcpLocalRemoved": "Donut のローカル MCP サーバーは削除されました。代わりにリモート MCP を使用してください。設定 > 連携 で設定すれば、どこからでも接続できます。",
+    "mcpLocalRemoved": "Donut のローカル MCP サーバーは削除されました。MCP は現在リモートで提供され、Pro プラン以上が必要です。",
     "trashEntryNotFound": "このプロファイルはもうゴミ箱にありません。",
     "trashRestoreConflict": "同じIDのプロファイルがすでに存在するため、復元できません。",
     "agentNotEntitled": "現在のプランにはエージェントが含まれていません。",
@@ -2560,7 +2559,7 @@
         "proxy": "プロキシ対応（HTTP/SOCKS5）",
         "vpn": "VPN対応（WireGuard）",
         "profiles": "無制限のローカルプロファイル",
-        "api": "プロファイル管理APIとMCP",
+        "api": "プロファイル管理API",
         "openSource": "オープンソース",
         "groups": "プロファイルグループ",
         "cookies": "Cookieのインポート・エクスポート"
@@ -3036,9 +3035,35 @@
     "title": "ローカル MCP は削除されました",
     "description": "Donut は今後、どこからでも接続できるリモート MCP を使用します。「リモート MCP」タブで設定し、AI クライアントをそちらに向けてください。"
   },
-  "mcpLocalMigrated": {
-    "title": "リモート MCP に移行しました",
-    "description": "{{count}} 個の MCP クライアントが、削除されたローカルサーバーからリモート MCP に移行されました。"
+  "mcpMigration": {
+    "title": "リモート MCP に移行",
+    "doneTitle": "リモート MCP に移行しました",
+    "body": "ローカル MCP サーバーは廃止されました。リモート MCP は Donut クラウド経由で AI クライアントをこのブラウザーに接続するため、Donut を開いている間はどこからでも使えます。",
+    "changes": "Donut はこれらのクライアントを、専用の資格情報とともにリモートエンドポイントに向けます。その他の設定は変わりません。",
+    "changesNone": "このコンピューターでローカルサーバーを使っている AI クライアントはありません。Donut はリモート MCP をオンにし、手動で設定するクライアント用の資格情報を作成します。",
+    "start": "リモート MCP に移行",
+    "notNow": "今はしない",
+    "done": "完了",
+    "stepBridge": "リモート MCP",
+    "stepClients": "クライアント",
+    "bridgeWorking": "オンにしています",
+    "bridgeOn": "オン",
+    "credentialWorking": "作成中",
+    "clientsProgress": "{{total}} 件中 {{moved}} 件を移行",
+    "clientsNone": "移行対象なし",
+    "clientMoving": "移行中",
+    "clientMoved": "移行済み",
+    "clientFailed": "未変更",
+    "summary_one": "{{count}} 件のクライアントがリモート MCP を使用しています。",
+    "summary_other": "{{count}} 件のクライアントがリモート MCP を使用しています。",
+    "failed_one": "{{count}} 件のクライアントを変更できませんでした。再試行するか、下の情報で手動設定してください。",
+    "failed_other": "{{count}} 件のクライアントを変更できませんでした。再試行するか、下の情報で手動設定してください。",
+    "manual": "その他のクライアントでは、このエンドポイントを使い、資格情報をベアラートークンとして設定してください。",
+    "credentialCopied": "資格情報をコピーしました",
+    "localServer": "ローカルサーバーは、移行したことを古いクライアントに伝えるだけです。オフにできます。",
+    "localServerOff": "ローカルサーバーをオフにする",
+    "localServerIsOff": "ローカルサーバーはオフです",
+    "localServerOffFailed": "ローカルサーバーをオフにできませんでした"
   },
   "appFeedback": {
     "saveFailed": "設定を保存できませんでした",
@@ -3361,7 +3386,7 @@
     "previous": "前のヒント",
     "next": "次のヒント",
     "done": "完了",
-    "autoShow": "Donut の起動時にヒントを表示",
+    "autoShow": "数日ごとにヒントを表示",
     "items": {
       "dnsBlocklist": {
         "label": "DNS ブロック",
@@ -3432,7 +3457,7 @@
       "localApi": {
         "label": "API と MCP",
         "title": "スクリプトやエージェントから Donut を自動化",
-        "body": "ローカルの REST API と MCP サーバーで、スクリプトや AI エージェントがプロファイルの一覧取得、作成、設定を行えます。「連携」で有効にしてトークンをコピーしてください。",
+        "body": "ローカルの REST API で、スクリプトがプロファイルの一覧取得、作成、設定を行えます。「連携」で有効にしてトークンをコピーしてください。",
         "action": "連携を開く"
       },
       "importProfiles": {

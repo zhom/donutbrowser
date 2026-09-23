@@ -879,7 +879,6 @@
       "enabled": "Contrôle à distance activé",
       "disabled": "Contrôle à distance désactivé",
       "toggleFailed": "Impossible de modifier le contrôle à distance",
-      "notEntitled": "Le contrôle à distance nécessite le plan Enterprise. Contactez-nous pour activer le contrôle à distance.",
       "endpointLabel": "Point de terminaison MCP distant",
       "endpointCopied": "Point de terminaison copié",
       "endpointDescription": "Dirigez un client MCP ici avec l'identifiant ci-dessus comme jeton bearer. Une instance par compte : la première application connectée garde la place.",
@@ -2307,7 +2306,7 @@
     "mcpRemoteRequiresSignIn": "Connectez-vous à votre compte Donut avant d'activer le contrôle à distance.",
     "mcpRemoteUnauthorized": "Donut cloud a refusé les identifiants de cet appareil. Déconnectez-vous puis reconnectez-vous.",
     "mcpRemoteSlotTaken": "Une autre instance de Donut est déjà connectée sur ce compte. Une seule peut être contrôlée à distance à la fois.",
-    "mcpRemoteNotEntitled": "Ce forfait n'inclut pas le contrôle à distance. Contactez-nous pour l'activer.",
+    "mcpRemoteNotEntitled": "Le MCP distant nécessite le forfait Pro ou supérieur.",
     "mcpRemoteUnreachable": "Donut cloud est injoignable pour le moment. Reconnexion automatique.",
     "mcpRemoteKeyMissing": "Cet appareil n'a pas encore d'identifiant MCP distant. Créez-en un d'abord, puis ajoutez de nouveau le client.",
     "mcpRemoteKeyLimit": "Ce compte a déjà atteint le nombre maximal d'identifiants MCP. Révoquez-en un sur la page du compte, puis réessayez.",
@@ -2325,7 +2324,7 @@
     "remoteSessionNotDrivable": "Cette session distante n'est pas encore prête à être pilotée. Attendez qu'elle soit active.",
     "remotePlatformUnsupported": "Les sessions distantes ne fonctionnent que sur des hôtes macOS, Windows ou Linux. La plateforme de ce profil est {{platform}}.",
     "remoteProfileNotSynced": "Ce profil n'a pas encore fini d'être téléversé vers la synchronisation cloud. Attendez la fin de sa première synchronisation, puis réessayez.",
-    "mcpLocalRemoved": "Le serveur MCP local de Donut a été supprimé. Utilisez le MCP distant à la place : configurez-le dans Paramètres > Intégrations et connectez-vous depuis n'importe où.",
+    "mcpLocalRemoved": "Le serveur MCP local de Donut a été supprimé. Le MCP est désormais distant et nécessite le forfait Pro ou supérieur.",
     "trashEntryNotFound": "Ce profil n'est plus dans la corbeille.",
     "trashRestoreConflict": "Un profil avec le même identifiant existe déjà, celui-ci ne peut donc pas être restauré.",
     "agentNotEntitled": "Votre forfait n'inclut pas l'agent.",
@@ -2570,7 +2569,7 @@
         "proxy": "Prise en charge des proxys (HTTP/SOCKS5)",
         "vpn": "Prise en charge du VPN (WireGuard)",
         "profiles": "Profils locaux illimités",
-        "api": "API de gestion des profils et MCP",
+        "api": "API de gestion des profils",
         "openSource": "Open source",
         "groups": "Groupes de profils",
         "cookies": "Import et export de cookies"
@@ -3066,9 +3065,37 @@
     "title": "Le MCP local a été supprimé",
     "description": "Donut utilise désormais le MCP distant, accessible depuis n'importe où. Configurez-le dans l'onglet MCP distant et dirigez-y vos clients IA."
   },
-  "mcpLocalMigrated": {
-    "title": "Migré vers le MCP distant",
-    "description": "{{count}} client MCP a été déplacé du serveur local supprimé vers le MCP distant."
+  "mcpMigration": {
+    "title": "Migrer vers le MCP distant",
+    "doneTitle": "Migré vers le MCP distant",
+    "body": "Le serveur MCP local n'existe plus. Le MCP distant relie vos clients IA à ce navigateur via le cloud Donut : ils continuent de fonctionner depuis n'importe où tant que Donut est ouvert.",
+    "changes": "Donut dirige ces clients vers le point de terminaison distant avec un identifiant privé. Rien d'autre ne change dans leurs réglages.",
+    "changesNone": "Aucun client IA de cet ordinateur n'utilise le serveur local. Donut active le MCP distant et crée un identifiant pour les clients que vous configurez vous-même.",
+    "start": "Migrer vers le MCP distant",
+    "notNow": "Pas maintenant",
+    "done": "Terminé",
+    "stepBridge": "MCP distant",
+    "stepClients": "Clients",
+    "bridgeWorking": "Activation",
+    "bridgeOn": "Activé",
+    "credentialWorking": "Création",
+    "clientsProgress": "{{moved}} sur {{total}} migrés",
+    "clientsNone": "Rien à migrer",
+    "clientMoving": "Migration",
+    "clientMoved": "Migré",
+    "clientFailed": "Inchangé",
+    "summary_one": "{{count}} client utilise désormais le MCP distant.",
+    "summary_other": "{{count}} clients utilisent désormais le MCP distant.",
+    "summary_many": "{{count}} clients utilisent désormais le MCP distant.",
+    "failed_one": "{{count}} client n'a pas été modifié. Réessayez, ou configurez-le à la main avec les informations ci-dessous.",
+    "failed_other": "{{count}} clients n'ont pas été modifiés. Réessayez, ou configurez-les à la main avec les informations ci-dessous.",
+    "failed_many": "{{count}} clients n'ont pas été modifiés. Réessayez, ou configurez-les à la main avec les informations ci-dessous.",
+    "manual": "Pour tout autre client, utilisez ce point de terminaison avec l'identifiant comme jeton bearer.",
+    "credentialCopied": "Identifiant copié",
+    "localServer": "Le serveur local indique seulement aux anciens clients qu'il a été déplacé. Vous pouvez le désactiver.",
+    "localServerOff": "Désactiver le serveur local",
+    "localServerIsOff": "Le serveur local est désactivé",
+    "localServerOffFailed": "Impossible de désactiver le serveur local"
   },
   "appFeedback": {
     "saveFailed": "Impossible d’enregistrer les paramètres",
@@ -3394,7 +3421,7 @@
     "previous": "Astuce précédente",
     "next": "Astuce suivante",
     "done": "Terminé",
-    "autoShow": "Afficher une astuce au démarrage de Donut",
+    "autoShow": "Afficher une astuce de temps en temps",
     "items": {
       "dnsBlocklist": {
         "label": "Blocage DNS",
@@ -3465,7 +3492,7 @@
       "localApi": {
         "label": "API et MCP",
         "title": "Automatisez Donut depuis des scripts et des agents",
-        "body": "L'API REST locale et le serveur MCP permettent aux scripts et aux agents IA de lister, créer et configurer des profils. Activez-les dans Intégrations et copiez le jeton.",
+        "body": "L'API REST locale permet aux scripts de lister, créer et configurer des profils. Activez-la dans Intégrations et copiez le jeton.",
         "action": "Ouvrir Intégrations"
       },
       "importProfiles": {

@@ -875,7 +875,6 @@
       "enabled": "Đã bật điều khiển từ xa",
       "disabled": "Đã tắt điều khiển từ xa",
       "toggleFailed": "Không thể thay đổi điều khiển từ xa",
-      "notEntitled": "Điều khiển từ xa cần gói Enterprise. Hãy liên hệ với chúng tôi để bật điều khiển từ xa.",
       "endpointLabel": "Điểm cuối MCP từ xa",
       "endpointCopied": "Đã sao chép điểm cuối",
       "endpointDescription": "Trỏ một máy khách MCP tới đây và dùng thông tin xác thực ở trên làm bearer token. Một phiên bản cho mỗi tài khoản: ứng dụng kết nối đầu tiên giữ chỗ.",
@@ -2297,7 +2296,7 @@
     "mcpRemoteRequiresSignIn": "Đăng nhập tài khoản Donut trước khi bật điều khiển từ xa.",
     "mcpRemoteUnauthorized": "Donut cloud đã từ chối thông tin xác thực của thiết bị này. Hãy đăng xuất rồi đăng nhập lại.",
     "mcpRemoteSlotTaken": "Một phiên bản Donut khác trên tài khoản này đã kết nối. Mỗi lần chỉ điều khiển từ xa được một máy.",
-    "mcpRemoteNotEntitled": "Gói này không bao gồm điều khiển từ xa. Liên hệ với chúng tôi để bật.",
+    "mcpRemoteNotEntitled": "MCP từ xa yêu cầu gói Pro trở lên.",
     "mcpRemoteUnreachable": "Hiện không kết nối được tới Donut cloud. Đang tự động kết nối lại.",
     "mcpRemoteKeyMissing": "Thiết bị này chưa có thông tin xác thực MCP từ xa. Hãy tạo một thông tin trước, rồi thêm lại ứng dụng khách.",
     "mcpRemoteKeyLimit": "Tài khoản này đã có số thông tin xác thực MCP tối đa có thể giữ. Hãy thu hồi một cái trên trang tài khoản rồi thử lại.",
@@ -2315,7 +2314,7 @@
     "remoteSessionNotDrivable": "Phiên từ xa này chưa sẵn sàng để điều khiển. Hãy đợi đến khi phiên hoạt động.",
     "remotePlatformUnsupported": "Phiên từ xa chỉ chạy trên máy chủ macOS, Windows hoặc Linux. Nền tảng của hồ sơ này là {{platform}}.",
     "remoteProfileNotSynced": "Hồ sơ này chưa tải lên xong dịch vụ đồng bộ đám mây. Hãy đợi lần đồng bộ đầu tiên hoàn tất rồi thử lại.",
-    "mcpLocalRemoved": "Máy chủ MCP cục bộ của Donut đã bị gỡ bỏ. Hãy dùng MCP từ xa: thiết lập trong Cài đặt > Tích hợp và kết nối từ bất cứ đâu.",
+    "mcpLocalRemoved": "Máy chủ MCP cục bộ của Donut đã bị gỡ bỏ. MCP giờ chạy từ xa và yêu cầu gói Pro trở lên.",
     "trashEntryNotFound": "Hồ sơ này không còn trong thùng rác.",
     "trashRestoreConflict": "Đã tồn tại một hồ sơ có cùng ID nên không thể khôi phục hồ sơ này.",
     "agentNotEntitled": "Gói của bạn không bao gồm tác nhân.",
@@ -2560,7 +2559,7 @@
         "proxy": "Hỗ trợ Proxy (HTTP/SOCKS5)",
         "vpn": "Hỗ trợ VPN (WireGuard)",
         "profiles": "Hồ sơ cục bộ không giới hạn",
-        "api": "API quản lý hồ sơ & MCP",
+        "api": "API quản lý hồ sơ",
         "openSource": "Mã nguồn mở",
         "groups": "Nhóm hồ sơ",
         "cookies": "Nhập & xuất cookie"
@@ -3036,9 +3035,35 @@
     "title": "MCP cục bộ đã bị gỡ bỏ",
     "description": "Donut hiện dùng MCP từ xa, bạn có thể kết nối từ bất cứ đâu. Thiết lập trong tab MCP từ xa và trỏ các client AI của bạn tới đó."
   },
-  "mcpLocalMigrated": {
-    "title": "Đã chuyển sang MCP từ xa",
-    "description": "{{count}} client MCP đã được chuyển từ máy chủ cục bộ đã gỡ sang MCP từ xa."
+  "mcpMigration": {
+    "title": "Chuyển sang MCP từ xa",
+    "doneTitle": "Đã chuyển sang MCP từ xa",
+    "body": "Máy chủ MCP cục bộ đã bị gỡ bỏ. MCP từ xa kết nối các client AI của bạn với trình duyệt này qua đám mây Donut, nên chúng vẫn hoạt động từ bất cứ đâu khi Donut đang mở.",
+    "changes": "Donut trỏ các client này tới điểm cuối từ xa với một thông tin xác thực riêng. Các cài đặt khác của chúng không thay đổi.",
+    "changesNone": "Không có client AI nào trên máy này dùng máy chủ cục bộ. Donut sẽ bật MCP từ xa và tạo thông tin xác thực cho các client bạn tự thiết lập.",
+    "start": "Chuyển sang MCP từ xa",
+    "notNow": "Để sau",
+    "done": "Xong",
+    "stepBridge": "MCP từ xa",
+    "stepClients": "Client",
+    "bridgeWorking": "Đang bật",
+    "bridgeOn": "Đã bật",
+    "credentialWorking": "Đang tạo",
+    "clientsProgress": "Đã chuyển {{moved}}/{{total}}",
+    "clientsNone": "Không có gì để chuyển",
+    "clientMoving": "Đang chuyển",
+    "clientMoved": "Đã chuyển",
+    "clientFailed": "Chưa đổi",
+    "summary_one": "{{count}} client hiện dùng MCP từ xa.",
+    "summary_other": "{{count}} client hiện dùng MCP từ xa.",
+    "failed_one": "{{count}} client chưa được thay đổi. Hãy thử lại, hoặc tự thiết lập bằng thông tin bên dưới.",
+    "failed_other": "{{count}} client chưa được thay đổi. Hãy thử lại, hoặc tự thiết lập bằng thông tin bên dưới.",
+    "manual": "Với client khác, hãy dùng điểm cuối này và dùng thông tin xác thực làm bearer token.",
+    "credentialCopied": "Đã sao chép thông tin xác thực",
+    "localServer": "Máy chủ cục bộ giờ chỉ báo cho client cũ rằng nó đã chuyển đi. Bạn có thể tắt nó.",
+    "localServerOff": "Tắt máy chủ cục bộ",
+    "localServerIsOff": "Máy chủ cục bộ đã tắt",
+    "localServerOffFailed": "Không thể tắt máy chủ cục bộ"
   },
   "appFeedback": {
     "saveFailed": "Không thể lưu cài đặt",
@@ -3361,7 +3386,7 @@
     "previous": "Mẹo trước",
     "next": "Mẹo tiếp theo",
     "done": "Xong",
-    "autoShow": "Hiện một mẹo khi Donut khởi động",
+    "autoShow": "Hiện một mẹo sau mỗi vài ngày",
     "items": {
       "dnsBlocklist": {
         "label": "Chặn DNS",
@@ -3432,7 +3457,7 @@
       "localApi": {
         "label": "API và MCP",
         "title": "Tự động hóa Donut từ script và tác nhân",
-        "body": "REST API cục bộ và máy chủ MCP cho phép script và tác nhân AI liệt kê, tạo và cấu hình hồ sơ. Bật chúng trong Tích hợp và sao chép mã thông báo.",
+        "body": "REST API cục bộ cho phép script liệt kê, tạo và cấu hình hồ sơ. Bật nó trong Tích hợp và sao chép mã thông báo.",
         "action": "Mở Tích hợp"
       },
       "importProfiles": {

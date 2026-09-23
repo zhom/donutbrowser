@@ -27,6 +27,7 @@ import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
+import { McpMigrationDialog } from "@/components/mcp-migration-dialog";
 import { ONBOARDING_TOUR } from "@/components/onboarding-provider";
 import { PaidWelcomeDialog } from "@/components/paid-welcome-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
@@ -66,6 +67,7 @@ import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import { useKonamiCode } from "@/hooks/use-konami-code";
+import { useMcpMigrationOffer } from "@/hooks/use-mcp-migration-offer";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
@@ -353,22 +355,6 @@ export default function Home() {
     trialStatus?.type === "Expired" &&
     !trialAcknowledged &&
     !crossOsUnlocked;
-  // Feature tips and the paid-plan welcome wait for a settled app: not the
-  // first-run session, terms accepted, nothing modal in the way.
-  const tipsFlow = useTips({
-    cloudUser,
-    loggedInAt: cloudLoggedInAt,
-    ready:
-      firstRunOnboarding === false &&
-      !profilesLoading &&
-      !welcomeOpen &&
-      !thankYouOpen &&
-      !isOnbordaVisible &&
-      !termsLoading &&
-      termsAccepted === true &&
-      !commercialTrialModalOpen,
-  });
-  const { openTips, closeTips } = tipsFlow;
   // Bulk run/stop is a paid (browser automation) feature, matching the
   // /v1/profiles/batch/run API gate. Free/solo users see the bulk Run/Stop
   // actions disabled with a Pro badge.
@@ -377,10 +363,11 @@ export default function Home() {
   // to the shared cookie-bot store too. It is a module singleton, so this costs
   // one more listener and no extra request. This is also what starts the event
   // stream for a user who signs in without restarting the app.
-  const { liveSessions: cookieBotLiveSessions } = useCookieBot(
-    canUseCookieBot(cloudUser),
-    cookieBotScopeFor(cloudUser),
-  );
+  const {
+    liveSessions: cookieBotLiveSessions,
+    schedules: cookieBotSchedules,
+    isLoading: cookieBotLoading,
+  } = useCookieBot(canUseCookieBot(cloudUser), cookieBotScopeFor(cloudUser));
 
   const [selfHostedSyncConfigured, setSelfHostedSyncConfigured] =
     useState(false);
@@ -403,6 +390,63 @@ export default function Home() {
   // Pro badge on the one feature a Solo customer is paying for.
   const cloudBackupUnlocked = getEntitlements(cloudUser).cloudBackup;
   const syncUnlocked = cloudBackupUnlocked || selfHostedSyncConfigured;
+
+  // Feature tips and the paid-plan welcome wait for a settled app: not the
+  // first-run session, terms accepted, nothing modal in the way. The usage
+  // lists let the automatic tip skip a feature the user already has in use.
+  const tipUsage = useMemo(
+    () => ({
+      loaded: !groupsLoading && !proxiesLoading && !cookieBotLoading,
+      profiles,
+      groupCount: groupsData.length,
+      extensionGroupCount: extensionGroups.length,
+      cookieBotEnrolled:
+        Object.keys(cookieBotSchedules).length > 0 ||
+        Object.keys(cookieBotLiveSessions).length > 0,
+      syncServerConfigured: selfHostedSyncConfigured,
+      proxyIds: storedProxies.map((proxy) => proxy.id),
+    }),
+    [
+      groupsLoading,
+      proxiesLoading,
+      cookieBotLoading,
+      profiles,
+      groupsData.length,
+      extensionGroups.length,
+      cookieBotSchedules,
+      cookieBotLiveSessions,
+      selfHostedSyncConfigured,
+      storedProxies,
+    ],
+  );
+  const settledLaunch =
+    firstRunOnboarding === false &&
+    !profilesLoading &&
+    !welcomeOpen &&
+    !thankYouOpen &&
+    !isOnbordaVisible &&
+    !termsLoading &&
+    termsAccepted === true &&
+    !commercialTrialModalOpen;
+  // The remote MCP move and the automatic tip never open on the same launch:
+  // the move holds the tip back until it has decided, and an automatic tip
+  // that opened first keeps the move for another launch.
+  const [autoTipOpened, setAutoTipOpened] = useState(false);
+  const mcpMigration = useMcpMigrationOffer({
+    ready: settledLaunch && !autoTipOpened,
+    accountId: cloudUser?.id ?? null,
+  });
+  const tipsFlow = useTips({
+    cloudUser,
+    loggedInAt: cloudLoggedInAt,
+    ready: settledLaunch && !mcpMigration.open,
+    autoTipHeld: mcpMigration.holdsLaunch,
+    usage: tipUsage,
+  });
+  const { openTips, closeTips } = tipsFlow;
+  useEffect(() => {
+    if (tipsFlow.dialog.open && tipsFlow.dialog.auto) setAutoTipOpened(true);
+  }, [tipsFlow.dialog.open, tipsFlow.dialog.auto]);
 
   const [currentPage, setCurrentPage] = useState<AppPage>("profiles");
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
@@ -2050,7 +2094,6 @@ export default function Home() {
     let unlistenWayfernBlocked: (() => void) | undefined;
     let unlistenGenerationLimit: (() => void) | undefined;
     let unlistenMcpLocalDeprecated: (() => void) | undefined;
-    let unlistenMcpLocalMigrated: (() => void) | undefined;
 
     void (async () => {
       unlistenRequired = await listen(
@@ -2149,23 +2192,6 @@ export default function Home() {
         });
       });
 
-      // Their clients were moved to remote MCP for them (paid accounts). A
-      // success note so the change is visible rather than silent.
-      unlistenMcpLocalMigrated = await listen<{ migrated?: number }>(
-        "mcp-local-migrated",
-        (event) => {
-          const migrated = event.payload?.migrated ?? 0;
-          if (migrated <= 0) return;
-          showToast({
-            id: "mcp-local-migrated",
-            type: "success",
-            title: t("mcpLocalMigrated.title"),
-            description: t("mcpLocalMigrated.description", { count: migrated }),
-            duration: 12000,
-          });
-        },
-      );
-
       // If the effect was torn down mid-setup, the cleanup below already ran
       // before these handles existed — unlisten them now so nothing leaks.
       if (disposed) {
@@ -2176,7 +2202,6 @@ export default function Home() {
         unlistenWayfernBlocked?.();
         unlistenGenerationLimit?.();
         unlistenMcpLocalDeprecated?.();
-        unlistenMcpLocalMigrated?.();
       }
     })();
 
@@ -2189,7 +2214,6 @@ export default function Home() {
       unlistenWayfernBlocked?.();
       unlistenGenerationLimit?.();
       unlistenMcpLocalDeprecated?.();
-      unlistenMcpLocalMigrated?.();
     };
   }, [t]);
 
@@ -2622,6 +2646,12 @@ export default function Home() {
           onOpenTip={(id) => {
             tipsFlow.dismissPaidWelcome();
             openTips(id);
+          }}
+        />
+        <McpMigrationDialog
+          open={mcpMigration.open}
+          onOpenChange={(open) => {
+            if (!open) mcpMigration.close();
           }}
         />
 
