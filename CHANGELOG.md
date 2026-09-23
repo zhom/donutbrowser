@@ -1,6 +1,25 @@
 # Changelog
 
 
+## v0.31.2 (2026-09-23)
+
+### Bug Fixes
+
+- prevent lock of old profiles
+- cache empty team scope
+- explain device refusal over mcp
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.31.1 [skip ci] (#616)
+
+### Maintenance
+
+- chore: bump tauri-wd
+- chore: bump tauri-wd
+- chore: update flake.nix for v0.31.1 [skip ci] (#617)
+
+
 ## v0.31.1 (2026-09-23)
 
 ### Refactoring
