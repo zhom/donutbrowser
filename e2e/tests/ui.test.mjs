@@ -2646,7 +2646,14 @@ test("a freshly paid account is welcomed once and walked to its plan tips", asyn
         await app.execute(
           `return [...document.querySelectorAll('[data-slot="paid-welcome-item"]')].map((node) => node.dataset.tipId);`,
         ),
-        ["cloudBackup", "cookieBot", "crossOs", "automation", "agent"],
+        [
+          "cloudBackup",
+          "cookieBot",
+          "crossOs",
+          "automation",
+          "agent",
+          "remoteControl",
+        ],
         "every capability the plan grants, in catalog order, and nothing it lacks",
       );
       await app.capture("paid-welcome");
