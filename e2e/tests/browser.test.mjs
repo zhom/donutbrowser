@@ -1579,9 +1579,26 @@ test("a payload profile an older version stored launches and is stored as an ide
     ]) {
       delete stored.wayfern_config[key];
     }
-    stored.wayfern_config = JSON.parse(
-      await readFile(process.env.DONUT_E2E_LEGACY_CONFIG, "utf8"),
-    );
+    stored.wayfern_config.identity_id = null;
+    stored.wayfern_config.fingerprint = JSON.stringify({
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      platform: "MacIntel",
+      vendor: "Google Inc.",
+      hardwareConcurrency: 8,
+      deviceMemory: 8,
+      maxTouchPoints: 0,
+      screenWidth: 1512,
+      screenHeight: 982,
+      screenAvailWidth: 1512,
+      screenAvailHeight: 944,
+      screenColorDepth: 30,
+      devicePixelRatio: 2,
+      language: "en-US",
+      languages: ["en-US", "en"],
+      timezone: "Europe/Berlin",
+      timezoneOffset: -120,
+    });
     await writeFile(metadataFile, JSON.stringify(stored, null, 2));
 
     const legacy = (await app.invoke("list_browser_profiles")).find(
