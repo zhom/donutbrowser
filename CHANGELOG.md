@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.31.1 (2026-09-23)
+
+### Refactoring
+
+- cleanup
+
+### Maintenance
+
+- chore: nixpack version bump
+- chore: update flake.nix for v0.31.0 [skip ci] (#615)
+
+
 ## v0.31.0 (2026-09-22)
 
 ### Features
