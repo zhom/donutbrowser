@@ -580,16 +580,20 @@ pub struct LiveTrafficTracker {
   requests: AtomicU64,
   domain_stats: RwLock<HashMap<String, (u64, u64, u64)>>, // domain -> (count, sent, recv)
   ips: RwLock<Vec<String>>,
+  /// False when the user turned off site history: bytes and requests are
+  /// still counted, but no domain or address is kept.
+  record_domains: bool,
   #[allow(dead_code)]
   session_start: u64,
   last_session_write: std::sync::atomic::AtomicU64,
 }
 
 impl LiveTrafficTracker {
-  pub fn new(proxy_id: String, profile_id: Option<String>) -> Self {
+  pub fn new(proxy_id: String, profile_id: Option<String>, record_domains: bool) -> Self {
     Self {
       proxy_id,
       profile_id,
+      record_domains,
       bytes_sent: AtomicU64::new(0),
       bytes_received: AtomicU64::new(0),
       requests: AtomicU64::new(0),
@@ -655,6 +659,9 @@ impl LiveTrafficTracker {
     self
       .bytes_received
       .fetch_add(bytes_received, Ordering::Relaxed);
+    if !self.record_domains {
+      return;
+    }
     if let Ok(mut stats) = self.domain_stats.write() {
       let entry = stats.entry(domain.to_string()).or_insert((0, 0, 0));
       entry.0 += 1;
@@ -664,6 +671,9 @@ impl LiveTrafficTracker {
   }
 
   pub fn record_ip(&self, ip: &str) {
+    if !self.record_domains {
+      return;
+    }
     if let Ok(mut ips) = self.ips.write() {
       if !ips.contains(&ip.to_string()) {
         ips.push(ip.to_string());
@@ -673,6 +683,9 @@ impl LiveTrafficTracker {
 
   /// Update domain-specific byte counts (called when CONNECT tunnel closes)
   pub fn update_domain_bytes(&self, domain: &str, bytes_sent: u64, bytes_received: u64) {
+    if !self.record_domains {
+      return;
+    }
     if let Ok(mut stats) = self.domain_stats.write() {
       let entry = stats.entry(domain.to_string()).or_insert((0, 0, 0));
       entry.1 += bytes_sent;
@@ -887,8 +900,12 @@ static TRAFFIC_TRACKER: std::sync::RwLock<Option<Arc<LiveTrafficTracker>>> =
 
 /// Initialize the global traffic tracker
 /// This can be called multiple times to update the tracker when proxy config changes
-pub fn init_traffic_tracker(proxy_id: String, profile_id: Option<String>) {
-  let tracker = Arc::new(LiveTrafficTracker::new(proxy_id, profile_id));
+pub fn init_traffic_tracker(proxy_id: String, profile_id: Option<String>, record_domains: bool) {
+  let tracker = Arc::new(LiveTrafficTracker::new(
+    proxy_id,
+    profile_id,
+    record_domains,
+  ));
   if let Ok(mut guard) = TRAFFIC_TRACKER.write() {
     *guard = Some(tracker);
   }
@@ -1167,6 +1184,18 @@ pub fn get_all_traffic_snapshots_realtime() -> Vec<TrafficSnapshot> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_tracker_without_site_history_counts_bytes_only() {
+    let tracker = LiveTrafficTracker::new("proxy".into(), Some("profile".into()), false);
+    tracker.record_request("example.com", 100, 200);
+    tracker.update_domain_bytes("example.com", 5, 5);
+    tracker.record_ip("203.0.113.7");
+
+    assert_eq!(tracker.get_snapshot(), (100, 200, 1));
+    assert!(tracker.domain_stats.read().unwrap().is_empty());
+    assert!(tracker.ips.read().unwrap().is_empty());
+  }
 
   #[test]
   fn test_traffic_stats_creation() {

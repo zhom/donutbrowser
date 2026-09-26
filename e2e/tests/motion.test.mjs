@@ -1386,6 +1386,142 @@ test("settings save a RAM-only edit, preserve location, and expose review and di
   });
 });
 
+test("settings sections stay on one row that scrolls, drags, and follows the page", async () => {
+  await withApp("motion-settings-nav", async (app) => {
+    await resize(app, 780, 580);
+    await app.clickSelector(`[aria-label="${en.rail.settings}"]`);
+    const strip = slot("settings-nav");
+    const scroller = slot("settings-scroller");
+    await waitForSelector(app, strip);
+    const layout = () =>
+      app.execute(
+        `
+        const strip = document.querySelector(arguments[0]);
+        const items = [...strip.querySelectorAll('[data-slot="settings-nav-item"]')];
+        const bounds = strip.getBoundingClientRect();
+        const active = strip.querySelector('[aria-current="location"]');
+        const box = active?.getBoundingClientRect();
+        return {
+          rows: new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size,
+          overflow: strip.scrollWidth - strip.clientWidth,
+          left: strip.scrollLeft,
+          fadeLeft: strip.dataset.fadeLeft,
+          fadeRight: strip.dataset.fadeRight,
+          active: active?.dataset.section ?? null,
+          activeVisible: box ? box.left >= bounds.left - 1 && box.right <= bounds.right + 1 : false,
+        };
+      `,
+        [strip],
+      );
+    const pageTop = () =>
+      app.execute(`return document.querySelector(arguments[0]).scrollTop;`, [
+        scroller,
+      ]);
+
+    const start = await layout();
+    assert.equal(start.rows, 1, "section badges never wrap");
+    assert.ok(start.overflow > 0, "a narrow window overflows the row");
+    assert.equal(start.fadeLeft, "false");
+    assert.equal(start.fadeRight, "true");
+
+    // The last section becomes active at the bottom of the page, and the row
+    // brings its badge into view.
+    await app.execute(
+      `const el = document.querySelector(arguments[0]); el.scrollTop = el.scrollHeight;`,
+      [scroller],
+    );
+    await app.waitFor(
+      async () => {
+        const state = await layout();
+        return (
+          state.active === "advanced" &&
+          state.activeVisible &&
+          state.fadeLeft === "true"
+        );
+      },
+      { description: "the row follows the active section" },
+    );
+    await app.capture("settings-nav-follows");
+
+    // A drag scrolls the row and is not a click on the badge under it.
+    const followed = await layout();
+    const top = await pageTop();
+    const point = await pointIn(app, strip);
+    await pointerActions(app, [
+      { type: "pointerMove", x: point.x, y: point.y, origin: "viewport" },
+      { type: "pointerDown", button: 0 },
+      { type: "pause", duration: 50 },
+      {
+        type: "pointerMove",
+        x: point.x + 160,
+        y: point.y,
+        duration: 150,
+        origin: "viewport",
+      },
+      { type: "pointerUp", button: 0 },
+    ]);
+    await app.session.command("DELETE", "/actions");
+    const dragged = await layout();
+    assert.ok(
+      dragged.left < followed.left,
+      `dragging right scrolls back (${followed.left} -> ${dragged.left})`,
+    );
+    assert.equal(await pageTop(), top, "the drag did not jump the page");
+
+    // The chevron pages the row forward again.
+    await app.clickSelector(
+      `[aria-label="${en.settings.scrollSectionsRight}"]`,
+    );
+    await app.waitFor(async () => (await layout()).left > dragged.left, {
+      description: "the chevron scrolls the row",
+    });
+
+    // A badge click still jumps to its section.
+    await app.clickSelector(
+      `${slot("settings-nav-item")}[data-section="privacy"]`,
+    );
+    await app.waitFor(async () => (await layout()).active === "privacy", {
+      description: "the privacy badge is active after a click",
+    });
+    assert.equal(
+      await app.visibleTextIncludes(en.settings.privacy.requireRoute),
+      true,
+    );
+    await app.capture("settings-privacy");
+  });
+});
+
+test("the launch kill switch refuses a profile that would connect directly", async () => {
+  await withApp("motion-kill-switch", async (app) => {
+    await resize(app, 1200, 800);
+    const profile = await createProfile(app, "Direct profile");
+    // The launch receipt lives in the inspector.
+    await waitForSelector(app, inspectTrigger(profile.id));
+    await app.clickSelector(inspectTrigger(profile.id));
+    const settings = await app.invoke("get_app_settings");
+    assert.equal(settings.require_route_for_launch, false);
+    assert.equal(settings.record_traffic_domains, true);
+    assert.equal(settings.trash_retention_days, 30);
+
+    await app.invoke("save_app_settings", {
+      settings: { ...settings, require_route_for_launch: true },
+    });
+    const error = await app.invokeError("launch_browser_profile", {
+      profile,
+      url: null,
+    });
+    assert.match(String(error), /PROFILE_ROUTE_REQUIRED/);
+    await waitForSelector(
+      app,
+      `${slot("profile-launch-activity")}[data-stage="failed"]`,
+    );
+
+    await app.invoke("save_app_settings", {
+      settings: { ...settings, require_route_for_launch: false },
+    });
+  });
+});
+
 test("profile notes save through the inspector and real launch failures retain a receipt", async () => {
   await withApp("motion-profile-feedback", async (app) => {
     await resize(app, 1200, 800);

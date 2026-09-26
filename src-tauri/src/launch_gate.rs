@@ -179,6 +179,34 @@ fn gate_disabled() -> bool {
     .unwrap_or(false)
 }
 
+/// The kill switch. With "Block launches without a proxy or VPN" on, a launch
+/// that would reach the internet from the machine's own address is refused:
+/// a profile with no route, and a profile whose proxy or VPN is gone or gave
+/// no endpoint. The fingerprint gate below would let the second kind through
+/// whenever the real location happens to match the fingerprint.
+pub fn enforce_route_required(profile: &BrowserProfile, has_upstream: bool) -> Result<(), String> {
+  let declares_route = profile.proxy_id.is_some() || profile.vpn_id.is_some();
+  route_verdict(declares_route, has_upstream, route_required())
+}
+
+fn route_verdict(declares_route: bool, has_upstream: bool, required: bool) -> Result<(), String> {
+  if has_upstream || !required {
+    return Ok(());
+  }
+  Err(crate::backend_error(if declares_route {
+    "PROFILE_ROUTE_UNAVAILABLE"
+  } else {
+    "PROFILE_ROUTE_REQUIRED"
+  }))
+}
+
+fn route_required() -> bool {
+  crate::settings_manager::SettingsManager::instance()
+    .load_settings()
+    .map(|s| s.require_route_for_launch)
+    .unwrap_or(false)
+}
+
 fn extension_warning_disabled() -> bool {
   crate::settings_manager::SettingsManager::instance()
     .load_settings()
@@ -469,6 +497,29 @@ pub async fn ack_launch_gate(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn with_the_kill_switch_off_every_launch_passes() {
+    assert!(route_verdict(false, false, false).is_ok());
+    assert!(route_verdict(true, false, false).is_ok());
+  }
+
+  #[test]
+  fn the_kill_switch_refuses_a_launch_with_no_route() {
+    let error = route_verdict(false, false, true).unwrap_err();
+    assert!(error.contains("PROFILE_ROUTE_REQUIRED"), "{error}");
+  }
+
+  #[test]
+  fn the_kill_switch_refuses_a_route_that_is_gone() {
+    let error = route_verdict(true, false, true).unwrap_err();
+    assert!(error.contains("PROFILE_ROUTE_UNAVAILABLE"), "{error}");
+  }
+
+  #[test]
+  fn the_kill_switch_lets_a_routed_launch_through() {
+    assert!(route_verdict(true, true, true).is_ok());
+  }
 
   fn profile_with(fingerprint: &str) -> BrowserProfile {
     let mut profile = BrowserProfile {

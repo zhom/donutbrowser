@@ -405,53 +405,6 @@ impl ProxyManager {
       .as_secs()
   }
 
-  pub async fn get_ip_geolocation(
-    ip: &str,
-  ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
-    // Use ip-api.com (free, no API key required)
-    let url = format!(
-      "http://ip-api.com/json/{}?fields=status,message,country,countryCode,city",
-      ip
-    );
-
-    let client = reqwest::Client::builder()
-      .timeout(std::time::Duration::from_secs(5))
-      .build()
-      .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
-
-    match client.get(&url).send().await {
-      Ok(response) => {
-        if response.status().is_success() {
-          match response.json::<serde_json::Value>().await {
-            Ok(json) => {
-              if json.get("status").and_then(|s| s.as_str()) == Some("success") {
-                let country = json
-                  .get("country")
-                  .and_then(|v| v.as_str())
-                  .map(|s| s.to_string());
-                let country_code = json
-                  .get("countryCode")
-                  .and_then(|v| v.as_str())
-                  .map(|s| s.to_string());
-                let city = json
-                  .get("city")
-                  .and_then(|v| v.as_str())
-                  .map(|s| s.to_string());
-                Ok((city, country, country_code))
-              } else {
-                Ok((None, None, None))
-              }
-            }
-            Err(e) => Err(format!("Failed to parse geolocation response: {e}")),
-          }
-        } else {
-          Ok((None, None, None))
-        }
-      }
-      Err(e) => Err(format!("Failed to fetch geolocation: {e}")),
-    }
-  }
-
   pub fn get_proxy_file_path(&self, proxy_id: &str) -> PathBuf {
     self.get_proxies_dir().join(format!("{proxy_id}.json"))
   }
@@ -1499,8 +1452,7 @@ impl ProxyManager {
     };
 
     // Get geolocation
-    let (city, country, country_code): (Option<String>, Option<String>, Option<String>) =
-      Self::get_ip_geolocation(&ip).await.unwrap_or_default();
+    let (city, country, country_code) = crate::geolocation::lookup_place(&ip);
 
     // The ISP and the timezone come off the databases already on disk. Handing
     // an exit address to an outside lookup service to learn them would tell
@@ -1934,6 +1886,7 @@ impl ProxyManager {
     bypass_rules: Vec<String>,
     blocklist_file: Option<String>,
     dns_allowlist_mode: bool,
+    record_domains: bool,
     // Protocol the local worker serves the browser: "socks5" (Wayfern). Reflected in
     // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
     local_protocol: &str,
@@ -2077,6 +2030,10 @@ impl ProxyManager {
       if dns_allowlist_mode {
         proxy_cmd = proxy_cmd.arg("--dns-allowlist-mode");
       }
+    }
+
+    if !record_domains {
+      proxy_cmd = proxy_cmd.arg("--no-domain-history");
     }
 
     // Tell the worker which protocol to serve the browser (http or socks5)
@@ -3594,6 +3551,7 @@ mod tests {
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
+      record_domains: true,
     };
     let dead_config = ProxyConfig {
       id: dead_id.clone(),
@@ -3609,6 +3567,7 @@ mod tests {
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
+      record_domains: true,
     };
 
     save_proxy_config(&live_config).unwrap();
@@ -3652,6 +3611,7 @@ mod tests {
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
+      record_domains: true,
     };
 
     // Save
@@ -4259,6 +4219,7 @@ mod tests {
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
+      record_domains: true,
     };
     save_proxy_config(&config).unwrap();
 

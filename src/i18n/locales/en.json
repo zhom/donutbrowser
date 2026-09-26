@@ -210,7 +210,12 @@
       "clearTrafficDescription": "Securely erase recorded traffic statistics for every profile.",
       "clearTrafficSuccess": "Traffic history cleared",
       "vpnExtensionWarning": "VPN extension warning",
-      "vpnExtensionWarningDescription": "Warn before launching when a profile contains an extension that can reroute the browser's traffic."
+      "vpnExtensionWarningDescription": "Warn before launching when a profile contains an extension that can reroute the browser's traffic.",
+      "title": "Privacy",
+      "requireRoute": "Block launches without a proxy or VPN",
+      "requireRouteDescription": "A profile never starts from your own IP address: not when it has no proxy or VPN, and not when its proxy or VPN is gone or does not answer.",
+      "recordSites": "Record visited sites",
+      "recordSitesDescription": "Traffic stats list the sites each profile reached. When off, only data totals are kept. Password-protected and ephemeral profiles never record sites."
     },
     "trashRetention": "Keep deleted profiles for",
     "trashRetentionDescription": "Deleted profiles wait in the trash and can be restored until then. After that they are removed for good.",
@@ -240,7 +245,10 @@
         "cleaning": "Removing the old directory",
         "done": "Done"
       }
-    }
+    },
+    "trashRetentionOff": "Delete at once",
+    "scrollSectionsLeft": "Scroll sections left",
+    "scrollSectionsRight": "Scroll sections right"
   },
   "header": {
     "searchPlaceholder": "Search profiles...",
@@ -2351,7 +2359,9 @@
     "syncDisplayTooSmall": "The display is too small for {{windows}} windows in that layout.",
     "syncArrangeFailed": "No window could be moved.",
     "extensionPathInvalid": "That path is not allowed: it contains '..'.",
-    "systemProxyUnreachable": "Donut could not connect through the system proxy {{proxy}}. Fix or turn off the proxy in your system network settings, then try again."
+    "systemProxyUnreachable": "Donut could not connect through the system proxy {{proxy}}. Fix or turn off the proxy in your system network settings, then try again.",
+    "profileRouteRequired": "This profile has no proxy or VPN. Launches without one are blocked in Settings, under Privacy.",
+    "profileRouteUnavailable": "The proxy or VPN of this profile is not available, so the launch was stopped to keep your IP address hidden. Assign a working proxy or VPN to the profile."
   },
   "rail": {
     "profiles": "Profiles",
@@ -3452,7 +3462,7 @@
       "trash": {
         "label": "Trash",
         "title": "Deleted profiles wait in the trash",
-        "body": "A deleted profile stays in the trash for 30 days by default and comes back with everything in it. The retention period is under Advanced settings.",
+        "body": "A deleted profile stays in the trash for 30 days by default and comes back with everything in it. The retention period is under Privacy settings.",
         "action": "Open Trash"
       },
       "localApi": {

@@ -779,13 +779,22 @@ impl ProfileManager {
         return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
       }
     } else {
-      let _guard = crate::profile::trash::mutation_lock();
-      crate::profile::trash::trash_profile(
-        &profiles_dir,
-        &crate::profile::trash::trash_dir(),
-        &profile,
-        crate::proxy_manager::now_secs(),
-      )?;
+      let retention_days = crate::profile::trash::retention_days();
+      {
+        let _guard = crate::profile::trash::mutation_lock();
+        crate::profile::trash::trash_profile(
+          &profiles_dir,
+          &crate::profile::trash::trash_dir(),
+          &profile,
+          crate::proxy_manager::now_secs(),
+          retention_days,
+        )?;
+      }
+      // "Keep for 0 days" means the trash is off: the entry goes right away,
+      // through the same purge an expired entry takes.
+      if retention_days == 0 {
+        self.purge_expired_trash();
+      }
     }
 
     log::info!(
@@ -936,6 +945,7 @@ impl ProfileManager {
     let purged = crate::profile::trash::purge_expired(
       &crate::profile::trash::trash_dir(),
       crate::proxy_manager::now_secs(),
+      crate::profile::trash::retention_days(),
     );
     self.after_trash_purged(&purged);
     purged.len()

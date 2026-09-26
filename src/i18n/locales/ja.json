@@ -210,7 +210,12 @@
       "clearTrafficDescription": "すべてのプロファイルの記録されたトラフィック統計を安全に消去します。",
       "clearTrafficSuccess": "トラフィック履歴を消去しました",
       "vpnExtensionWarning": "VPN拡張機能の警告",
-      "vpnExtensionWarningDescription": "ブラウザーの通信を経路変更できる拡張機能がプロファイルに含まれる場合、起動前に警告します。"
+      "vpnExtensionWarningDescription": "ブラウザーの通信を経路変更できる拡張機能がプロファイルに含まれる場合、起動前に警告します。",
+      "title": "プライバシー",
+      "requireRoute": "プロキシまたは VPN なしの起動をブロック",
+      "requireRouteDescription": "プロファイルが自分の IP アドレスから起動することはありません。プロキシや VPN がない場合も、プロキシや VPN が削除されたり応答しない場合も同様です。",
+      "recordSites": "訪問したサイトを記録",
+      "recordSitesDescription": "トラフィック統計には各プロファイルがアクセスしたサイトが記録されます。オフにするとデータ量の合計だけが残ります。パスワード保護されたプロファイルと一時プロファイルはサイトを記録しません。"
     },
     "trashRetention": "削除したプロファイルの保持期間",
     "trashRetentionDescription": "削除したプロファイルはゴミ箱に保管され、期限まで復元できます。期限を過ぎると完全に削除されます。",
@@ -240,7 +245,10 @@
         "cleaning": "以前のディレクトリを削除しています",
         "done": "完了"
       }
-    }
+    },
+    "trashRetentionOff": "すぐに削除",
+    "scrollSectionsLeft": "セクションを左へスクロール",
+    "scrollSectionsRight": "セクションを右へスクロール"
   },
   "header": {
     "searchPlaceholder": "プロファイルを検索...",
@@ -2351,7 +2359,9 @@
     "syncDisplayTooSmall": "その配置で {{windows}} 個のウィンドウを並べるには画面が小さすぎます。",
     "syncArrangeFailed": "動かせたウィンドウはありませんでした。",
     "extensionPathInvalid": "そのパスは使用できません。'..' が含まれています。",
-    "systemProxyUnreachable": "システムプロキシ {{proxy}} 経由で接続できませんでした。システムのネットワーク設定でプロキシを修正するか無効にしてから、もう一度お試しください。"
+    "systemProxyUnreachable": "システムプロキシ {{proxy}} 経由で接続できませんでした。システムのネットワーク設定でプロキシを修正するか無効にしてから、もう一度お試しください。",
+    "profileRouteRequired": "このプロファイルにはプロキシも VPN もありません。設定の「プライバシー」で、これらなしの起動がブロックされています。",
+    "profileRouteUnavailable": "このプロファイルのプロキシまたは VPN が利用できないため、IP アドレスを隠すために起動を停止しました。動作するプロキシまたは VPN をプロファイルに割り当ててください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -3452,7 +3462,7 @@
       "trash": {
         "label": "ゴミ箱",
         "title": "削除したプロファイルはゴミ箱で待機",
-        "body": "削除したプロファイルは既定で 30 日間ゴミ箱に残り、中身ごと復元できます。保持期間は詳細設定にあります。",
+        "body": "削除したプロファイルは既定で 30 日間ゴミ箱に残り、中身ごと復元できます。保持期間はプライバシー設定にあります。",
         "action": "ゴミ箱を開く"
       },
       "localApi": {

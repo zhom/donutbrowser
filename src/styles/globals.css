@@ -239,6 +239,34 @@
   --bottom-mask: transparent;
 }
 
+/* The same for a single row that scrolls sideways (`ScrollStrip`). The band
+   is wider than the chevron that sits over it, so a badge passing under the
+   chevron is already gone. */
+.scroll-fade-x {
+  --left-mask: black;
+  --right-mask: black;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    var(--left-mask) 0,
+    black 36px,
+    black calc(100% - 36px),
+    var(--right-mask)
+  );
+  mask-image: linear-gradient(
+    to right,
+    var(--left-mask) 0,
+    black 36px,
+    black calc(100% - 36px),
+    var(--right-mask)
+  );
+}
+.scroll-fade-x[data-fade-left="true"] {
+  --left-mask: transparent;
+}
+.scroll-fade-x[data-fade-right="true"] {
+  --right-mask: transparent;
+}
+
 /* Ensure Sonner toasts appear above all dialogs and remain interactive */
 .toaster,
 [data-sonner-toaster] {

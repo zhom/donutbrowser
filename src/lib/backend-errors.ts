@@ -65,6 +65,8 @@ export type BackendErrorCode =
   | "BROWSER_CHECKSUM_UNAVAILABLE"
   | "BROWSER_CHECKSUM_MISMATCH"
   | "SYSTEM_PROXY_UNREACHABLE"
+  | "PROFILE_ROUTE_REQUIRED"
+  | "PROFILE_ROUTE_UNAVAILABLE"
   | "UPDATE_PROFILES_RUNNING"
   | "UPDATE_PREPARATION_FAILED"
   | "PROFILE_NAME_EXISTS"
@@ -442,6 +444,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
         browser: parsed.params?.browser ?? "",
         version: parsed.params?.version ?? "",
       });
+    case "PROFILE_ROUTE_REQUIRED":
+      return t("backendErrors.profileRouteRequired");
+    case "PROFILE_ROUTE_UNAVAILABLE":
+      return t("backendErrors.profileRouteUnavailable");
     case "SYSTEM_PROXY_UNREACHABLE":
       return t("backendErrors.systemProxyUnreachable", {
         proxy: parsed.params?.proxy ?? "",

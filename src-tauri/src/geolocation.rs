@@ -426,6 +426,26 @@ mod tests {
   use super::*;
 
   #[test]
+  fn an_invalid_address_has_no_place() {
+    assert_eq!(lookup_place("not-an-ip"), (None, None, None));
+  }
+
+  /// Exit addresses stay on this machine. A lookup service would learn which
+  /// proxies the user tests, and plain HTTP would tell everyone on the path.
+  #[test]
+  fn proxy_checks_do_not_send_the_exit_address_to_a_lookup_service() {
+    for (name, source) in [
+      ("proxy_manager.rs", include_str!("proxy_manager.rs")),
+      ("lib.rs", include_str!("lib.rs")),
+    ] {
+      assert!(
+        !source.contains("ip-api.com"),
+        "{name} sends the exit address to ip-api.com; use geolocation::lookup_place"
+      );
+    }
+  }
+
+  #[test]
   fn test_locale_selector_creation() {
     let selector = LocaleSelector::new();
     assert!(selector.is_ok());

@@ -27,8 +27,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
-/// How long a deleted profile can still be restored.
-pub const RETENTION_DAYS: u32 = 30;
 /// How often expired entries are swept while the app runs.
 pub const PURGE_INTERVAL_SECS: u64 = 6 * 60 * 60;
 
@@ -81,6 +79,21 @@ pub struct TrashedProfileSummary {
 
 pub fn trash_dir() -> PathBuf {
   crate::app_dirs::data_dir().join("trash")
+}
+
+/// How many days a deleted profile can still be restored, from Settings.
+pub fn retention_days() -> u32 {
+  crate::settings_manager::SettingsManager::instance()
+    .load_settings()
+    .map(|settings| settings.trash_retention_days)
+    .unwrap_or(crate::settings_manager::DEFAULT_TRASH_RETENTION_DAYS)
+}
+
+/// When an entry deleted at `deleted_at` expires. Measured from the deletion
+/// with the retention in force now, so changing the setting applies to what
+/// is already in the trash, in both directions.
+fn expiry(deleted_at: u64, retention_days: u32) -> u64 {
+  deleted_at.saturating_add(u64::from(retention_days) * SECS_PER_DAY)
 }
 
 pub fn mutation_lock() -> MutexGuard<'static, ()> {
@@ -191,6 +204,7 @@ pub fn trash_profile(
   trash_root: &Path,
   profile: &BrowserProfile,
   now: u64,
+  retention_days: u32,
 ) -> Result<TrashManifest, String> {
   let id = profile.id.to_string();
   let source_dir = profiles_dir.join(&id);
@@ -225,7 +239,7 @@ pub fn trash_profile(
 
   let manifest = TrashManifest {
     deleted_at: now,
-    expires_at: now.saturating_add(u64::from(RETENTION_DAYS) * SECS_PER_DAY),
+    expires_at: expiry(now, retention_days),
     size_bytes: dir_size(&target_dir.join(DATA_DIR)),
     original_name: profile.name.clone(),
   };
@@ -272,7 +286,7 @@ pub fn list_entries(trash_root: &Path) -> Vec<(BrowserProfile, TrashManifest)> {
   listed
 }
 
-pub fn summaries(trash_root: &Path) -> Vec<TrashedProfileSummary> {
+pub fn summaries(trash_root: &Path, retention_days: u32) -> Vec<TrashedProfileSummary> {
   list_entries(trash_root)
     .into_iter()
     .map(|(profile, manifest)| TrashedProfileSummary {
@@ -281,7 +295,7 @@ pub fn summaries(trash_root: &Path) -> Vec<TrashedProfileSummary> {
       browser: profile.browser,
       version: profile.version,
       deleted_at: manifest.deleted_at,
-      expires_at: manifest.expires_at,
+      expires_at: expiry(manifest.deleted_at, retention_days),
       size_bytes: manifest.size_bytes,
       group_id: profile.group_id,
       password_protected: profile.password_protected,
@@ -389,10 +403,10 @@ pub fn purge_all(trash_root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Destroy every entry whose expiry has passed. Returns the ids removed.
-pub fn purge_expired(trash_root: &Path, now: u64) -> Vec<String> {
+pub fn purge_expired(trash_root: &Path, now: u64, retention_days: u32) -> Vec<String> {
   list_entries(trash_root)
     .into_iter()
-    .filter(|(_, manifest)| manifest.expires_at <= now)
+    .filter(|(_, manifest)| expiry(manifest.deleted_at, retention_days) <= now)
     .filter_map(|(profile, _)| {
       let id = profile.id.to_string();
       match purge_entry(trash_root, &id) {
@@ -444,7 +458,7 @@ pub fn start_expiry_sweeper() {
 
 #[tauri::command]
 pub fn list_trashed_profiles() -> Result<Vec<TrashedProfileSummary>, String> {
-  Ok(summaries(&trash_dir()))
+  Ok(summaries(&trash_dir(), retention_days()))
 }
 
 #[tauri::command]
@@ -506,6 +520,7 @@ mod tests {
   use tempfile::TempDir;
 
   const NOW: u64 = 1_700_000_000;
+  const DAYS: u32 = crate::settings_manager::DEFAULT_TRASH_RETENTION_DAYS;
 
   fn sample_profile(name: &str) -> BrowserProfile {
     BrowserProfile {
@@ -562,12 +577,9 @@ mod tests {
     let profiles_dir = seed_profile(root.path(), &profile, true);
     let trash_root = root.path().join("trash");
 
-    let manifest = trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    let manifest = trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
     assert_eq!(manifest.deleted_at, NOW);
-    assert_eq!(
-      manifest.expires_at,
-      NOW + u64::from(RETENTION_DAYS) * SECS_PER_DAY
-    );
+    assert_eq!(manifest.expires_at, NOW + u64::from(DAYS) * SECS_PER_DAY);
     assert_eq!(manifest.original_name, "Shop Account");
     assert!(manifest.size_bytes > 0);
 
@@ -588,7 +600,7 @@ mod tests {
       );
     }
 
-    let listed = summaries(&trash_root);
+    let listed = summaries(&trash_root, DAYS);
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, profile.id.to_string());
     assert_eq!(listed[0].name, "Shop Account");
@@ -633,7 +645,7 @@ mod tests {
       serde_json::from_str(&fs::read_to_string(uuid_dir.join("metadata.json")).unwrap()).unwrap();
     assert_eq!(on_disk.id, profile.id);
     assert_eq!(on_disk.updated_at, Some(NOW + 60));
-    assert!(summaries(&trash_root).is_empty());
+    assert!(summaries(&trash_root, DAYS).is_empty());
   }
 
   #[test]
@@ -642,7 +654,7 @@ mod tests {
     let profile = sample_profile("Shop Account");
     let profiles_dir = seed_profile(root.path(), &profile, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
 
     let mut twin = sample_profile("shop account");
     twin.id = uuid::Uuid::new_v4();
@@ -676,7 +688,7 @@ mod tests {
     let profile = sample_profile("Shop Account");
     let profiles_dir = seed_profile(root.path(), &profile, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
 
     let err = restore_profile(
       &profiles_dir,
@@ -688,7 +700,11 @@ mod tests {
     )
     .unwrap_err();
     assert!(err.contains("TRASH_RESTORE_CONFLICT"), "{err}");
-    assert_eq!(summaries(&trash_root).len(), 1, "the entry must survive");
+    assert_eq!(
+      summaries(&trash_root, DAYS).len(),
+      1,
+      "the entry must survive"
+    );
   }
 
   #[test]
@@ -715,7 +731,7 @@ mod tests {
     let profile = sample_profile("Grouped");
     let profiles_dir = seed_profile(root.path(), &profile, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
 
     let restored = restore_profile(
       &profiles_dir,
@@ -738,7 +754,7 @@ mod tests {
     profile.encryption_salt = Some("salt".to_string());
     let profiles_dir = seed_profile(root.path(), &profile, true);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
 
     let entry_dir = trash_root.join(profile.id.to_string());
     for relative in CACHE_DIRS {
@@ -747,7 +763,7 @@ mod tests {
         "an encrypted tree is never pruned ({relative})"
       );
     }
-    assert!(summaries(&trash_root)[0].password_protected);
+    assert!(summaries(&trash_root, DAYS)[0].password_protected);
 
     let restored = restore_profile(
       &profiles_dir,
@@ -770,18 +786,54 @@ mod tests {
     let profiles_dir = seed_profile(root.path(), &old, false);
     seed_profile(root.path(), &fresh, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &old, NOW).unwrap();
-    trash_profile(&profiles_dir, &trash_root, &fresh, NOW + SECS_PER_DAY).unwrap();
-    assert_eq!(summaries(&trash_root).len(), 2);
+    trash_profile(&profiles_dir, &trash_root, &old, NOW, DAYS).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &fresh, NOW + SECS_PER_DAY, DAYS).unwrap();
+    assert_eq!(summaries(&trash_root, DAYS).len(), 2);
 
-    let old_expiry = NOW + u64::from(RETENTION_DAYS) * SECS_PER_DAY;
-    assert!(purge_expired(&trash_root, old_expiry - 1).is_empty());
-    let purged = purge_expired(&trash_root, old_expiry);
+    let old_expiry = NOW + u64::from(DAYS) * SECS_PER_DAY;
+    assert!(purge_expired(&trash_root, old_expiry - 1, DAYS).is_empty());
+    let purged = purge_expired(&trash_root, old_expiry, DAYS);
     assert_eq!(purged, vec![old.id.to_string()]);
-    let remaining = summaries(&trash_root);
+    let remaining = summaries(&trash_root, DAYS);
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].id, fresh.id.to_string());
     assert!(!trash_root.join(old.id.to_string()).exists());
+  }
+
+  #[test]
+  fn a_shorter_retention_applies_to_entries_already_in_the_trash() {
+    let root = TempDir::new().unwrap();
+    let profile = sample_profile("Old");
+    let profiles_dir = seed_profile(root.path(), &profile, false);
+    let trash_root = root.path().join("trash");
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
+
+    let two_days_later = NOW + 2 * SECS_PER_DAY;
+    assert!(purge_expired(&trash_root, two_days_later, DAYS).is_empty());
+    assert_eq!(
+      summaries(&trash_root, 1)[0].expires_at,
+      NOW + SECS_PER_DAY,
+      "the trash page must show the expiry the sweep will act on"
+    );
+    assert_eq!(
+      purge_expired(&trash_root, two_days_later, 1),
+      vec![profile.id.to_string()]
+    );
+  }
+
+  #[test]
+  fn zero_days_expires_an_entry_at_once() {
+    let root = TempDir::new().unwrap();
+    let profile = sample_profile("Gone");
+    let profiles_dir = seed_profile(root.path(), &profile, false);
+    let trash_root = root.path().join("trash");
+    let manifest = trash_profile(&profiles_dir, &trash_root, &profile, NOW, 0).unwrap();
+    assert_eq!(manifest.expires_at, NOW);
+    assert_eq!(
+      purge_expired(&trash_root, NOW, 0),
+      vec![profile.id.to_string()]
+    );
+    assert!(!trash_root.join(profile.id.to_string()).exists());
   }
 
   #[test]
@@ -792,17 +844,17 @@ mod tests {
     let profiles_dir = seed_profile(root.path(), &first, false);
     seed_profile(root.path(), &second, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &first, NOW).unwrap();
-    trash_profile(&profiles_dir, &trash_root, &second, NOW + 1).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &first, NOW, DAYS).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &second, NOW + 1, DAYS).unwrap();
 
-    let listed = summaries(&trash_root);
+    let listed = summaries(&trash_root, DAYS);
     assert_eq!(listed[0].name, "Second", "newest deletion is listed first");
     let mut purged = purge_all(&trash_root).unwrap();
     purged.sort();
     let mut expected = vec![first.id.to_string(), second.id.to_string()];
     expected.sort();
     assert_eq!(purged, expected);
-    assert!(summaries(&trash_root).is_empty());
+    assert!(summaries(&trash_root, DAYS).is_empty());
   }
 
   #[test]
@@ -811,7 +863,7 @@ mod tests {
     let profile = sample_profile("Twice");
     let profiles_dir = seed_profile(root.path(), &profile, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
     restore_profile(
       &profiles_dir,
       &trash_root,
@@ -827,14 +879,14 @@ mod tests {
     fs::create_dir_all(trash_root.join(profile.id.to_string())).unwrap();
     fs::write(trash_root.join(profile.id.to_string()).join("stale"), b"x").unwrap();
 
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW + 5).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW + 5, DAYS).unwrap();
     let entry_dir = trash_root.join(profile.id.to_string());
     assert!(!entry_dir.join("stale").exists());
     assert_eq!(
       fs::read(entry_dir.join("profile").join("Local State")).unwrap(),
       b"newer"
     );
-    assert_eq!(summaries(&trash_root).len(), 1);
+    assert_eq!(summaries(&trash_root, DAYS).len(), 1);
   }
 
   #[test]
@@ -843,13 +895,13 @@ mod tests {
     let profile = sample_profile("Good");
     let profiles_dir = seed_profile(root.path(), &profile, false);
     let trash_root = root.path().join("trash");
-    trash_profile(&profiles_dir, &trash_root, &profile, NOW).unwrap();
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
     let broken = trash_root.join("broken-entry");
     fs::create_dir_all(&broken).unwrap();
     fs::write(broken.join("profile.json"), b"not json").unwrap();
     fs::write(broken.join("manifest.json"), b"{}").unwrap();
 
-    let listed = summaries(&trash_root);
+    let listed = summaries(&trash_root, DAYS);
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].name, "Good");
   }

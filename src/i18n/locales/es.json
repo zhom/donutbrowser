@@ -210,7 +210,12 @@
       "clearTrafficDescription": "Elimina de forma segura las estadísticas de tráfico registradas de todos los perfiles.",
       "clearTrafficSuccess": "Historial de tráfico borrado",
       "vpnExtensionWarning": "Aviso de extensión VPN",
-      "vpnExtensionWarningDescription": "Avisar antes de iniciar cuando un perfil contenga una extensión capaz de redirigir el tráfico del navegador."
+      "vpnExtensionWarningDescription": "Avisar antes de iniciar cuando un perfil contenga una extensión capaz de redirigir el tráfico del navegador.",
+      "title": "Privacidad",
+      "requireRoute": "Bloquear inicios sin proxy ni VPN",
+      "requireRouteDescription": "Un perfil nunca se inicia desde tu propia dirección IP: ni cuando no tiene proxy o VPN, ni cuando su proxy o VPN ya no existe o no responde.",
+      "recordSites": "Registrar sitios visitados",
+      "recordSitesDescription": "Las estadísticas de tráfico muestran los sitios a los que llegó cada perfil. Si se desactiva, solo se guardan los totales de datos. Los perfiles con contraseña y los efímeros nunca registran sitios."
     },
     "trashRetention": "Conservar perfiles eliminados durante",
     "trashRetentionDescription": "Los perfiles eliminados esperan en la papelera y se pueden restaurar hasta entonces. Después se eliminan definitivamente.",
@@ -241,7 +246,10 @@
         "cleaning": "Eliminando el directorio anterior",
         "done": "Listo"
       }
-    }
+    },
+    "trashRetentionOff": "Eliminar al instante",
+    "scrollSectionsLeft": "Desplazar secciones a la izquierda",
+    "scrollSectionsRight": "Desplazar secciones a la derecha"
   },
   "header": {
     "searchPlaceholder": "Buscar perfiles...",
@@ -2361,7 +2369,9 @@
     "syncDisplayTooSmall": "La pantalla es demasiado pequeña para {{windows}} ventanas en esa disposición.",
     "syncArrangeFailed": "No se pudo mover ninguna ventana.",
     "extensionPathInvalid": "Esa ruta no está permitida: contiene '..'.",
-    "systemProxyUnreachable": "Donut no pudo conectarse a través del proxy del sistema {{proxy}}. Corrige o desactiva el proxy en la configuración de red del sistema e inténtalo de nuevo."
+    "systemProxyUnreachable": "Donut no pudo conectarse a través del proxy del sistema {{proxy}}. Corrige o desactiva el proxy en la configuración de red del sistema e inténtalo de nuevo.",
+    "profileRouteRequired": "Este perfil no tiene proxy ni VPN. Los inicios sin ellos están bloqueados en Ajustes, en Privacidad.",
+    "profileRouteUnavailable": "El proxy o la VPN de este perfil no está disponible, así que el inicio se detuvo para mantener oculta tu dirección IP. Asigna al perfil un proxy o una VPN que funcione."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -3487,7 +3497,7 @@
       "trash": {
         "label": "Papelera",
         "title": "Los perfiles eliminados esperan en la papelera",
-        "body": "Un perfil eliminado permanece en la papelera 30 días de forma predeterminada y vuelve con todo su contenido. El periodo de retención está en los ajustes avanzados.",
+        "body": "Un perfil eliminado permanece en la papelera 30 días de forma predeterminada y vuelve con todo su contenido. El periodo de retención está en los ajustes de privacidad.",
         "action": "Abrir Papelera"
       },
       "localApi": {

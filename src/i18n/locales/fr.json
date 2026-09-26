@@ -210,7 +210,12 @@
       "clearTrafficDescription": "Efface en toute sécurité les statistiques de trafic enregistrées pour chaque profil.",
       "clearTrafficSuccess": "Historique de trafic effacé",
       "vpnExtensionWarning": "Avertissement d'extension VPN",
-      "vpnExtensionWarningDescription": "Avertir avant le lancement lorsqu'un profil contient une extension capable de rerouter le trafic du navigateur."
+      "vpnExtensionWarningDescription": "Avertir avant le lancement lorsqu'un profil contient une extension capable de rerouter le trafic du navigateur.",
+      "title": "Confidentialité",
+      "requireRoute": "Bloquer les lancements sans proxy ni VPN",
+      "requireRouteDescription": "Un profil ne démarre jamais depuis votre propre adresse IP : ni sans proxy ou VPN, ni lorsque son proxy ou VPN a disparu ou ne répond pas.",
+      "recordSites": "Enregistrer les sites visités",
+      "recordSitesDescription": "Les statistiques de trafic listent les sites atteints par chaque profil. Désactivé, seuls les volumes de données sont conservés. Les profils protégés par mot de passe et éphémères n'enregistrent jamais de sites."
     },
     "trashRetention": "Conserver les profils supprimés pendant",
     "trashRetentionDescription": "Les profils supprimés attendent dans la corbeille et peuvent être restaurés jusque-là. Ensuite, ils sont supprimés définitivement.",
@@ -241,7 +246,10 @@
         "cleaning": "Suppression de l'ancien répertoire",
         "done": "Terminé"
       }
-    }
+    },
+    "trashRetentionOff": "Supprimer aussitôt",
+    "scrollSectionsLeft": "Faire défiler les sections vers la gauche",
+    "scrollSectionsRight": "Faire défiler les sections vers la droite"
   },
   "header": {
     "searchPlaceholder": "Rechercher des profils...",
@@ -2361,7 +2369,9 @@
     "syncDisplayTooSmall": "L'écran est trop petit pour {{windows}} fenêtres dans cette disposition.",
     "syncArrangeFailed": "Aucune fenêtre n'a pu être déplacée.",
     "extensionPathInvalid": "Ce chemin n'est pas autorisé : il contient « .. ».",
-    "systemProxyUnreachable": "Donut n'a pas pu se connecter via le proxy système {{proxy}}. Corrigez ou désactivez le proxy dans les paramètres réseau de votre système, puis réessayez."
+    "systemProxyUnreachable": "Donut n'a pas pu se connecter via le proxy système {{proxy}}. Corrigez ou désactivez le proxy dans les paramètres réseau de votre système, puis réessayez.",
+    "profileRouteRequired": "Ce profil n'a ni proxy ni VPN. Les lancements sans eux sont bloqués dans Réglages, sous Confidentialité.",
+    "profileRouteUnavailable": "Le proxy ou le VPN de ce profil n'est pas disponible : le lancement a été arrêté pour garder votre adresse IP cachée. Attribuez au profil un proxy ou un VPN qui fonctionne."
   },
   "rail": {
     "profiles": "Profils",
@@ -3487,7 +3497,7 @@
       "trash": {
         "label": "Corbeille",
         "title": "Les profils supprimés attendent dans la corbeille",
-        "body": "Un profil supprimé reste 30 jours dans la corbeille par défaut et revient avec tout son contenu. La durée de conservation se règle dans les réglages avancés.",
+        "body": "Un profil supprimé reste 30 jours dans la corbeille par défaut et revient avec tout son contenu. La durée de conservation se règle dans les réglages de confidentialité.",
         "action": "Ouvrir Corbeille"
       },
       "localApi": {

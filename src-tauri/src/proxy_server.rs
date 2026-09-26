@@ -1589,7 +1589,11 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   // Initialize traffic tracker with profile ID if available.
   // This can be called multiple times to update the tracker.
-  init_traffic_tracker(config.id.clone(), config.profile_id.clone());
+  init_traffic_tracker(
+    config.id.clone(),
+    config.profile_id.clone(),
+    config.record_domains,
+  );
 
   // Determine the bind address
   let bind_addr = SocketAddr::from(([127, 0, 0, 1], config.local_port.unwrap_or(0)));
@@ -2230,7 +2234,9 @@ async fn connect_via_http_proxy<S: AsyncStream + 'static>(
     return Err(format!("Upstream proxy CONNECT failed: {status_line}").into());
   }
 
-  log::info!(
+  // Debug, not info: at info every tunnel the browser opens lands in the
+  // worker log, which is a list of the sites the profile visited.
+  log::debug!(
     "Upstream CONNECT to {}:{} via {}:{} accepted ({})",
     target_host,
     target_port,
@@ -2951,7 +2957,11 @@ this line has no colon\r\n\
     let _cache_guard = crate::app_dirs::set_test_cache_dir(temp_dir.path().to_path_buf());
     let profile_id = "traffic-counting-profile";
     let domain = "counting.example";
-    init_traffic_tracker("traffic-counting-proxy".into(), Some(profile_id.into()));
+    init_traffic_tracker(
+      "traffic-counting-proxy".into(),
+      Some(profile_id.into()),
+      true,
+    );
     let tracker = get_traffic_tracker().unwrap();
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

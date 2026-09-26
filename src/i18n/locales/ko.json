@@ -210,7 +210,12 @@
       "clearTrafficDescription": "모든 프로필의 기록된 트래픽 통계를 안전하게 지웁니다.",
       "clearTrafficSuccess": "트래픽 기록이 지워졌습니다",
       "vpnExtensionWarning": "VPN 확장 프로그램 경고",
-      "vpnExtensionWarningDescription": "브라우저 트래픽의 경로를 바꿀 수 있는 확장 프로그램이 프로필에 있으면 실행 전에 경고합니다."
+      "vpnExtensionWarningDescription": "브라우저 트래픽의 경로를 바꿀 수 있는 확장 프로그램이 프로필에 있으면 실행 전에 경고합니다.",
+      "title": "개인정보 보호",
+      "requireRoute": "프록시나 VPN 없는 실행 차단",
+      "requireRouteDescription": "프로필이 내 IP 주소로 시작되지 않습니다. 프록시나 VPN이 없을 때도, 프록시나 VPN이 사라졌거나 응답하지 않을 때도 마찬가지입니다.",
+      "recordSites": "방문한 사이트 기록",
+      "recordSitesDescription": "트래픽 통계에는 각 프로필이 접속한 사이트가 표시됩니다. 끄면 데이터 합계만 보관됩니다. 비밀번호로 보호된 프로필과 임시 프로필은 사이트를 기록하지 않습니다."
     },
     "trashRetention": "삭제한 프로필 보관 기간",
     "trashRetentionDescription": "삭제한 프로필은 휴지통에 보관되며 그때까지 복원할 수 있습니다. 이후에는 영구 삭제됩니다.",
@@ -240,7 +245,10 @@
         "cleaning": "이전 디렉터리를 지우는 중",
         "done": "완료"
       }
-    }
+    },
+    "trashRetentionOff": "즉시 삭제",
+    "scrollSectionsLeft": "섹션 왼쪽으로 스크롤",
+    "scrollSectionsRight": "섹션 오른쪽으로 스크롤"
   },
   "header": {
     "searchPlaceholder": "프로필 검색...",
@@ -2351,7 +2359,9 @@
     "syncDisplayTooSmall": "그 배치로 창 {{windows}}개를 놓기에는 화면이 너무 작습니다.",
     "syncArrangeFailed": "옮겨진 창이 없습니다.",
     "extensionPathInvalid": "그 경로는 사용할 수 없습니다. '..'이 포함되어 있습니다.",
-    "systemProxyUnreachable": "시스템 프록시 {{proxy}}를 통해 연결하지 못했습니다. 시스템 네트워크 설정에서 프록시를 수정하거나 끈 다음 다시 시도하세요."
+    "systemProxyUnreachable": "시스템 프록시 {{proxy}}를 통해 연결하지 못했습니다. 시스템 네트워크 설정에서 프록시를 수정하거나 끈 다음 다시 시도하세요.",
+    "profileRouteRequired": "이 프로필에는 프록시나 VPN이 없습니다. 설정의 개인정보 보호에서 이 경우의 실행이 차단되어 있습니다.",
+    "profileRouteUnavailable": "이 프로필의 프록시나 VPN을 사용할 수 없어 IP 주소를 숨기기 위해 실행을 중단했습니다. 작동하는 프록시나 VPN을 프로필에 지정하세요."
   },
   "rail": {
     "profiles": "프로필",
@@ -3452,7 +3462,7 @@
       "trash": {
         "label": "휴지통",
         "title": "삭제된 프로필은 휴지통에서 대기",
-        "body": "삭제된 프로필은 기본적으로 30일 동안 휴지통에 남고 내용 그대로 복원됩니다. 보관 기간은 고급 설정에 있습니다.",
+        "body": "삭제된 프로필은 기본적으로 30일 동안 휴지통에 남고 내용 그대로 복원됩니다. 보관 기간은 개인정보 보호 설정에 있습니다.",
         "action": "휴지통 열기"
       },
       "localApi": {

@@ -40,6 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollStrip } from "@/components/ui/scroll-strip";
 import {
   Select,
   SelectContent,
@@ -82,7 +83,14 @@ interface AppSettings {
   keep_decrypted_profiles_in_ram?: boolean;
   fingerprint_gate_disabled?: boolean;
   vpn_extension_warning_disabled?: boolean;
+  require_route_for_launch?: boolean;
+  trash_retention_days?: number;
+  record_traffic_domains?: boolean;
 }
+
+/** The retention choices offered, in days. 0 turns the trash off. */
+const TRASH_RETENTION_DAYS = [0, 1, 7, 14, 30, 90] as const;
+const DEFAULT_TRASH_RETENTION_DAYS = 30;
 
 interface CustomThemeState {
   selectedThemeId: string | null;
@@ -603,10 +611,12 @@ export function SettingsDialog({
                 | "es"
                 | "pt"
                 | "fr"
+                | "de"
                 | "zh"
                 | "ja"
                 | "ko"
                 | "ru"
+                | "tr"
                 | "vi"),
         );
         setOriginalLanguage(selectedLanguage);
@@ -826,12 +836,21 @@ export function SettingsDialog({
           "vpn_extension_warning_disabled",
           "settings.privacy.vpnExtensionWarning",
         ],
+        ["require_route_for_launch", "settings.privacy.requireRoute"],
       ] as const
     )
       .filter(
         ([key]) => Boolean(settings[key]) !== Boolean(originalSettings[key]),
       )
       .map(([, key]) => t(key)),
+    ...((settings.record_traffic_domains ?? true) !==
+    (originalSettings.record_traffic_domains ?? true)
+      ? [t("settings.privacy.recordSites")]
+      : []),
+    ...((settings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS) !==
+    (originalSettings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS)
+      ? [t("settings.trashRetention")]
+      : []),
   ];
   const hasChanges = pendingChanges.length > 0;
   const sections = [
@@ -860,6 +879,15 @@ export function SettingsDialog({
     ["encryption", "settings.encryption.title", ["settings.encryption"]],
     ["commercial", "settings.commercial.title", ["settings.commercial"]],
     [
+      "privacy",
+      "settings.privacy.title",
+      [
+        "settings.privacy",
+        "settings.trashRetention",
+        "settings.trashRetentionDescription",
+      ],
+    ],
+    [
       "advanced",
       "settings.advanced.title",
       [
@@ -868,7 +896,6 @@ export function SettingsDialog({
         "settings.disableAutoUpdatesDescription",
         "settings.keepDecryptedProfilesInRam",
         "settings.keepDecryptedProfilesInRamDescription",
-        "settings.privacy",
       ],
     ],
   ] as Array<[string, string, string[]]>;
@@ -965,48 +992,55 @@ export function SettingsDialog({
               aria-label={t("appFeedback.searchSettings")}
               className="h-8"
             />
-            <nav
-              aria-label={t("settings.title")}
-              className="flex flex-wrap gap-x-1 gap-y-1"
-            >
-              {sections.map(([id, label]) => {
-                const active = activeSection === id;
-                return (
-                  <button
-                    type="button"
-                    key={id}
-                    data-slot="settings-nav-item"
-                    data-section={id}
-                    aria-current={active ? "location" : undefined}
-                    onClick={() => {
-                      setSearch("");
-                      setJumpTo(id);
-                    }}
-                    className={cn(
-                      "relative isolate rounded-md px-2 py-1 text-xs transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-ring",
-                      active
-                        ? "text-accent-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        aria-hidden="true"
-                        data-slot="settings-nav-indicator"
-                        layoutId={
-                          animateNav ? "settings-nav-indicator" : undefined
-                        }
-                        initial={false}
-                        transition={
-                          animateNav ? MOTION_SPRING_POSITION : { duration: 0 }
-                        }
-                        className="absolute inset-0 -z-10 rounded-md bg-accent"
-                      />
-                    )}
-                    {t(label)}
-                  </button>
-                );
-              })}
+            <nav aria-label={t("settings.title")}>
+              <ScrollStrip
+                data-slot="settings-nav"
+                activeKey={activeSection}
+                scrollLeftLabel={t("settings.scrollSectionsLeft")}
+                scrollRightLabel={t("settings.scrollSectionsRight")}
+                stripClassName="gap-1"
+              >
+                {sections.map(([id, label]) => {
+                  const active = activeSection === id;
+                  return (
+                    <button
+                      type="button"
+                      key={id}
+                      data-slot="settings-nav-item"
+                      data-section={id}
+                      aria-current={active ? "location" : undefined}
+                      onClick={() => {
+                        setSearch("");
+                        setJumpTo(id);
+                      }}
+                      className={cn(
+                        "relative isolate shrink-0 rounded-md px-2 py-1 text-xs whitespace-nowrap transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-ring",
+                        active
+                          ? "text-accent-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          aria-hidden="true"
+                          data-slot="settings-nav-indicator"
+                          layoutId={
+                            animateNav ? "settings-nav-indicator" : undefined
+                          }
+                          initial={false}
+                          transition={
+                            animateNav
+                              ? MOTION_SPRING_POSITION
+                              : { duration: 0 }
+                          }
+                          className="absolute inset-0 -z-10 rounded-md bg-accent"
+                        />
+                      )}
+                      {t(label)}
+                    </button>
+                  );
+                })}
+              </ScrollStrip>
             </nav>
           </div>
 
@@ -1015,6 +1049,7 @@ export function SettingsDialog({
               them was the dead-wheel-zone bug. */}
           <div
             ref={scrollerRef}
+            data-slot="settings-scroller"
             onScroll={syncActiveSection}
             className={cn(
               "min-h-0 flex-1 overflow-y-auto",
@@ -1637,6 +1672,154 @@ export function SettingsDialog({
                 </div>
               </div>
 
+              {/* Privacy Section */}
+              <div
+                data-settings-section="privacy"
+                tabIndex={-1}
+                hidden={!sectionVisible("privacy")}
+                className="scroll-mt-2 space-y-4 focus:outline-none"
+              >
+                <Label className="text-base font-medium">
+                  {t("settings.privacy.title")}
+                </Label>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.privacy.requireRoute")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.privacy.requireRouteDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    aria-label={t("settings.privacy.requireRoute")}
+                    checked={settings.require_route_for_launch ?? false}
+                    onCheckedChange={(v) => {
+                      updateSetting("require_route_for_launch", v === true);
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.privacy.consistencyWarning")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.privacy.consistencyWarningDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    aria-label={t("settings.privacy.consistencyWarning")}
+                    checked={!(settings.fingerprint_gate_disabled ?? false)}
+                    onCheckedChange={(v) => {
+                      updateSetting("fingerprint_gate_disabled", v !== true);
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.privacy.vpnExtensionWarning")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.privacy.vpnExtensionWarningDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    aria-label={t("settings.privacy.vpnExtensionWarning")}
+                    checked={
+                      !(settings.vpn_extension_warning_disabled ?? false)
+                    }
+                    onCheckedChange={(v) => {
+                      updateSetting(
+                        "vpn_extension_warning_disabled",
+                        v !== true,
+                      );
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.privacy.recordSites")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.privacy.recordSitesDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    aria-label={t("settings.privacy.recordSites")}
+                    checked={settings.record_traffic_domains ?? true}
+                    onCheckedChange={(v) => {
+                      updateSetting("record_traffic_domains", v === true);
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Label
+                      htmlFor="trash-retention"
+                      className="text-sm font-medium"
+                    >
+                      {t("settings.trashRetention")}
+                    </Label>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.trashRetentionDescription")}
+                    </span>
+                  </div>
+                  <Select
+                    value={String(
+                      settings.trash_retention_days ??
+                        DEFAULT_TRASH_RETENTION_DAYS,
+                    )}
+                    onValueChange={(value) => {
+                      updateSetting("trash_retention_days", Number(value));
+                    }}
+                  >
+                    <SelectTrigger
+                      id="trash-retention"
+                      className="w-40 shrink-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRASH_RETENTION_DAYS.map((days) => (
+                        <SelectItem key={days} value={String(days)}>
+                          {days === 0
+                            ? t("settings.trashRetentionOff")
+                            : t("settings.trashRetentionDays", {
+                                count: days,
+                              })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <LoadingButton
+                    isLoading={isClearingTraffic}
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      handleClearTraffic().catch((err: unknown) => {
+                        console.error(err);
+                      });
+                    }}
+                  >
+                    {t("settings.privacy.clearTraffic")}
+                  </LoadingButton>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t("settings.privacy.clearTrafficDescription")}
+                  </p>
+                </div>
+              </div>
+
               {/* Advanced Section */}
               <div
                 data-settings-section="advanced"
@@ -1750,65 +1933,6 @@ export function SettingsDialog({
                 <p className="text-xs text-muted-foreground">
                   {t("settings.advanced.copyLogsDescription")}
                 </p>
-
-                <div className="flex items-center justify-between gap-3 border-t pt-3">
-                  <div className="min-w-0 flex-1">
-                    <span className="text-sm font-medium">
-                      {t("settings.privacy.consistencyWarning")}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("settings.privacy.consistencyWarningDescription")}
-                    </span>
-                  </div>
-                  <AnimatedSwitch
-                    aria-label={t("settings.privacy.consistencyWarning")}
-                    checked={!(settings.fingerprint_gate_disabled ?? false)}
-                    onCheckedChange={(v) => {
-                      updateSetting("fingerprint_gate_disabled", v !== true);
-                    }}
-                  />
-                </div>
-
-                <div className="flex items-start justify-between gap-x-3 rounded-lg border p-3">
-                  <div className="min-w-0 flex-1">
-                    <span className="text-sm font-medium">
-                      {t("settings.privacy.vpnExtensionWarning")}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("settings.privacy.vpnExtensionWarningDescription")}
-                    </span>
-                  </div>
-                  <AnimatedSwitch
-                    aria-label={t("settings.privacy.vpnExtensionWarning")}
-                    checked={
-                      !(settings.vpn_extension_warning_disabled ?? false)
-                    }
-                    onCheckedChange={(v) => {
-                      updateSetting(
-                        "vpn_extension_warning_disabled",
-                        v !== true,
-                      );
-                    }}
-                  />
-                </div>
-
-                <div className="border-t pt-3">
-                  <LoadingButton
-                    isLoading={isClearingTraffic}
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      handleClearTraffic().catch((err: unknown) => {
-                        console.error(err);
-                      });
-                    }}
-                  >
-                    {t("settings.privacy.clearTraffic")}
-                  </LoadingButton>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {t("settings.privacy.clearTrafficDescription")}
-                  </p>
-                </div>
               </div>
 
               {matchingSections.length === 0 && (

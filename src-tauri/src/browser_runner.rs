@@ -128,6 +128,19 @@ impl BrowserRunner {
     Ok(PROXY_MANAGER.get_proxy_settings_by_id(proxy_id))
   }
 
+  /// Whether this launch may keep a list of the sites it reaches. Never for a
+  /// password-protected or ephemeral profile: their data is sealed or held in
+  /// RAM, and a plaintext list of where they went would undo that. For the
+  /// rest, the "Record visited sites" setting decides.
+  fn records_site_history(profile: &BrowserProfile) -> bool {
+    !profile.password_protected
+      && !profile.ephemeral
+      && crate::settings_manager::SettingsManager::instance()
+        .load_settings()
+        .map(|settings| settings.record_traffic_domains)
+        .unwrap_or(true)
+  }
+
   fn fire_launch_hook(profile: &BrowserProfile) {
     let Some(raw_url) = profile.launch_hook.as_deref() else {
       return;
@@ -409,6 +422,8 @@ impl BrowserRunner {
       // it: the gate returns early for several kinds of profile and answers a
       // question ("may this launch proceed"), while this is a preparation step
       // every spawn needs, including a profile with no route to check.
+      crate::launch_gate::enforce_route_required(profile, upstream_proxy.is_some())
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
       crate::group_bookmarks::sync_for_launch(profile);
 
       // Run concurrently with the blocklist compile so the added wall clock is
@@ -449,6 +464,7 @@ impl BrowserRunner {
           profile.proxy_bypass_rules.clone(),
           blocklist_file,
           dns_allowlist_mode,
+          Self::records_site_history(profile),
           // Wayfern (Chromium) uses a local SOCKS5 proxy so QUIC and WebRTC
           // UDP can be routed through it (via SOCKS5 UDP ASSOCIATE) without
           // leaking the real IP, rather than being forced direct as they

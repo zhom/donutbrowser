@@ -264,7 +264,17 @@ pub async fn start_proxy_process(
   upstream_url: Option<String>,
   port: Option<u16>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
-  start_proxy_process_with_profile(upstream_url, port, None, Vec::new(), None, false, None).await
+  start_proxy_process_with_profile(
+    upstream_url,
+    port,
+    None,
+    Vec::new(),
+    None,
+    false,
+    None,
+    true,
+  )
+  .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -276,6 +286,7 @@ pub async fn start_proxy_process_with_profile(
   blocklist_file: Option<String>,
   dns_allowlist_mode: bool,
   local_protocol: Option<String>,
+  record_domains: bool,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
   ensure_sidecar_version().await?;
 
@@ -294,7 +305,8 @@ pub async fn start_proxy_process_with_profile(
     .with_bypass_rules(bypass_rules)
     .with_blocklist_file(blocklist_file)
     .with_dns_allowlist_mode(dns_allowlist_mode)
-    .with_local_protocol(local_protocol);
+    .with_local_protocol(local_protocol)
+    .with_record_domains(record_domains);
   save_proxy_config(&config)?;
 
   // Log profile_id for debugging

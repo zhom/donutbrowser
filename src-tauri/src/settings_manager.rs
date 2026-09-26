@@ -67,7 +67,7 @@ pub struct AppSettings {
   #[serde(default)]
   pub mcp_remote_key_id: Option<String>,
   #[serde(default)]
-  pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ko", "ru", or None for system default
+  pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "de", "zh", "ja", "ko", "ru", "tr", "vi", or None for system default
   #[serde(default)]
   pub window_resize_warning_dismissed: bool,
   /// Stop blocking launches whose proxy exit disagrees with the fingerprint.
@@ -115,6 +115,17 @@ pub struct AppSettings {
   /// MCP, so the move dialog opens by itself at most once per account.
   #[serde(default)]
   pub mcp_migration_offered_for: Vec<String>,
+  /// Refuse every launch that would reach the internet without a proxy or
+  /// VPN: a profile with no route, and one whose proxy or VPN is gone.
+  #[serde(default)]
+  pub require_route_for_launch: bool,
+  /// Days a deleted profile can still be restored. 0 destroys it at once.
+  #[serde(default = "default_trash_retention_days")]
+  pub trash_retention_days: u32,
+  /// Record which sites each profile visits in its traffic stats. Off keeps
+  /// byte counts only, so nothing on disk lists where a profile went.
+  #[serde(default = "default_record_traffic_domains")]
+  pub record_traffic_domains: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -132,6 +143,18 @@ fn default_api_port() -> u16 {
 }
 
 fn default_tips_auto_show() -> bool {
+  true
+}
+
+pub const DEFAULT_TRASH_RETENTION_DAYS: u32 = 30;
+/// The longest retention the Settings page offers.
+pub const MAX_TRASH_RETENTION_DAYS: u32 = 90;
+
+fn default_trash_retention_days() -> u32 {
+  DEFAULT_TRASH_RETENTION_DAYS
+}
+
+fn default_record_traffic_domains() -> bool {
   true
 }
 
@@ -177,6 +200,9 @@ impl Default for AppSettings {
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
       mcp_migration_offered_for: Vec::new(),
+      require_route_for_launch: false,
+      trash_retention_days: DEFAULT_TRASH_RETENTION_DAYS,
+      record_traffic_domains: true,
     }
   }
 }
@@ -640,8 +666,11 @@ pub async fn save_app_settings(
   // terms gates those commands enforce, or switch it off on disk while the
   // task kept running. The key id is bookkeeping for the rotation path and is
   // never the frontend's to write.
+  settings.trash_retention_days = settings.trash_retention_days.min(MAX_TRASH_RETENTION_DAYS);
+  let mut previous_retention = None;
   if let Ok(content) = std::fs::read_to_string(manager.get_settings_file()) {
     if let Ok(current) = serde_json::from_str::<AppSettings>(&content) {
+      previous_retention = Some(current.trash_retention_days);
       settings.window_resize_warning_dismissed = current.window_resize_warning_dismissed;
       settings.mcp_remote_enabled = current.mcp_remote_enabled;
       settings.mcp_remote_key_id = current.mcp_remote_key_id;
@@ -669,6 +698,15 @@ pub async fn save_app_settings(
   manager
     .save_settings(&persist_settings)
     .map_err(|e| format!("Failed to save settings: {e}"))?;
+
+  // A shorter retention applies to what is already in the trash. Sweep now
+  // rather than at the next six-hourly pass, so "delete after 1 day" does not
+  // keep a month-old profile until then.
+  if previous_retention != Some(settings.trash_retention_days) {
+    tauri::async_runtime::spawn_blocking(|| {
+      crate::profile::ProfileManager::instance().purge_expired_trash();
+    });
+  }
 
   // Answer with what a fresh read would show, the stored credential included,
   // so a page that keeps the answer as its settings does not lose the fx
@@ -1368,6 +1406,9 @@ mod tests {
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
       mcp_migration_offered_for: Vec::new(),
+      require_route_for_launch: true,
+      trash_retention_days: 7,
+      record_traffic_domains: false,
     };
 
     let save_result = manager.save_settings(&test_settings);
@@ -1385,6 +1426,17 @@ mod tests {
       loaded_settings.theme, "dark",
       "Loaded theme should match saved"
     );
+    assert!(loaded_settings.require_route_for_launch);
+    assert_eq!(loaded_settings.trash_retention_days, 7);
+    assert!(!loaded_settings.record_traffic_domains);
+  }
+
+  #[test]
+  fn settings_written_before_the_privacy_options_keep_the_old_behaviour() {
+    let settings: AppSettings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+    assert!(!settings.require_route_for_launch);
+    assert_eq!(settings.trash_retention_days, DEFAULT_TRASH_RETENTION_DAYS);
+    assert!(settings.record_traffic_domains);
   }
 
   #[test]

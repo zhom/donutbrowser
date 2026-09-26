@@ -210,7 +210,12 @@
       "clearTrafficDescription": "Apaga com segurança as estatísticas de tráfego registradas de todos os perfis.",
       "clearTrafficSuccess": "Histórico de tráfego limpo",
       "vpnExtensionWarning": "Aviso de extensão VPN",
-      "vpnExtensionWarningDescription": "Avisar antes de iniciar quando um perfil contiver uma extensão capaz de redirecionar o tráfego do navegador."
+      "vpnExtensionWarningDescription": "Avisar antes de iniciar quando um perfil contiver uma extensão capaz de redirecionar o tráfego do navegador.",
+      "title": "Privacidade",
+      "requireRoute": "Bloquear inicializações sem proxy ou VPN",
+      "requireRouteDescription": "Um perfil nunca inicia a partir do seu próprio endereço IP: nem quando não tem proxy ou VPN, nem quando o proxy ou a VPN sumiu ou não responde.",
+      "recordSites": "Registrar sites visitados",
+      "recordSitesDescription": "As estatísticas de tráfego listam os sites que cada perfil acessou. Desativado, só os totais de dados são mantidos. Perfis protegidos por senha e efêmeros nunca registram sites."
     },
     "trashRetention": "Manter perfis excluídos por",
     "trashRetentionDescription": "Os perfis excluídos ficam na lixeira e podem ser restaurados até lá. Depois disso, são removidos permanentemente.",
@@ -241,7 +246,10 @@
         "cleaning": "A remover o diretório anterior",
         "done": "Concluído"
       }
-    }
+    },
+    "trashRetentionOff": "Excluir na hora",
+    "scrollSectionsLeft": "Rolar seções para a esquerda",
+    "scrollSectionsRight": "Rolar seções para a direita"
   },
   "header": {
     "searchPlaceholder": "Pesquisar perfis...",
@@ -2361,7 +2369,9 @@
     "syncDisplayTooSmall": "O ecrã é demasiado pequeno para {{windows}} janelas nessa disposição.",
     "syncArrangeFailed": "Não foi possível mover nenhuma janela.",
     "extensionPathInvalid": "Esse caminho não é permitido: contém '..'.",
-    "systemProxyUnreachable": "O Donut não conseguiu se conectar pelo proxy do sistema {{proxy}}. Corrija ou desative o proxy nas configurações de rede do sistema e tente novamente."
+    "systemProxyUnreachable": "O Donut não conseguiu se conectar pelo proxy do sistema {{proxy}}. Corrija ou desative o proxy nas configurações de rede do sistema e tente novamente.",
+    "profileRouteRequired": "Este perfil não tem proxy nem VPN. Inicializações sem eles estão bloqueadas em Configurações, em Privacidade.",
+    "profileRouteUnavailable": "O proxy ou a VPN deste perfil não está disponível, então a inicialização foi interrompida para manter seu endereço IP oculto. Atribua ao perfil um proxy ou uma VPN que funcione."
   },
   "rail": {
     "profiles": "Perfis",
@@ -3487,7 +3497,7 @@
       "trash": {
         "label": "Lixeira",
         "title": "Perfis excluídos esperam na lixeira",
-        "body": "Um perfil excluído fica na lixeira por 30 dias por padrão e volta com tudo o que tinha. O período de retenção está nas configurações avançadas.",
+        "body": "Um perfil excluído fica na lixeira por 30 dias por padrão e volta com tudo o que tinha. O período de retenção está nas configurações de privacidade.",
         "action": "Abrir Lixeira"
       },
       "localApi": {

@@ -326,6 +326,7 @@ async fn test_xray_reality_chain_and_local_traffic_monitoring(
     None,
     false,
     Some("http".to_string()),
+    true,
   )
   .await?;
   cleanup.outer_id = Some(outer.id.clone());
@@ -1832,6 +1833,7 @@ async fn start_lifecycle_worker(
     None,
     false,
     Some("http".to_string()),
+    true,
   )
   .await
   .map_err(|error| error.to_string().into())

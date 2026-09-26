@@ -210,7 +210,12 @@
       "clearTrafficDescription": "Xóa an toàn số liệu thống kê lưu lượng đã ghi của mọi hồ sơ.",
       "clearTrafficSuccess": "Đã xóa lịch sử lưu lượng",
       "vpnExtensionWarning": "Cảnh báo tiện ích VPN",
-      "vpnExtensionWarningDescription": "Cảnh báo trước khi khởi chạy khi hồ sơ có tiện ích có thể định tuyến lại lưu lượng của trình duyệt."
+      "vpnExtensionWarningDescription": "Cảnh báo trước khi khởi chạy khi hồ sơ có tiện ích có thể định tuyến lại lưu lượng của trình duyệt.",
+      "title": "Quyền riêng tư",
+      "requireRoute": "Chặn khởi chạy khi không có proxy hoặc VPN",
+      "requireRouteDescription": "Hồ sơ không bao giờ khởi chạy từ địa chỉ IP của bạn: kể cả khi không có proxy hoặc VPN, hoặc khi proxy hay VPN của nó đã mất hoặc không phản hồi.",
+      "recordSites": "Ghi lại trang đã truy cập",
+      "recordSitesDescription": "Thống kê lưu lượng liệt kê các trang mà mỗi hồ sơ đã truy cập. Khi tắt, chỉ lưu tổng dung lượng dữ liệu. Hồ sơ có mật khẩu và hồ sơ tạm thời không bao giờ ghi lại trang."
     },
     "trashRetention": "Giữ hồ sơ đã xóa trong",
     "trashRetentionDescription": "Hồ sơ đã xóa được giữ trong thùng rác và có thể khôi phục cho đến lúc đó. Sau đó chúng sẽ bị xóa vĩnh viễn.",
@@ -240,7 +245,10 @@
         "cleaning": "Đang xoá thư mục cũ",
         "done": "Xong"
       }
-    }
+    },
+    "trashRetentionOff": "Xóa ngay",
+    "scrollSectionsLeft": "Cuộn các mục sang trái",
+    "scrollSectionsRight": "Cuộn các mục sang phải"
   },
   "header": {
     "searchPlaceholder": "Tìm kiếm hồ sơ...",
@@ -2351,7 +2359,9 @@
     "syncDisplayTooSmall": "Màn hình quá nhỏ cho {{windows}} cửa sổ theo cách xếp đó.",
     "syncArrangeFailed": "Không cửa sổ nào được di chuyển.",
     "extensionPathInvalid": "Đường dẫn đó không được phép: nó chứa '..'.",
-    "systemProxyUnreachable": "Donut không thể kết nối qua proxy hệ thống {{proxy}}. Hãy sửa hoặc tắt proxy trong cài đặt mạng của hệ thống rồi thử lại."
+    "systemProxyUnreachable": "Donut không thể kết nối qua proxy hệ thống {{proxy}}. Hãy sửa hoặc tắt proxy trong cài đặt mạng của hệ thống rồi thử lại.",
+    "profileRouteRequired": "Hồ sơ này không có proxy hoặc VPN. Việc khởi chạy khi không có chúng đang bị chặn trong Cài đặt, mục Quyền riêng tư.",
+    "profileRouteUnavailable": "Proxy hoặc VPN của hồ sơ này không khả dụng, nên việc khởi chạy đã dừng để giữ địa chỉ IP của bạn được ẩn. Hãy gán cho hồ sơ một proxy hoặc VPN hoạt động được."
   },
   "rail": {
     "profiles": "Profile",
@@ -3452,7 +3462,7 @@
       "trash": {
         "label": "Thùng rác",
         "title": "Hồ sơ đã xóa chờ trong thùng rác",
-        "body": "Hồ sơ đã xóa nằm trong thùng rác 30 ngày theo mặc định và quay lại với đầy đủ nội dung. Thời gian lưu giữ nằm trong cài đặt nâng cao.",
+        "body": "Hồ sơ đã xóa nằm trong thùng rác 30 ngày theo mặc định và quay lại với đầy đủ nội dung. Thời gian lưu giữ nằm trong cài đặt quyền riêng tư.",
         "action": "Mở Thùng rác"
       },
       "localApi": {

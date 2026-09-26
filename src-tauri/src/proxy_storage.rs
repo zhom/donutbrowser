@@ -39,6 +39,15 @@ pub struct ProxyConfig {
   /// upgrade never reaps a worker whose browser is still running.
   #[serde(default)]
   pub browser_pid_start_time: Option<u64>,
+  /// Whether the worker records which sites the browser reaches. Off keeps
+  /// byte and request counts only. Configs written before this field
+  /// existed record, as they always did.
+  #[serde(default = "default_record_domains")]
+  pub record_domains: bool,
+}
+
+fn default_record_domains() -> bool {
+  true
 }
 
 impl ProxyConfig {
@@ -57,7 +66,13 @@ impl ProxyConfig {
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
+      record_domains: true,
     }
+  }
+
+  pub fn with_record_domains(mut self, record_domains: bool) -> Self {
+    self.record_domains = record_domains;
+    self
   }
 
   pub fn with_profile_id(mut self, profile_id: Option<String>) -> Self {

@@ -210,7 +210,12 @@
       "clearTrafficDescription": "Tüm profillerin kayıtlı trafik istatistiklerini güvenli bir şekilde siler.",
       "clearTrafficSuccess": "Trafik geçmişi temizlendi",
       "vpnExtensionWarning": "VPN uzantısı uyarısı",
-      "vpnExtensionWarningDescription": "Bir profil, tarayıcı trafiğini yeniden yönlendirebilecek bir uzantı içerdiğinde başlatmadan önce uyarır."
+      "vpnExtensionWarningDescription": "Bir profil, tarayıcı trafiğini yeniden yönlendirebilecek bir uzantı içerdiğinde başlatmadan önce uyarır.",
+      "title": "Gizlilik",
+      "requireRoute": "Proxy veya VPN olmadan başlatmayı engelle",
+      "requireRouteDescription": "Bir profil asla kendi IP adresinizden başlamaz: proxy veya VPN yoksa da, proxy veya VPN kaldırıldıysa ya da yanıt vermiyorsa da.",
+      "recordSites": "Ziyaret edilen siteleri kaydet",
+      "recordSitesDescription": "Trafik istatistikleri her profilin ulaştığı siteleri listeler. Kapalıyken yalnızca veri toplamları tutulur. Parola korumalı ve geçici profiller hiçbir zaman site kaydetmez."
     },
     "trashRetention": "Silinen profilleri şu süre boyunca sakla",
     "trashRetentionDescription": "Silinen profiller çöp kutusunda bekler ve o zamana kadar geri yüklenebilir. Sonrasında kalıcı olarak kaldırılır.",
@@ -240,7 +245,10 @@
         "cleaning": "Eski dizin siliniyor",
         "done": "Bitti"
       }
-    }
+    },
+    "trashRetentionOff": "Hemen sil",
+    "scrollSectionsLeft": "Bölümleri sola kaydır",
+    "scrollSectionsRight": "Bölümleri sağa kaydır"
   },
   "header": {
     "searchPlaceholder": "Profillerde ara...",
@@ -2351,7 +2359,9 @@
     "syncDisplayTooSmall": "Ekran, o düzende {{windows}} pencere için fazla küçük.",
     "syncArrangeFailed": "Hiçbir pencere taşınamadı.",
     "extensionPathInvalid": "Bu yol kullanılamaz: '..' içeriyor.",
-    "systemProxyUnreachable": "Donut, {{proxy}} sistem proxy'si üzerinden bağlanamadı. Sistem ağ ayarlarınızda proxy'yi düzeltin veya kapatın, ardından yeniden deneyin."
+    "systemProxyUnreachable": "Donut, {{proxy}} sistem proxy'si üzerinden bağlanamadı. Sistem ağ ayarlarınızda proxy'yi düzeltin veya kapatın, ardından yeniden deneyin.",
+    "profileRouteRequired": "Bu profilin proxy'si veya VPN'i yok. Bunlar olmadan başlatma, Ayarlar'daki Gizlilik bölümünde engellendi.",
+    "profileRouteUnavailable": "Bu profilin proxy'si veya VPN'i kullanılamıyor, bu yüzden IP adresinizi gizli tutmak için başlatma durduruldu. Profile çalışan bir proxy veya VPN atayın."
   },
   "rail": {
     "profiles": "Profiller",
@@ -3452,7 +3462,7 @@
       "trash": {
         "label": "Çöp kutusu",
         "title": "Silinen profiller çöp kutusunda bekler",
-        "body": "Silinen bir profil varsayılan olarak 30 gün çöp kutusunda kalır ve içindeki her şeyle geri gelir. Saklama süresi Gelişmiş ayarlardadır.",
+        "body": "Silinen bir profil varsayılan olarak 30 gün çöp kutusunda kalır ve içindeki her şeyle geri gelir. Saklama süresi Gizlilik ayarlarındadır.",
         "action": "Çöp kutusunu aç"
       },
       "localApi": {

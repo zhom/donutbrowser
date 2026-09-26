@@ -144,6 +144,12 @@ async fn main() {
                 .help("Treat --blocklist-file as an allowlist (block all domains not listed)"),
             )
             .arg(
+              Arg::new("no-domain-history")
+                .long("no-domain-history")
+                .num_args(0)
+                .help("Count bytes only; do not record which sites the browser reaches"),
+            )
+            .arg(
               Arg::new("local-protocol")
                 .long("local-protocol")
                 .help("Protocol served to the browser: http (default) or socks5"),
@@ -255,6 +261,7 @@ async fn main() {
       let blocklist_file = start_matches.get_one::<String>("blocklist-file").cloned();
       let dns_allowlist_mode = start_matches.get_flag("dns-allowlist-mode");
       let local_protocol = start_matches.get_one::<String>("local-protocol").cloned();
+      let record_domains = !start_matches.get_flag("no-domain-history");
 
       match start_proxy_process_with_profile(
         upstream_url,
@@ -264,6 +271,7 @@ async fn main() {
         blocklist_file,
         dns_allowlist_mode,
         local_protocol,
+        record_domains,
       )
       .await
       {

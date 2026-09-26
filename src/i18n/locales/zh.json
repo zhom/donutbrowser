@@ -210,7 +210,12 @@
       "clearTrafficDescription": "安全清除所有配置文件的已记录流量统计数据。",
       "clearTrafficSuccess": "流量历史已清除",
       "vpnExtensionWarning": "VPN 扩展警告",
-      "vpnExtensionWarningDescription": "当配置文件中存在可改变浏览器流量路径的扩展时，在启动前发出警告。"
+      "vpnExtensionWarningDescription": "当配置文件中存在可改变浏览器流量路径的扩展时，在启动前发出警告。",
+      "title": "隐私",
+      "requireRoute": "阻止未使用代理或 VPN 的启动",
+      "requireRouteDescription": "配置文件绝不会使用您自己的 IP 地址启动：无论是没有代理或 VPN，还是其代理或 VPN 已被删除或无响应。",
+      "recordSites": "记录访问过的网站",
+      "recordSitesDescription": "流量统计会列出每个配置文件访问过的网站。关闭后仅保留数据总量。受密码保护的配置文件和临时配置文件从不记录网站。"
     },
     "trashRetention": "已删除配置文件的保留时间",
     "trashRetentionDescription": "已删除的配置文件会保留在回收站中，在此期间可以恢复。之后将被永久删除。",
@@ -240,7 +245,10 @@
         "cleaning": "正在删除旧目录",
         "done": "完成"
       }
-    }
+    },
+    "trashRetentionOff": "立即删除",
+    "scrollSectionsLeft": "向左滚动分区",
+    "scrollSectionsRight": "向右滚动分区"
   },
   "header": {
     "searchPlaceholder": "搜索配置文件...",
@@ -2351,7 +2359,9 @@
     "syncDisplayTooSmall": "显示器太小，无法以该布局排列 {{windows}} 个窗口。",
     "syncArrangeFailed": "没有窗口被移动。",
     "extensionPathInvalid": "该路径不允许使用：它包含“..”。",
-    "systemProxyUnreachable": "Donut 无法通过系统代理 {{proxy}} 连接。请在系统网络设置中修正或关闭该代理，然后重试。"
+    "systemProxyUnreachable": "Donut 无法通过系统代理 {{proxy}} 连接。请在系统网络设置中修正或关闭该代理，然后重试。",
+    "profileRouteRequired": "此配置文件没有代理或 VPN。设置的“隐私”中已阻止在没有它们的情况下启动。",
+    "profileRouteUnavailable": "此配置文件的代理或 VPN 不可用，为隐藏您的 IP 地址已停止启动。请为该配置文件分配可用的代理或 VPN。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -3452,7 +3462,7 @@
       "trash": {
         "label": "回收站",
         "title": "已删除的配置文件在回收站等候",
-        "body": "已删除的配置文件默认在回收站保留 30 天，并可连同全部内容一起恢复。保留期限在高级设置中。",
+        "body": "已删除的配置文件默认在回收站保留 30 天，并可连同全部内容一起恢复。保留期限在隐私设置中。",
         "action": "打开回收站"
       },
       "localApi": {
