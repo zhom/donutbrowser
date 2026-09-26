@@ -16,10 +16,7 @@ import { cn } from "@/lib/utils";
 /** How far a pressed pointer travels before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 /** Room kept between the active item and a faded edge. */
-const EDGE_ROOM_PX = 28;
-/** Clears a 2px focus outline: a row that scrolls sideways also clips
- * vertically, so a badge's focus ring would be cut at every edge. */
-const RING_ROOM_PX = 2;
+const EDGE_ROOM_PX = 48;
 
 interface ScrollStripProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
@@ -230,15 +227,13 @@ export function ScrollStrip({
           onClickCapture?.(event);
         }}
         className={cn(
-          "scroll-fade-x relative flex scrollbar-none items-center overflow-x-auto py-0.5 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+          // p-0.5 clears a 2px focus outline: a row that scrolls sideways
+          // also clips vertically, so a focus ring would be cut at every edge.
+          "scroll-fade-x relative flex scrollbar-none items-center overflow-x-auto p-0.5 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
           overflowing && "cursor-grab",
           dragging && "cursor-grabbing select-none",
           stripClassName,
         )}
-        style={{
-          paddingLeft: fadeLeft ? 22 : RING_ROOM_PX,
-          paddingRight: fadeRight ? 22 : RING_ROOM_PX,
-        }}
       >
         {children}
       </div>

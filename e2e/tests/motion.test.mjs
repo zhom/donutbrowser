@@ -1436,7 +1436,8 @@ test("settings sections stay on one row that scrolls, drags, and follows the pag
         return (
           state.active === "advanced" &&
           state.activeVisible &&
-          state.fadeLeft === "true"
+          state.fadeLeft === "true" &&
+          state.fadeRight === "false"
         );
       },
       { description: "the row follows the active section" },

@@ -239,24 +239,28 @@
   --bottom-mask: transparent;
 }
 
-/* The same for a single row that scrolls sideways (`ScrollStrip`). The band
-   is wider than the chevron that sits over it, so a badge passing under the
-   chevron is already gone. */
+/* The same for a single row that scrolls sideways (`ScrollStrip`). The first
+   24px, where the chevron sits, are fully cleared, so the chevron never lands
+   on half-faded letters; the badges fade in over the next 24px. */
 .scroll-fade-x {
   --left-mask: black;
   --right-mask: black;
   -webkit-mask-image: linear-gradient(
     to right,
     var(--left-mask) 0,
-    black 36px,
-    black calc(100% - 36px),
+    var(--left-mask) 24px,
+    black 48px,
+    black calc(100% - 48px),
+    var(--right-mask) calc(100% - 24px),
     var(--right-mask)
   );
   mask-image: linear-gradient(
     to right,
     var(--left-mask) 0,
-    black 36px,
-    black calc(100% - 36px),
+    var(--left-mask) 24px,
+    black 48px,
+    black calc(100% - 48px),
+    var(--right-mask) calc(100% - 24px),
     var(--right-mask)
   );
 }
