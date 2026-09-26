@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2025 zhom@github -->
+<component type="desktop-application">
+  <id>com.donutbrowser.DonutBrowser</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+
+  <name>Donut Browser</name>
+  <summary>Open source anti-detect browser</summary>
+  <developer id="com.donutbrowser">
+    <name>Donut Browser</name>
+  </developer>
+
+  <description>
+    <p>
+      Donut Browser manages any number of isolated browser profiles. Each profile
+      keeps its own fingerprint, cookies, extensions and data, and runs on
+      Wayfern, a Chromium-based engine that Donut downloads on first use.
+    </p>
+    <ul>
+      <li>Per-profile HTTP, HTTPS, SOCKS4 and SOCKS5 proxies, and WireGuard configs</li>
+      <li>Per-profile DNS blocklists for ads and trackers</li>
+      <li>Profile import from Chrome, Edge, Brave and other Chromium browsers</li>
+      <li>Cookie and extension management</li>
+      <li>A local REST API and a Model Context Protocol server for automation</li>
+      <li>Optional end-to-end encrypted sync to Donut cloud or a self-hosted server</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">com.donutbrowser.DonutBrowser.desktop</launchable>
+  <provides>
+    <binary>donutbrowser</binary>
+  </provides>
+
+  <url type="homepage">https://donutbrowser.com</url>
+  <url type="bugtracker">https://github.com/zhom/donutbrowser/issues</url>
+  <url type="vcs-browser">https://github.com/zhom/donutbrowser</url>
+  <url type="contribute">https://github.com/zhom/donutbrowser/blob/main/CONTRIBUTING.md</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/zhom/donutbrowser/main/assets/donut-preview.png</image>
+      <caption>The profile list</caption>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.31.2" date="2026-09-23">
+      <url type="details">https://github.com/zhom/donutbrowser/releases/tag/v0.31.2</url>
+    </release>
+  </releases>
+</component>

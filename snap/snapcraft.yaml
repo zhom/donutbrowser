@@ -1,0 +1,87 @@
+# Snap for Donut Browser.
+#
+# This repackages the .deb that `pnpm tauri build --bundles deb` produces
+# (the app, the donut-proxy and xray sidecars, the desktop entry and the icons).
+# WebKitGTK, GTK, libayatana-appindicator and NSS come from the gnome-46-2404
+# content snap through the gnome extension, not from the build host.
+#
+# Build it locally on Ubuntu 24.04 (x86_64) after `pnpm tauri build --bundles deb`:
+#   cp src-tauri/target/release/bundle/deb/*.deb packaging/donut.deb
+#   sudo snapcraft pack --destructive-mode
+name: donutbrowser
+title: Donut Browser
+base: core24
+adopt-info: donutbrowser
+license: AGPL-3.0-only
+grade: stable
+confinement: strict
+compression: lzo
+icon: src-tauri/icons/icon.png
+contact: mailto:contact@donutbrowser.com
+
+platforms:
+  amd64:
+
+slots:
+  # tauri-plugin-single-instance owns this session bus name so that a second
+  # launch (a link clicked in another app) is handed to the running instance.
+  single-instance:
+    interface: dbus
+    bus: session
+    name: com.donutbrowser.SingleInstance
+
+apps:
+  donutbrowser:
+    command: usr/bin/donutbrowser
+    desktop: usr/share/applications/donutbrowser.desktop
+    extensions: [gnome]
+    environment:
+      # $SNAP_USER_DATA is copied on every refresh so that a revert can restore
+      # it. Downloaded Wayfern builds and profiles run to gigabytes, so they go
+      # to the unversioned $SNAP_USER_COMMON instead, as the Chromium snap does.
+      DONUTBROWSER_DATA_DIR: $SNAP_USER_COMMON/.local/share/DonutBrowser
+      DONUTBROWSER_CACHE_DIR: $SNAP_USER_COMMON/.cache/DonutBrowser
+    plugs:
+      # Proxies, VPNs, sync and Wayfern downloads. The local API, the MCP server
+      # and the per-profile proxy workers listen on loopback ports.
+      - network
+      - network-bind
+      # Wayfern is Chromium based. Donut starts it with --no-sandbox, so the
+      # plug does not need allow-sandbox.
+      - browser-support
+      - audio-playback
+      # Microphone and camera for the websites Wayfern opens. Not connected
+      # automatically: `snap connect donutbrowser:audio-record` / `:camera`.
+      - audio-record
+      - camera
+      # Imports and exports go through the file dialog.
+      - home
+      # Profile import reads the source browser's "Safe Storage" secret. Not
+      # connected automatically: `snap connect donutbrowser:password-manager-service`.
+      - password-manager-service
+      # Tracking and cleaning up the browser and proxy processes Donut starts.
+      - system-observe
+      # The tray icon (StatusNotifierItem / libayatana-appindicator).
+      - unity7
+    slots:
+      - single-instance
+
+parts:
+  donutbrowser:
+    plugin: dump
+    source: packaging/donut.deb
+    source-type: deb
+    parse-info:
+      - usr/share/metainfo/com.donutbrowser.DonutBrowser.metainfo.xml
+    override-pull: |
+      craftctl default
+      version="$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' "$CRAFT_PROJECT_DIR/src-tauri/tauri.conf.json")"
+      craftctl set version="$version"
+    override-build: |
+      craftctl default
+      install -Dm644 "$CRAFT_PROJECT_DIR/packaging/linux/com.donutbrowser.DonutBrowser.metainfo.xml" \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo/com.donutbrowser.DonutBrowser.metainfo.xml"
+      desktop="$CRAFT_PART_INSTALL/usr/share/applications"
+      mv "$desktop/Donut.desktop" "$desktop/donutbrowser.desktop"
+      sed -i 's|^Icon=.*|Icon=${SNAP}/usr/share/icons/hicolor/512x512/apps/donutbrowser.png|' \
+        "$desktop/donutbrowser.desktop"

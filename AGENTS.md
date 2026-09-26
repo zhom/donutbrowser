@@ -89,6 +89,8 @@ donutbrowser/
 │   ├── python/                     # `donutbrowser` (stdlib only, pytest)
 │   └── node/                       # `@donutbrowser/sdk` (ESM TypeScript, node --test)
 ├── patches/                        # pnpm compatibility patches for secured dependencies
+├── packaging/                      # Flatpak manifest, shared AppStream metainfo, Linux package smoke tests
+├── snap/                           # snapcraft.yaml (strict confinement, repackages the .deb)
 ├── flake.nix                       # Nix development environment
 └── .github/workflows/              # CI/CD pipelines
 ```

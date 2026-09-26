@@ -523,6 +523,12 @@ impl AppAutoUpdater {
   /// Check if a system package manager repo is configured for this installation.
   #[cfg(target_os = "linux")]
   fn is_repo_configured(&self) -> bool {
+    // flatpak and snapd update these installs. Nothing inside the sandbox can
+    // replace the app, so report the release the way a repository install does
+    // instead of downloading a .deb that cannot be installed from in here.
+    if crate::app_dirs::linux_sandbox().is_some() {
+      return true;
+    }
     let installation_method = self.detect_linux_installation_method();
     match installation_method {
       LinuxInstallationMethod::Deb => Self::is_deb_repo_configured(),

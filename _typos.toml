@@ -7,6 +7,8 @@ extend-exclude = [
     # Auto-generated from commit subjects by release.yml; typos here originate
     # in commit messages, which are immutable, so don't spell-check it.
     "CHANGELOG.md",
+    # Upstream patches for the Flatpak's tray libraries, applied verbatim.
+    "packaging/flatpak/patches/",
 ]
 
 [default.extend-words]

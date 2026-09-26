@@ -1,0 +1,328 @@
+# Builds the Linux .deb once, repackages it as a Flatpak and as a Snap, and
+# starts each package headless to check that it runs inside its sandbox.
+
+name: Linux Packages
+
+on:
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "snap/**"
+      - ".github/workflows/linux-packages.yml"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/donutbrowser.desktop"
+  push:
+    branches:
+      - main
+    paths:
+      - "packaging/**"
+      - "snap/**"
+      - ".github/workflows/linux-packages.yml"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/donutbrowser.desktop"
+  workflow_dispatch:
+    inputs:
+      check-wayfern:
+        description: "Also download Wayfern (about 1 GB) and start it inside each sandbox"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_ID: com.donutbrowser.DonutBrowser
+  FLATPAK_MANIFEST: packaging/flatpak/com.donutbrowser.DonutBrowser.yml
+  FLATPAK_LINT_EXCEPTIONS: packaging/flatpak/flatpak-builder-lint-exceptions.json
+  METAINFO: packaging/linux/com.donutbrowser.DonutBrowser.metainfo.xml
+
+jobs:
+  deb:
+    name: Build .deb
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 #v6.1.0
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 #v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: "pnpm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 #master
+        with:
+          toolchain: stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev pkg-config unzip xdg-utils
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 #v2.9.2
+        with:
+          workdir: ./src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # beforeBuildCommand builds the donut-proxy sidecar, downloads the
+      # verified Xray-core sidecar and builds the frontend.
+      - name: Build the .deb
+        env:
+          NEXT_PUBLIC_TURNSTILE: ${{ secrets.NEXT_PUBLIC_TURNSTILE }}
+        run: |
+          BUILD_TAG="nightly-$(git show -s --format=%cs HEAD)-${GITHUB_SHA::7}"
+          export BUILD_TAG
+          pnpm tauri build --bundles deb
+
+      - name: Collect the .deb
+        run: |
+          mkdir -p linux-deb
+          cp src-tauri/target/release/bundle/deb/*.deb linux-deb/
+          ls -l linux-deb
+          test "$(find linux-deb -name '*.deb' | wc -l)" -eq 1
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        with:
+          name: donut-deb
+          path: linux-deb/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  flatpak:
+    name: Build Flatpak
+    needs: deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container:
+      # flatpak, flatpak-builder, flatpak-builder-lint and appstreamcli, with
+      # org.gnome.Platform//50 and org.gnome.Sdk//50 already installed.
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #v8.0.1
+        with:
+          name: donut-deb
+          path: linux-deb
+
+      - name: Put the .deb where the manifest expects it
+        run: mv linux-deb/*.deb packaging/donut.deb
+
+      - name: Validate the AppStream metadata
+        run: appstreamcli validate --no-net --explain "$METAINFO"
+
+      - name: Lint the manifest
+        run: flatpak-builder-lint --exceptions --user-exceptions "$FLATPAK_LINT_EXCEPTIONS" manifest "$FLATPAK_MANIFEST"
+
+      - name: Restore the flatpak-builder cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ hashFiles('packaging/flatpak/**') }}
+          restore-keys: flatpak-builder-
+
+      # No --install-deps-from: the image already has the runtime and the SDK,
+      # and updating a runtime in place fails on the container's overlay
+      # filesystem ("Invalid cross-device link").
+      - name: Build the Flatpak
+        run: |
+          flatpak-builder --repo=repo --disable-rofiles-fuse --force-clean \
+            --default-branch=master build-dir "$FLATPAK_MANIFEST"
+
+      - name: Lint the build
+        run: flatpak-builder-lint --exceptions --user-exceptions "$FLATPAK_LINT_EXCEPTIONS" repo repo
+
+      - name: Create the bundle
+        run: |
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo Donut.flatpak "$APP_ID" master
+          ls -l Donut.flatpak
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        with:
+          name: donut-flatpak-x86_64
+          path: Donut.flatpak
+          if-no-files-found: error
+
+  flatpak-smoke:
+    name: Test Flatpak
+    needs: flatpak
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #v8.0.1
+        with:
+          name: donut-flatpak-x86_64
+          path: flatpak-bundle
+
+      - name: Install Flatpak and the test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak xvfb imagemagick dbus
+          # Ubuntu 24.04 can restrict unprivileged user namespaces, which
+          # bubblewrap needs to build the sandbox.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Prepare a user runtime directory
+        run: |
+          dir="/run/user/$(id -u)"
+          sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" "$dir"
+          echo "XDG_RUNTIME_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Install the bundle
+        run: |
+          flatpak install --user -y --noninteractive flatpak-bundle/Donut.flatpak
+          flatpak info --user "$APP_ID"
+
+      - name: Check that every library resolves inside the sandbox
+        run: |
+          # shellcheck disable=SC2016 # expanded by the shell inside the sandbox
+          dbus-run-session -- flatpak run --command=sh "$APP_ID" -c '
+            for f in /app/bin/donutbrowser /app/bin/donut-proxy /app/lib/libayatana-appindicator3.so.1; do
+              echo "== $f"
+              /lib64/ld-linux-x86-64.so.2 --list "$f"
+            done' 2>&1 | tee libraries.txt
+          if grep "not found" libraries.txt || ! grep -q "=>" libraries.txt; then
+            echo "::error::A library does not resolve inside the Flatpak sandbox."
+            exit 1
+          fi
+
+      - name: Start the app on a virtual display
+        run: bash packaging/linux/smoke-test.sh smoke 45 flatpak run "$APP_ID"
+
+      - name: Stop the app and collect its logs
+        if: always()
+        run: |
+          flatpak kill "$APP_ID" 2>/dev/null || true
+          mkdir -p smoke
+          cp -r "$HOME/.var/app/$APP_ID/data/com.donutbrowser/logs" smoke/app-logs 2>/dev/null || true
+          cp libraries.txt smoke/ 2>/dev/null || true
+
+      - name: Download Wayfern
+        if: ${{ inputs.check-wayfern }}
+        run: |
+          url="$(curl -fsSL https://donutbrowser.com/wayfern.json | jq -r '.downloads["linux-x64"]')"
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/wayfern.tar.xz" "$url"
+
+      - name: Start Wayfern inside the sandbox
+        if: ${{ inputs.check-wayfern }}
+        run: bash packaging/linux/wayfern-check.sh flatpak "$RUNNER_TEMP/wayfern.tar.xz" smoke/wayfern
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        if: always()
+        with:
+          name: flatpak-smoke-test
+          path: smoke
+          if-no-files-found: ignore
+          retention-days: 14
+
+  snap:
+    name: Build and test Snap
+    needs: deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #v8.0.1
+        with:
+          name: donut-deb
+          path: linux-deb
+
+      - name: Put the .deb where snapcraft.yaml expects it
+        run: mv linux-deb/*.deb packaging/donut.deb
+
+      - name: Install Snapcraft
+        run: sudo snap install snapcraft --classic
+
+      # The runner is Ubuntu 24.04, the same system as the core24 base, so
+      # the snap is built on the host rather than in an LXD instance.
+      - name: Build the snap
+        run: |
+          sudo snapcraft pack --destructive-mode --verbosity=brief
+          snap_file="$(ls donutbrowser_*.snap)"
+          echo "SNAP_FILE=$snap_file" >> "$GITHUB_ENV"
+          ls -l "$snap_file"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        with:
+          name: donut-snap-amd64
+          path: ${{ env.SNAP_FILE }}
+          if-no-files-found: error
+
+      - name: Prepare a user runtime directory
+        run: |
+          dir="/run/user/$(id -u)"
+          sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" "$dir"
+          echo "XDG_RUNTIME_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Install the snap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb imagemagick dbus
+          sudo snap install gnome-46-2404 mesa-2404 gtk-common-themes
+          sudo snap install --dangerous "$SNAP_FILE"
+          snap connections donutbrowser
+
+      - name: Check that every library resolves inside the snap
+        run: |
+          # shellcheck disable=SC2016 # expanded by the shell inside the sandbox
+          snap run --shell donutbrowser -c '
+            for f in "$SNAP/usr/bin/donutbrowser" "$SNAP/usr/bin/donut-proxy"; do
+              echo "== $f"
+              /lib64/ld-linux-x86-64.so.2 --list "$f"
+            done' 2>&1 | tee libraries.txt
+          if grep "not found" libraries.txt || ! grep -q "=>" libraries.txt; then
+            echo "::error::A library does not resolve inside the snap."
+            exit 1
+          fi
+
+      - name: Start the app on a virtual display
+        run: bash packaging/linux/smoke-test.sh smoke 45 snap run donutbrowser
+
+      - name: Stop the app and collect its logs
+        if: always()
+        run: |
+          pkill -f /snap/donutbrowser/ 2>/dev/null || true
+          mkdir -p smoke
+          cp -r "$HOME/snap/donutbrowser/current/.local/share/com.donutbrowser/logs" smoke/app-logs 2>/dev/null || true
+          cp libraries.txt smoke/ 2>/dev/null || true
+          sudo journalctl --no-pager -k --grep 'apparmor="DENIED"' 2>/dev/null | grep donutbrowser > smoke/apparmor-denials.txt || true
+          echo "AppArmor denials: $(wc -l < smoke/apparmor-denials.txt)"
+
+      - name: Download Wayfern
+        if: ${{ inputs.check-wayfern }}
+        run: |
+          url="$(curl -fsSL https://donutbrowser.com/wayfern.json | jq -r '.downloads["linux-x64"]')"
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/wayfern.tar.xz" "$url"
+
+      - name: Start Wayfern inside the snap
+        if: ${{ inputs.check-wayfern }}
+        run: bash packaging/linux/wayfern-check.sh snap "$RUNNER_TEMP/wayfern.tar.xz" smoke/wayfern
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        if: always()
+        with:
+          name: snap-smoke-test
+          path: smoke
+          if-no-files-found: ignore
+          retention-days: 14

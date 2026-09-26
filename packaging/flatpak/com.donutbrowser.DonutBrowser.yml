@@ -1,0 +1,166 @@
+# Flatpak manifest for Donut Browser.
+#
+# This repackages the .deb that `pnpm tauri build --bundles deb` produces. It
+# takes only Donut's own files from it (the app, the donut-proxy and xray
+# sidecars, the desktop entry and the icons) and links against the WebKitGTK,
+# GTK and OpenSSL of the GNOME runtime. Nothing from the build host's /usr/lib
+# is copied: those libraries would shadow the runtime's and break it.
+#
+# Build it locally (x86_64) after `pnpm tauri build --bundles deb`:
+#   cp src-tauri/target/release/bundle/deb/*.deb packaging/donut.deb
+#   flatpak-builder --user --install --install-deps-from=flathub --force-clean \
+#     build-dir packaging/flatpak/com.donutbrowser.DonutBrowser.yml
+id: com.donutbrowser.DonutBrowser
+runtime: org.gnome.Platform
+runtime-version: "50"
+sdk: org.gnome.Sdk
+command: donutbrowser
+rename-desktop-file: Donut.desktop
+rename-icon: donutbrowser
+
+finish-args:
+  # Proxies, VPNs, sync and Wayfern downloads. The local API, the MCP server and
+  # the per-profile proxy workers listen on loopback ports.
+  - --share=network
+  # X11 shared memory, for the app and for Wayfern under XWayland.
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Audio playback and microphone for the websites Wayfern opens.
+  - --socket=pulseaudio
+  # Wayfern saves downloads here, and cookie, profile and proxy exports go here.
+  - --filesystem=xdg-download
+  # The tray icon is written to $XDG_RUNTIME_DIR/tray-icon, and the desktop's
+  # tray host reads it from the same path outside the sandbox.
+  - --filesystem=xdg-run/tray-icon:create
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # Profile import reads the source browser's "Safe Storage" secret.
+  - --talk-name=org.freedesktop.secrets
+  # Web notifications from the sites Wayfern opens.
+  - --talk-name=org.freedesktop.Notifications
+  # tauri-plugin-single-instance hands the second launch (a clicked link) to the
+  # first one over this name, which is derived from the Tauri identifier.
+  - --own-name=com.donutbrowser.SingleInstance
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - "*.la"
+  - "*.a"
+
+modules:
+  # The tray (tray-icon, through libappindicator-sys) dlopens
+  # libayatana-appindicator3 at startup and panics when it is missing. The GNOME
+  # runtime does not ship it. These five modules are Flathub's
+  # shared-modules/libayatana-appindicator (commit cb9ec602), flattened.
+  - name: intltool
+    cleanup:
+      - "*"
+    sources:
+      - type: archive
+        url: https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz
+        mirror-urls:
+          - https://gstreamer.freedesktop.org/src/mirror/intltool-0.51.0.tar.gz
+          - https://mirror-hk.koddos.net/lfs/lfs-packages/12.0/intltool-0.51.0.tar.gz
+        sha256: 67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd
+      - type: patch
+        path: patches/intltool-perl5.26-regex-fixes.patch
+
+  - name: libdbusmenu
+    buildsystem: autotools
+    build-options:
+      cflags: -Wno-error
+    config-opts:
+      - --with-gtk=3
+      - --disable-dumper
+      - --disable-static
+      - --disable-tests
+      - --disable-gtk-doc
+      - --enable-introspection=no
+      - --disable-vala
+    cleanup:
+      - "*.la"
+      - /include
+      - /lib/pkgconfig
+      - /libexec
+      - /share/doc
+      - /share/gtk-doc
+    sources:
+      - type: archive
+        url: https://launchpad.net/libdbusmenu/16.04/16.04.0/+download/libdbusmenu-16.04.0.tar.gz
+        mirror-urls:
+          - https://sources.suse.com/SUSE:SLFO:Main:Build/libdbusmenu/a5b3e4717f09f90f9cd5568a5f933e8d/libdbusmenu-16.04.0.tar.gz
+          - https://mirror.math.princeton.edu/pub/frugalware/frugalware-2.1/source/xlib/libdbusmenu/libdbusmenu-16.04.0.tar.gz
+        sha256: b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a
+      - type: patch
+        path: patches/libdbusmenu-fix-HAVE_VALGRIND-AM_CONDITIONAL.patch
+
+  - name: ayatana-ido
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DENABLE_INTROSPECTION=OFF
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+    sources:
+      - type: git
+        url: https://github.com/AyatanaIndicators/ayatana-ido.git
+        tag: 0.10.4
+        commit: f968079b09e2310fefc3fc307359025f1c74b3eb
+      - type: patch
+        path: patches/ayatana-ido-make-introspection-configurable.patch
+
+  - name: libayatana-indicator
+    buildsystem: cmake-ninja
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /libexec
+      - /share
+    sources:
+      - type: git
+        url: https://github.com/AyatanaIndicators/libayatana-indicator.git
+        tag: 0.9.4
+        commit: 611bb384b73fa6311777ba4c41381a06f5b99dad
+
+  - name: libayatana-appindicator
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DENABLE_BINDINGS_MONO=NO
+      - -DENABLE_BINDINGS_VALA=NO
+      - -DENABLE_GTKDOC=NO
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+    sources:
+      - type: git
+        url: https://github.com/AyatanaIndicators/libayatana-appindicator.git
+        tag: 0.5.94
+        commit: 31e8bb083b307e1cc96af4874a94707727bd1e79
+
+  - name: donutbrowser
+    buildsystem: simple
+    sources:
+      # CI puts the .deb here; see the note at the top for a local build.
+      - type: file
+        path: ../donut.deb
+      - type: file
+        path: ../linux/com.donutbrowser.DonutBrowser.metainfo.xml
+      - type: file
+        path: ../../LICENSE
+    build-commands:
+      - ar x donut.deb
+      - mkdir deb && tar -xf data.tar.* -C deb
+      - install -Dm755 -t /app/bin deb/usr/bin/donutbrowser deb/usr/bin/donut-proxy deb/usr/bin/xray
+      # Tauri resolves its resource directory to <prefix>/lib/<productName>.
+      - mkdir -p /app/lib && cp -r deb/usr/lib/Donut /app/lib/Donut
+      - install -Dm644 -t /app/share/applications deb/usr/share/applications/Donut.desktop
+      - |
+        for size in 32x32 128x128 512x512; do
+          install -Dm644 "deb/usr/share/icons/hicolor/$size/apps/donutbrowser.png" \
+            "/app/share/icons/hicolor/$size/apps/donutbrowser.png"
+        done
+      - install -Dm644 -t /app/share/metainfo com.donutbrowser.DonutBrowser.metainfo.xml
+      - install -Dm644 -t /app/share/licenses/com.donutbrowser.DonutBrowser LICENSE

@@ -26,6 +26,50 @@ pub fn is_portable() -> bool {
   portable_dir().is_some()
 }
 
+/// A Linux app sandbox that Donut can be installed through. In either one the
+/// app cannot replace its own files, and it does not see the desktop's
+/// default-application settings the way a .deb or .rpm install does.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxSandbox {
+  Flatpak,
+  Snap,
+}
+
+/// The sandbox this process runs in, or `None` for a regular install.
+#[cfg(target_os = "linux")]
+pub fn linux_sandbox() -> Option<LinuxSandbox> {
+  static SANDBOX: OnceLock<Option<LinuxSandbox>> = OnceLock::new();
+  *SANDBOX.get_or_init(|| {
+    detect_linux_sandbox(
+      std::path::Path::new("/.flatpak-info").exists(),
+      std::env::var_os("SNAP").map(PathBuf::from).as_deref(),
+      std::env::current_exe().ok().as_deref(),
+    )
+  })
+}
+
+/// Flatpak writes `/.flatpak-info` into every sandbox. A snap is recognised by
+/// the executable living under `$SNAP`, not by the variable alone: a snapped
+/// terminal or IDE leaks `SNAP` into every program started from it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn detect_linux_sandbox(
+  flatpak_info_exists: bool,
+  snap_dir: Option<&std::path::Path>,
+  exe: Option<&std::path::Path>,
+) -> Option<LinuxSandbox> {
+  if flatpak_info_exists {
+    return Some(LinuxSandbox::Flatpak);
+  }
+  match (snap_dir, exe) {
+    // An empty `SNAP` is a prefix of every path.
+    (Some(snap), Some(exe)) if !snap.as_os_str().is_empty() && exe.starts_with(snap) => {
+      Some(LinuxSandbox::Snap)
+    }
+    _ => None,
+  }
+}
+
 /// Optional single-root override for all on-disk state. Set
 /// `DONUTBROWSER_DATA_ROOT=/path` (e.g. a tmpfs mount) to relocate
 /// data/cache/logs under `<root>/{data,cache,logs}` without touching the real
@@ -458,6 +502,33 @@ mod tests {
     );
     assert!(portable.join("data").starts_with(&portable));
     assert!(portable.join("cache").starts_with(&portable));
+  }
+
+  #[test]
+  fn linux_sandbox_detection() {
+    let snap = PathBuf::from("/snap/donutbrowser/x1");
+    let snapped_exe = snap.join("usr/bin/donutbrowser");
+    let deb_exe = PathBuf::from("/usr/bin/donutbrowser");
+
+    assert_eq!(
+      detect_linux_sandbox(true, None, Some(&deb_exe)),
+      Some(LinuxSandbox::Flatpak)
+    );
+    assert_eq!(
+      detect_linux_sandbox(false, Some(&snap), Some(&snapped_exe)),
+      Some(LinuxSandbox::Snap)
+    );
+    // A .deb install started from a snapped terminal inherits its `SNAP`.
+    assert_eq!(
+      detect_linux_sandbox(false, Some(&snap), Some(&deb_exe)),
+      None
+    );
+    assert_eq!(
+      detect_linux_sandbox(false, Some(&PathBuf::new()), Some(&deb_exe)),
+      None
+    );
+    assert_eq!(detect_linux_sandbox(false, None, Some(&deb_exe)), None);
+    assert_eq!(detect_linux_sandbox(false, Some(&snap), None), None);
   }
 
   #[test]

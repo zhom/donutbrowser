@@ -1,0 +1,2 @@
+# The .deb that the Flatpak manifest and snap/snapcraft.yaml repackage.
+/donut.deb

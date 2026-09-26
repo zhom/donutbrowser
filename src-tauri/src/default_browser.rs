@@ -848,11 +848,20 @@ mod windows {
 
 #[cfg(target_os = "linux")]
 mod linux {
+  use crate::app_dirs::{linux_sandbox, LinuxSandbox};
   use std::process::Command;
 
   const APP_DESKTOP_NAME: &str = "donutbrowser.desktop";
 
   pub fn is_default_browser() -> Result<bool, String> {
+    match linux_sandbox() {
+      Some(LinuxSandbox::Snap) => {
+        return snap_default_browser("check").map(|answer| answer == "yes")
+      }
+      Some(LinuxSandbox::Flatpak) => return Err(flatpak_cannot_manage_default()),
+      None => {}
+    }
+
     // Check if xdg-mime is available
     if !is_xdg_mime_available() {
       return Err("xdg-mime utility not found. Please install xdg-utils package.".to_string());
@@ -886,6 +895,19 @@ mod linux {
   }
 
   pub fn set_as_default_browser() -> Result<(), String> {
+    match linux_sandbox() {
+      Some(LinuxSandbox::Snap) => {
+        snap_default_browser("set")?;
+        return if snap_default_browser("check")? == "yes" {
+          Ok(())
+        } else {
+          Err("xdg-settings did not make Donut Browser the default browser".to_string())
+        };
+      }
+      Some(LinuxSandbox::Flatpak) => return Err(flatpak_cannot_manage_default()),
+      None => {}
+    }
+
     // Check if xdg-mime is available
     if !is_xdg_mime_available() {
       return Err("xdg-mime utility not found. Please install xdg-utils package.".to_string());
@@ -981,6 +1003,53 @@ mod linux {
     }
 
     false
+  }
+
+  /// Inside a snap, `xdg-settings` is snapd's client for its
+  /// `io.snapcraft.Settings` service, not the xdg-utils script. It asks the
+  /// user before it changes anything. `xdg-mime` would only edit the
+  /// mimeapps.list in the snap's private home, which the desktop never reads.
+  fn snap_default_browser(action: &str) -> Result<String, String> {
+    let output = Command::new("xdg-settings")
+      .args(snap_settings_args(action))
+      .output()
+      .map_err(|e| format!("Failed to run xdg-settings: {e}"))?;
+    if !output.status.success() {
+      return Err(format!(
+        "xdg-settings {action} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+      ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+  }
+
+  /// snapd installs the snap's desktop file as `<snap>_donutbrowser.desktop`
+  /// and adds that prefix to the name it is given, so the name goes in bare.
+  fn snap_settings_args(action: &str) -> [&str; 3] {
+    [action, "default-web-browser", APP_DESKTOP_NAME]
+  }
+
+  /// No portal lets a Flatpak app read or change the default browser, and
+  /// `xdg-mime` in here would only edit the sandbox's own mimeapps.list.
+  fn flatpak_cannot_manage_default() -> String {
+    let app_id =
+      std::env::var("FLATPAK_ID").unwrap_or_else(|_| "com.donutbrowser.DonutBrowser".to_string());
+    format!(
+      "A Flatpak app cannot change the default browser. Choose Donut Browser in your system settings (GNOME: Settings > Default Applications > Web; KDE: System Settings > Default Applications > Web Browser), or run this outside the sandbox: xdg-settings set default-web-browser {app_id}.desktop"
+    )
+  }
+
+  #[cfg(test)]
+  mod tests {
+    use super::*;
+
+    #[test]
+    fn snapd_gets_the_desktop_name_without_its_snap_prefix() {
+      assert_eq!(
+        snap_settings_args("check"),
+        ["check", "default-web-browser", "donutbrowser.desktop"]
+      );
+    }
   }
 }
 
