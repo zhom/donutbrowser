@@ -2085,8 +2085,9 @@ pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, Str
 // Global singleton instance
 static APP_AUTO_UPDATER: std::sync::LazyLock<AppAutoUpdater> =
   std::sync::LazyLock::new(AppAutoUpdater::new);
-static PENDING_INSTALLER_PATH: std::sync::LazyLock<std::sync::Mutex<Option<PathBuf>>> =
-  std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+/// The Windows installer that runs on the next user-initiated restart.
+#[cfg(target_os = "windows")]
+static PENDING_INSTALLER_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
 #[cfg(test)]
 mod tests {
