@@ -1571,7 +1571,6 @@ test("schedule displays every timezone and slot, and skipped run details work by
     await resize(app, 1200, 800);
     const profile = await createProfile(app, "Two daily slots");
     const other = await createProfile(app, "Separate timezone");
-    await installSynchronizerFixture(app);
     const schedule = (item, timezone, slots) => ({
       profile_id: item.id,
       profile_name: item.name,
@@ -1613,6 +1612,10 @@ test("schedule displays every timezone and slot, and skipped run details work by
     `,
       [schedules, profile.id],
     );
+    // After the schedule stubs, not before: the fixture signs in a paid user,
+    // and the app fetches the schedules the moment it sees one. On a slow
+    // start that fetch reached the backend before the stubs were in place.
+    await installSynchronizerFixture(app);
     await app.pressShortcut({ ...modifier, key: "b" });
     await app.clickText(en.cookieBot.tabs.schedule, { roles: ["tab"] });
     await waitForSelector(app, slot("schedule-lane"));
