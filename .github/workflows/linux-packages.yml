@@ -272,16 +272,26 @@ jobs:
           path: ${{ env.SNAP_FILE }}
           if-no-files-found: error
 
-      - name: Prepare a user runtime directory
+      # `snap run` moves the app into its own systemd scope and asks the
+      # user's systemd for it. The runner has no user session, so the app died
+      # with "... is not a snap cgroup". Lingering starts systemd --user and,
+      # with dbus-user-session, its bus at /run/user/<uid>/bus.
+      - name: Start a user session
         run: |
-          dir="/run/user/$(id -u)"
-          sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" "$dir"
-          echo "XDG_RUNTIME_DIR=$dir" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y xvfb imagemagick dbus dbus-user-session
+          sudo loginctl enable-linger "$(id -un)"
+          uid="$(id -u)"
+          for _ in $(seq 1 60); do
+            [ -S "/run/user/$uid/bus" ] && break
+            sleep 1
+          done
+          test -S "/run/user/$uid/bus"
+          echo "XDG_RUNTIME_DIR=/run/user/$uid" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus" >> "$GITHUB_ENV"
 
       - name: Install the snap
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb imagemagick dbus
           sudo snap install gnome-46-2404 mesa-2404 gtk-common-themes
           sudo snap install --dangerous "$SNAP_FILE"
           snap connections donutbrowser

@@ -5,8 +5,9 @@
 #   smoke-test.sh <output-dir> <seconds> <command> [args...]
 #
 # XDG_RUNTIME_DIR must point to a directory owned by the current user. The
-# script starts a private session bus at $XDG_RUNTIME_DIR/bus, the path both
-# sandboxes let the app reach, and an Xvfb display. It fails when the app exits
+# app needs a session bus at $XDG_RUNTIME_DIR/bus, the path both sandboxes let
+# it reach: an existing one (the user systemd a snap needs) is used as is,
+# otherwise the script starts a private one. It also starts an Xvfb display. It fails when the app exits
 # before <seconds> have passed or prints a Rust panic. The app's output and a
 # screenshot are left in <output-dir>. A screenshot with almost no colours
 # (a blank window) is reported as a warning.
@@ -19,9 +20,11 @@ mkdir -p "$out"
 
 : "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must be set}"
 bus="$XDG_RUNTIME_DIR/bus"
-rm -f "$bus"
-dbus-daemon --session --address="unix:path=$bus" --nofork --nopidfile &
-dbus_pid=$!
+dbus_pid=""
+if [ ! -S "$bus" ]; then
+  dbus-daemon --session --address="unix:path=$bus" --nofork --nopidfile &
+  dbus_pid=$!
+fi
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$bus"
 
 display_number=99
@@ -29,7 +32,7 @@ Xvfb ":$display_number" -screen 0 1600x1000x24 -nolisten tcp >"$out/xvfb.log" 2>
 xvfb_pid=$!
 export DISPLAY=":$display_number"
 
-trap 'kill "$xvfb_pid" "$dbus_pid" 2>/dev/null || true' EXIT
+trap 'kill "$xvfb_pid" ${dbus_pid:+"$dbus_pid"} 2>/dev/null || true' EXIT
 
 for _ in $(seq 1 100); do
   if [ -S "$bus" ] && [ -S "/tmp/.X11-unix/X$display_number" ]; then
