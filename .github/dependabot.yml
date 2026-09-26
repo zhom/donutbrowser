@@ -11,6 +11,12 @@ updates:
       time: "09:00"
     allow:
       - dependency-type: "all"
+    ignore:
+      # donut-sync stays on TypeScript 6: Nest CLI and ts-jest need the
+      # compiler API, which TypeScript 7.0 does not ship (it returns in 7.1).
+      # The root is on 7 already, so this only holds donut-sync back.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-dependencies:
         patterns:
@@ -92,6 +98,11 @@ updates:
       interval: "weekly"
       day: "saturday"
       time: "09:00"
+    ignore:
+      # Node majors follow .node-version (the LTS line), not the newest
+      # "Current" release; moving to the next LTS is done by hand.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     groups:
       docker-dependencies:
         patterns:
