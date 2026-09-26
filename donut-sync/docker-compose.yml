@@ -1,7 +1,7 @@
-# Storage for developing and testing donut-sync itself. It runs MinIO only, and
-# the sync server is expected to run on the host beside it (`pnpm start:dev`),
-# which is why MinIO is published and why the port matches the one pinned in
-# test/test-env.ts.
+# Storage for developing and testing donut-sync itself. It runs an S3 server
+# only, and the sync server is expected to run on the host beside it
+# (`pnpm start:dev`), which is why the port is published and matches the one
+# pinned in test/test-env.ts.
 #
 # This is NOT the self-hosting compose file. That one runs donut-sync in a
 # container too, and it must set S3_PUBLIC_ENDPOINT, because a server that signs
@@ -10,24 +10,31 @@
 # Take the self-hosting compose from https://donutbrowser.com/docs/self-hosting
 # rather than from here.
 services:
-  minio:
-    # quay.io, not Docker Hub: the `minio/minio` Hub repository no longer serves
-    # anonymous pulls, so a Hub reference fails CI with "pull access denied".
-    image: quay.io/minio/minio:latest
+  s3:
+    # rclone, not MinIO: MinIO withdrew its community images (quay.io now
+    # answers 401 and Docker Hub denies the pull) as well as its binaries.
+    # `rclone serve s3` is what scripts/sync-test-harness.mjs uses too.
+    image: rclone/rclone:latest
     ports:
       - "8987:9000"
-      - "8988:9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
+    command:
+      - serve
+      - s3
+      - /data
+      - --addr
+      - :9000
+      - --auth-key
+      - minioadmin,minioadmin
+      - --force-path-style
+      - --vfs-cache-mode
+      - writes
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
+      test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
+      interval: 2s
       timeout: 5s
-      retries: 5
+      retries: 15
     volumes:
-      - minio_data:/data
+      - s3_data:/data
 
 volumes:
-  minio_data:
+  s3_data:

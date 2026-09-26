@@ -136,7 +136,7 @@ suite passes:
 | REST API/OpenAPI, MCP, cloud/update contracts, team locks, real-time synchronizer | `pnpm e2e:integrations` |
 | Sync client/server, manifests, timestamps, deletion, encryption, password rollover | `pnpm e2e:sync` |
 | Wayfern download/terms/fingerprint, browser runner, CDP, automation endpoints, process cleanup | `pnpm e2e:browser` |
-| `donut-sync/` server code (controllers, services, auth, S3 endpoints) | `pnpm --filter donut-sync test:e2e` against a local MinIO |
+| `donut-sync/` server code (controllers, services, auth, S3 endpoints) | `pnpm --filter donut-sync test:e2e` against the compose S3 server |
 | E2E harness, WebDriver plugin/driver, app isolation hooks, or changes spanning multiple rows | Run every affected row; use `pnpm e2e` for cross-cutting changes |
 
 `e2e:browser` requires `WAYFERN_TEST_TOKEN` in the environment or local `.env`. `e2e:network`
@@ -147,17 +147,14 @@ Keep failed artifacts and inspect the per-session app/driver logs and screenshot
 assertions.
 
 The `donut-sync` row is the one suite the root `pnpm test` does not cover (`test:sync-e2e` runs
-the Rust sync harness only). It needs a MinIO on port 8987:
+the Rust sync harness only). It needs the S3 server in `donut-sync/docker-compose.yml`
+(`rclone serve s3` on port 8987; MinIO no longer publishes community images or binaries).
+`test/test-env.ts` supplies the matching keys:
 
 ```bash
-docker run -d --rm --name minio -p 8987:9000 \
-  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-  quay.io/minio/minio:latest server /data
-SYNC_TOKEN=test-sync-token S3_ENDPOINT=http://127.0.0.1:8987 \
-  S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin \
-  S3_BUCKET=donut-sync-test S3_FORCE_PATH_STYLE=true \
-  pnpm --filter donut-sync test:e2e
-docker rm -f minio
+docker compose -f donut-sync/docker-compose.yml up -d --wait
+pnpm --filter donut-sync test:e2e
+docker compose -f donut-sync/docker-compose.yml down -v
 ```
 
 When adding a Tauri command, assign it exactly once in `e2e/coverage-map.mjs` and add executable

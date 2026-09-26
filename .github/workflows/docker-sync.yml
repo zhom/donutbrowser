@@ -40,7 +40,7 @@ jobs:
   # reaches users.
   #
   # Ubuntu only, and separate from the Rust and Node matrices, because it needs
-  # Docker for MinIO and a POSIX env-var prefix in the package script.
+  # Docker for the S3 test server.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -62,7 +62,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Publishes MinIO on 8987, which is the port test/test-env.ts pins.
+      # Publishes the S3 test server on 8987, the port test/test-env.ts pins.
       - name: Start test storage
         run: docker compose -f donut-sync/docker-compose.yml up -d --wait
 
