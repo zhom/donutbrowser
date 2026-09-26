@@ -107,6 +107,8 @@ jobs:
             pkg_target: "latest-win-x64"
 
     runs-on: ${{ matrix.platform }}
+    # Builds take 38 to 65 minutes; this only stops a hung runner.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
@@ -133,10 +135,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev pkg-config unzip xdg-utils
 
+      # `workspaces`, not `workdir`: rust-cache v2 has no `workdir` input, so
+      # it looked for Cargo.toml at the repository root, failed, and saved an
+      # empty 1.7 KB cache on every run. Dependencies only; the app crate and
+      # the sidecar always rebuild with this run's BUILD_TAG. `key` keeps the
+      # two macOS targets, which share a runner type, in separate caches.
       - name: Rust cache
         uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 #v2.9.2
         with:
-          workdir: ./src-tauri
+          workspaces: "src-tauri -> target"
+          key: ${{ matrix.target }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -170,7 +178,7 @@ jobs:
           # release from its checksums.
           TIMESTAMP=$(git show -s --format=%cs HEAD)
           COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          echo "timestamp=${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
           echo "Generated timestamp: ${TIMESTAMP}-${COMMIT_HASH}"
 
       - name: Build sidecar binaries
@@ -210,24 +218,24 @@ jobs:
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
           P12_PASSWORD=$(openssl rand -base64 32)
 
-          echo "$APPLE_CERTIFICATE" | base64 --decode > $CERT_PATH
-          echo "$APPLE_CERTIFICATE_KEY" | base64 --decode > $KEY_PATH
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+          echo "$APPLE_CERTIFICATE_KEY" | base64 --decode > "$KEY_PATH"
 
-          openssl x509 -inform DER -in $CERT_PATH -out $PEM_PATH
-          openssl pkcs12 -export -out $P12_PATH -inkey $KEY_PATH -in $PEM_PATH -passout pass:$P12_PASSWORD
+          openssl x509 -inform DER -in "$CERT_PATH" -out "$PEM_PATH"
+          openssl pkcs12 -export -out "$P12_PATH" -inkey "$KEY_PATH" -in "$PEM_PATH" -passout "pass:$P12_PASSWORD"
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          security import $P12_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH login.keychain-db
+          security import "$P12_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
           echo "Available signing identities:"
-          security find-identity -v -p codesigning $KEYCHAIN_PATH
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-          rm -f $CERT_PATH $KEY_PATH $PEM_PATH $P12_PATH
+          rm -f "$CERT_PATH" "$KEY_PATH" "$PEM_PATH" "$P12_PATH"
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f #v1.0.0
@@ -292,13 +300,14 @@ jobs:
       - name: Clean up Apple certificate
         if: matrix.platform == 'macos-latest' && always()
         run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
-          rm -f $RUNNER_TEMP/build_certificate.p12 || true
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/build_certificate.p12" || true
 
   update-nightly-release:
     if: github.repository == 'zhom/donutbrowser'
     needs: [rolling-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -311,7 +320,7 @@ jobs:
           # the timestamp step there), even when this job runs past midnight.
           TIMESTAMP=$(git show -s --format=%cs HEAD)
           COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          echo "nightly_tag=nightly-${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "nightly_tag=nightly-${TIMESTAMP}-${COMMIT_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Generate nightly changelog
         id: nightly-changelog
@@ -324,7 +333,6 @@ jobs:
             LAST_STABLE=$(git rev-list --max-parents=0 HEAD)
           fi
 
-          COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c1-7)
           {
             echo "**Nightly build from main branch**"
             echo ""
@@ -420,6 +428,7 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     needs: [update-nightly-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Trigger Cloudflare Pages deployment
         env:
@@ -430,6 +439,7 @@ jobs:
     if: github.repository == 'zhom/donutbrowser'
     needs: [update-nightly-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Send Discord notification
         env:

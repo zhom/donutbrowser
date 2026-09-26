@@ -1,7 +1,8 @@
 version: 2
 
 updates:
-  # Frontend dependencies (root package.json)
+  # Frontend dependencies (root package.json). pnpm-workspace.yaml makes the
+  # root lockfile cover donut-sync/package.json too, so this entry updates both.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -33,6 +34,70 @@ updates:
           - "*"
     commit-message:
       prefix: "deps(rust)"
+      include: "scope"
+
+  # E2E harness crate. Its only registry dependency is the pinned tauri-wd
+  # driver; Cargo.lock there is generated from src-tauri's and not committed.
+  - package-ecosystem: "cargo"
+    directory: "/e2e/app"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+    groups:
+      e2e-rust-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(e2e)"
+      include: "scope"
+
+  # Standalone SDKs for the local REST API
+  - package-ecosystem: "npm"
+    directory: "/sdk/node"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+    allow:
+      - dependency-type: "all"
+    groups:
+      sdk-node-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(sdk)"
+      include: "scope"
+
+  - package-ecosystem: "pip"
+    directory: "/sdk/python"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+    allow:
+      - dependency-type: "all"
+    groups:
+      sdk-python-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(sdk)"
+      include: "scope"
+
+  # donut-sync image base (node:*-alpine)
+  - package-ecosystem: "docker"
+    directory: "/donut-sync"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(docker)"
       include: "scope"
 
   # GitHub Actions

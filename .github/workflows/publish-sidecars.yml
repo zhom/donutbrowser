@@ -59,7 +59,11 @@ permissions:
 jobs:
   build:
     name: Build donut-proxy (${{ matrix.target }})
+    # Forks have no R2 credentials; skip instead of failing there.
+    if: github.repository == 'zhom/donutbrowser'
     runs-on: ${{ matrix.platform }}
+    # Builds take 13 to 23 minutes; this only stops a hung runner.
+    timeout-minutes: 90
     strategy:
       # One target failing must not leave the others unpublished and the set
       # skewed; publish what built and report the rest.

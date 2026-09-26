@@ -1,0 +1,51 @@
+name: Set up Copilot CLI
+description: >-
+  Installs a pinned GitHub Copilot CLI and `copilot-locked`, a launcher that
+  runs it with everything that lets it act switched off.
+
+inputs:
+  version:
+    description: The @github/copilot npm version to install.
+    required: false
+    default: "1.0.88"
+
+outputs:
+  launcher:
+    description: Absolute path of `copilot-locked`. Pass it as `copilot-cli-path` to actions/ai-inference.
+    value: ${{ steps.install.outputs.launcher }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Copilot CLI
+      id: install
+      shell: bash
+      env:
+        COPILOT_CLI_VERSION: ${{ inputs.version }}
+      run: |
+        # Pinned: the AI workflows run with write tokens next to text anyone
+        # can write, so a new CLI release must not change what they execute
+        # until someone bumps this on purpose. The package ships prebuilt
+        # binaries as optional dependencies and needs no install scripts.
+        npm install --global --no-audit --no-fund --ignore-scripts "@github/copilot@${COPILOT_CLI_VERSION}"
+
+        # The prompts carry issue bodies, pull request text and translations.
+        # Without repository instructions (AGENTS.md would be read as orders),
+        # built-in MCP servers (the GitHub server holds the token) or temp-dir
+        # access, and in prompt mode, which denies every tool that needs
+        # approval, the model can answer but cannot act.
+        launcher_dir="$RUNNER_TEMP/copilot-launcher"
+        mkdir -p "$launcher_dir"
+        cat > "$launcher_dir/copilot-locked" <<'EOF'
+        #!/usr/bin/env bash
+        exec copilot "$@" \
+          --no-custom-instructions \
+          --disable-builtin-mcps \
+          --no-auto-update \
+          --disallow-temp-dir
+        EOF
+        chmod +x "$launcher_dir/copilot-locked"
+        echo "$launcher_dir" >> "$GITHUB_PATH"
+        echo "launcher=$launcher_dir/copilot-locked" >> "$GITHUB_OUTPUT"
+
+        copilot --version

@@ -10,6 +10,12 @@ on:
   pull_request:
     branches: ["main"]
 
+concurrency:
+  # A called workflow sees its caller's `github.workflow`, so the literal
+  # prefix keeps this group apart from the caller's own.
+  group: spellcheck-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
 env:
   RUST_BACKTRACE: 1
   CARGO_TERM_COLOR: always
@@ -19,8 +25,11 @@ jobs:
   spelling:
     name: Spell Check with Typos
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Actions Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
       - name: Spell Check Repo
         uses: crate-ci/typos@512fc24f32f44ab01972217aaaf3dc86ec234d53 #v1.50.2

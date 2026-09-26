@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include passwords, access tokens, proxy credentials, personal information, or other secrets. Automated triage sends the issue title and body to GitHub Models after removing the logs/screenshots field and redacting common sensitive-data patterns.
+        Do not include passwords, access tokens, proxy credentials, personal information, or other secrets. Automated triage sends the issue title and body to GitHub Copilot after removing the logs/screenshots field and redacting common sensitive-data patterns.
 
   - type: textarea
     id: description

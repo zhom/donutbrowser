@@ -1,0 +1,7 @@
+# actionlint configuration. https://github.com/rhysd/actionlint/blob/main/docs/config.md
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      # `copilot-requests` is the permission that lets GITHUB_TOKEN call
+      # GitHub Copilot. actionlint 1.7.12 does not know the scope yet.
+      - 'unknown permission scope "copilot-requests"'

@@ -22,6 +22,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' ||
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -70,8 +71,9 @@ jobs:
         run: |
           # Normalize accidental quotes and whitespace in configured secrets.
           strip() { printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"; }
-          export R2_ACCESS_KEY_ID="$(strip "$R2_ACCESS_KEY_ID")"
-          export R2_SECRET_ACCESS_KEY="$(strip "$R2_SECRET_ACCESS_KEY")"
-          export R2_ENDPOINT_URL="$(strip "$R2_ENDPOINT_URL")"
-          export R2_BUCKET_NAME="$(strip "$R2_BUCKET_NAME")"
+          R2_ACCESS_KEY_ID="$(strip "$R2_ACCESS_KEY_ID")"
+          R2_SECRET_ACCESS_KEY="$(strip "$R2_SECRET_ACCESS_KEY")"
+          R2_ENDPOINT_URL="$(strip "$R2_ENDPOINT_URL")"
+          R2_BUCKET_NAME="$(strip "$R2_BUCKET_NAME")"
+          export R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT_URL R2_BUCKET_NAME
           bash scripts/publish-repo.sh "$RELEASE_TAG"

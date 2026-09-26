@@ -43,6 +43,7 @@ jobs:
   # Docker for MinIO and a POSIX env-var prefix in the package script.
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
@@ -75,7 +76,12 @@ jobs:
 
   build-and-push:
     needs: test
+    # Forks have no Docker Hub credentials; skip instead of failing there.
+    if: github.repository == 'zhom/donutbrowser'
     runs-on: ubuntu-latest
+    # A normal build takes 4 to 6 minutes. The emulated arm64 `npm install`
+    # hung four times since August and burned the 6-hour default each time.
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1

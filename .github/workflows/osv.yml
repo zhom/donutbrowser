@@ -1,32 +1,15 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# A sample workflow which sets up periodic OSV-Scanner scanning for vulnerabilities,
-# in addition to a PR check which fails if new vulnerabilities are introduced.
+# Security vulnerability scanning for Donut Browser.
+# Scans dependencies in package managers (npm/pnpm, Cargo) for known
+# vulnerabilities on a weekly schedule and when dependencies change on main.
+# https://google.github.io/osv-scanner/github-action/
 #
-# For more examples and options, including how to ignore specific vulnerabilities,
-# see https://google.github.io/osv-scanner/github-action/
-
-# Security vulnerability scanning for Donut Browser
-# Scans dependencies in package managers (npm/pnpm, Cargo) for known vulnerabilities
-# Runs on schedule and when dependencies change
+# Pull requests and merge groups are scanned by the security-scan job in
+# pr-checks.yml, which runs the same PR scan whenever a manifest or lockfile
+# changes. This workflow used to run it a second time for the same PR.
 
 name: Security Vulnerability Scan
 
 on:
-  pull_request:
-    branches: ["main"]
-    paths:
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "src-tauri/Cargo.toml"
-      - "src-tauri/Cargo.lock"
-      - "osv-scanner.toml"
-      - ".github/workflows/osv.yml"
-  merge_group:
-    branches: ["main"]
   schedule:
     # Run weekly on Tuesdays at 2:20 PM UTC
     - cron: "20 14 * * 2"
@@ -35,6 +18,7 @@ on:
     paths:
       - "package.json"
       - "pnpm-lock.yaml"
+      - "donut-sync/package.json"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
       - "osv-scanner.toml"
@@ -48,20 +32,7 @@ permissions:
 jobs:
   scan-scheduled:
     name: Scheduled Security Scan
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
     uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc" # v2.6.0
-    with:
-      scan-args: |-
-        -r
-        --config=osv-scanner.toml
-        --lockfile=pnpm-lock.yaml
-        --lockfile=src-tauri/Cargo.lock
-        ./
-
-  scan-pr:
-    name: PR Security Scan
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc" # v2.6.0
     with:
       scan-args: |-
         -r

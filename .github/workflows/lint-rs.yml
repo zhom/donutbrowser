@@ -1,30 +1,31 @@
-# Installs Rust and checks formatting + linting
+# Installs Rust and checks formatting + linting, then runs the full test suite
 
 name: Lint Rust
 
+# Pull requests reach this through pr-checks.yml and tags through release.yml.
+# Both used to trigger it directly as well, so it ran twice for each of them.
 on:
   workflow_call: {}
   push:
     branches:
       - main
-    tags:
-      - "v*"
-  pull_request:
-    paths-ignore:
-      - "src/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "yarn.lock"
-      - "README.md"
-      - ".github/workflows/lint-js.yml"
-      - ".github/workflows/osv.yml"
-      - "next.config.js"
-      - "tailwind.config.js"
-      - "tsconfig.json"
-      - "biome.json"
 
 permissions:
   contents: read
+
+concurrency:
+  # A called workflow sees its caller's `github.workflow`, so the literal
+  # prefix keeps this group apart from the caller's own. Only the standalone
+  # push to main cancels a superseded run; Rolling Release runs one at a time.
+  group: lint-rs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Clippy and the tests never need debug info. Without it the target
+  # directory the cache carries is several times smaller and links are faster.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   build:
@@ -34,6 +35,7 @@ jobs:
         os: [macos-latest, ubuntu-22.04, windows-latest]
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
 
     steps:
       - name: Disable git core.autocrlf on Windows
@@ -42,6 +44,8 @@ jobs:
 
       - name: Checkout repository code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm package manager
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 #v6.1.0
@@ -60,14 +64,20 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
+      # Dependencies only: the app crate itself always rebuilds. Only main
+      # writes the cache, so pull requests and tags reuse it without churning
+      # the 10 GB repository cache.
+      - name: Rust cache
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 #v2.9.2
+        with:
+          workspaces: "src-tauri -> target"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install dependencies (Ubuntu only)
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev openvpn unzip
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev openvpn unzip
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -80,29 +90,38 @@ jobs:
         shell: bash
         run: |
           HOST_TARGET=$(rustc -vV | sed -n 's|host: ||p')
-          echo "target=${HOST_TARGET}" >> $GITHUB_OUTPUT
+          echo "target=${HOST_TARGET}" >> "$GITHUB_OUTPUT"
           echo "Host target: ${HOST_TARGET}"
 
+      # A dev build, not --release. Tauri only needs the sidecar file to
+      # exist at compile time, and the proxy integration tests build and use
+      # target/debug/donut-proxy anyway. The release build compiled every
+      # dependency a second time with thin LTO: 13 to 22 minutes per OS that
+      # checked nothing the release workflow does not build for real.
       - name: Build sidecar binaries
         shell: bash
         working-directory: ./src-tauri
         run: |
-          cargo build --bin donut-proxy --release
+          cargo build --bin donut-proxy
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash
+        env:
+          HOST_TARGET: ${{ steps.host_target.outputs.target }}
         run: |
           mkdir -p src-tauri/binaries
-          HOST_TARGET="${{ steps.host_target.outputs.target }}"
           if [[ "$HOST_TARGET" == *"windows"* ]]; then
-            cp src-tauri/target/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${HOST_TARGET}.exe
+            cp src-tauri/target/debug/donut-proxy.exe "src-tauri/binaries/donut-proxy-${HOST_TARGET}.exe"
           else
-            cp src-tauri/target/release/donut-proxy src-tauri/binaries/donut-proxy-${HOST_TARGET}
-            chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
+            cp src-tauri/target/debug/donut-proxy "src-tauri/binaries/donut-proxy-${HOST_TARGET}"
+            chmod +x "src-tauri/binaries/donut-proxy-${HOST_TARGET}"
           fi
 
       - name: Download verified Xray-core sidecar
-        run: node src-tauri/download-xray.mjs --target ${{ steps.host_target.outputs.target }}
+        env:
+          HOST_TARGET: ${{ steps.host_target.outputs.target }}
+        run: node src-tauri/download-xray.mjs --target "$HOST_TARGET"
+        shell: bash
 
       - name: Run rustfmt check
         run: cargo fmt --all -- --check
@@ -115,6 +134,11 @@ jobs:
       - name: Run test suite
         run: pnpm test
 
+      # Cargo.lock is the same on every OS, so one audit covers it. The Ubuntu
+      # image ships cargo-audit; installing it elsewhere cost 4 to 6 minutes.
       - name: Run cargo audit security check
-        run: cargo audit
+        if: matrix.os == 'ubuntu-22.04'
         working-directory: src-tauri
+        run: |
+          command -v cargo-audit > /dev/null || cargo install cargo-audit --locked
+          cargo audit

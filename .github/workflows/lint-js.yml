@@ -2,39 +2,36 @@
 
 name: Lint Node.js
 
+# Pull requests reach this through pr-checks.yml and tags through release.yml.
+# Both used to trigger it directly as well, so it ran twice for each of them.
 on:
   workflow_call: {}
   push:
     branches:
       - main
-    tags:
-      - "v*"
-  pull_request:
-    paths-ignore:
-      - "src-tauri/**"
-      - "README.md"
-      - ".github/workflows/lint-rs.yml"
-      - ".github/workflows/osv.yml"
 
 permissions:
   contents: read
 
+concurrency:
+  # A called workflow sees its caller's `github.workflow`, so the literal
+  # prefix keeps this group apart from the caller's own. Only the standalone
+  # push to main cancels a superseded run; Rolling Release runs one at a time.
+  group: lint-js-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
 jobs:
   build:
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [macos-latest]
-
-    runs-on: ${{ matrix.os }}
+    # biome and tsc do not depend on the host. Linux starts faster than macOS
+    # and leaves the five-runner macOS pool to the Rust and release builds.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Disable git core.autocrlf on Windows
-        if: matrix.os == 'windows-latest'
-        run: git config --global core.autocrlf false
-
       - name: Checkout repository code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm package manager
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 #v6.1.0

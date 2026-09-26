@@ -7,27 +7,116 @@ on:
     branches: ["main"]
 
 permissions:
-  security-events: write
   contents: read
-  actions: read
+
+# A new push to a pull request makes the previous run's results moot.
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # Decides which suites this pull request can affect. Anything unrecognised
+  # runs everything, so a new directory is covered until it is listed here.
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      js: ${{ steps.filter.outputs.js }}
+      rust: ${{ steps.filter.outputs.rust }}
+      deps: ${{ steps.filter.outputs.deps }}
+    steps:
+      - name: Checkout repository code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent, the base branch tip.
+          fetch-depth: 2
+
+      - name: Classify changed files
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          all() {
+            {
+              echo "js=true"
+              echo "rust=true"
+              echo "deps=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          [ "$EVENT_NAME" = "pull_request" ] || all
+          git diff --name-only HEAD^1 HEAD > /tmp/changed.txt || all
+          [ -s /tmp/changed.txt ] || all
+
+          js=false; rust=false; deps=false
+          while IFS= read -r file; do
+            case "$file" in
+              # Text and tooling the lint and test jobs never read.
+              *.md|LICENSE|.github/ISSUE_TEMPLATE/*|\
+              .github/prompts/*|.github/dependabot.yml|.github/codeql/*|.github/actionlint.yaml|\
+              .github/scripts/*|.github/actions/*|_typos.toml|assets/*|flake.nix|flake.lock|\
+              packaging/*|snap/*|sdk/*|.vscode/*|.envrc|osv-scanner.toml)
+                ;;
+              # Workflows that are not part of this check.
+              .github/workflows/*)
+                case "$file" in
+                  .github/workflows/pr-checks.yml|.github/workflows/lint-js.yml|.github/workflows/lint-rs.yml)
+                    js=true; rust=true ;;
+                esac
+                ;;
+              # Rust only. The .mjs helpers under src-tauri are linted by biome.
+              src-tauri/*.mjs)
+                js=true; rust=true ;;
+              src-tauri/*)
+                rust=true ;;
+              *)
+                js=true; rust=true ;;
+            esac
+            case "$file" in
+              package.json|pnpm-lock.yaml|pnpm-workspace.yaml|donut-sync/package.json|\
+              src-tauri/Cargo.toml|src-tauri/Cargo.lock|osv-scanner.toml|.github/workflows/pr-checks.yml)
+                deps=true ;;
+            esac
+          done < /tmp/changed.txt
+
+          {
+            echo "js=$js"
+            echo "rust=$rust"
+            echo "deps=$deps"
+          } >> "$GITHUB_OUTPUT"
+          echo "Changed files: $(wc -l < /tmp/changed.txt); js=$js rust=$rust deps=$deps"
+
   lint-js:
     name: Lint JavaScript/TypeScript
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
     uses: ./.github/workflows/lint-js.yml
     permissions:
       contents: read
 
   lint-rust:
     name: Lint Rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     uses: ./.github/workflows/lint-rs.yml
     permissions:
       contents: read
 
+  # Reports only vulnerabilities a pull request introduces, so it has nothing
+  # to say unless a manifest or lockfile changed. osv.yml no longer runs this
+  # scan a second time for the same pull request.
   security-scan:
     name: Security Vulnerability Scan
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    needs: changes
+    if: needs.changes.outputs.deps == 'true'
     uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc" # v2.6.0
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
     with:
       scan-args: |-
         -r
@@ -43,12 +132,27 @@ jobs:
   pr-status:
     name: PR Status Check
     runs-on: ubuntu-latest
-    needs: [lint-js, lint-rust, security-scan]
+    timeout-minutes: 5
+    needs: [changes, lint-js, lint-rust, security-scan]
     if: always()
     steps:
       - name: Check all jobs succeeded
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          LINT_JS: ${{ needs.lint-js.result }}
+          LINT_RUST: ${{ needs.lint-rust.result }}
+          SECURITY_SCAN: ${{ needs.security-scan.result }}
         run: |
-          if [[ "${{ needs.lint-js.result }}" != "success" || "${{ needs.lint-rust.result }}" != "success" || "${{ needs.security-scan.result }}" != "success" ]]; then
+          # `skipped` means the pull request cannot affect that suite.
+          failed=0
+          [ "$CHANGES" = "success" ] || { echo "Change detection: $CHANGES"; failed=1; }
+          for pair in "lint-js=$LINT_JS" "lint-rust=$LINT_RUST" "security-scan=$SECURITY_SCAN"; do
+            case "${pair#*=}" in
+              success|skipped) echo "${pair%%=*}: ${pair#*=}" ;;
+              *) echo "${pair%%=*}: ${pair#*=}"; failed=1 ;;
+            esac
+          done
+          if [ "$failed" -ne 0 ]; then
             echo "One or more checks failed"
             exit 1
           fi
