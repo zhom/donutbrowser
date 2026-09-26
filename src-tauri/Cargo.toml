@@ -102,7 +102,7 @@ sha2 = "0.11"
 # aws-lc crypto backend (a C/assembly library needing cmake, and NASM on Windows)
 # alongside the `ring` this crate already ships through boringtun. Moving up is a
 # build-toolchain decision for every platform, not a routine dependency refresh.
-shadowsocks = { version = ">=1.24, <1.26", default-features = false, features = ["aead-cipher"] }
+shadowsocks = { version = ">=1.24, <1.25", default-features = false, features = ["aead-cipher"] }
 hyper = { version = "1.10", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"

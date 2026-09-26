@@ -34,6 +34,11 @@ updates:
       time: "09:00"
     allow:
       - dependency-type: "all"
+    ignore:
+      # Held below 1.25 on purpose (see the note in src-tauri/Cargo.toml):
+      # from 1.25 it pulls in aws-lc, which needs CMake and NASM to build.
+      - dependency-name: "shadowsocks"
+        versions: [">=1.25"]
     groups:
       rust-dependencies:
         patterns:
@@ -50,6 +55,11 @@ updates:
       interval: "weekly"
       day: "saturday"
       time: "09:00"
+    ignore:
+      # Held below 1.25 on purpose (see the note in src-tauri/Cargo.toml):
+      # from 1.25 it pulls in aws-lc, which needs CMake and NASM to build.
+      - dependency-name: "shadowsocks"
+        versions: [">=1.25"]
     groups:
       e2e-rust-dependencies:
         patterns:
