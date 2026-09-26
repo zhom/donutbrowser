@@ -202,6 +202,9 @@ jobs:
   flatpak-smoke:
     name: Test Flatpak
     needs: flatpak
+    # Stated, not implied: without it the job inherits the skip of whichever
+    # .deb job did not run, and a release would go out without the Flatpak.
+    if: ${{ !cancelled() && needs.flatpak.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
