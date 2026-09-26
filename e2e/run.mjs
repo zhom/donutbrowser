@@ -107,7 +107,17 @@ function log(message) {
 
 function run(command, args, cwd, env = process.env) {
   log(`${command} ${args.join(" ")}`);
-  const result = spawnSync(command, args, { cwd, env, stdio: "inherit" });
+  // pnpm is a .cmd shim on Windows, and Node starts those only through a
+  // shell. The arguments here are fixed words, so joining them is safe.
+  const result =
+    isWindows && command === "pnpm"
+      ? spawnSync([command, ...args].join(" "), {
+          cwd,
+          env,
+          stdio: "inherit",
+          shell: true,
+        })
+      : spawnSync(command, args, { cwd, env, stdio: "inherit" });
   if (result.error) {
     throw result.error;
   }

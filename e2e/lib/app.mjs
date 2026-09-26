@@ -123,6 +123,17 @@ export class AppSession {
       mkdir(path.join(this.root, "home"), { recursive: true }),
       mkdir(path.join(this.root, "tmp"), { recursive: true }),
       mkdir(path.join(this.root, "artifacts"), { recursive: true }),
+      // Windows expands the known folders from %USERPROFILE%, which points at
+      // the isolated home. A missing AppData\Roaming makes
+      // SHGetKnownFolderPath fail, and the app cannot resolve its base
+      // directories at startup.
+      ...(process.platform === "win32"
+        ? ["Roaming", "Local"].map((folder) =>
+            mkdir(path.join(this.root, "home", "AppData", folder), {
+              recursive: true,
+            }),
+          )
+        : []),
     ]);
     if (this.onboardingCompleted) {
       const settingsFile = path.join(
