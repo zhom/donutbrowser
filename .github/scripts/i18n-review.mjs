@@ -26,7 +26,10 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 
 const LOCALES_DIR = "src/i18n/locales";
-const OUT = process.env.I18N_REVIEW_DIR || "/tmp/i18n-review";
+// The workflow points this under RUNNER_TEMP, which only this job can reach.
+// A fixed path in the shared /tmp would let another local user plant the
+// files that `report` posts.
+const OUT = process.env.I18N_REVIEW_DIR;
 const API = process.env.GITHUB_API_URL || "https://api.github.com";
 const MARKER = "<!-- donut-translation-review -->";
 // The prompt travels as one 128 KiB argument next to the system prompt.
@@ -153,7 +156,7 @@ async function resolveRefs() {
 }
 
 async function collect() {
-  mkdirSync(OUT, { recursive: true });
+  mkdirSync(OUT, { recursive: true, mode: 0o700 });
   const refs = await resolveRefs();
   if (!refs) return skip("no earlier commit to compare with");
 
@@ -410,6 +413,10 @@ const command = process.argv[2];
 const run = { collect, report }[command];
 if (!run) {
   console.error("usage: i18n-review.mjs collect|report");
+  process.exit(2);
+}
+if (!OUT) {
+  console.error("I18N_REVIEW_DIR must name a private work directory");
   process.exit(2);
 }
 await run();

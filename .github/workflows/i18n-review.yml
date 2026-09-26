@@ -32,7 +32,6 @@ concurrency:
 env:
   # `auto` lets Copilot pick; see issue-compliance.yml.
   COPILOT_MODEL: auto
-  I18N_REVIEW_DIR: /tmp/i18n-review
 
 jobs:
   review:
@@ -53,6 +52,10 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github
+
+      # RUNNER_TEMP belongs to this job alone; a fixed /tmp path does not.
+      - name: Use a private work directory
+        run: echo "I18N_REVIEW_DIR=$RUNNER_TEMP/i18n-review" >> "$GITHUB_ENV"
 
       - name: Collect changed strings
         id: collect
