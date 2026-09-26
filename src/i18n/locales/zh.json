@@ -2350,7 +2350,8 @@
     "syncDisplayUnavailable": "无法读取显示器尺寸，因此不能排列窗口。",
     "syncDisplayTooSmall": "显示器太小，无法以该布局排列 {{windows}} 个窗口。",
     "syncArrangeFailed": "没有窗口被移动。",
-    "extensionPathInvalid": "该路径不允许使用：它包含“..”。"
+    "extensionPathInvalid": "该路径不允许使用：它包含“..”。",
+    "systemProxyUnreachable": "Donut 无法通过系统代理 {{proxy}} 连接。请在系统网络设置中修正或关闭该代理，然后重试。"
   },
   "rail": {
     "profiles": "配置文件",

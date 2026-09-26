@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useBrowserSetup } from "@/hooks/use-browser-setup";
 import { useInputModality } from "@/hooks/use-input-modality";
 import { usePermissions } from "@/hooks/use-permissions";
+import { translateBackendError } from "@/lib/backend-errors";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import { getCurrentOS } from "@/lib/platform";
 
@@ -460,6 +461,11 @@ export function WelcomeDialog({
                               browser: browserName,
                             })}
                     </p>
+                    {setup.error?.detail && (
+                      <p className="max-w-[55ch] text-sm/6 text-pretty text-foreground">
+                        {translateBackendError(t, setup.error.detail)}
+                      </p>
+                    )}
                   </div>
 
                   {/* No escape hatch here: a browser must finish downloading

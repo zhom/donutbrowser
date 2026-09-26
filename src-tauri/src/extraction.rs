@@ -129,6 +129,7 @@ impl ExtractionReporter {
       speed_bytes_per_sec: 0.0,
       eta_seconds: None,
       stage: "extracting".to_string(),
+      error: None,
     };
     let _ = events::emit("download-progress", &progress);
   }
@@ -273,6 +274,7 @@ impl Extractor {
       speed_bytes_per_sec: 0.0,
       eta_seconds: None,
       stage: "extracting".to_string(),
+      error: None,
     };
     let _ = events::emit("download-progress", &progress);
 

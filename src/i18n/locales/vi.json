@@ -2350,7 +2350,8 @@
     "syncDisplayUnavailable": "Không đọc được kích thước màn hình nên không xếp được cửa sổ.",
     "syncDisplayTooSmall": "Màn hình quá nhỏ cho {{windows}} cửa sổ theo cách xếp đó.",
     "syncArrangeFailed": "Không cửa sổ nào được di chuyển.",
-    "extensionPathInvalid": "Đường dẫn đó không được phép: nó chứa '..'."
+    "extensionPathInvalid": "Đường dẫn đó không được phép: nó chứa '..'.",
+    "systemProxyUnreachable": "Donut không thể kết nối qua proxy hệ thống {{proxy}}. Hãy sửa hoặc tắt proxy trong cài đặt mạng của hệ thống rồi thử lại."
   },
   "rail": {
     "profiles": "Profile",

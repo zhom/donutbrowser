@@ -54,6 +54,26 @@ pub struct DownloadProgress {
   pub speed_bytes_per_sec: f64,
   pub eta_seconds: Option<f64>,
   pub stage: String, // "downloading", "extracting", "verifying"
+  /// Why an "error" stage happened: a coded backend error or plain text.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+impl DownloadProgress {
+  /// The terminal event for a download that stopped, so the UI can show why.
+  pub fn failed(browser: &str, version: &str, error: Option<String>) -> Self {
+    Self {
+      browser: browser.to_string(),
+      version: version.to_string(),
+      downloaded_bytes: 0,
+      total_bytes: None,
+      percentage: 0.0,
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: None,
+      stage: "error".to_string(),
+      error,
+    }
+  }
 }
 
 pub struct Downloader {
@@ -268,6 +288,7 @@ impl Downloader {
         speed_bytes_per_sec: 0.0,
         eta_seconds: None,
         stage: "verifying".to_string(),
+        error: None,
       },
     );
     verify_archive_checksum(
@@ -317,7 +338,7 @@ impl Downloader {
       }
       Err(e) => {
         log::warn!("Checksum sidecar request failed for {browser} {version}: {e}");
-        return Err(unavailable());
+        return Err(crate::system_proxy::explain(&e).map_or_else(unavailable, Into::into));
       }
     };
 
@@ -416,6 +437,15 @@ impl Downloader {
             break;
           }
           Err(e) => {
+            // Through a system proxy, a second connect failure in a row means
+            // the proxy is the problem. Five more attempts would only keep the
+            // bar at 0% for minutes before saying the same thing.
+            if attempt > 0 {
+              if let Some(proxy_error) = crate::system_proxy::explain(&e) {
+                log::warn!("Download request through the system proxy failed: {e}");
+                return Err(proxy_error.into());
+              }
+            }
             let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
             if is_retryable && attempt < max_send_retries {
               let delay = 2u64.pow(attempt.min(4));
@@ -511,6 +541,7 @@ impl Downloader {
           speed_bytes_per_sec: 0.0,
           eta_seconds: None,
           stage: "downloading".to_string(),
+          error: None,
         },
       );
 
@@ -594,6 +625,7 @@ impl Downloader {
               speed_bytes_per_sec: speed,
               eta_seconds: eta,
               stage: "downloading".to_string(),
+              error: None,
             },
           );
           last_update = now;
@@ -778,24 +810,18 @@ impl Downloader {
         // Emit a terminal stage so the UI stops spinning. A user cancellation maps to
         // "cancelled"; any other failure (network error, stall timeout, bad status)
         // maps to "error" so the frontend can show a concrete error toast.
-        let stage = if cancel_token.is_cancelled() {
-          "cancelled"
+        let failure = contextualize("Failed to download browser", e);
+        let progress = if cancel_token.is_cancelled() {
+          DownloadProgress {
+            stage: "cancelled".to_string(),
+            ..DownloadProgress::failed(&browser_str, &version, None)
+          }
         } else {
-          "error"
-        };
-        let progress = DownloadProgress {
-          browser: browser_str.clone(),
-          version: version.clone(),
-          downloaded_bytes: 0,
-          total_bytes: None,
-          percentage: 0.0,
-          speed_bytes_per_sec: 0.0,
-          eta_seconds: None,
-          stage: stage.to_string(),
+          DownloadProgress::failed(&browser_str, &version, Some(failure.to_string()))
         };
         let _ = events::emit("download-progress", &progress);
 
-        return Err(contextualize("Failed to download browser", e));
+        return Err(failure);
       }
     };
 
@@ -841,6 +867,7 @@ impl Downloader {
             speed_bytes_per_sec: 0.0,
             eta_seconds: None,
             stage: "error".to_string(),
+            error: None,
           };
           let _ = events::emit("download-progress", &progress);
 
@@ -862,6 +889,7 @@ impl Downloader {
       speed_bytes_per_sec: 0.0,
       eta_seconds: None,
       stage: "verifying".to_string(),
+      error: None,
     };
     let _ = events::emit("download-progress", &progress);
 
@@ -913,6 +941,7 @@ impl Downloader {
         speed_bytes_per_sec: 0.0,
         eta_seconds: None,
         stage: "error".to_string(),
+        error: None,
       };
       let _ = events::emit("download-progress", &progress);
 
@@ -956,6 +985,7 @@ impl Downloader {
       speed_bytes_per_sec: 0.0,
       eta_seconds: Some(0.0),
       stage: "completed".to_string(),
+      error: None,
     };
     let _ = events::emit("download-progress", &progress);
 

@@ -63,6 +63,7 @@ donutbrowser/
 │   │   ├── downloader.rs           # Browser binary downloader
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)
 │   │   ├── settings_manager.rs     # App settings persistence (atomic writes), tips + paid-welcome state
+│   │   ├── system_proxy.rs         # The OS proxy Donut's own requests use; named in the error when it is unreachable
 │   │   ├── vault.rs                # Per-install key that seals local secrets; opens legacy build-password seals once
 │   │   ├── cookie_manager.rs       # Cookie import/export
 │   │   ├── profile_importer.rs     # Bulk profile import (Chromium-family detection, ZIP, batch)

@@ -266,6 +266,7 @@ impl ApiClient {
     let url = "https://donutbrowser.com/wayfern.json";
 
     let mut last_err = None;
+    let mut proxy_err = None;
     let mut version_info: Option<WayfernVersionInfo> = None;
 
     for attempt in 1..=3 {
@@ -291,6 +292,7 @@ impl ApiClient {
         }
         Err(e) => {
           log::warn!("Wayfern fetch attempt {attempt}/3 failed: {e}");
+          proxy_err = crate::system_proxy::explain(&e);
           last_err = Some(e.to_string());
         }
       }
@@ -301,10 +303,12 @@ impl ApiClient {
     }
 
     let version_info = version_info.ok_or_else(|| {
-      format!(
-        "Failed to fetch Wayfern version after 3 attempts: {}",
-        last_err.unwrap_or_default()
-      )
+      proxy_err.unwrap_or_else(|| {
+        format!(
+          "Failed to fetch Wayfern version after 3 attempts: {}",
+          last_err.unwrap_or_default()
+        )
+      })
     })?;
     log::info!("Fetched Wayfern version: {}", version_info.version);
 

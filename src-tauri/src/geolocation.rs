@@ -317,6 +317,36 @@ pub fn lookup_exit_insight(ip: &str) -> ExitInsight {
   insight
 }
 
+/// City, country and country code for `ip`, read from the local City
+/// database. Proxy checks used to ask ip-api.com over plain HTTP, which showed
+/// that service and everyone on the path which exit address this machine was
+/// testing. `None` wherever the database has no answer.
+pub fn lookup_place(ip: &str) -> (Option<String>, Option<String>, Option<String>) {
+  let Ok(ip_addr) = IpAddr::from_str(ip) else {
+    return (None, None, None);
+  };
+  let Some(path) = GeoIPDownloader::get_mmdb_file_path()
+    .ok()
+    .filter(|path| path.exists())
+  else {
+    return (None, None, None);
+  };
+  let Ok(reader) = Reader::open_readfile(&path) else {
+    return (None, None, None);
+  };
+  let Ok(Some(city)) = reader
+    .lookup(ip_addr)
+    .and_then(|lookup| lookup.decode::<geoip2::City>())
+  else {
+    return (None, None, None);
+  };
+  (
+    first_non_empty([city.city.names.english]),
+    first_non_empty([city.country.names.english]),
+    first_non_empty([city.country.iso_code]).map(|code| code.to_uppercase()),
+  )
+}
+
 /// The autonomous system's organisation, from the ASN database that ships
 /// alongside the city one. Absent on an install that has only ever fetched the
 /// city database, which is why the caller treats `None` as "unknown".

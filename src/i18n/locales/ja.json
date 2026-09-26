@@ -2350,7 +2350,8 @@
     "syncDisplayUnavailable": "画面の大きさを読み取れなかったため、ウィンドウを並べられません。",
     "syncDisplayTooSmall": "その配置で {{windows}} 個のウィンドウを並べるには画面が小さすぎます。",
     "syncArrangeFailed": "動かせたウィンドウはありませんでした。",
-    "extensionPathInvalid": "そのパスは使用できません。'..' が含まれています。"
+    "extensionPathInvalid": "そのパスは使用できません。'..' が含まれています。",
+    "systemProxyUnreachable": "システムプロキシ {{proxy}} 経由で接続できませんでした。システムのネットワーク設定でプロキシを修正するか無効にしてから、もう一度お試しください。"
   },
   "rail": {
     "profiles": "プロファイル",

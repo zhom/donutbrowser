@@ -2360,7 +2360,8 @@
     "syncDisplayUnavailable": "La taille de l'écran n'a pas pu être lue, les fenêtres ne peuvent donc pas être rangées.",
     "syncDisplayTooSmall": "L'écran est trop petit pour {{windows}} fenêtres dans cette disposition.",
     "syncArrangeFailed": "Aucune fenêtre n'a pu être déplacée.",
-    "extensionPathInvalid": "Ce chemin n'est pas autorisé : il contient « .. »."
+    "extensionPathInvalid": "Ce chemin n'est pas autorisé : il contient « .. ».",
+    "systemProxyUnreachable": "Donut n'a pas pu se connecter via le proxy système {{proxy}}. Corrigez ou désactivez le proxy dans les paramètres réseau de votre système, puis réessayez."
   },
   "rail": {
     "profiles": "Profils",

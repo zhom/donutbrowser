@@ -2350,7 +2350,8 @@
     "syncDisplayUnavailable": "Ekran boyutu okunamadı, bu yüzden pencereler yerleştirilemiyor.",
     "syncDisplayTooSmall": "Ekran, o düzende {{windows}} pencere için fazla küçük.",
     "syncArrangeFailed": "Hiçbir pencere taşınamadı.",
-    "extensionPathInvalid": "Bu yol kullanılamaz: '..' içeriyor."
+    "extensionPathInvalid": "Bu yol kullanılamaz: '..' içeriyor.",
+    "systemProxyUnreachable": "Donut, {{proxy}} sistem proxy'si üzerinden bağlanamadı. Sistem ağ ayarlarınızda proxy'yi düzeltin veya kapatın, ardından yeniden deneyin."
   },
   "rail": {
     "profiles": "Profiller",

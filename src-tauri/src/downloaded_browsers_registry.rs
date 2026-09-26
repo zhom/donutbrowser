@@ -1567,6 +1567,12 @@ pub async fn ensure_active_browsers_downloaded(
         Ok(info) => info.version,
         Err(e) => {
           log::warn!("Failed to resolve current {browser} version: {e}");
+          // The first-run screen listens for this. Without it the screen
+          // waits at 0% for a download that never starts (issue #625).
+          let _ = crate::events::emit(
+            "download-progress",
+            crate::downloader::DownloadProgress::failed(browser, "", Some(e.to_string())),
+          );
           continue;
         }
       }
@@ -1621,6 +1627,10 @@ pub async fn ensure_active_browsers_downloaded(
           log::warn!(
             "Failed to auto-download {browser} {version} (attempt {attempt}/{MAX_ATTEMPTS}): {e}"
           );
+          // A proxy setting stays wrong until the user changes it.
+          if crate::system_proxy::is_unreachable_error(&e.to_string()) {
+            break;
+          }
         }
         Err(_) => {
           // The download future itself hung past the overall timeout and was dropped,
@@ -1632,16 +1642,7 @@ pub async fn ensure_active_browsers_downloaded(
             ATTEMPT_TIMEOUT.as_secs()
           );
           crate::downloader::clear_download_state_for_browser(browser);
-          let progress = crate::downloader::DownloadProgress {
-            browser: (*browser).to_string(),
-            version: version.clone(),
-            downloaded_bytes: 0,
-            total_bytes: None,
-            percentage: 0.0,
-            speed_bytes_per_sec: 0.0,
-            eta_seconds: None,
-            stage: "error".to_string(),
-          };
+          let progress = crate::downloader::DownloadProgress::failed(browser, &version, None);
           let _ = crate::events::emit("download-progress", &progress);
         }
       }

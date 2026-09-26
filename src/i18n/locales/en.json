@@ -2350,7 +2350,8 @@
     "syncDisplayUnavailable": "The display size could not be read, so the windows cannot be arranged.",
     "syncDisplayTooSmall": "The display is too small for {{windows}} windows in that layout.",
     "syncArrangeFailed": "No window could be moved.",
-    "extensionPathInvalid": "That path is not allowed: it contains '..'."
+    "extensionPathInvalid": "That path is not allowed: it contains '..'.",
+    "systemProxyUnreachable": "Donut could not connect through the system proxy {{proxy}}. Fix or turn off the proxy in your system network settings, then try again."
   },
   "rail": {
     "profiles": "Profiles",

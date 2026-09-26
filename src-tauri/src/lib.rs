@@ -101,6 +101,7 @@ mod settings_manager;
 pub mod socks5_local;
 pub mod sync;
 mod synchronizer;
+mod system_proxy;
 pub mod traffic_stats;
 mod wayfern_cdp;
 mod wayfern_identity_storage;
@@ -1685,10 +1686,7 @@ pub async fn check_vpn_validity_core(
 
     match ip_utils::fetch_public_ip(Some(&local_proxy_url)).await {
       Ok(ip) => {
-        let (city, country, country_code) =
-          crate::proxy_manager::ProxyManager::get_ip_geolocation(&ip)
-            .await
-            .unwrap_or_default();
+        let (city, country, country_code) = crate::geolocation::lookup_place(&ip);
 
         let insight = crate::geolocation::lookup_exit_insight(&ip);
         result = Some(crate::proxy_manager::ProxyCheckResult {

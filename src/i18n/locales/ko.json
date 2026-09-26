@@ -2350,7 +2350,8 @@
     "syncDisplayUnavailable": "화면 크기를 읽지 못해 창을 정렬할 수 없습니다.",
     "syncDisplayTooSmall": "그 배치로 창 {{windows}}개를 놓기에는 화면이 너무 작습니다.",
     "syncArrangeFailed": "옮겨진 창이 없습니다.",
-    "extensionPathInvalid": "그 경로는 사용할 수 없습니다. '..'이 포함되어 있습니다."
+    "extensionPathInvalid": "그 경로는 사용할 수 없습니다. '..'이 포함되어 있습니다.",
+    "systemProxyUnreachable": "시스템 프록시 {{proxy}}를 통해 연결하지 못했습니다. 시스템 네트워크 설정에서 프록시를 수정하거나 끈 다음 다시 시도하세요."
   },
   "rail": {
     "profiles": "프로필",

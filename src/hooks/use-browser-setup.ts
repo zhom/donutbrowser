@@ -13,6 +13,7 @@ interface DownloadProgress {
   speed_bytes_per_sec: number;
   eta_seconds?: number | null;
   stage: string;
+  error?: string;
 }
 
 export type SetupPhase = "downloading" | "extracting" | "ready" | "error";
@@ -25,6 +26,8 @@ export type SetupErrorStage =
 
 export interface SetupError {
   stage: SetupErrorStage;
+  /** The backend's reason, coded or plain, when it sent one. */
+  detail?: string;
 }
 
 // The backend reports real extraction percentages for most archive formats
@@ -216,7 +219,10 @@ export function useBrowserSetup(browser: string, active: boolean) {
             doneRef.current = true;
             finishExtraction();
             setPhase("error");
-            setError({ stage: toErrorStage(lastStageRef.current) });
+            setError({
+              stage: toErrorStage(lastStageRef.current),
+              detail: p.error,
+            });
             break;
           case "cancelled":
             // Treat a cancellation like an error so the dialog can offer retry.

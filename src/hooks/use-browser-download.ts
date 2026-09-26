@@ -3,6 +3,7 @@ import type { Event as TauriEvent } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import i18n from "@/i18n";
+import { translateBackendError } from "@/lib/backend-errors";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import { isOnboardingActive } from "@/lib/onboarding-signal";
 import {
@@ -38,6 +39,7 @@ interface DownloadProgress {
   speed_bytes_per_sec: number;
   eta_seconds?: number;
   stage: string;
+  error?: string;
 }
 
 interface BrowserVersionsResult {
@@ -418,11 +420,13 @@ export function useBrowserDownload() {
                   ),
                   {
                     id: `download-error-${progress.browser}-${progress.version}`,
-                    description: i18n.t(
-                      wasExtracting
-                        ? "browserDownload.toast.extractionFailedDescription"
-                        : "browserDownload.toast.downloadFailedDescription",
-                    ),
+                    description: progress.error
+                      ? translateBackendError(i18n.t, progress.error)
+                      : i18n.t(
+                          wasExtracting
+                            ? "browserDownload.toast.extractionFailedDescription"
+                            : "browserDownload.toast.downloadFailedDescription",
+                        ),
                   },
                 );
               }

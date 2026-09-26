@@ -64,6 +64,7 @@ export type BackendErrorCode =
   | "UPDATE_CHECKSUM_MISMATCH"
   | "BROWSER_CHECKSUM_UNAVAILABLE"
   | "BROWSER_CHECKSUM_MISMATCH"
+  | "SYSTEM_PROXY_UNREACHABLE"
   | "UPDATE_PROFILES_RUNNING"
   | "UPDATE_PREPARATION_FAILED"
   | "PROFILE_NAME_EXISTS"
@@ -440,6 +441,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.browserChecksumUnavailable", {
         browser: parsed.params?.browser ?? "",
         version: parsed.params?.version ?? "",
+      });
+    case "SYSTEM_PROXY_UNREACHABLE":
+      return t("backendErrors.systemProxyUnreachable", {
+        proxy: parsed.params?.proxy ?? "",
       });
     case "BROWSER_CHECKSUM_MISMATCH":
       return t("backendErrors.browserChecksumMismatch", {
