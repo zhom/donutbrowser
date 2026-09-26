@@ -468,7 +468,7 @@
     "license": "MIT"
   },
   {
-    "name": "@typescript/typescript-darwin-arm64",
+    "name": "@typescript/typescript-win32-x64",
     "license": "Apache-2.0"
   },
   {
@@ -630,14 +630,6 @@
   {
     "name": "avif-serialize",
     "license": "BSD-3-Clause"
-  },
-  {
-    "name": "aws-lc-rs",
-    "license": "ISC AND (Apache-2.0 OR ISC)"
-  },
-  {
-    "name": "aws-lc-sys",
-    "license": "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)"
   },
   {
     "name": "axum",
@@ -1104,6 +1096,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "der",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "deranged",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1205,6 +1201,10 @@
   },
   {
     "name": "dynosaur_derive",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "ed25519",
     "license": "Apache-2.0 OR MIT"
   },
   {
@@ -1980,14 +1980,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "multiversion",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "multiversion-macros",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "multiversion_no_op",
     "license": "Apache-2.0 OR MIT"
   },
@@ -2284,6 +2276,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "pkcs8",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "plist",
     "license": "MIT"
   },
@@ -2536,6 +2532,10 @@
     "license": "Apache-2.0 AND ISC"
   },
   {
+    "name": "ring-compat",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "roxmltree",
     "license": "Apache-2.0 OR MIT"
   },
@@ -2566,10 +2566,6 @@
   {
     "name": "rustls-webpki",
     "license": "ISC"
-  },
-  {
-    "name": "rustversion",
-    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "ryu",
@@ -2736,6 +2732,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "signature",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "simd-adler32",
     "license": "MIT"
   },
@@ -2802,6 +2802,10 @@
   {
     "name": "spin",
     "license": "MIT"
+  },
+  {
+    "name": "spki",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "stable_deref_trait",

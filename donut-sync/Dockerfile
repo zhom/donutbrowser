@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /build
 COPY donut-sync/package.json donut-sync/tsconfig.json donut-sync/tsconfig.build.json ./
@@ -7,7 +7,7 @@ RUN npm install
 RUN npm run build
 RUN npm prune --omit=dev
 
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 COPY --from=builder /build/package.json .
