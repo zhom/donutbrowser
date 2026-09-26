@@ -192,9 +192,8 @@ impl WayfernTermsManager {
   }
 }
 
-lazy_static::lazy_static! {
-  static ref WAYFERN_TERMS_MANAGER: WayfernTermsManager = WayfernTermsManager::new();
-}
+static WAYFERN_TERMS_MANAGER: std::sync::LazyLock<WayfernTermsManager> =
+  std::sync::LazyLock::new(WayfernTermsManager::new);
 
 #[cfg(test)]
 mod tests {

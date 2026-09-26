@@ -380,9 +380,8 @@ impl GroupManager {
 }
 
 // Global instance
-lazy_static::lazy_static! {
-  pub static ref GROUP_MANAGER: Mutex<GroupManager> = Mutex::new(GroupManager::new());
-}
+pub static GROUP_MANAGER: std::sync::LazyLock<Mutex<GroupManager>> =
+  std::sync::LazyLock::new(|| Mutex::new(GroupManager::new()));
 
 // Helper function to get groups with counts
 pub fn get_groups_with_counts(profiles: &[crate::profile::BrowserProfile]) -> Vec<GroupWithCount> {

@@ -649,6 +649,9 @@ pub async fn check_for_updates_with_progress(app_handle: tauri::AppHandle) {
   updater.check_for_updates_with_progress(&app_handle).await;
 }
 
+// Global singleton instance
+static AUTO_UPDATER: std::sync::LazyLock<AutoUpdater> = std::sync::LazyLock::new(AutoUpdater::new);
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -999,9 +1002,4 @@ mod tests {
       "Pending updates should be empty after dismissal"
     );
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref AUTO_UPDATER: AutoUpdater = AutoUpdater::new();
 }

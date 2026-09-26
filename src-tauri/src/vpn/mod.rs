@@ -19,8 +19,9 @@ pub use storage::VpnStorage;
 pub use tunnel::{TunnelManager, VpnTunnel};
 pub use wireguard::WireGuardTunnel;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 
 /// Global VPN storage instance
-pub static VPN_STORAGE: Lazy<Mutex<VpnStorage>> = Lazy::new(|| Mutex::new(VpnStorage::new()));
+pub static VPN_STORAGE: LazyLock<Mutex<VpnStorage>> =
+  LazyLock::new(|| Mutex::new(VpnStorage::new()));

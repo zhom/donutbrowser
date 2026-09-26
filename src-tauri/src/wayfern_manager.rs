@@ -3442,9 +3442,8 @@ fn kill_browser_process(pid: u32) {
   force_kill_process(pid);
 }
 
-lazy_static::lazy_static! {
-  static ref WAYFERN_MANAGER: WayfernManager = WayfernManager::new();
-}
+static WAYFERN_MANAGER: std::sync::LazyLock<WayfernManager> =
+  std::sync::LazyLock::new(WayfernManager::new);
 
 /// Deterministically derive a pleasant, distinct window frame color from a
 /// profile id so concurrent profile windows are visually distinguishable even

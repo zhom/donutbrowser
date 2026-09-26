@@ -113,9 +113,7 @@ impl CommercialLicenseManager {
   }
 }
 
-lazy_static::lazy_static! {
-  static ref COMMERCIAL_LICENSE_MANAGER: CommercialLicenseManager = CommercialLicenseManager;
-}
+static COMMERCIAL_LICENSE_MANAGER: CommercialLicenseManager = CommercialLicenseManager;
 
 #[cfg(test)]
 mod tests {

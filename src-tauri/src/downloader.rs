@@ -21,12 +21,12 @@ const STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 const DOWNLOAD_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
 // Global state to track currently downloading browser-version pairs
-lazy_static::lazy_static! {
-  static ref DOWNLOADING_BROWSERS: std::sync::Arc<Mutex<std::collections::HashSet<String>>> =
-    std::sync::Arc::new(Mutex::new(std::collections::HashSet::new()));
-  static ref DOWNLOAD_CANCELLATION_TOKENS: std::sync::Arc<Mutex<std::collections::HashMap<String, CancellationToken>>> =
-    std::sync::Arc::new(Mutex::new(std::collections::HashMap::new()));
-}
+static DOWNLOADING_BROWSERS: std::sync::LazyLock<
+  std::sync::Arc<Mutex<std::collections::HashSet<String>>>,
+> = std::sync::LazyLock::new(|| std::sync::Arc::new(Mutex::new(std::collections::HashSet::new())));
+static DOWNLOAD_CANCELLATION_TOKENS: std::sync::LazyLock<
+  std::sync::Arc<Mutex<std::collections::HashMap<String, CancellationToken>>>,
+> = std::sync::LazyLock::new(|| std::sync::Arc::new(Mutex::new(std::collections::HashMap::new())));
 
 /// Clears a browser-version pair from the in-flight download maps on every
 /// exit path of `download_browser_full`. A leaked key would permanently report
@@ -1191,6 +1191,9 @@ pub async fn cancel_download(browser_str: String, version: String) -> Result<(),
   }
 }
 
+// Global singleton instance
+static DOWNLOADER: std::sync::LazyLock<Downloader> = std::sync::LazyLock::new(Downloader::new);
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1512,9 +1515,4 @@ mod tests {
     clear_download_state_for_browser("wayfern");
     clear_download_state_for_browser("chromium");
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref DOWNLOADER: Downloader = Downloader::new();
 }

@@ -1206,9 +1206,8 @@ pub async fn import_browser_profiles(
     .map_err(error_to_code_string)
 }
 
-lazy_static::lazy_static! {
-  static ref PROFILE_IMPORTER: ProfileImporter = ProfileImporter::new();
-}
+static PROFILE_IMPORTER: std::sync::LazyLock<ProfileImporter> =
+  std::sync::LazyLock::new(ProfileImporter::new);
 
 #[cfg(test)]
 mod tests {

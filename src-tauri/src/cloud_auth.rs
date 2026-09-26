@@ -1,5 +1,4 @@
 use chrono::Utc;
-use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -349,9 +348,8 @@ pub struct CloudAuthManager {
   wayfern_device_refusal: std::sync::Mutex<Option<String>>,
 }
 
-lazy_static! {
-  pub static ref CLOUD_AUTH: CloudAuthManager = CloudAuthManager::new();
-}
+pub static CLOUD_AUTH: std::sync::LazyLock<CloudAuthManager> =
+  std::sync::LazyLock::new(CloudAuthManager::new);
 
 impl CloudAuthManager {
   fn new() -> Self {

@@ -2082,6 +2082,12 @@ pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, Str
     .map_err(|e| format!("Failed to check for app updates: {e}"))
 }
 
+// Global singleton instance
+static APP_AUTO_UPDATER: std::sync::LazyLock<AppAutoUpdater> =
+  std::sync::LazyLock::new(AppAutoUpdater::new);
+static PENDING_INSTALLER_PATH: std::sync::LazyLock<std::sync::Mutex<Option<PathBuf>>> =
+  std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -2517,10 +2523,4 @@ mod tests {
     let _deb = AppAutoUpdater::is_deb_repo_configured();
     let _rpm = AppAutoUpdater::is_rpm_repo_configured();
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref APP_AUTO_UPDATER: AppAutoUpdater = AppAutoUpdater::new();
-  static ref PENDING_INSTALLER_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 }

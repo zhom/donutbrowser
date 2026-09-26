@@ -75,6 +75,5 @@ pub fn get_all_tags() -> Result<Vec<String>, String> {
     .map_err(|e| format!("Failed to get tags: {e}"))
 }
 
-lazy_static::lazy_static! {
-  pub static ref TAG_MANAGER: std::sync::Mutex<TagManager> = std::sync::Mutex::new(TagManager::new());
-}
+pub static TAG_MANAGER: std::sync::LazyLock<std::sync::Mutex<TagManager>> =
+  std::sync::LazyLock::new(|| std::sync::Mutex::new(TagManager::new()));

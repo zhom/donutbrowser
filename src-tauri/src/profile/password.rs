@@ -40,29 +40,27 @@ fn err_internal(detail: impl std::fmt::Display) -> String {
   err_with("INTERNAL_ERROR", &[("detail", detail.to_string())])
 }
 
-lazy_static::lazy_static! {
-  /// Per-profile snapshot of plaintext file mtimes captured at launch time.
-  /// Used by `complete_after_quit` to skip re-encrypting unchanged files.
-  static ref LAUNCH_SNAPSHOTS: Mutex<HashMap<uuid::Uuid, HashMap<String, SystemTime>>> =
-    Mutex::new(HashMap::new());
-
-  /// Profile IDs whose ephemeral dir is currently populated and matches the
-  /// on-disk encrypted state, so we can skip re-decrypting on the next launch
-  /// when `keep_decrypted_profiles_in_ram` is enabled.
-  static ref POPULATED_EPHEMERAL: Mutex<HashSet<uuid::Uuid>> = Mutex::new(HashSet::new());
-
-  /// Per-profile failed unlock attempt tracking for rate-limiting.
-  static ref FAILED_ATTEMPTS: Mutex<HashMap<uuid::Uuid, FailureRecord>> = Mutex::new(HashMap::new());
-
-  /// Per-profile lock serializing the whole check-lockout -> verify -> record
-  /// window. `check_lockout` and `record_failed_attempt` each take and release
-  /// `FAILED_ATTEMPTS` independently, with an Argon2 verification between them,
-  /// so without this a burst of concurrent attempts all read the same stale
-  /// count before any of them increments it and one lockout window admits as
-  /// many guesses as there are worker threads.
-  static ref ATTEMPT_LOCKS: Mutex<HashMap<uuid::Uuid, Arc<tokio::sync::Mutex<()>>>> =
-    Mutex::new(HashMap::new());
-}
+/// Per-profile snapshot of plaintext file mtimes captured at launch time.
+/// Used by `complete_after_quit` to skip re-encrypting unchanged files.
+static LAUNCH_SNAPSHOTS: std::sync::LazyLock<
+  Mutex<HashMap<uuid::Uuid, HashMap<String, SystemTime>>>,
+> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Profile IDs whose ephemeral dir is currently populated and matches the
+/// on-disk encrypted state, so we can skip re-decrypting on the next launch
+/// when `keep_decrypted_profiles_in_ram` is enabled.
+static POPULATED_EPHEMERAL: std::sync::LazyLock<Mutex<HashSet<uuid::Uuid>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
+/// Per-profile failed unlock attempt tracking for rate-limiting.
+static FAILED_ATTEMPTS: std::sync::LazyLock<Mutex<HashMap<uuid::Uuid, FailureRecord>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Per-profile lock serializing the whole check-lockout -> verify -> record
+/// window. `check_lockout` and `record_failed_attempt` each take and release
+/// `FAILED_ATTEMPTS` independently, with an Argon2 verification between them,
+/// so without this a burst of concurrent attempts all read the same stale
+/// count before any of them increments it and one lockout window admits as
+/// many guesses as there are worker threads.
+static ATTEMPT_LOCKS: std::sync::LazyLock<Mutex<HashMap<uuid::Uuid, Arc<tokio::sync::Mutex<()>>>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// The attempt lock for one profile. The std map lock is released before the
 /// caller awaits the returned lock, so it is never held across an await.

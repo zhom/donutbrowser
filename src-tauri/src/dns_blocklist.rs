@@ -281,12 +281,12 @@ pub struct BlocklistCacheStatus {
 
 pub struct BlocklistManager;
 
-lazy_static::lazy_static! {
-  static ref HTTP_CLIENT: reqwest::Client = reqwest::Client::builder()
+static HTTP_CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
+  reqwest::Client::builder()
     .timeout(Duration::from_secs(60))
     .build()
-    .expect("Failed to create HTTP client");
-}
+    .expect("Failed to create HTTP client")
+});
 
 impl BlocklistManager {
   pub fn instance() -> &'static BlocklistManager {
@@ -628,9 +628,7 @@ impl BlocklistManager {
   }
 }
 
-lazy_static::lazy_static! {
-  static ref BLOCKLIST_MANAGER: BlocklistManager = BlocklistManager;
-}
+static BLOCKLIST_MANAGER: BlocklistManager = BlocklistManager;
 
 // Tauri commands
 

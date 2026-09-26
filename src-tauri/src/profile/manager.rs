@@ -2599,6 +2599,5 @@ pub fn delete_profile(
   })
 }
 
-lazy_static::lazy_static! {
-  static ref PROFILE_MANAGER: ProfileManager = ProfileManager::new();
-}
+static PROFILE_MANAGER: std::sync::LazyLock<ProfileManager> =
+  std::sync::LazyLock::new(ProfileManager::new);

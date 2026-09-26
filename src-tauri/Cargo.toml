@@ -62,7 +62,6 @@ tokio-native-tls = "0.3"
 tokio = { version = "1", features = ["full", "sync"] }
 tokio-util = "0.7"
 sysinfo = "0.39"
-lazy_static = "1.5"
 # 0.23 turns on `simd-unsafe` by default, decoding via hand-written unsafe
 # AVX2/NEON. This crate decodes attacker-influenced input (proxy CONNECT auth,
 # extension payloads, os_crypt key blobs), and none of those paths are hot
@@ -83,7 +82,6 @@ url = "2.5"
 blake3 = "1"
 globset = "0.4"
 mime_guess = "2"
-once_cell = "1"
 urlencoding = "2.1"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"

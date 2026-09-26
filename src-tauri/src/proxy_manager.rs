@@ -2688,9 +2688,8 @@ impl ProxyManager {
 }
 
 // Create a singleton instance of the proxy manager
-lazy_static::lazy_static! {
-    pub static ref PROXY_MANAGER: ProxyManager = ProxyManager::new();
-}
+pub static PROXY_MANAGER: std::sync::LazyLock<ProxyManager> =
+  std::sync::LazyLock::new(ProxyManager::new);
 
 #[cfg(test)]
 mod tests {

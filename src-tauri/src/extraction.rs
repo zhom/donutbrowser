@@ -1535,6 +1535,9 @@ impl Extractor {
   }
 }
 
+// Global singleton instance
+static EXTRACTOR: std::sync::LazyLock<Extractor> = std::sync::LazyLock::new(Extractor::new);
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -2080,9 +2083,4 @@ mod tests {
       }
     }
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref EXTRACTOR: Extractor = Extractor::new();
 }

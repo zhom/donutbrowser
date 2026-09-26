@@ -31,11 +31,9 @@ pub struct LaunchGatePrefs {
   pub vpn_extension_acks: HashMap<String, Vec<String>>,
 }
 
-lazy_static::lazy_static! {
-  /// Serializes read-modify-write so two concurrent acknowledgements in a bulk
-  /// run cannot clobber each other.
-  static ref PREFS_LOCK: Mutex<()> = Mutex::new(());
-}
+/// Serializes read-modify-write so two concurrent acknowledgements in a bulk
+/// run cannot clobber each other.
+static PREFS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 
 fn prefs_file() -> PathBuf {
   crate::app_dirs::data_subdir().join("launch_gate_prefs.json")

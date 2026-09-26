@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -37,9 +36,8 @@ pub struct ProfileLockManager {
   connected: Mutex<bool>,
 }
 
-lazy_static! {
-  pub static ref PROFILE_LOCK: ProfileLockManager = ProfileLockManager::new();
-}
+pub static PROFILE_LOCK: std::sync::LazyLock<ProfileLockManager> =
+  std::sync::LazyLock::new(ProfileLockManager::new);
 
 // Keep backward compatibility alias
 pub use PROFILE_LOCK as TEAM_LOCK;

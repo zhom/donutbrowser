@@ -5,10 +5,9 @@ use crate::proxy_storage::{
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
-lazy_static::lazy_static! {
-  static ref PROXY_PROCESSES: std::sync::Mutex<std::collections::HashMap<String, u32>> =
-    std::sync::Mutex::new(std::collections::HashMap::new());
-}
+static PROXY_PROCESSES: std::sync::LazyLock<
+  std::sync::Mutex<std::collections::HashMap<String, u32>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
 static SIDECAR_VERSION_VERIFIED: AtomicBool = AtomicBool::new(false);
 const RETAINED_PROXY_LOGS: usize = 20;

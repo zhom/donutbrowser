@@ -9739,9 +9739,7 @@ impl McpServer {
   }
 }
 
-lazy_static::lazy_static! {
-  static ref MCP_SERVER: McpServer = McpServer::new();
-}
+static MCP_SERVER: std::sync::LazyLock<McpServer> = std::sync::LazyLock::new(McpServer::new);
 
 #[cfg(test)]
 mod tests {

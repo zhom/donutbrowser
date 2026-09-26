@@ -98,9 +98,8 @@ pub fn use_client_side_decorations() -> bool {
 mod imp {
   use std::sync::Mutex;
 
-  lazy_static::lazy_static! {
-    static ref LAYOUT: Mutex<Option<String>> = Mutex::new(None);
-  }
+  static LAYOUT: std::sync::LazyLock<Mutex<Option<String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
 
   fn store(layout: Option<String>) {
     if let Ok(mut slot) = LAYOUT.lock() {

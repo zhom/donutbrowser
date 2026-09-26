@@ -1776,9 +1776,8 @@ impl ExtensionManager {
 }
 
 // Global instance
-lazy_static::lazy_static! {
-  pub static ref EXTENSION_MANAGER: Mutex<ExtensionManager> = Mutex::new(ExtensionManager::new());
-}
+pub static EXTENSION_MANAGER: std::sync::LazyLock<Mutex<ExtensionManager>> =
+  std::sync::LazyLock::new(|| Mutex::new(ExtensionManager::new()));
 
 // Tauri commands
 

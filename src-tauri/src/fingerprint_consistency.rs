@@ -91,9 +91,8 @@ pub fn exit_cache_key(profile: &BrowserProfile) -> Option<ExitCacheKey> {
   None
 }
 
-lazy_static::lazy_static! {
-  static ref EXIT_CACHE: Mutex<HashMap<String, CachedExit>> = Mutex::new(HashMap::new());
-}
+static EXIT_CACHE: std::sync::LazyLock<Mutex<HashMap<String, CachedExit>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// The dimensions an exit is compared on, in report order.
 pub const CHECKED_DIMENSIONS: [&str; 2] = ["timezone", "language"];

@@ -1177,9 +1177,8 @@ pub fn get_system_info() -> SystemInfo {
 }
 
 // Global singleton instance
-lazy_static::lazy_static! {
-  static ref SETTINGS_MANAGER: SettingsManager = SettingsManager::new();
-}
+static SETTINGS_MANAGER: std::sync::LazyLock<SettingsManager> =
+  std::sync::LazyLock::new(SettingsManager::new);
 
 #[cfg(test)]
 mod tests {

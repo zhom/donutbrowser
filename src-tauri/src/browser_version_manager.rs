@@ -554,6 +554,5 @@ pub async fn fetch_browser_versions_with_count(
 }
 
 // Global singleton instance
-lazy_static::lazy_static! {
-  static ref BROWSER_VERSION_SERVICE: BrowserVersionManager = BrowserVersionManager::new();
-}
+static BROWSER_VERSION_SERVICE: std::sync::LazyLock<BrowserVersionManager> =
+  std::sync::LazyLock::new(BrowserVersionManager::new);

@@ -29,9 +29,8 @@ struct EphemeralEntry {
   backing: EphemeralBacking,
 }
 
-lazy_static::lazy_static! {
-  static ref EPHEMERAL_DIRS: Mutex<HashMap<String, EphemeralEntry>> = Mutex::new(HashMap::new());
-}
+static EPHEMERAL_DIRS: std::sync::LazyLock<Mutex<HashMap<String, EphemeralEntry>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Test-only redirect for the ephemeral base.
 ///

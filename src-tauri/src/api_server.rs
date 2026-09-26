@@ -16,7 +16,6 @@ use axum::{
   routing::get,
   Router,
 };
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -1211,9 +1210,8 @@ async fn rate_limit_middleware(request: axum::extract::Request, next: Next) -> R
 }
 
 // Global API server instance
-lazy_static! {
-  pub static ref API_SERVER: Arc<Mutex<ApiServer>> = Arc::new(Mutex::new(ApiServer::new()));
-}
+pub static API_SERVER: std::sync::LazyLock<Arc<Mutex<ApiServer>>> =
+  std::sync::LazyLock::new(|| Arc::new(Mutex::new(ApiServer::new())));
 
 // Tauri commands
 #[tauri::command]

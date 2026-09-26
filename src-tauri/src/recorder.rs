@@ -57,9 +57,8 @@ struct RecorderState {
   pending_is_password: bool,
 }
 
-lazy_static::lazy_static! {
-  static ref RECORDER: Arc<AsyncMutex<RecorderState>> = Arc::new(AsyncMutex::new(RecorderState::default()));
-}
+static RECORDER: std::sync::LazyLock<Arc<AsyncMutex<RecorderState>>> =
+  std::sync::LazyLock::new(|| Arc::new(AsyncMutex::new(RecorderState::default())));
 
 fn err(code: &str) -> String {
   json!({ "code": code }).to_string()

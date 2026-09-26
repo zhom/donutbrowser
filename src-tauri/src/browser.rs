@@ -494,6 +494,10 @@ pub struct GithubAsset {
   pub updated_at: Option<String>,
 }
 
+// Global singleton instance
+static BROWSER_FACTORY: std::sync::LazyLock<BrowserFactory> =
+  std::sync::LazyLock::new(BrowserFactory::new);
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -747,9 +751,4 @@ mod tests {
         .join("profile")
     );
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref BROWSER_FACTORY: BrowserFactory = BrowserFactory::new();
 }

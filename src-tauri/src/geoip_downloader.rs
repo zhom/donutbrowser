@@ -357,9 +357,8 @@ pub fn check_missing_geoip_database() -> Result<bool, String> {
 }
 
 // Global singleton instance
-lazy_static::lazy_static! {
-  static ref GEOIP_DOWNLOADER: GeoIPDownloader = GeoIPDownloader::new();
-}
+static GEOIP_DOWNLOADER: std::sync::LazyLock<GeoIPDownloader> =
+  std::sync::LazyLock::new(GeoIPDownloader::new);
 
 #[cfg(test)]
 mod tests {

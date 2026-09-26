@@ -1054,9 +1054,8 @@ mod linux {
 }
 
 // Global singleton instance
-lazy_static::lazy_static! {
-  static ref DEFAULT_BROWSER: DefaultBrowser = DefaultBrowser::new();
-}
+static DEFAULT_BROWSER: std::sync::LazyLock<DefaultBrowser> =
+  std::sync::LazyLock::new(DefaultBrowser::new);
 
 #[command]
 pub async fn is_default_browser() -> Result<bool, String> {

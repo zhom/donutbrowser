@@ -39,10 +39,8 @@ impl ProfileSyncOutcome {
   }
 }
 
-lazy_static::lazy_static! {
-  static ref SYNC_CANCEL_FLAGS: StdMutex<HashMap<String, Arc<AtomicBool>>> =
-    StdMutex::new(HashMap::new());
-}
+static SYNC_CANCEL_FLAGS: std::sync::LazyLock<StdMutex<HashMap<String, Arc<AtomicBool>>>> =
+  std::sync::LazyLock::new(|| StdMutex::new(HashMap::new()));
 
 fn register_sync_cancel(profile_id: &str) -> Arc<AtomicBool> {
   let mut map = SYNC_CANCEL_FLAGS.lock().unwrap();

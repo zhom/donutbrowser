@@ -1091,15 +1091,14 @@ impl DownloadedBrowsersRegistry {
 }
 
 // Global singleton instance
-lazy_static::lazy_static! {
-  static ref DOWNLOADED_BROWSERS_REGISTRY: DownloadedBrowsersRegistry = {
+static DOWNLOADED_BROWSERS_REGISTRY: std::sync::LazyLock<DownloadedBrowsersRegistry> =
+  std::sync::LazyLock::new(|| {
     let registry = DownloadedBrowsersRegistry::new();
     if let Err(e) = registry.load() {
       log::warn!("Warning: Failed to load downloaded browsers registry: {e}");
     }
     registry
-  };
-}
+  });
 
 #[cfg(test)]
 mod tests {

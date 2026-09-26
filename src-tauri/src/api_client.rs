@@ -378,9 +378,7 @@ impl ApiClient {
   }
 }
 
-lazy_static::lazy_static! {
-  static ref API_CLIENT: ApiClient = ApiClient::new();
-}
+static API_CLIENT: std::sync::LazyLock<ApiClient> = std::sync::LazyLock::new(ApiClient::new);
 
 #[cfg(test)]
 mod tests {

@@ -30,11 +30,10 @@ const HMAC_FILENAME_LEN: usize = 32;
 const VERIFY_FILE_NAME: &str = ".donut-pw-verify";
 const VERIFY_FILE_PATH: &str = "__donut_pw_verify__";
 
-lazy_static::lazy_static! {
-  /// In-memory cache of derived per-profile encryption keys, keyed by profile UUID.
-  /// Only populated while a profile is unlocked / running. Never persisted.
-  static ref KEY_CACHE: Mutex<HashMap<uuid::Uuid, [u8; 32]>> = Mutex::new(HashMap::new());
-}
+/// In-memory cache of derived per-profile encryption keys, keyed by profile UUID.
+/// Only populated while a profile is unlocked / running. Never persisted.
+static KEY_CACHE: std::sync::LazyLock<Mutex<HashMap<uuid::Uuid, [u8; 32]>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, thiserror::Error)]
 pub enum PasswordError {

@@ -2004,6 +2004,10 @@ pub async fn open_url_with_profile(
     .await
 }
 
+// Global singleton instance
+static BROWSER_RUNNER: std::sync::LazyLock<BrowserRunner> =
+  std::sync::LazyLock::new(BrowserRunner::new);
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -2033,9 +2037,4 @@ mod tests {
         .is_ok()
     );
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref BROWSER_RUNNER: BrowserRunner = BrowserRunner::new();
 }

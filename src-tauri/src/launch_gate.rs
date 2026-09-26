@@ -56,9 +56,8 @@ struct PendingConsent {
   issued_at: u64,
 }
 
-lazy_static::lazy_static! {
-  static ref CONSENTS: Mutex<HashMap<String, PendingConsent>> = Mutex::new(HashMap::new());
-}
+static CONSENTS: std::sync::LazyLock<Mutex<HashMap<String, PendingConsent>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn consents() -> std::sync::MutexGuard<'static, HashMap<String, PendingConsent>> {
   CONSENTS.lock().unwrap_or_else(|e| e.into_inner())
