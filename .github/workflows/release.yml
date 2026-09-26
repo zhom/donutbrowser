@@ -288,9 +288,21 @@ jobs:
   # Runs after every matrix leg (including the portable ZIP upload) so the
   # sums cover the complete, final asset set. The app self-updater refuses to
   # install a release it cannot verify against this file.
-  checksums:
+  # The Flatpak and the Snap, repackaged from this release's .deb and attached
+  # to it before the checksums are taken, so SHA256SUMS.txt covers them.
+  linux-packages:
     if: github.repository == 'zhom/donutbrowser'
     needs: [release]
+    uses: ./.github/workflows/linux-packages.yml
+    permissions:
+      contents: write
+    with:
+      release-tag: ${{ github.ref_name }}
+
+  checksums:
+    # A failed Flatpak or Snap never holds back the checksums.
+    if: ${{ !cancelled() && github.repository == 'zhom/donutbrowser' && needs.release.result == 'success' }}
+    needs: [release, linux-packages]
     runs-on: ubuntu-latest
     permissions:
       contents: write

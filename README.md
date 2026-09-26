@@ -88,11 +88,11 @@ If that gives an EGL display error, add `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `G
 
 ### Flatpak and Snap
 
-The [Linux Packages](https://github.com/zhom/donutbrowser/actions/workflows/linux-packages.yml) workflow builds an x86_64 Flatpak bundle and Snap from the `.deb`. Download `donut-flatpak-x86_64` or `donut-snap-amd64` from a successful run, unzip it, and install it:
+Releases include an x86_64 Flatpak bundle and a Snap, built from the `.deb` and tested in their sandboxes by the [Linux Packages](https://github.com/zhom/donutbrowser/actions/workflows/linux-packages.yml) workflow. Download `Donut_*_x86_64.flatpak` or `Donut_*_amd64.snap` from the [releases](https://github.com/zhom/donutbrowser/releases) (the nightly has them already) and install it:
 
 ```bash
-flatpak install --user Donut.flatpak
-sudo snap install --dangerous donutbrowser_*.snap
+flatpak install --user Donut_*_x86_64.flatpak
+sudo snap install --dangerous Donut_*_amd64.snap
 ```
 
 The Snap leaves the microphone, the camera and the keyring (used by profile import) disconnected until you run `sudo snap connect donutbrowser:audio-record`, `donutbrowser:camera` or `donutbrowser:password-manager-service`. The Flatpak cannot change the default browser, so choose Donut in your system settings instead.

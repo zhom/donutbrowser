@@ -1,5 +1,9 @@
 # Builds the Linux .deb once, repackages it as a Flatpak and as a Snap, and
 # starts each package headless to check that it runs inside its sandbox.
+#
+# The release workflows call it with `release-tag`: it then repackages the
+# amd64 .deb already attached to that release instead of building one, and
+# uploads the Flatpak and the Snap that passed their tests to the release.
 
 name: Linux Packages
 
@@ -22,6 +26,12 @@ on:
       - "src-tauri/tauri.conf.json"
       - "src-tauri/Cargo.toml"
       - "src-tauri/donutbrowser.desktop"
+  workflow_call:
+    inputs:
+      release-tag:
+        description: "Release whose amd64 .deb is repackaged; the packages are uploaded to it"
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       check-wayfern:
@@ -33,7 +43,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: linux-packages-${{ github.event.pull_request.number || github.ref }}
+  group: linux-packages-${{ inputs.release-tag || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -45,6 +55,7 @@ env:
 jobs:
   deb:
     name: Build .deb
+    if: ${{ !inputs.release-tag }}
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -106,9 +117,34 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  deb-from-release:
+    name: Take the .deb from the release
+    if: ${{ inputs.release-tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download the amd64 .deb
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release-tag }}
+        run: |
+          mkdir -p linux-deb
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'Donut_*_amd64.deb' --dir linux-deb
+          ls -l linux-deb
+          test "$(find linux-deb -name '*.deb' | wc -l)" -eq 1
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        with:
+          name: donut-deb
+          path: linux-deb/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
   flatpak:
     name: Build Flatpak
-    needs: deb
+    needs: [deb, deb-from-release]
+    # Exactly one of the two .deb jobs runs; the other is skipped.
+    if: ${{ !cancelled() && (needs.deb.result == 'success' || needs.deb-from-release.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     container:
@@ -240,7 +276,8 @@ jobs:
 
   snap:
     name: Build and test Snap
-    needs: deb
+    needs: [deb, deb-from-release]
+    if: ${{ !cancelled() && (needs.deb.result == 'success' || needs.deb-from-release.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -339,3 +376,54 @@ jobs:
           path: smoke
           if-no-files-found: ignore
           retention-days: 14
+
+  publish:
+    name: Attach the packages to the release
+    needs: [flatpak-smoke, snap]
+    # Each package goes up only when its own test passed, so a Snap failure
+    # does not hold back a working Flatpak.
+    if: ${{ !cancelled() && inputs.release-tag && (needs.flatpak-smoke.result == 'success' || needs.snap.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #v8.0.1
+        with:
+          name: donut-deb
+          path: linux-deb
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #v8.0.1
+        if: ${{ needs.flatpak-smoke.result == 'success' }}
+        with:
+          name: donut-flatpak-x86_64
+          path: flatpak-bundle
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #v8.0.1
+        if: ${{ needs.snap.result == 'success' }}
+        with:
+          name: donut-snap-amd64
+          path: snap-package
+
+      # Named like the other assets (Donut_<version>_<arch>.<ext>), so the
+      # nightly job renames them the same way it renames the rest.
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release-tag }}
+        run: |
+          deb="$(find linux-deb -name 'Donut_*_amd64.deb' | head -n 1)"
+          version="$(basename "$deb" | sed -E 's/^Donut_(.+)_amd64\.deb$/\1/')"
+          test -n "$version"
+          files=()
+          if [ -f flatpak-bundle/Donut.flatpak ]; then
+            cp flatpak-bundle/Donut.flatpak "Donut_${version}_x86_64.flatpak"
+            files+=("Donut_${version}_x86_64.flatpak")
+          fi
+          snap="$(find snap-package -name '*.snap' 2>/dev/null | head -n 1)"
+          if [ -n "$snap" ]; then
+            cp "$snap" "Donut_${version}_amd64.snap"
+            files+=("Donut_${version}_amd64.snap")
+          fi
+          ls -l "${files[@]}"
+          gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"

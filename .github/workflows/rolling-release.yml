@@ -303,9 +303,37 @@ jobs:
           security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
           rm -f "$RUNNER_TEMP/build_certificate.p12" || true
 
-  update-nightly-release:
+  # The Flatpak and the Snap, repackaged from this build's .deb and attached to
+  # its release before the nightly is assembled from it.
+  nightly-tag:
     if: github.repository == 'zhom/donutbrowser'
     needs: [rolling-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Name the build's release
+        id: tag
+        run: echo "tag=nightly-$(git show -s --format=%cs HEAD)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  linux-packages:
+    needs: [nightly-tag]
+    uses: ./.github/workflows/linux-packages.yml
+    permissions:
+      contents: write
+    with:
+      release-tag: ${{ needs.nightly-tag.outputs.tag }}
+
+  update-nightly-release:
+    # A failed Flatpak or Snap never holds back the nightly; it only goes out
+    # without them.
+    if: ${{ !cancelled() && github.repository == 'zhom/donutbrowser' && needs.rolling-release.result == 'success' }}
+    needs: [rolling-release, linux-packages]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -404,6 +432,8 @@ jobs:
           for f in Donut-*.aarch64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.rpm; done
           for f in Donut_*_aarch64.app.tar.gz; do [ -f "$f" ] && mv "$f" Donut_aarch64.app.tar.gz; done
           for f in Donut_*_x64.app.tar.gz; do [ -f "$f" ] && mv "$f" Donut_x64.app.tar.gz; done
+          for f in Donut_*_x86_64.flatpak; do [ -f "$f" ] && mv "$f" Donut_nightly_x86_64.flatpak; done
+          for f in Donut_*_amd64.snap; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.snap; done
 
           # Checksums for the rolling release (renamed filenames), restricted
           # to exactly the assets uploaded below.
