@@ -1,62 +1,6 @@
 [
   {
-    "name": "@babel/code-frame",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/compat-data",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/core",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/generator",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/helper-compilation-targets",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/helper-globals",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/helper-string-parser",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/helper-validator-identifier",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/helper-validator-option",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/helpers",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/parser",
-    "license": "MIT"
-  },
-  {
     "name": "@babel/runtime",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/template",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/traverse",
-    "license": "MIT"
-  },
-  {
-    "name": "@babel/types",
     "license": "MIT"
   },
   {
@@ -73,26 +17,6 @@
   },
   {
     "name": "@floating-ui/utils",
-    "license": "MIT"
-  },
-  {
-    "name": "@img/colour",
-    "license": "MIT"
-  },
-  {
-    "name": "@jridgewell/gen-mapping",
-    "license": "MIT"
-  },
-  {
-    "name": "@jridgewell/resolve-uri",
-    "license": "MIT"
-  },
-  {
-    "name": "@jridgewell/sourcemap-codec",
-    "license": "MIT"
-  },
-  {
-    "name": "@jridgewell/trace-mapping",
     "license": "MIT"
   },
   {
@@ -444,32 +368,8 @@
     "license": "MIT"
   },
   {
-    "name": "@types/gensync",
-    "license": "MIT"
-  },
-  {
-    "name": "@types/jsesc",
-    "license": "MIT"
-  },
-  {
-    "name": "@types/node",
-    "license": "MIT"
-  },
-  {
-    "name": "@types/react",
-    "license": "MIT"
-  },
-  {
-    "name": "@types/react-dom",
-    "license": "MIT"
-  },
-  {
     "name": "@types/use-sync-external-store",
     "license": "MIT"
-  },
-  {
-    "name": "@typescript/typescript-win32-x64",
-    "license": "Apache-2.0"
   },
   {
     "name": "adler2",
@@ -708,10 +608,6 @@
     "license": "BSD-3-Clause OR MIT"
   },
   {
-    "name": "browserslist",
-    "license": "MIT"
-  },
-  {
     "name": "bs58",
     "license": "Apache-2.0 OR MIT"
   },
@@ -900,10 +796,6 @@
     "license": "CC0-1.0 OR MIT-0 OR Apache-2.0"
   },
   {
-    "name": "convert-source-map",
-    "license": "MIT"
-  },
-  {
     "name": "cookie",
     "license": "Apache-2.0 OR MIT"
   },
@@ -978,10 +870,6 @@
   {
     "name": "cssparser-macros",
     "license": "MPL-2.0"
-  },
-  {
-    "name": "csstype",
-    "license": "MIT"
   },
   {
     "name": "ctor",
@@ -1112,10 +1000,6 @@
     "license": "MIT"
   },
   {
-    "name": "detect-libc",
-    "license": "Apache-2.0"
-  },
-  {
     "name": "detect-node-es",
     "license": "MIT"
   },
@@ -1212,16 +1096,8 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "electron-to-chromium",
-    "license": "ISC"
-  },
-  {
     "name": "embed_plist",
     "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "empathic",
-    "license": "MIT"
   },
   {
     "name": "encoding_rs",
@@ -1273,10 +1149,6 @@
   },
   {
     "name": "es-toolkit",
-    "license": "MIT"
-  },
-  {
-    "name": "escalade",
     "license": "MIT"
   },
   {
@@ -1457,10 +1329,6 @@
   },
   {
     "name": "generic-array",
-    "license": "MIT"
-  },
-  {
-    "name": "gensync",
     "license": "MIT"
   },
   {
@@ -1696,10 +1564,6 @@
     "license": "MIT"
   },
   {
-    "name": "import-meta-resolve",
-    "license": "MIT"
-  },
-  {
     "name": "indexmap",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1784,20 +1648,8 @@
     "license": "MIT"
   },
   {
-    "name": "js-tokens",
-    "license": "MIT"
-  },
-  {
-    "name": "jsesc",
-    "license": "MIT"
-  },
-  {
     "name": "json-patch",
     "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "json5",
-    "license": "MIT"
   },
   {
     "name": "jsonc-parser",
@@ -1874,10 +1726,6 @@
   {
     "name": "loop9",
     "license": "MIT"
-  },
-  {
-    "name": "lru-cache",
-    "license": "BlueOak-1.0.0"
   },
   {
     "name": "lucide-react",
@@ -2008,10 +1856,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "node-releases",
-    "license": "MIT"
-  },
-  {
     "name": "nom",
     "license": "MIT"
   },
@@ -2130,10 +1974,6 @@
   {
     "name": "objc2-web-kit",
     "license": "Zlib OR Apache-2.0 OR MIT"
-  },
-  {
-    "name": "obug",
-    "license": "MIT"
   },
   {
     "name": "onborda",
@@ -2620,10 +2460,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "semver",
-    "license": "ISC"
-  },
-  {
     "name": "sendfd",
     "license": "Apache-2.0 OR BSD-3-Clause"
   },
@@ -2710,10 +2546,6 @@
   {
     "name": "shared_child",
     "license": "MIT"
-  },
-  {
-    "name": "sharp",
-    "license": "Apache-2.0"
   },
   {
     "name": "sigchld",
@@ -3112,14 +2944,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "typescript",
-    "license": "Apache-2.0"
-  },
-  {
-    "name": "undici-types",
-    "license": "MIT"
-  },
-  {
     "name": "unic-char-property",
     "license": "Apache-2.0 OR MIT"
   },
@@ -3174,10 +2998,6 @@
   {
     "name": "untrusted",
     "license": "ISC"
-  },
-  {
-    "name": "update-browserslist-db",
-    "license": "MIT"
   },
   {
     "name": "url",
