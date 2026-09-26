@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
@@ -622,6 +622,143 @@ test("global config sealing and encrypted profile sync reject a wrong password, 
       receiver.close(),
       rolloverReceiver.close(),
     ]);
+  }
+});
+
+test("a synced profile restored from the trash keeps its sync, and a delete made offline is not undone by the next sync", async () => {
+  assert.ok(syncUrl && syncToken, "Sync infrastructure was not started");
+  const app = appFromEnvironment("sync-trash");
+  try {
+    await app.start();
+    await configureSync(app);
+
+    const remoteHas = async (key) =>
+      (await listRemote(key)).some((object) => object.key === key);
+    const manifestKey = (id) => `profiles/${id}/manifest.json`;
+    const tombstoneKey = (id) => `tombstones/profiles/${id}.json`;
+    const isLive = async (id) =>
+      (await app.invoke("list_browser_profiles")).some(
+        (profile) => profile.id === id,
+      );
+    const pendingFile = path.join(
+      app.dataRoot,
+      "data",
+      "pending_profile_deletes.json",
+    );
+    // The pipeline logs this once its reconcile at sync start has finished.
+    const logDir = path.join(app.dataRoot, "logs");
+    const pipelineStarts = async () => {
+      let count = 0;
+      for (const name of await readdir(logDir)) {
+        if (!name.endsWith(".log")) continue;
+        const text = await readFile(path.join(logDir, name), "utf8");
+        count += text.split("Sync scheduler started").length - 1;
+      }
+      return count;
+    };
+    const restartSync = async (description) => {
+      const before = await pipelineStarts();
+      await app.invoke("restart_sync_service");
+      await waitFor(
+        app,
+        async () => (await pipelineStarts()) > before,
+        description,
+      );
+    };
+    const syncedProfile = async (name) => {
+      const profile = await createProfile(app, name);
+      const data = path.join(
+        app.dataRoot,
+        "data",
+        "profiles",
+        profile.id,
+        "profile",
+        "Default",
+      );
+      await mkdir(data, { recursive: true });
+      await writeFile(path.join(data, "Preferences"), JSON.stringify({ name }));
+      await app.invoke("set_profile_sync_mode", {
+        profileId: profile.id,
+        syncMode: "Regular",
+      });
+      await app.invoke("request_profile_sync", { profileId: profile.id });
+      await waitFor(
+        app,
+        () => remoteHas(manifestKey(profile.id)),
+        `${name} uploaded`,
+      );
+      return profile;
+    };
+
+    // Restored at once, while the cloud delete may still be running. The
+    // restore waits for that delete and clears its tombstone before sync is
+    // back on, so nothing can erase the restored profile afterwards.
+    const kept = await syncedProfile("Trash Round Trip");
+    await app.invoke("delete_profile", { profileId: kept.id });
+    const [entry] = await app.invoke("list_trashed_profiles");
+    assert.equal(entry.id, kept.id);
+    assert.equal(entry.sync_enabled, true);
+    const restored = await app.invoke("restore_trashed_profile", {
+      profileId: kept.id,
+    });
+    assert.equal(restored.sync_mode, "Regular");
+    assert.equal(
+      await remoteHas(tombstoneKey(kept.id)),
+      false,
+      "the restore clears the tombstone of the delete",
+    );
+    await waitFor(
+      app,
+      () => remoteHas(manifestKey(kept.id)),
+      "the restored profile uploads again",
+    );
+    await restartSync("the reconcile after the restore finishes");
+    assert.equal(
+      await isLive(kept.id),
+      true,
+      "the reconcile at sync start keeps the restored profile",
+    );
+
+    // Deleted while the server cannot be reached: the delete is owed, and the
+    // next sync start carries it out instead of downloading the profile back.
+    const offline = await syncedProfile("Deleted Offline");
+    await app.invoke("save_sync_settings", {
+      syncServerUrl: "http://127.0.0.1:9",
+      syncToken,
+    });
+    await app.invoke("delete_profile", { profileId: offline.id });
+    await waitFor(
+      app,
+      async () =>
+        JSON.parse(await readFile(pendingFile, "utf8")).some(
+          (pending) => pending.profile_id === offline.id,
+        ),
+      "the unreachable delete is recorded",
+    );
+    assert.equal(await remoteHas(manifestKey(offline.id)), true);
+
+    await app.invoke("save_sync_settings", {
+      syncServerUrl: syncUrl,
+      syncToken,
+    });
+    await restartSync("the reconcile with the owed delete finishes");
+    assert.equal(await remoteHas(tombstoneKey(offline.id)), true);
+    assert.equal(await remoteHas(manifestKey(offline.id)), false);
+    assert.equal(
+      await isLive(offline.id),
+      false,
+      "the profile deleted offline does not come back",
+    );
+    assert.deepEqual(
+      (await app.invoke("list_trashed_profiles")).map((item) => item.id),
+      [offline.id],
+    );
+    await assert.rejects(readFile(pendingFile, "utf8"), { code: "ENOENT" });
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    await app.close();
   }
 });
 

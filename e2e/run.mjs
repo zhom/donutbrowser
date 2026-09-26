@@ -10,7 +10,6 @@ import {
   statSync,
 } from "node:fs";
 import {
-  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -26,6 +25,7 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+import { ensureRclone, serveS3Args } from "../scripts/rclone.mjs";
 import { createSafeDiagnostics } from "./lib/diagnostics.mjs";
 import { extensionCrx3 } from "./lib/fixtures.mjs";
 import { DRIVER_COMMAND_TIMEOUT_SECONDS } from "./lib/limits.mjs";
@@ -483,22 +483,6 @@ async function ensureMmdbFixture(
   return fixture;
 }
 
-function minioUrl() {
-  const arch = os.arch() === "arm64" ? "arm64" : "amd64";
-  if (process.platform === "darwin") {
-    return `https://dl.min.io/server/minio/release/darwin-${arch}/minio`;
-  }
-  if (process.platform === "linux") {
-    return `https://dl.min.io/server/minio/release/linux-${arch}/minio`;
-  }
-  if (process.platform === "win32") {
-    return "https://dl.min.io/server/minio/release/windows-amd64/minio.exe";
-  }
-  throw new Error(
-    `Unsupported MinIO platform ${process.platform}-${os.arch()}`,
-  );
-}
-
 async function download(url, destination) {
   const transport = url.startsWith("https:") ? https : http;
   await new Promise((resolve, reject) => {
@@ -526,73 +510,43 @@ async function download(url, destination) {
   });
 }
 
-async function ensureMinio() {
-  if (process.env.DONUT_E2E_MINIO_BIN) {
-    return path.resolve(process.env.DONUT_E2E_MINIO_BIN);
+async function ensureS3Server() {
+  if (process.env.DONUT_E2E_RCLONE_BIN) {
+    return path.resolve(process.env.DONUT_E2E_RCLONE_BIN);
   }
-  const existingHarnessBinary = path.join(
-    projectRoot,
-    ".cache",
-    "sync-test",
-    isWindows ? "minio.exe" : "minio",
+  // The same cache as scripts/sync-test-harness.mjs, so one download serves both.
+  return ensureRclone(
+    path.join(projectRoot, ".cache", "sync-test"),
+    download,
+    log,
   );
-  if (existsSync(existingHarnessBinary)) {
-    return existingHarnessBinary;
-  }
-  const toolsDir = path.join(os.tmpdir(), "donut-e2e-tools");
-  const binary = path.join(
-    toolsDir,
-    `minio-${process.platform}-${os.arch()}${executableSuffix}`,
-  );
-  await mkdir(toolsDir, { recursive: true });
-  if (!existsSync(binary)) {
-    log("Downloading isolated MinIO test dependency");
-    const temporary = `${binary}.${process.pid}.tmp`;
-    await download(minioUrl(), temporary);
-    await chmod(temporary, 0o755);
-    await rm(binary, { force: true });
-    await import("node:fs/promises").then(({ rename }) =>
-      rename(temporary, binary),
-    );
-  }
-  return binary;
 }
 
 async function startSyncInfrastructure(runRoot, options, records) {
-  const minioBinary = await ensureMinio();
-  const minioPort = await freePort();
-  const minioConsolePort = await freePort();
+  const s3Binary = await ensureS3Server();
+  const s3Port = await freePort();
   const syncPort = await freePort();
   const syncToken = "donut-e2e-sync-token-0123456789abcdef";
-  const minio = startProcess(
-    "minio",
-    minioBinary,
-    [
-      "server",
-      path.join(runRoot, "minio-data"),
-      "--address",
-      `127.0.0.1:${minioPort}`,
-      "--console-address",
-      `127.0.0.1:${minioConsolePort}`,
-    ],
+  const s3DataDir = path.join(runRoot, "s3-data");
+  await mkdir(s3DataDir, { recursive: true });
+  const s3 = startProcess(
+    "s3",
+    s3Binary,
+    serveS3Args({
+      dataDir: s3DataDir,
+      address: `127.0.0.1:${s3Port}`,
+      accessKey: "minioadmin",
+      secretKey: "minioadmin",
+    }),
     {
       cwd: projectRoot,
       runRoot,
       verbose: options.verbose,
-      env: {
-        ...process.env,
-        MINIO_ROOT_USER: "minioadmin",
-        MINIO_ROOT_PASSWORD: "minioadmin",
-        MINIO_BROWSER: "off",
-      },
+      env: { ...process.env },
     },
   );
-  records.push(minio);
-  await waitForUrl(
-    `http://127.0.0.1:${minioPort}/minio/health/live`,
-    30_000,
-    minio,
-  );
+  records.push(s3);
+  await waitForPort(s3Port, 30_000, s3);
 
   const syncRoot = path.join(projectRoot, "donut-sync");
   await rm(path.join(syncRoot, "tsconfig.build.tsbuildinfo"), { force: true });
@@ -606,7 +560,7 @@ async function startSyncInfrastructure(runRoot, options, records) {
       ...process.env,
       PORT: String(syncPort),
       SYNC_TOKEN: syncToken,
-      S3_ENDPOINT: `http://127.0.0.1:${minioPort}`,
+      S3_ENDPOINT: `http://127.0.0.1:${s3Port}`,
       S3_REGION: "us-east-1",
       S3_ACCESS_KEY_ID: "minioadmin",
       S3_SECRET_ACCESS_KEY: "minioadmin",
@@ -617,7 +571,7 @@ async function startSyncInfrastructure(runRoot, options, records) {
   records.push(sync);
   await waitForUrl(`http://127.0.0.1:${syncPort}/health`, 30_000, sync);
   return {
-    minioUrl: `http://127.0.0.1:${minioPort}`,
+    s3Url: `http://127.0.0.1:${s3Port}`,
     syncUrl: `http://127.0.0.1:${syncPort}`,
     syncToken,
   };
@@ -1080,7 +1034,7 @@ async function main() {
           localValues.RESIDENTIAL_PROXY_URL_ONE_HTTP ?? "",
         DONUT_E2E_SYNC_URL: sync.syncUrl ?? "",
         DONUT_E2E_SYNC_TOKEN: sync.syncToken ?? "",
-        DONUT_E2E_MINIO_URL: sync.minioUrl ?? "",
+        DONUT_E2E_S3_URL: sync.s3Url ?? "",
         DONUT_E2E_WIREGUARD_CONFIG_BASE64: wireGuard
           ? Buffer.from(wireGuard.config).toString("base64")
           : "",

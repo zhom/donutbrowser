@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "{{count}} 个配置文件及其全部数据将被销毁。此操作无法撤销。",
     "confirmEmptyDescription_other": "{{count}} 个配置文件及其全部数据将被销毁。此操作无法撤销。",
     "restored": "已恢复“{{name}}”",
+    "restoredSyncOff": "无法重新开启同步，因此该配置文件仅保存在此设备上。请重新设置其同步模式，以便在其他设备上使用。",
     "restoreFailed": "无法恢复配置文件：{{error}}",
     "deletedForever": "已永久删除“{{name}}”",
     "deleteForeverFailed": "无法删除配置文件：{{error}}",

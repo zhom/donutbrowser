@@ -3200,6 +3200,7 @@
     "confirmEmptyDescription_other": "{{count}} perfiles y todos sus datos se destruirán. Esta acción no se puede deshacer.",
     "confirmEmptyDescription_many": "{{count}} perfiles y todos sus datos se destruirán. Esta acción no se puede deshacer.",
     "restored": "\"{{name}}\" se ha restaurado",
+    "restoredSyncOff": "No se pudo volver a activar la sincronización, así que el perfil solo está en este dispositivo. Vuelve a elegir su modo de sincronización para compartirlo con tus otros dispositivos.",
     "restoreFailed": "No se pudo restaurar el perfil: {{error}}",
     "deletedForever": "\"{{name}}\" se ha eliminado definitivamente",
     "deleteForeverFailed": "No se pudo eliminar el perfil: {{error}}",

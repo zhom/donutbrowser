@@ -754,7 +754,11 @@ impl ProfileManager {
     }
 
     // An ephemeral profile keeps its data in RAM; there is nothing to trash.
-    let permanent = permanent || profile.ephemeral;
+    // "Delete at once" (a retention of 0 days) turns the trash off: the
+    // profile is erased where it lies and never passes through the trash.
+    let retention_days = crate::profile::trash::retention_days();
+    let permanent = permanent || profile.ephemeral || retention_days == 0;
+    let now = crate::proxy_manager::now_secs();
 
     // A decrypted or in-memory copy must not outlive the profile it belonged
     // to. The running-browser guard above only rejects a live process, and
@@ -772,29 +776,21 @@ impl ProfileManager {
     if permanent {
       self.forget_profile_side_state(profile_id);
       if profile_uuid_dir.exists() {
-        log::info!("Deleting profile directory: {}", profile_uuid_dir.display());
-        fs::remove_dir_all(&profile_uuid_dir)?;
+        log::info!("Erasing profile directory: {}", profile_uuid_dir.display());
+        crate::fs_secure::secure_remove_dir_all(&profile_uuid_dir, true)?;
       }
       if profile_uuid_dir.exists() {
         return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
       }
     } else {
-      let retention_days = crate::profile::trash::retention_days();
-      {
-        let _guard = crate::profile::trash::mutation_lock();
-        crate::profile::trash::trash_profile(
-          &profiles_dir,
-          &crate::profile::trash::trash_dir(),
-          &profile,
-          crate::proxy_manager::now_secs(),
-          retention_days,
-        )?;
-      }
-      // "Keep for 0 days" means the trash is off: the entry goes right away,
-      // through the same purge an expired entry takes.
-      if retention_days == 0 {
-        self.purge_expired_trash();
-      }
+      let _guard = crate::profile::trash::mutation_lock();
+      crate::profile::trash::trash_profile(
+        &profiles_dir,
+        &crate::profile::trash::trash_dir(),
+        &profile,
+        now,
+        retention_days,
+      )?;
     }
 
     log::info!(
@@ -815,20 +811,24 @@ impl ProfileManager {
       crate::team_lock::release_team_lock_if_needed(&lock_profile).await;
     });
 
-    // From the cloud's point of view a trashed profile is deleted.
+    // From the cloud's point of view a trashed profile is deleted. The delete
+    // stays owed until it lands, so one that cannot reach the server is
+    // retried when sync next starts instead of the profile downloading back.
     if was_sync_enabled {
+      crate::sync::pending_deletes::record(profile_id, now);
       let profile_id_owned = profile_id.to_string();
       let app_handle_clone = app_handle.clone();
-      tauri::async_runtime::spawn(async move {
+      let task = tauri::async_runtime::spawn(async move {
         match crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
           Ok(engine) => {
             if let Err(e) = engine.delete_profile(&profile_id_owned).await {
               log::warn!(
-                "Failed to delete profile {} from sync: {}",
+                "Failed to delete profile {} from sync, retrying when sync next starts: {}",
                 profile_id_owned,
                 e
               );
             } else {
+              crate::sync::pending_deletes::forget(&profile_id_owned);
               log::info!("Profile {} deleted from S3 sync storage", profile_id_owned);
             }
           }
@@ -837,6 +837,7 @@ impl ProfileManager {
           }
         }
       });
+      crate::sync::pending_deletes::track(profile_id, task);
     }
 
     if emit_events {
@@ -878,13 +879,13 @@ impl ProfileManager {
 
   /// Move a trashed profile back into the live list under its original id.
   ///
-  /// Sync is NOT re-enabled here: the caller (the Tauri command) routes the
-  /// restored profile through `set_profile_sync_mode`, which clears the
-  /// tombstone the trash wrote and queues the re-upload.
+  /// The profile comes back with sync off, next to the sync mode it had. The
+  /// caller (the Tauri command) turns sync back on once the tombstone the
+  /// delete wrote is gone from the cloud.
   pub fn restore_trashed_profile(
     &self,
     profile_id: &str,
-  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+  ) -> Result<(BrowserProfile, SyncMode), Box<dyn std::error::Error>> {
     let _guard = crate::profile::trash::mutation_lock();
     let live = self.list_profiles()?;
     let groups: std::collections::HashSet<String> = crate::group_manager::GROUP_MANAGER
@@ -898,7 +899,7 @@ impl ProfileManager {
       })
       .unwrap_or_default();
 
-    let profile = crate::profile::trash::restore_profile(
+    let (profile, sync_mode) = crate::profile::trash::restore_profile(
       &self.get_profiles_dir(),
       &crate::profile::trash::trash_dir(),
       profile_id,
@@ -920,7 +921,7 @@ impl ProfileManager {
     if let Err(e) = events::emit_empty("trash-changed") {
       log::warn!("Warning: Failed to emit trash-changed event: {e}");
     }
-    Ok(profile)
+    Ok((profile, sync_mode))
   }
 
   pub fn purge_trashed_profile(&self, profile_id: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -968,15 +969,21 @@ impl ProfileManager {
 
   /// Delete a profile from the local filesystem only, without triggering remote sync deletion.
   /// Used when a profile was deleted on another device and the local copy should be cleaned up.
+  /// The copy is erased the same way a local permanent delete erases it.
   pub fn delete_profile_local_only(
     &self,
     profile_id: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
+    crate::ephemeral_dirs::remove_ephemeral_dir(profile_id);
+    if let Ok(uuid) = uuid::Uuid::parse_str(profile_id) {
+      crate::profile::encryption::drop_cached_key(&uuid);
+    }
+    self.forget_profile_side_state(profile_id);
     let profiles_dir = self.get_profiles_dir();
     let profile_dir = profiles_dir.join(profile_id);
     if profile_dir.exists() {
-      fs::remove_dir_all(&profile_dir)?;
-      log::info!("Deleted local profile {} (tombstoned remotely)", profile_id);
+      crate::fs_secure::secure_remove_dir_all(&profile_dir, true)?;
+      log::info!("Erased local profile {} (tombstoned remotely)", profile_id);
     }
 
     if let Err(e) = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance()
@@ -2577,26 +2584,32 @@ pub fn clone_profile(profile_id: String, name: Option<String>) -> Result<Browser
 }
 
 /// Move a profile to the trash. `permanent: true` destroys it instead.
+///
+/// Async so the erase, which overwrites every file, runs off the main thread.
 #[tauri::command]
-pub fn delete_profile(
+pub async fn delete_profile(
   app_handle: tauri::AppHandle,
   profile_id: String,
   permanent: Option<bool>,
 ) -> Result<(), String> {
-  let manager = ProfileManager::instance();
-  let result = if permanent.unwrap_or(false) {
-    manager.delete_profile_permanently(&app_handle, &profile_id)
-  } else {
-    manager.delete_profile(&app_handle, &profile_id)
-  };
-  result.map_err(|e| {
-    let msg = e.to_string();
-    if msg.starts_with('{') {
-      msg
+  tauri::async_runtime::spawn_blocking(move || {
+    let manager = ProfileManager::instance();
+    let result = if permanent.unwrap_or(false) {
+      manager.delete_profile_permanently(&app_handle, &profile_id)
     } else {
-      format!("Failed to delete profile: {msg}")
-    }
+      manager.delete_profile(&app_handle, &profile_id)
+    };
+    result.map_err(|e| {
+      let msg = e.to_string();
+      if msg.starts_with('{') {
+        msg
+      } else {
+        format!("Failed to delete profile: {msg}")
+      }
+    })
   })
+  .await
+  .map_err(|e| format!("Failed to delete profile: {e}"))?
 }
 
 static PROFILE_MANAGER: std::sync::LazyLock<ProfileManager> =

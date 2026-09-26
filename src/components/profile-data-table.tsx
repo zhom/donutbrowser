@@ -518,7 +518,7 @@ function ExtCell({
         >
           <LuPuzzle className="size-3 shrink-0" />
           <span className="flex-1 truncate" title={label}>
-            {label}
+            {group?.name ?? "—"}
           </span>
           <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </button>

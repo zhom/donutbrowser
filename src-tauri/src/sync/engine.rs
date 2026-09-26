@@ -2045,6 +2045,40 @@ impl SyncEngine {
     Ok(())
   }
 
+  /// Whether the cloud still holds a tombstone for `profile`, personal or team.
+  /// A failed check counts as no: a skipped erase is retried by the next
+  /// reconcile, and an erase cannot be undone.
+  pub async fn profile_tombstone_exists(&self, profile: &BrowserProfile) -> bool {
+    for key in Self::profile_tombstone_keys(profile).await {
+      match self.client.stat(&key).await {
+        Ok(stat) if stat.exists => return true,
+        Ok(_) => {}
+        Err(e) => {
+          log::warn!("Could not check {key}: {e}");
+          return false;
+        }
+      }
+    }
+    false
+  }
+
+  async fn delete_profile_tombstones(&self, profile: &BrowserProfile) -> SyncResult<()> {
+    for key in Self::profile_tombstone_keys(profile).await {
+      self.client.delete(&key, None).await?;
+    }
+    Ok(())
+  }
+
+  async fn profile_tombstone_keys(profile: &BrowserProfile) -> Vec<String> {
+    let profile_id = profile.id.to_string();
+    let mut keys = vec![format!("tombstones/profiles/{profile_id}.json")];
+    let key_prefix = Self::get_team_key_prefix(profile).await;
+    if !key_prefix.is_empty() {
+      keys.push(format!("{key_prefix}tombstones/profiles/{profile_id}.json"));
+    }
+    keys
+  }
+
   pub async fn delete_proxy(&self, proxy_id: &str) -> SyncResult<()> {
     let remote_key = format!("proxies/{}.json", proxy_id);
     let tombstone_key = format!("tombstones/proxies/{}.json", proxy_id);
@@ -2881,6 +2915,39 @@ impl SyncEngine {
       profiles_to_check.len()
     );
 
+    // Deletes this device made while the cloud was out of reach. They are
+    // settled before anything downloads, or the download below would bring the
+    // deleted profile back. A cloud copy changed after the delete was used on
+    // another device since, and wins, as a newer edit does everywhere else.
+    for pending in super::pending_deletes::list() {
+      let profile_id = pending.profile_id;
+      let Some(key_prefix) = profiles_to_check.remove(&profile_id) else {
+        log::info!("Profile {profile_id} is already gone from the cloud");
+        super::pending_deletes::forget(&profile_id);
+        continue;
+      };
+      let manifest_key = format!("{key_prefix}profiles/{profile_id}/manifest.json");
+      let changed_at = match self.client.stat(&manifest_key).await {
+        Ok(stat) => stat.last_modified.as_deref().and_then(rfc3339_secs),
+        Err(e) => {
+          log::warn!("Could not check profile {profile_id} before its owed delete: {e}");
+          continue;
+        }
+      };
+      if changed_at.is_some_and(|changed| changed > pending.deleted_at) {
+        log::info!(
+          "Profile {profile_id} changed in the cloud after this device deleted it; keeping the newer copy"
+        );
+        super::pending_deletes::forget(&profile_id);
+        profiles_to_check.insert(profile_id, key_prefix);
+        continue;
+      }
+      match self.delete_profile(&profile_id).await {
+        Ok(()) => super::pending_deletes::forget(&profile_id),
+        Err(e) => log::warn!("The owed cloud delete of profile {profile_id} failed again: {e}"),
+      }
+    }
+
     // For each remote profile, check if it exists locally and download if missing.
     // Skip any profile that has a tombstone — a leftover manifest under a
     // tombstoned id means delete_prefix raced or partially failed, and
@@ -2950,40 +3017,16 @@ impl SyncEngine {
     // Delete local synced profiles that have a remote tombstone (deleted on another device)
     {
       let profile_manager = ProfileManager::instance();
-      let local_synced: Vec<(String, Option<String>)> = profile_manager
+      let local_synced: Vec<BrowserProfile> = profile_manager
         .list_profiles()
         .unwrap_or_default()
-        .iter()
+        .into_iter()
         .filter(|p| p.is_sync_enabled())
-        .map(|p| (p.id.to_string(), p.created_by_id.clone()))
         .collect();
 
-      let team_prefix = if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
-        auth.user.team_id.map(|tid| format!("teams/{}/", tid))
-      } else {
-        None
-      };
-
-      for (pid, created_by_id) in &local_synced {
-        // Check personal tombstone
-        let personal_tombstone = format!("tombstones/profiles/{}.json", pid);
-        let has_personal_tombstone = matches!(
-          self.client.stat(&personal_tombstone).await,
-          Ok(stat) if stat.exists
-        );
-
-        // Check team tombstone
-        let has_team_tombstone = if let (Some(tp), Some(_)) = (&team_prefix, created_by_id) {
-          let team_tombstone = format!("{}tombstones/profiles/{}.json", tp, pid);
-          matches!(
-            self.client.stat(&team_tombstone).await,
-            Ok(stat) if stat.exists
-          )
-        } else {
-          false
-        };
-
-        if has_personal_tombstone || has_team_tombstone {
+      for profile in &local_synced {
+        let pid = &profile.id.to_string();
+        if self.profile_tombstone_exists(profile).await {
           // Originator guard: re-read the profile right before deleting. If the
           // local user disabled sync between the snapshot above and this stat
           // call, they're the one who wrote this tombstone — keep their local
@@ -3466,7 +3509,28 @@ pub async fn set_profile_sync_mode(
     "Encrypted" => SyncMode::Encrypted,
     _ => return Err(format!("Invalid sync mode: {sync_mode}")),
   };
+  apply_profile_sync_mode(app_handle, profile_id, new_mode, false).await
+}
 
+/// Turn sync back on for a profile restored from the trash.
+///
+/// Unlike the command, it fails when the tombstone the delete wrote cannot be
+/// cleared, and leaves the profile as it was. Enabled with that tombstone in
+/// place, the profile would be erased by the next reconcile.
+pub async fn resume_profile_sync(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  mode: SyncMode,
+) -> Result<(), String> {
+  apply_profile_sync_mode(app_handle, profile_id, mode, true).await
+}
+
+async fn apply_profile_sync_mode(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  new_mode: SyncMode,
+  require_tombstone_cleared: bool,
+) -> Result<(), String> {
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
@@ -3561,6 +3625,31 @@ pub async fn set_profile_sync_mode(
     }
   }
 
+  // When (re-)enabling sync, clear any stale tombstone from a previous
+  // disable or delete first, while the profile is still local-only. Otherwise
+  // the next reconcile on any device would see the tombstone and delete the
+  // freshly re-uploaded data, and a tombstone event handled between the save
+  // and a later clear would erase the profile that was just switched on.
+  if enabling {
+    let cleared = match SyncEngine::create_from_settings(&app_handle).await {
+      Ok(engine) => engine
+        .delete_profile_tombstones(&profile)
+        .await
+        .map_err(|e| e.to_string()),
+      Err(e) => Err(e),
+    };
+    if let Err(e) = cleared {
+      if require_tombstone_cleared {
+        return Err(format!("Could not clear the profile's tombstone: {e}"));
+      }
+      log::warn!(
+        "Failed to clear the tombstone of profile {}: {}",
+        Plain(&profile_id),
+        e
+      );
+    }
+  }
+
   profile.sync_mode = new_mode;
 
   profile_manager
@@ -3575,22 +3664,6 @@ pub async fn set_profile_sync_mode(
   crate::cookie_bot::report_profile_state(&profile);
 
   let _ = events::emit("profiles-changed", ());
-
-  // When (re-)enabling sync, clear any stale tombstone from a previous
-  // disable on this device. Otherwise the next reconcile on another
-  // device — or even a race on this one — would see the tombstone and
-  // delete the freshly re-uploaded data.
-  if enabling {
-    if let Ok(engine) = SyncEngine::create_from_settings(&app_handle).await {
-      let key_prefix = SyncEngine::get_team_key_prefix(&profile).await;
-      let personal_tombstone = format!("tombstones/profiles/{}.json", profile_id);
-      let _ = engine.client.delete(&personal_tombstone, None).await;
-      if !key_prefix.is_empty() {
-        let team_tombstone = format!("{}tombstones/profiles/{}.json", key_prefix, profile_id);
-        let _ = engine.client.delete(&team_tombstone, None).await;
-      }
-    }
-  }
 
   if enabling {
     let is_running = profile.process_id.is_some();

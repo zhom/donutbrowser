@@ -856,7 +856,7 @@ impl SyncScheduler {
     }
   }
 
-  async fn process_pending_tombstones(&self, _app_handle: &tauri::AppHandle) {
+  async fn process_pending_tombstones(&self, app_handle: &tauri::AppHandle) {
     let tombstones: Vec<(String, String)> = {
       let mut pending = self.pending_tombstones.lock().await;
       std::mem::take(&mut *pending)
@@ -875,30 +875,54 @@ impl SyncScheduler {
       match entity_type.as_str() {
         "profile" => {
           let profile_manager = ProfileManager::instance();
-          let local_sync_enabled = {
-            if let Ok(profiles) = profile_manager.list_profiles() {
-              let profile_uuid = uuid::Uuid::parse_str(&entity_id).ok();
-              profile_uuid
-                .and_then(|uuid| profiles.into_iter().find(|p| p.id == uuid))
-                .is_some_and(|p| p.is_sync_enabled())
-            } else {
-              false
-            }
-          };
+          let local = uuid::Uuid::parse_str(&entity_id)
+            .ok()
+            .and_then(|uuid| {
+              profile_manager
+                .list_profiles()
+                .ok()?
+                .into_iter()
+                .find(|p| p.id == uuid)
+            })
+            .filter(|p| p.is_sync_enabled());
 
-          if local_sync_enabled {
-            log::info!(
-              "Profile {} was deleted remotely, deleting locally",
-              entity_id
-            );
-            if let Err(e) = profile_manager.delete_profile_local_only(&entity_id) {
-              log::warn!("Failed to delete tombstoned profile {}: {}", entity_id, e);
-            }
-          } else {
+          let Some(local) = local else {
             log::info!(
               "Profile {} has a tombstone but sync is no longer enabled locally — keeping local copy",
               entity_id
             );
+            continue;
+          };
+
+          // The event can be stale. A restore from the trash, or sync switched
+          // off and on again, clears the tombstone after it was written, and
+          // the profile it named is live again. Only a tombstone that is still
+          // in the cloud erases the local copy.
+          let still_tombstoned = match SyncEngine::create_from_settings(app_handle).await {
+            Ok(engine) => engine.profile_tombstone_exists(&local).await,
+            Err(e) => {
+              log::warn!(
+                "Could not confirm the tombstone of profile {}: {}",
+                entity_id,
+                e
+              );
+              false
+            }
+          };
+          if !still_tombstoned {
+            log::info!(
+              "Profile {} tombstone is no longer in the cloud — keeping local copy",
+              entity_id
+            );
+            continue;
+          }
+
+          log::info!(
+            "Profile {} was deleted remotely, deleting locally",
+            entity_id
+          );
+          if let Err(e) = profile_manager.delete_profile_local_only(&entity_id) {
+            log::warn!("Failed to delete tombstoned profile {}: {}", entity_id, e);
           }
         }
         "proxy" => {

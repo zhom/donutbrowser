@@ -987,4 +987,6 @@ export interface TrashedProfileSummary {
   size_bytes: number;
   group_id?: string;
   password_protected: boolean;
+  /** Whether the profile synced when it was deleted. */
+  sync_enabled: boolean;
 }

@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "{{count}} profil ve tüm verileri yok edilecek. Bu işlem geri alınamaz.",
     "confirmEmptyDescription_other": "{{count}} profil ve tüm verileri yok edilecek. Bu işlem geri alınamaz.",
     "restored": "\"{{name}}\" geri yüklendi",
+    "restoredSyncOff": "Senkronizasyon yeniden açılamadı, bu yüzden profil yalnızca bu cihazda. Diğer cihazlarınızla paylaşmak için senkronizasyon modunu yeniden ayarlayın.",
     "restoreFailed": "Profil geri yüklenemedi: {{error}}",
     "deletedForever": "\"{{name}}\" kalıcı olarak silindi",
     "deleteForeverFailed": "Profil silinemedi: {{error}}",

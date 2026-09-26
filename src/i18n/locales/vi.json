@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "{{count}} hồ sơ và toàn bộ dữ liệu của chúng sẽ bị hủy. Không thể hoàn tác thao tác này.",
     "confirmEmptyDescription_other": "{{count}} hồ sơ và toàn bộ dữ liệu của chúng sẽ bị hủy. Không thể hoàn tác thao tác này.",
     "restored": "Đã khôi phục \"{{name}}\"",
+    "restoredSyncOff": "Không thể bật lại đồng bộ, nên hồ sơ chỉ có trên thiết bị này. Hãy đặt lại chế độ đồng bộ để chia sẻ hồ sơ với các thiết bị khác của bạn.",
     "restoreFailed": "Không thể khôi phục hồ sơ: {{error}}",
     "deletedForever": "Đã xóa vĩnh viễn \"{{name}}\"",
     "deleteForeverFailed": "Không thể xóa hồ sơ: {{error}}",

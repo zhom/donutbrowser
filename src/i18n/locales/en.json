@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "{{count}} profile and all of its data are destroyed. This cannot be undone.",
     "confirmEmptyDescription_other": "{{count}} profiles and all of their data are destroyed. This cannot be undone.",
     "restored": "\"{{name}}\" was restored",
+    "restoredSyncOff": "Sync could not be turned back on, so the profile is on this device only. Set its sync mode again to share it with your other devices.",
     "restoreFailed": "Could not restore the profile: {{error}}",
     "deletedForever": "\"{{name}}\" was deleted forever",
     "deleteForeverFailed": "Could not delete the profile: {{error}}",

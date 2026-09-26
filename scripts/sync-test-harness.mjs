@@ -11,14 +11,8 @@
  * Usage: node scripts/sync-test-harness.mjs
  */
 
-import { spawn, spawnSync, execSync } from "child_process";
-import {
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  chmodSync,
-  renameSync,
-} from "fs";
+import { spawn, execSync } from "child_process";
+import { createWriteStream, existsSync } from "fs";
 import { mkdir, rm, writeFile } from "fs/promises";
 import http from "http";
 import https from "https";
@@ -26,6 +20,7 @@ import os from "os";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { fileURLToPath } from "url";
+import { ensureRclone, serveS3Args } from "./rclone.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -34,8 +29,6 @@ const CACHE_DIR = path.join(ROOT_DIR, ".cache", "sync-test");
 const S3_PORT = 9876;
 const S3_ACCESS_KEY = "donuttestaccesskey";
 const S3_SECRET_KEY = "donuttestsecretkey";
-// Pinned so a fresh rclone release cannot change what CI runs underneath us.
-const RCLONE_VERSION = "v1.75.1";
 const SYNC_PORT = 3456;
 // Must be >= 24 chars and not a known default — the server's validateEnv()
 // rejects short/placeholder tokens and exits at startup otherwise.
@@ -94,103 +87,10 @@ async function downloadFile(url, dest) {
   });
 }
 
-function getRcloneAsset() {
-  const platform = os.platform();
-  const arch = os.arch();
-
-  if (platform === "darwin") {
-    return `rclone-${RCLONE_VERSION}-osx-${arch === "arm64" ? "arm64" : "amd64"}`;
-  } else if (platform === "linux") {
-    return `rclone-${RCLONE_VERSION}-linux-${arch === "arm64" ? "arm64" : "amd64"}`;
-  } else if (platform === "win32") {
-    return `rclone-${RCLONE_VERSION}-windows-amd64`;
-  }
-
-  throw new Error(`Unsupported platform: ${platform}-${arch}`);
+function ensureS3Binary() {
+  return ensureRclone(CACHE_DIR, downloadFile, log);
 }
 
-// Mirrors src-tauri/download-xray.mjs: PowerShell owns zip extraction on
-// Windows, `unzip` everywhere else. Both are present on every runner this
-// harness targets.
-function extractZip(archive, destinationDir) {
-  if (os.platform() === "win32") {
-    const result = spawnSync(
-      "powershell",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Expand-Archive -LiteralPath $env:DONUT_RCLONE_ARCHIVE -DestinationPath $env:DONUT_RCLONE_DESTINATION -Force",
-      ],
-      {
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          DONUT_RCLONE_ARCHIVE: archive,
-          DONUT_RCLONE_DESTINATION: destinationDir,
-        },
-      },
-    );
-    if (result.status !== 0) {
-      throw new Error("Failed to extract the rclone archive");
-    }
-    return;
-  }
-
-  const result = spawnSync(
-    "unzip",
-    ["-qq", "-j", "-o", archive, "*/rclone", "-d", destinationDir],
-    { stdio: "inherit" },
-  );
-  if (result.status !== 0) {
-    throw new Error("Failed to extract the rclone archive");
-  }
-}
-
-async function ensureS3Binary() {
-  const isWindows = os.platform() === "win32";
-  const binName = isWindows ? "rclone.exe" : "rclone";
-  const bin = path.join(CACHE_DIR, binName);
-
-  if (existsSync(bin)) {
-    log("rclone binary already cached");
-    return bin;
-  }
-
-  log("Downloading rclone binary...");
-  mkdirSync(CACHE_DIR, { recursive: true });
-
-  const asset = getRcloneAsset();
-  const archive = path.join(CACHE_DIR, `${asset}.zip`);
-  await downloadFile(
-    `https://github.com/rclone/rclone/releases/download/${RCLONE_VERSION}/${asset}.zip`,
-    archive,
-  );
-  extractZip(archive, CACHE_DIR);
-
-  if (isWindows) {
-    // Expand-Archive keeps the archive's own directory, so lift the binary out.
-    const nested = path.join(CACHE_DIR, asset, binName);
-    if (existsSync(nested)) {
-      renameSync(nested, bin);
-    }
-  }
-  if (!existsSync(bin)) {
-    throw new Error(`rclone archive did not contain ${binName}`);
-  }
-  if (!isWindows) {
-    chmodSync(bin, 0o755);
-  }
-
-  log("rclone binary downloaded");
-  return bin;
-}
-
-// MinIO used to play this part, but MinIO withdrew its community binaries and
-// every dl.min.io path now answers 410, which took this job down. rclone still
-// publishes a single binary per platform, and `rclone serve s3` speaks enough
-// of the API for these tests: path-style addressing, a static key pair, and
-// bucket creation (a bucket is a directory under the served root).
 async function startS3(bin) {
   const dataDir = path.join(CACHE_DIR, "s3-data");
   await mkdir(dataDir, { recursive: true });
@@ -199,18 +99,12 @@ async function startS3(bin) {
 
   const proc = spawn(
     bin,
-    [
-      "serve",
-      "s3",
+    serveS3Args({
       dataDir,
-      "--addr",
-      `127.0.0.1:${S3_PORT}`,
-      "--auth-key",
-      `${S3_ACCESS_KEY},${S3_SECRET_KEY}`,
-      "--force-path-style",
-      "--vfs-cache-mode",
-      "writes",
-    ],
+      address: `127.0.0.1:${S3_PORT}`,
+      accessKey: S3_ACCESS_KEY,
+      secretKey: S3_SECRET_KEY,
+    }),
     {
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],

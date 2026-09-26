@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "{{count}} Profil und alle zugehörigen Daten werden vernichtet. Dies kann nicht rückgängig gemacht werden.",
     "confirmEmptyDescription_other": "{{count}} Profile und alle zugehörigen Daten werden vernichtet. Dies kann nicht rückgängig gemacht werden.",
     "restored": "„{{name}}“ wurde wiederhergestellt",
+    "restoredSyncOff": "Die Synchronisierung konnte nicht wieder aktiviert werden, daher ist das Profil nur auf diesem Gerät. Legen Sie den Synchronisierungsmodus erneut fest, um es mit Ihren anderen Geräten zu teilen.",
     "restoreFailed": "Das Profil konnte nicht wiederhergestellt werden: {{error}}",
     "deletedForever": "„{{name}}“ wurde endgültig gelöscht",
     "deleteForeverFailed": "Das Profil konnte nicht gelöscht werden: {{error}}",

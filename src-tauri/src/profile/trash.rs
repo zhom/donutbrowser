@@ -16,10 +16,15 @@
 //!
 //! From the cloud's point of view a trashed profile is deleted: the sync
 //! tombstone is written by the same path a permanent delete uses. Restoring
-//! re-registers the profile under its original id and routes it through the
-//! normal sync-enable path so it wins the stale tombstone.
+//! re-registers the profile under its original id with sync off, then turns
+//! sync back on only once that tombstone is gone from the cloud, because a
+//! tombstone erases any synced profile it names.
+//!
+//! What leaves the trash for good (expiry, "Delete forever", emptying it, or
+//! the whole trash when it is set to "Delete at once") is erased with every
+//! file overwritten first, as far as the disk allows (see `fs_secure`).
 
-use crate::profile::types::BrowserProfile;
+use crate::profile::types::{BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -75,6 +80,10 @@ pub struct TrashedProfileSummary {
   #[serde(default)]
   pub group_id: Option<String>,
   pub password_protected: bool,
+  /// Whether the profile synced when it was deleted. A restore turns sync
+  /// back on, or says it could not.
+  #[serde(default)]
+  pub sync_enabled: bool,
 }
 
 pub fn trash_dir() -> PathBuf {
@@ -106,6 +115,19 @@ fn err_internal(e: impl std::fmt::Display) -> String {
   crate::backend_error_with_detail("INTERNAL_ERROR", e)
 }
 
+/// The entry directory for `profile_id`. Only a canonical profile id names
+/// one, so an id from a caller can never point the erase outside the trash.
+fn entry_dir(trash_root: &Path, profile_id: &str) -> Result<PathBuf, String> {
+  match uuid::Uuid::parse_str(profile_id) {
+    Ok(id) if id.to_string() == profile_id => Ok(trash_root.join(profile_id)),
+    _ => Err(crate::backend_error("TRASH_ENTRY_NOT_FOUND")),
+  }
+}
+
+fn erase_dir(dir: &Path) -> std::io::Result<()> {
+  crate::fs_secure::secure_remove_dir_all(dir, true).map(|_| ())
+}
+
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
   let json = serde_json::to_string_pretty(value).map_err(err_internal)?;
   let tmp = path.with_extension("json.tmp");
@@ -118,8 +140,8 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
   serde_json::from_str(&content).map_err(err_internal)
 }
 
-/// Remove the cache-only directories from a profile data directory. Returns
-/// the directories that were actually removed.
+/// Erase the cache-only directories of a profile data directory. Returns the
+/// directories that were actually removed.
 pub fn prune_cache_dirs(data_dir: &Path) -> Vec<PathBuf> {
   let mut removed = Vec::new();
   for relative in CACHE_DIRS {
@@ -127,7 +149,7 @@ pub fn prune_cache_dirs(data_dir: &Path) -> Vec<PathBuf> {
     if !dir.is_dir() {
       continue;
     }
-    match fs::remove_dir_all(&dir) {
+    match erase_dir(&dir) {
       Ok(()) => removed.push(dir),
       Err(e) => log::warn!("Could not prune cache dir {}: {e}", dir.display()),
     }
@@ -252,7 +274,7 @@ pub fn read_entry(
   trash_root: &Path,
   profile_id: &str,
 ) -> Result<(BrowserProfile, TrashManifest), String> {
-  let entry_dir = trash_root.join(profile_id);
+  let entry_dir = entry_dir(trash_root, profile_id)?;
   let profile_file = entry_dir.join(PROFILE_FILE);
   let manifest_file = entry_dir.join(MANIFEST_FILE);
   if !profile_file.is_file() || !manifest_file.is_file() {
@@ -290,6 +312,7 @@ pub fn summaries(trash_root: &Path, retention_days: u32) -> Vec<TrashedProfileSu
   list_entries(trash_root)
     .into_iter()
     .map(|(profile, manifest)| TrashedProfileSummary {
+      sync_enabled: profile.is_sync_enabled(),
       id: profile.id.to_string(),
       name: profile.name,
       browser: profile.browser,
@@ -331,8 +354,9 @@ pub fn unique_restored_name(name: &str, taken: &HashSet<String>) -> String {
 }
 
 /// Move a trashed profile back under `profiles_dir` and return the profile as
-/// it must be saved: same id, identity, proxy and tags; the group only when it
-/// still exists; a fresh `updated_at` so it wins any stale sync tombstone.
+/// it must be saved, next to the sync mode it had: same id, identity, proxy
+/// and tags; the group only when it still exists; a fresh `updated_at`; and
+/// sync off, so no tombstone can erase it before the caller clears one.
 ///
 /// `TRASH_RESTORE_CONFLICT` when a live profile already carries the id.
 pub fn restore_profile(
@@ -342,7 +366,7 @@ pub fn restore_profile(
   live_profiles: &[BrowserProfile],
   group_exists: &dyn Fn(&str) -> bool,
   now: u64,
-) -> Result<BrowserProfile, String> {
+) -> Result<(BrowserProfile, SyncMode), String> {
   let (mut profile, _manifest) = read_entry(trash_root, profile_id)?;
 
   if live_profiles.iter().any(|live| live.id == profile.id) {
@@ -372,22 +396,23 @@ pub fn restore_profile(
   }
   profile.process_id = None;
   profile.updated_at = Some(now);
+  let sync_mode = std::mem::replace(&mut profile.sync_mode, SyncMode::Disabled);
 
   let entry_dir = trash_root.join(profile_id);
   move_dir(&entry_dir, &target_dir).map_err(err_internal)?;
   let _ = fs::remove_file(target_dir.join(PROFILE_FILE));
   let _ = fs::remove_file(target_dir.join(MANIFEST_FILE));
   write_json(&target_dir.join(METADATA_FILE), &profile)?;
-  Ok(profile)
+  Ok((profile, sync_mode))
 }
 
-/// Destroy one entry for good. `TRASH_ENTRY_NOT_FOUND` when absent.
+/// Erase one entry for good. `TRASH_ENTRY_NOT_FOUND` when absent.
 pub fn purge_entry(trash_root: &Path, profile_id: &str) -> Result<(), String> {
-  let entry_dir = trash_root.join(profile_id);
+  let entry_dir = entry_dir(trash_root, profile_id)?;
   if !entry_dir.is_dir() {
     return Err(crate::backend_error("TRASH_ENTRY_NOT_FOUND"));
   }
-  fs::remove_dir_all(&entry_dir).map_err(err_internal)
+  erase_dir(&entry_dir).map_err(err_internal)
 }
 
 /// Destroy every entry. Returns the ids that were removed.
@@ -445,7 +470,10 @@ pub fn start_expiry_sweeper() {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(PURGE_INTERVAL_SECS));
     loop {
       interval.tick().await;
-      let purged = ProfileManager::instance().purge_expired_trash();
+      let purged =
+        tauri::async_runtime::spawn_blocking(|| ProfileManager::instance().purge_expired_trash())
+          .await
+          .unwrap_or(0);
       if purged > 0 {
         log::info!(
           "Purged {purged} expired trash entr{}",
@@ -466,33 +494,37 @@ pub async fn restore_trashed_profile(
   app_handle: tauri::AppHandle,
   profile_id: String,
 ) -> Result<BrowserProfile, String> {
-  let manager = ProfileManager::instance();
-  let mut profile = manager
-    .restore_trashed_profile(&profile_id)
-    .map_err(|e| command_error(e, "Failed to restore profile"))?;
+  // The cloud delete of this profile may still be running, and the server
+  // writes its tombstone last. It has to land before the restore clears it.
+  crate::sync::pending_deletes::wait_for(&profile_id).await;
 
-  if profile.is_sync_enabled() {
-    // The cloud saw a delete (a tombstone was written when the profile was
-    // trashed). Re-enabling through the normal path clears that tombstone
-    // and queues the re-upload. When that path refuses (sync no longer
-    // configured, a cross-OS copy), sync is switched off on the restored
-    // profile so the next reconcile keeps the local copy instead of
-    // honouring the tombstone.
-    let mode = if profile.is_encrypted_sync() {
-      "Encrypted"
-    } else {
-      "Regular"
-    };
-    if let Err(e) =
-      crate::sync::set_profile_sync_mode(app_handle.clone(), profile_id.clone(), mode.to_string())
-        .await
-    {
-      log::warn!("Restored profile {profile_id} could not re-enable sync ({e}); leaving sync off");
-      profile.sync_mode = crate::profile::types::SyncMode::Disabled;
-      manager
-        .save_profile(&profile)
-        .map_err(|e| command_error(e, "Failed to save restored profile"))?;
-      let _ = crate::events::emit_empty("profiles-changed");
+  let id = profile_id.clone();
+  let (mut profile, sync_mode) = tauri::async_runtime::spawn_blocking(move || {
+    ProfileManager::instance()
+      .restore_trashed_profile(&id)
+      .map_err(|e| command_error(e, "Failed to restore profile"))
+  })
+  .await
+  .map_err(err_internal)??;
+
+  // The profile is back, so the cloud no longer owes its delete.
+  crate::sync::pending_deletes::forget(&profile_id);
+
+  if sync_mode != SyncMode::Disabled {
+    // Sync comes back only once the tombstone is gone. When that cannot be
+    // done (offline, signed out, a cross-OS copy), sync stays off, the local
+    // copy is safe, and the trash page tells the user.
+    match crate::sync::resume_profile_sync(app_handle, profile_id.clone(), sync_mode).await {
+      Ok(()) => {
+        if let Some(current) = ProfileManager::instance()
+          .list_profiles()
+          .ok()
+          .and_then(|all| all.into_iter().find(|p| p.id == profile.id))
+        {
+          profile = current;
+        }
+      }
+      Err(e) => log::warn!("Restored profile {profile_id} keeps sync off: {e}"),
     }
   }
 
@@ -500,17 +532,25 @@ pub async fn restore_trashed_profile(
 }
 
 #[tauri::command]
-pub fn purge_trashed_profile(profile_id: String) -> Result<(), String> {
-  ProfileManager::instance()
-    .purge_trashed_profile(&profile_id)
-    .map_err(|e| command_error(e, "Failed to delete trashed profile"))
+pub async fn purge_trashed_profile(profile_id: String) -> Result<(), String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    ProfileManager::instance()
+      .purge_trashed_profile(&profile_id)
+      .map_err(|e| command_error(e, "Failed to delete trashed profile"))
+  })
+  .await
+  .map_err(err_internal)?
 }
 
 #[tauri::command]
-pub fn empty_trash() -> Result<usize, String> {
-  ProfileManager::instance()
-    .empty_trash()
-    .map_err(|e| command_error(e, "Failed to empty trash"))
+pub async fn empty_trash() -> Result<usize, String> {
+  tauri::async_runtime::spawn_blocking(|| {
+    ProfileManager::instance()
+      .empty_trash()
+      .map_err(|e| command_error(e, "Failed to empty trash"))
+  })
+  .await
+  .map_err(err_internal)?
 }
 
 #[cfg(test)]
@@ -607,7 +647,7 @@ mod tests {
     assert_eq!(listed[0].group_id.as_deref(), Some("group-1"));
     assert!(!listed[0].password_protected);
 
-    let restored = restore_profile(
+    let (restored, _) = restore_profile(
       &profiles_dir,
       &trash_root,
       &profile.id.to_string(),
@@ -649,6 +689,81 @@ mod tests {
   }
 
   #[test]
+  fn a_synced_profile_comes_back_with_sync_off_and_reports_its_mode() {
+    let root = TempDir::new().unwrap();
+    let mut profile = sample_profile("Synced");
+    profile.sync_mode = SyncMode::Encrypted;
+    let profiles_dir = seed_profile(root.path(), &profile, false);
+    let trash_root = root.path().join("trash");
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
+    assert!(summaries(&trash_root, DAYS)[0].sync_enabled);
+
+    let (restored, sync_mode) = restore_profile(
+      &profiles_dir,
+      &trash_root,
+      &profile.id.to_string(),
+      &[],
+      &group_exists,
+      NOW,
+    )
+    .unwrap();
+    assert_eq!(sync_mode, SyncMode::Encrypted);
+    assert_eq!(restored.sync_mode, SyncMode::Disabled);
+    let on_disk: BrowserProfile = serde_json::from_str(
+      &fs::read_to_string(
+        profiles_dir
+          .join(profile.id.to_string())
+          .join("metadata.json"),
+      )
+      .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+      on_disk.sync_mode,
+      SyncMode::Disabled,
+      "no tombstone may find a synced profile before the caller clears it"
+    );
+  }
+
+  #[test]
+  fn only_a_canonical_profile_id_names_an_entry() {
+    let root = TempDir::new().unwrap();
+    let trash_root = root.path().join("trash");
+    fs::create_dir_all(&trash_root).unwrap();
+    let outside = root.path().join("profiles");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("keep"), b"live data").unwrap();
+
+    let err = purge_entry(&trash_root, "../profiles").unwrap_err();
+    assert!(err.contains("TRASH_ENTRY_NOT_FOUND"), "{err}");
+    assert_eq!(fs::read(outside.join("keep")).unwrap(), b"live data");
+
+    let id = uuid::Uuid::new_v4();
+    let upper = id.to_string().to_uppercase();
+    fs::create_dir_all(trash_root.join(&upper)).unwrap();
+    let err = purge_entry(&trash_root, &upper).unwrap_err();
+    assert!(err.contains("TRASH_ENTRY_NOT_FOUND"), "{err}");
+    assert!(trash_root.join(&upper).exists());
+  }
+
+  #[test]
+  fn purge_erases_the_whole_entry() {
+    let root = TempDir::new().unwrap();
+    let profile = sample_profile("Erased");
+    let profiles_dir = seed_profile(root.path(), &profile, false);
+    let trash_root = root.path().join("trash");
+    trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
+    let entry = trash_root.join(profile.id.to_string());
+    let cookies = entry.join("profile").join("Default").join("Cookies");
+    assert!(cookies.is_file());
+
+    purge_entry(&trash_root, &profile.id.to_string()).unwrap();
+    assert!(!entry.exists());
+    let err = purge_entry(&trash_root, &profile.id.to_string()).unwrap_err();
+    assert!(err.contains("TRASH_ENTRY_NOT_FOUND"), "{err}");
+  }
+
+  #[test]
   fn restore_appends_suffix_when_a_live_profile_has_the_name() {
     let root = TempDir::new().unwrap();
     let profile = sample_profile("Shop Account");
@@ -661,7 +776,7 @@ mod tests {
     let mut second_twin = sample_profile("Shop Account (restored)");
     second_twin.id = uuid::Uuid::new_v4();
 
-    let restored = restore_profile(
+    let (restored, _) = restore_profile(
       &profiles_dir,
       &trash_root,
       &profile.id.to_string(),
@@ -733,7 +848,7 @@ mod tests {
     let trash_root = root.path().join("trash");
     trash_profile(&profiles_dir, &trash_root, &profile, NOW, DAYS).unwrap();
 
-    let restored = restore_profile(
+    let (restored, _) = restore_profile(
       &profiles_dir,
       &trash_root,
       &profile.id.to_string(),
@@ -765,7 +880,7 @@ mod tests {
     }
     assert!(summaries(&trash_root, DAYS)[0].password_protected);
 
-    let restored = restore_profile(
+    let (restored, _) = restore_profile(
       &profiles_dir,
       &trash_root,
       &profile.id.to_string(),

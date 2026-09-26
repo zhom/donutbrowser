@@ -460,8 +460,12 @@ pub async fn delete_selected_profiles(
   app_handle: tauri::AppHandle,
   profile_ids: Vec<String>,
 ) -> Result<(), String> {
-  let profile_manager = crate::profile::ProfileManager::instance();
-  profile_manager
-    .delete_multiple_profiles(&app_handle, profile_ids)
-    .map_err(|e| format!("Failed to delete profiles: {e}"))
+  // Off the async runtime: a delete can erase every file of every profile.
+  tauri::async_runtime::spawn_blocking(move || {
+    crate::profile::ProfileManager::instance()
+      .delete_multiple_profiles(&app_handle, profile_ids)
+      .map_err(|e| format!("Failed to delete profiles: {e}"))
+  })
+  .await
+  .map_err(|e| format!("Failed to delete profiles: {e}"))?
 }

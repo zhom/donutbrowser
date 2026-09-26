@@ -3200,6 +3200,7 @@
     "confirmEmptyDescription_other": "{{count}} profils et toutes leurs données seront détruits. Cette action est irréversible.",
     "confirmEmptyDescription_many": "{{count}} profils et toutes leurs données seront détruits. Cette action est irréversible.",
     "restored": "« {{name}} » a été restauré",
+    "restoredSyncOff": "La synchronisation n'a pas pu être réactivée : le profil n'est que sur cet appareil. Choisissez de nouveau son mode de synchronisation pour le partager avec vos autres appareils.",
     "restoreFailed": "Impossible de restaurer le profil : {{error}}",
     "deletedForever": "« {{name}} » a été supprimé définitivement",
     "deleteForeverFailed": "Impossible de supprimer le profil : {{error}}",

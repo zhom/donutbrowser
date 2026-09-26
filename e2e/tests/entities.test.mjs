@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import {
   mkdir,
+  open,
   readdir,
   readFile,
   realpath,
@@ -1136,6 +1137,7 @@ test("deleted profiles land in the trash and come back intact on restore", async
     assert.equal(trashed[0].version, "150.0.7871.100");
     assert.equal(trashed[0].group_id, group.id);
     assert.equal(trashed[0].password_protected, false);
+    assert.equal(trashed[0].sync_enabled, false);
     assert.equal(
       trashed[0].expires_at - trashed[0].deleted_at,
       30 * 24 * 60 * 60,
@@ -1274,6 +1276,78 @@ test("deleted profiles land in the trash and come back intact on restore", async
       permanent: true,
     });
     assert.deepEqual(await app.invoke("list_browser_profiles"), []);
+  });
+});
+
+test("Delete at once erases a profile on the spot and keeps nothing in the trash", async () => {
+  await withApp("entities-delete-at-once", async (app) => {
+    const profilesDir = path.join(app.dataRoot, "data", "profiles");
+    const trashDir = path.join(app.dataRoot, "data", "trash");
+    const secret = "secret-cookie-db";
+    const seed = async (profile) => {
+      const dir = path.join(profilesDir, profile.id, "profile", "Default");
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, "Cookies"), secret);
+      return path.join(dir, "Cookies");
+    };
+
+    // Switching to "Delete at once" empties what the trash already holds.
+    const earlier = await createProfile(app, "Already Trashed");
+    await seed(earlier);
+    await app.invoke("delete_profile", { profileId: earlier.id });
+    assert.equal((await app.invoke("list_trashed_profiles")).length, 1);
+    const settings = await app.invoke("get_app_settings");
+    await app.invoke("save_app_settings", {
+      settings: { ...settings, trash_retention_days: 0 },
+    });
+    await app.waitFor(
+      async () =>
+        (await app.invoke("list_trashed_profiles")).length === 0 &&
+        !existsSync(path.join(trashDir, earlier.id)),
+      {
+        description: "the trash empties once it is switched off",
+        timeoutMs: 20_000,
+        intervalMs: 250,
+      },
+    );
+
+    const doomed = await createProfile(app, "Delete At Once");
+    const cookies = await seed(doomed);
+    // A handle opened before the delete still reads the file after the
+    // unlink, so it shows whether the bytes were overwritten first. Windows
+    // cannot remove a directory while a file in it is open.
+    const handle = process.platform === "win32" ? null : await open(cookies);
+    try {
+      await app.invoke("delete_profile", { profileId: doomed.id });
+      assert.equal(
+        existsSync(path.join(profilesDir, doomed.id)),
+        false,
+        "the profile is erased before the delete returns",
+      );
+      assert.equal(existsSync(path.join(trashDir, doomed.id)), false);
+      assert.deepEqual(await app.invoke("list_trashed_profiles"), []);
+      assert.equal(
+        (await app.invoke("list_browser_profiles")).some(
+          (item) => item.id === doomed.id,
+        ),
+        false,
+      );
+      if (handle) {
+        const { buffer, bytesRead } = await handle.read(
+          Buffer.alloc(64),
+          0,
+          64,
+          0,
+        );
+        assert.equal(bytesRead, secret.length);
+        assert.ok(
+          buffer.subarray(0, bytesRead).every((byte) => byte === 0),
+          "the file is zeroed before it is unlinked",
+        );
+      }
+    } finally {
+      await handle?.close();
+    }
   });
 });
 

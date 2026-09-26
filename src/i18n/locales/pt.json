@@ -3200,6 +3200,7 @@
     "confirmEmptyDescription_other": "{{count}} perfis e todos os seus dados serão destruídos. Esta ação não pode ser desfeita.",
     "confirmEmptyDescription_many": "{{count}} perfis e todos os seus dados serão destruídos. Esta ação não pode ser desfeita.",
     "restored": "\"{{name}}\" foi restaurado",
+    "restoredSyncOff": "Não foi possível reativar a sincronização, por isso o perfil está apenas neste dispositivo. Defina o modo de sincronização novamente para compartilhá-lo com seus outros dispositivos.",
     "restoreFailed": "Não foi possível restaurar o perfil: {{error}}",
     "deletedForever": "\"{{name}}\" foi excluído permanentemente",
     "deleteForeverFailed": "Não foi possível excluir o perfil: {{error}}",

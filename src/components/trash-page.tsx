@@ -123,7 +123,14 @@ export function TrashPage({ isOpen, onClose, subPage }: TrashPageProps) {
           "restore_trashed_profile",
           { profileId: entry.id },
         );
-        showSuccessToast(t("trash.restored", { name: restored.name }));
+        // The restore keeps sync off when the cloud still holds the
+        // profile's tombstone; say so rather than let it look synced.
+        const syncStayedOff =
+          entry.sync_enabled && restored.sync_mode === "Disabled";
+        showSuccessToast(t("trash.restored", { name: restored.name }), {
+          description: syncStayedOff ? t("trash.restoredSyncOff") : undefined,
+          duration: syncStayedOff ? 10000 : undefined,
+        });
       } catch (err: unknown) {
         console.error("Failed to restore trashed profile:", err);
         showErrorToast(

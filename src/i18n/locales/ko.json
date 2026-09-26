@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "프로필 {{count}}개와 모든 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
     "confirmEmptyDescription_other": "프로필 {{count}}개와 모든 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
     "restored": "\"{{name}}\"을(를) 복원했습니다",
+    "restoredSyncOff": "동기화를 다시 켜지 못해 이 프로필은 이 기기에만 있습니다. 다른 기기와 공유하려면 동기화 모드를 다시 설정하세요.",
     "restoreFailed": "프로필을 복원하지 못했습니다: {{error}}",
     "deletedForever": "\"{{name}}\"을(를) 영구 삭제했습니다",
     "deleteForeverFailed": "프로필을 삭제하지 못했습니다: {{error}}",

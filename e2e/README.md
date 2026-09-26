@@ -77,8 +77,8 @@ runner redirects:
 - `TMPDIR`, `TMP`, and `TEMP`;
 - the Tauri WebView store (incognito for WKWebView, whose persistent data-directory API is not
   honored);
-- all REST, MCP, WebDriver, fixture, MinIO, and sync-server ports;
-- each sync test to a new MinIO bucket and random token.
+- all REST, MCP, WebDriver, fixture, S3, and sync-server ports;
+- each sync test to a new S3 bucket (served by `rclone serve s3`) and random token.
 
 The E2E feature suppresses automatic updater/download traffic, but explicit browser tests still
 exercise published Wayfern downloads whenever the cache fixture is missing or holds a different
@@ -90,7 +90,7 @@ the WebDriver plugin or this fallback.
 
 `.github/workflows/app-e2e.yml` runs smoke tests on macOS, Linux/Xvfb, and Windows for pull
 requests. Pushes to `main`, weekly schedules, and manual runs execute the full macOS suite,
-including MinIO-backed sync and real Wayfern automation, plus a Linux/Docker job for residential
+including S3-backed sync and real Wayfern automation, plus a Linux/Docker job for residential
 proxy and local WireGuard browser traffic.
 
 Every job restores the compiled driver from an `actions/cache` entry keyed by `e2e/app/Cargo.lock`,

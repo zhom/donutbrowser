@@ -3166,6 +3166,7 @@
     "confirmEmptyDescription_one": "{{count}}件のプロファイルとそのすべてのデータが破棄されます。この操作は元に戻せません。",
     "confirmEmptyDescription_other": "{{count}}件のプロファイルとそのすべてのデータが破棄されます。この操作は元に戻せません。",
     "restored": "「{{name}}」を復元しました",
+    "restoredSyncOff": "同期を再開できなかったため、このプロファイルはこのデバイスにのみあります。ほかのデバイスと共有するには、同期モードをもう一度設定してください。",
     "restoreFailed": "プロファイルを復元できませんでした: {{error}}",
     "deletedForever": "「{{name}}」を完全に削除しました",
     "deleteForeverFailed": "プロファイルを削除できませんでした: {{error}}",
