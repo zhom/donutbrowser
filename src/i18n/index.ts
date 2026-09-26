@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
+import de from "./locales/de.json";
 import en from "./locales/en.json";
 import es from "./locales/es.json";
 import fr from "./locales/fr.json";
@@ -17,6 +18,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: "es", name: "Spanish", nativeName: "Español" },
   { code: "pt", name: "Portuguese", nativeName: "Português" },
   { code: "fr", name: "French", nativeName: "Français" },
+  { code: "de", name: "German", nativeName: "Deutsch" },
   { code: "zh", name: "Chinese", nativeName: "中文" },
   { code: "ja", name: "Japanese", nativeName: "日本語" },
   { code: "ko", name: "Korean", nativeName: "한국어" },
@@ -40,6 +42,11 @@ const LANGUAGE_FALLBACKS: Record<string, string[]> = {
   "es-ES": ["es", "en"],
   "fr-CA": ["fr", "en"],
   "fr-FR": ["fr", "en"],
+  "de-DE": ["de", "en"],
+  "de-AT": ["de", "en"],
+  "de-CH": ["de", "en"],
+  "de-LU": ["de", "en"],
+  "de-LI": ["de", "en"],
   "vi-VN": ["vi", "en"],
 };
 
@@ -66,6 +73,7 @@ const resources = {
   es: { translation: es },
   pt: { translation: pt },
   fr: { translation: fr },
+  de: { translation: de },
   zh: { translation: zh },
   ja: { translation: ja },
   ko: { translation: ko },

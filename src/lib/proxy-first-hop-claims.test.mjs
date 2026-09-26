@@ -149,7 +149,19 @@ test("both keys of every pair have a sentence in every locale", () => {
     inTheClear,
     undecided,
   ]);
-  const codes = ["en", "es", "fr", "ja", "ko", "pt", "ru", "tr", "vi", "zh"];
+  const codes = [
+    "de",
+    "en",
+    "es",
+    "fr",
+    "ja",
+    "ko",
+    "pt",
+    "ru",
+    "tr",
+    "vi",
+    "zh",
+  ];
   for (const code of codes) {
     const bundle = JSON.parse(
       readFileSync(path.join(LOCALES, `${code}.json`), "utf8"),

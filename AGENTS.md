@@ -34,7 +34,7 @@ donutbrowser/
 │   ├── components/                   # 50+ React components (dialogs, tables, UI)
 │   │   └── tips/                     # Feature tips: SVG scene primitives and one looping scene per tip
 │   ├── hooks/                        # Event-driven React hooks
-│   ├── i18n/locales/                 # Translations (en, es, fr, ja, ko, pt, ru, tr, vi, zh)
+│   ├── i18n/locales/                 # Translations (de, en, es, fr, ja, ko, pt, ru, tr, vi, zh)
 │   ├── generated/                    # Build-generated third-party license inventory
 │   ├── lib/                          # Utilities (themes, toast, browser-utils)
 │   └── types.ts                      # Shared TypeScript interfaces
@@ -180,7 +180,7 @@ Linux/Windows swap `~/Library/Logs/com.donutbrowser/` for the platform-appropria
 
 - Never write user-facing strings as raw English literals in JSX, toast messages, dialog titles/descriptions, button labels, placeholders, table headers, tooltips, or empty-state text. Always go through `t("namespace.key")` from `useTranslation()`.
 - This applies to every component under `src/`, including new ones. If a component doesn't already import `useTranslation`, add it.
-- Adding a new string means adding the key to EVERY locale file in `src/i18n/locales/` (currently en, es, fr, ja, ko, pt, ru, tr, vi, zh), not just `en.json`. The English version alone is incomplete work. Don't trust this list: enumerate `src/i18n/locales/*.json` and update every file you find, because a newly added locale is exactly what a hardcoded list silently skips.
+- Adding a new string means adding the key to EVERY locale file in `src/i18n/locales/` (currently de, en, es, fr, ja, ko, pt, ru, tr, vi, zh), not just `en.json`. The English version alone is incomplete work. Don't trust this list: enumerate `src/i18n/locales/*.json` and update every file you find, because a newly added locale is exactly what a hardcoded list silently skips.
 - Reuse existing keys (`common.buttons.*`, `common.labels.*`, `createProfile.*`, etc.) before creating new namespaces. Check `en.json` first.
 - Strings excluded from this rule: `console.log/warn/error`, dev-only debug labels, internal IDs, CSS class names, type names. If unsure whether a string renders to the user, assume it does and translate it.
 - Never use `t(key, "fallback")` with a default-value second argument. The 2-arg form is forbidden: every key must exist in every locale file before the call site lands. Fallbacks mask missing translations, so a key missing from `ru.json` silently renders the English fallback to Russian users and the bug never surfaces in CI or review. Only call `t("namespace.key")`. If a translation is missing for any locale, that's a bug to fix at the JSON, not a hole to paper over at the call site.
