@@ -312,7 +312,10 @@
 
         apps.build = mkApp "donut-build" ''
           set -euo pipefail
-          pnpm build
+          # mkApp exports NODE_ENV=development for the dev apps, and next build
+          # fails to prerender under it ("Cannot read properties of null
+          # (reading 'useContext')" on /_global-error).
+          NODE_ENV=production pnpm build
           (cd src-tauri && cargo build)
         '';
 
