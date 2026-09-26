@@ -180,7 +180,10 @@ impl AgentEnv {
   pub fn from_process() -> Option<Self> {
     Some(Self {
       platform: Platform::current(),
-      home: dirs::home_dir()?,
+      // std, not `dirs`: on Windows `dirs` asks for the Profile known folder
+      // and ignores USERPROFILE, while the clients themselves (Node's
+      // os.homedir(), Rust's home_dir) follow USERPROFILE.
+      home: std::env::home_dir()?,
       appdata: env_path("APPDATA"),
       xdg_config_home: env_path("XDG_CONFIG_HOME"),
       codex_home: env_path("CODEX_HOME"),

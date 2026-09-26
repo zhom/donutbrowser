@@ -683,7 +683,9 @@ impl ExtensionManager {
     dir: &Path,
     manifest: &serde_json::Value,
   ) -> Result<Extension, Box<dyn std::error::Error>> {
-    let absolute = dir.canonicalize()?;
+    // dunce, not std: on Windows std returns the `\\?\C:\...` form, which the
+    // Extensions page would show and `--load-extension` would be handed.
+    let absolute = dunce::canonicalize(dir)?;
     if !path_is_load_extension_safe(&absolute) {
       return Err(err_code("EXTENSION_PATH_HAS_COMMA"));
     }
@@ -956,7 +958,7 @@ impl ExtensionManager {
     manifest: &serde_json::Value,
     explicit_name_provided: bool,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    let absolute = dir.canonicalize()?;
+    let absolute = dunce::canonicalize(dir)?;
     if !path_is_load_extension_safe(&absolute) {
       return Err(err_code("EXTENSION_PATH_HAS_COMMA"));
     }
@@ -2201,7 +2203,11 @@ mod tests {
 
     let mgr = ExtensionManager::new();
     let source = write_unpacked_fixture(&tmp.path().join("linked-extension"), "Linked Fixture");
-    let canonical = source.canonicalize().unwrap().to_string_lossy().to_string();
+    let canonical = dunce::canonicalize(&source)
+      .unwrap()
+      .to_string_lossy()
+      .to_string();
+    assert!(!canonical.starts_with(r"\\?\"), "{canonical}");
     let ext = mgr
       .add_unpacked_extension("Ignored".to_string(), &source, true)
       .unwrap();

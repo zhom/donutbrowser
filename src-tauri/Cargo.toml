@@ -119,6 +119,7 @@ serde_yaml = "0.9"
 thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"
+dunce = "1"
 maxminddb = "0.32"
 quick-xml = { version = "0.42", features = ["serialize"] }
 

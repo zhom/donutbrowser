@@ -1762,6 +1762,7 @@ dependencies = [
  "crossbeam-channel",
  "directories",
  "dirs 7.0.0",
+ "dunce",
  "env_logger",
  "flate2",
  "futures-util",
