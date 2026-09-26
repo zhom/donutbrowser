@@ -1,5 +1,4 @@
 packages:
-  - nodecar
   - donut-sync
 
 onlyBuiltDependencies:

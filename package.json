@@ -44,7 +44,7 @@
     "lint:spell": "typos .",
     "tauri": "node scripts/run-with-env.mjs tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
-    "prepare": "husky && husky install",
+    "prepare": "husky",
     "format:rust": "cd src-tauri && cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
     "format:js": "biome check src/ e2e/ --write --unsafe && cd donut-sync && biome check src/ --write --unsafe",
     "format": "pnpm format:js && pnpm format:rust",
