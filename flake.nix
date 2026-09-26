@@ -15,11 +15,8 @@
         };
         lib = pkgs.lib;
 
-        nodejs =
-          if pkgs ? nodejs_23 then
-            pkgs.nodejs_23
-          else
-            pkgs.nodejs_22;
+        # The version in .node-version; 22 only where 24 is not packaged.
+        nodejs = pkgs.nodejs_24 or pkgs.nodejs_22;
 
         rustPackages = with pkgs; [
           cargo
@@ -92,10 +89,17 @@
           pkgs.pango
           pkgs.harfbuzz
           pkgs.webkitgtk_4_1
+          pkgs.zlib
         ];
-        pkgConfigPath = lib.makeSearchPath "lib/pkgconfig" (
-          pkgConfigLibs ++ map lib.getDev pkgConfigLibs
-        );
+        # The .pc files these name in Requires have to resolve too: gdk-3.0
+        # requires zlib, and a list of direct dependencies alone left it out,
+        # so `nix run .#build` failed in gdk-sys. The propagated closure brings
+        # in everything the listed libraries themselves depend on.
+        pkgConfigClosure = lib.closePropagation (pkgConfigLibs ++ map lib.getDev pkgConfigLibs);
+        pkgConfigPath = lib.concatStringsSep ":" [
+          (lib.makeSearchPath "lib/pkgconfig" (pkgConfigClosure ++ map lib.getDev pkgConfigClosure))
+          (lib.makeSearchPath "share/pkgconfig" pkgConfigClosure)
+        ];
         releaseVersion = "0.31.2";
         releaseAppImage =
           if system == "x86_64-linux" then
@@ -276,6 +280,13 @@
           echo "Rust: $(rustc --version)"
           echo "Cargo: $(cargo --version)"
           echo "Tauri CLI: $(cargo-tauri --version)"
+          # Every library the Rust build links through pkg-config, with the
+          # packages their .pc files require. A gap fails here in seconds
+          # instead of minutes into `nix run .#build`.
+          for module in gdk-3.0 webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 ayatana-appindicator3-0.1 openssl; do
+            pkg-config --cflags --libs "$module" > /dev/null
+            echo "$module: $(pkg-config --modversion "$module")"
+          done
         '';
 
         apps.deps = mkApp "donut-deps" ''
