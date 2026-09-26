@@ -232,18 +232,59 @@ mod windows {
   }
 
   fn is_default_for_scheme(scheme: &str) -> Result<bool, String> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let prog_id = shell_prog_id(scheme)
+      .or_else(|| registry_prog_id(&RegKey::predef(HKEY_CURRENT_USER), scheme));
+    Ok(prog_id.as_deref() == Some(PROG_ID))
+  }
 
-    let path =
-      format!(r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice");
+  /// The ProgId the shell actually opens `scheme` links with.
+  ///
+  /// Reading `UserChoice` directly is what made the Settings page say
+  /// "Inactive" while Donut was the default. Windows 11 25H2 records the choice
+  /// under `UserChoiceLatest\ProgId` and leaves the old `UserChoice` key behind
+  /// with whatever was there before, often `MSEdgeHTM`. Asking the shell for
+  /// the resolved ProgId follows whichever layout this build of Windows uses.
+  fn shell_prog_id(scheme: &str) -> Option<String> {
+    use windows::core::{HSTRING, PCWSTR, PWSTR};
+    use windows::Win32::UI::Shell::{AssocQueryStringW, ASSOCF_IS_PROTOCOL, ASSOCSTR_PROGID};
 
-    match hkcu.open_subkey(&path) {
-      Ok(key) => match key.get_value::<String, _>("ProgId") {
-        Ok(prog_id) => Ok(prog_id == PROG_ID),
-        Err(_) => Ok(false),
-      },
-      Err(_) => Ok(false),
+    let scheme = HSTRING::from(scheme);
+    let mut buffer = [0u16; 260];
+    let mut len = buffer.len() as u32;
+    let status = unsafe {
+      AssocQueryStringW(
+        ASSOCF_IS_PROTOCOL,
+        ASSOCSTR_PROGID,
+        PCWSTR(scheme.as_ptr()),
+        PCWSTR::null(),
+        Some(PWSTR(buffer.as_mut_ptr())),
+        &mut len,
+      )
+    };
+    if status.is_err() {
+      return None;
     }
+
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    let prog_id = String::from_utf16_lossy(&buffer[..end]);
+    (!prog_id.is_empty()).then_some(prog_id)
+  }
+
+  /// The same answer read from the registry, for when the shell call fails.
+  /// `UserChoiceLatest` wins whenever it exists, because a machine that has it
+  /// no longer updates `UserChoice`.
+  fn registry_prog_id(root: &RegKey, scheme: &str) -> Option<String> {
+    let base = format!(r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}");
+    let read = |path: String| {
+      root
+        .open_subkey(path)
+        .and_then(|key| key.get_value::<String, _>("ProgId"))
+    };
+
+    read(format!(r"{base}\UserChoiceLatest\ProgId"))
+      .or_else(|_| read(format!(r"{base}\UserChoice")))
+      .ok()
+      .filter(|prog_id| !prog_id.is_empty())
   }
 
   /// Delete the layout earlier builds wrote.
@@ -710,6 +751,54 @@ mod windows {
           "{extension} default value must be left alone"
         );
       }
+    }
+
+    fn write_choice(root: &ScratchRoot, subkey: &str, prog_id: &str) {
+      let (key, _) = root
+        .key
+        .create_subkey(format!(
+          r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\{subkey}"
+        ))
+        .expect("choice key");
+      key.set_value("ProgId", &prog_id).expect("choice value");
+    }
+
+    /// What Windows 11 25H2 leaves behind after the user picks Donut in
+    /// Settings: the new key names Donut, the old one still names Edge.
+    #[test]
+    fn the_latest_choice_outranks_the_stale_one() {
+      let root = ScratchRoot::new("latest_choice");
+      write_choice(&root, "UserChoice", "MSEdgeHTM");
+      write_choice(&root, r"UserChoiceLatest\ProgId", PROG_ID);
+
+      assert_eq!(
+        registry_prog_id(&root.key, "http").as_deref(),
+        Some(PROG_ID)
+      );
+    }
+
+    #[test]
+    fn a_machine_without_the_latest_key_reads_user_choice() {
+      let root = ScratchRoot::new("legacy_choice");
+      write_choice(&root, "UserChoice", PROG_ID);
+
+      assert_eq!(
+        registry_prog_id(&root.key, "http").as_deref(),
+        Some(PROG_ID)
+      );
+      assert_eq!(registry_prog_id(&root.key, "https"), None);
+    }
+
+    #[test]
+    fn a_stale_user_choice_does_not_override_the_latest_one() {
+      let root = ScratchRoot::new("stale_choice");
+      write_choice(&root, "UserChoice", PROG_ID);
+      write_choice(&root, r"UserChoiceLatest\ProgId", "ChromeHTML");
+
+      assert_eq!(
+        registry_prog_id(&root.key, "http").as_deref(),
+        Some("ChromeHTML")
+      );
     }
 
     #[test]
