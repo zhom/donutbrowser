@@ -250,6 +250,10 @@ fn fingerprint_locale(profile: &BrowserProfile) -> (Option<String>, Option<Strin
   (read("timezone"), read("language"))
 }
 
+pub(crate) fn fingerprint_timezone(profile: &BrowserProfile) -> Option<String> {
+  fingerprint_locale(profile).0
+}
+
 /// A mutex whose poison is not fatal.
 ///
 /// A panic anywhere under this lock used to brick the check process-wide.

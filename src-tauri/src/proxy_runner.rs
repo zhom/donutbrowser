@@ -373,11 +373,6 @@ pub async fn start_proxy_process_with_profile(
       processes.insert(id.clone(), pid);
     }
 
-    // Update config with PID
-    let mut config_with_pid = config.clone();
-    config_with_pid.pid = Some(pid);
-    save_proxy_config(&config_with_pid)?;
-
     // Don't wait for the child - it's detached
     drop(child);
   }
@@ -447,11 +442,6 @@ pub async fn start_proxy_process_with_profile(
       processes.insert(id.clone(), pid);
     }
 
-    // Update config with PID
-    let mut config_with_pid = config.clone();
-    config_with_pid.pid = Some(pid);
-    save_proxy_config(&config_with_pid)?;
-
     drop(child);
   }
 
@@ -516,43 +506,46 @@ pub async fn start_proxy_process_with_profile(
 }
 
 pub async fn stop_proxy_process(id: &str) -> Result<bool, Box<dyn std::error::Error>> {
-  let config = get_proxy_config(id);
+  let pid = PROXY_PROCESSES
+    .lock()
+    .unwrap()
+    .get(id)
+    .copied()
+    .or_else(|| get_proxy_config(id).and_then(|config| config.pid));
 
-  if let Some(config) = config {
-    if let Some(pid) = config.pid {
-      // Kill the process
-      #[cfg(unix)]
-      {
-        use std::process::Command;
-        let _ = Command::new("kill")
-          .arg("-TERM")
-          .arg(pid.to_string())
-          .output();
-      }
-      #[cfg(windows)]
-      {
-        use std::os::windows::process::CommandExt;
-        use std::process::Command;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let _ = Command::new("taskkill")
-          .args(["/F", "/PID", &pid.to_string()])
-          .creation_flags(CREATE_NO_WINDOW)
-          .output();
-      }
-
-      // Wait a bit for the process to exit
-      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-      // Remove from tracking
-      {
-        let mut processes = PROXY_PROCESSES.lock().unwrap();
-        processes.remove(id);
-      }
-
-      // Delete the config file
-      delete_proxy_config(id);
-      return Ok(true);
+  if let Some(pid) = pid {
+    // Kill the process
+    #[cfg(unix)]
+    {
+      use std::process::Command;
+      let _ = Command::new("kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .output();
     }
+    #[cfg(windows)]
+    {
+      use std::os::windows::process::CommandExt;
+      use std::process::Command;
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      let _ = Command::new("taskkill")
+        .args(["/F", "/PID", &pid.to_string()])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    }
+
+    // Wait a bit for the process to exit
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Remove from tracking
+    {
+      let mut processes = PROXY_PROCESSES.lock().unwrap();
+      processes.remove(id);
+    }
+
+    // Delete the config file
+    delete_proxy_config(id);
+    return Ok(true);
   }
 
   Ok(false)

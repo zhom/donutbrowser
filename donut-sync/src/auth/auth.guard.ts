@@ -118,6 +118,10 @@ export class AuthGuard implements CanActivate {
           algorithms: ["RS256"],
         }) as jwt.JwtPayload;
 
+        if (decoded.scope !== "sync") {
+          throw new Error("Token scope is not accepted");
+        }
+
         const sub = typeof decoded.sub === "string" ? decoded.sub : "";
         // Validate the prefix claim SHAPE before trusting it as an S3 key
         // prefix. An empty/over-broad prefix would make validateKeyAccess

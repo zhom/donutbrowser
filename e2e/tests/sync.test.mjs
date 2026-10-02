@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
@@ -79,6 +79,193 @@ async function createProfile(app, name) {
 async function waitFor(app, callback, description, timeoutMs = 45_000) {
   return app.waitFor(callback, { description, timeoutMs, intervalMs: 250 });
 }
+
+test("remote profile changes return after a long outage without another app restart", async () => {
+  assert.ok(syncUrl && syncToken, "Sync infrastructure was not started");
+  const app = appFromEnvironment("sync-remote-return");
+  let mode = "missing";
+  let profileId;
+  let missingManifests = 0;
+  let failedPulls = 0;
+  let failedFiles = 0;
+  let proxyUrl;
+  const proxy = createServer(async (request, response) => {
+    try {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const body = Buffer.concat(chunks).toString();
+      const input = body ? JSON.parse(body) : {};
+      if (request.url === "/failed-file") {
+        failedFiles += 1;
+        response.writeHead(503).end();
+        return;
+      }
+      if (request.url.endsWith("/subscribe")) {
+        response.writeHead(503).end();
+        return;
+      }
+      if (mode === "offline") {
+        if (input.key === `profiles/${profileId}/metadata.json`) {
+          failedPulls += 1;
+        }
+        response.writeHead(503).end();
+        return;
+      }
+      if (
+        mode === "missing" &&
+        request.url.endsWith("/stat") &&
+        input.key === `profiles/${profileId}/manifest.json`
+      ) {
+        missingManifests += 1;
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ exists: false }));
+        return;
+      }
+      const upstream = await fetch(`${syncUrl}${request.url}`, {
+        method: request.method,
+        headers: {
+          authorization: `Bearer ${syncToken}`,
+          "content-type": "application/json",
+        },
+        ...(body ? { body } : {}),
+        signal: AbortSignal.timeout(10_000),
+      });
+      let text = await upstream.text();
+      if (
+        mode === "partial" &&
+        request.url.endsWith("/presign-download-batch")
+      ) {
+        const result = JSON.parse(text);
+        for (const item of result.items ?? []) {
+          if (item.key.endsWith("/History"))
+            item.url = `${proxyUrl}/failed-file`;
+        }
+        text = JSON.stringify(result);
+      }
+      response.writeHead(upstream.status, {
+        "content-type": "application/json",
+      });
+      response.end(text);
+    } catch {
+      response.writeHead(502).end();
+    }
+  });
+  await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  proxyUrl = `http://127.0.0.1:${proxy.address().port}`;
+
+  try {
+    await app.start();
+    await configureSync(app);
+    const profile = await createProfile(app, "Remote Return");
+    profileId = profile.id;
+    const profileRoot = path.join(app.dataRoot, "data", "profiles", profileId);
+    const data = path.join(profileRoot, "profile", "Default");
+    const preferences = path.join(data, "Preferences");
+    const history = path.join(data, "History");
+    await mkdir(data, { recursive: true });
+    await writeFile(preferences, "remote preferences");
+    await writeFile(history, "remote history");
+    await app.invoke("set_profile_sync_mode", {
+      profileId,
+      syncMode: "Regular",
+    });
+    await app.invoke("request_profile_sync", { profileId });
+    await waitFor(
+      app,
+      async () =>
+        (await app.invoke("list_browser_profiles")).some(
+          (item) => item.id === profileId && item.last_sync != null,
+        ),
+      "the source profile finishes its upload",
+    );
+    const manifestKey = `profiles/${profileId}/manifest.json`;
+    const originalManifest = await downloadRemote(manifestKey);
+    await app.invoke("save_sync_settings", {
+      syncServerUrl: proxyUrl,
+      syncToken,
+    });
+    await app.close();
+
+    await writeFile(preferences, "stale local preferences");
+    await writeFile(history, "stale local history");
+    const later = new Date(Date.now() + 60_000);
+    await Promise.all([
+      utimes(preferences, later, later),
+      utimes(history, later, later),
+    ]);
+    await mkdir(path.join(profileRoot, ".donut-sync"), { recursive: true });
+    await writeFile(
+      path.join(profileRoot, ".donut-sync", "resume-state.json"),
+      JSON.stringify({
+        profile_id: profileId,
+        direction: "download",
+        started_at: new Date().toISOString(),
+        completed_files: [
+          "profile/Default/Preferences",
+          "profile/Default/History",
+        ],
+      }),
+    );
+    await writeFile(
+      path.join(app.dataRoot, "data", "settings", "remote_handoff.json"),
+      JSON.stringify({
+        [profileId]: {
+          session_id: "remote-return-session",
+          state: "pending_sync",
+          observed_at: Math.floor(Date.now() / 1000),
+        },
+      }),
+    );
+    await app.start();
+    const pending = async () =>
+      (await app.invoke("get_remote_handoff_states"))[profileId] ===
+      "pending_sync";
+    await waitFor(
+      app,
+      () => missingManifests >= 2,
+      "return waits for the remote manifest",
+    );
+    assert.equal(await pending(), true);
+    assert.deepEqual(await downloadRemote(manifestKey), originalManifest);
+
+    mode = "offline";
+    await app.invoke("request_profile_sync", { profileId });
+    await waitFor(
+      app,
+      () => failedPulls >= 6,
+      "return keeps trying after five failures",
+      120_000,
+    );
+    assert.equal(await pending(), true);
+
+    mode = "partial";
+    await waitFor(
+      app,
+      () => failedFiles >= 3,
+      "a non-critical file fails to return",
+    );
+    assert.equal(await pending(), true);
+    assert.deepEqual(await downloadRemote(manifestKey), originalManifest);
+
+    mode = "healthy";
+    await waitFor(
+      app,
+      async () => !(await pending()),
+      "return completes without a restart",
+      25_000,
+    );
+    assert.equal(await readFile(preferences, "utf8"), "remote preferences");
+    assert.equal(await readFile(history, "utf8"), "remote history");
+    assert.deepEqual(await downloadRemote(manifestKey), originalManifest);
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    await app.close();
+    proxy.closeAllConnections();
+    await new Promise((resolve) => proxy.close(resolve));
+  }
+});
 
 test("two real app devices reconcile profile files and every config entity with last-write-wins", async () => {
   assert.ok(syncUrl && syncToken, "Sync infrastructure was not started");
@@ -336,6 +523,43 @@ test("two real app devices reconcile profile files and every config entity with 
     throw error;
   } finally {
     await Promise.all([deviceA.close(), deviceB.close()]);
+  }
+});
+
+test("the first sync of an empty profile publishes a manifest and records completion", async () => {
+  const source = appFromEnvironment("sync-empty-source");
+  try {
+    await source.start();
+    await configureSync(source);
+    const profile = await createProfile(source, "Empty Profile");
+    await source.invoke("set_profile_sync_mode", {
+      profileId: profile.id,
+      syncMode: "Regular",
+    });
+    await source.invoke("request_profile_sync", { profileId: profile.id });
+    const manifestKey = `profiles/${profile.id}/manifest.json`;
+    await waitFor(
+      source,
+      async () => {
+        const profiles = await source.invoke("list_browser_profiles");
+        return (
+          profiles.find((item) => item.id === profile.id)?.last_sync > 0 &&
+          (await listRemote(`profiles/${profile.id}/`)).some(
+            (item) => item.key === manifestKey,
+          )
+        );
+      },
+      "empty profile has a remote manifest and a completed sync",
+    );
+    const manifest = JSON.parse(
+      (await downloadRemote(manifestKey)).toString("utf8"),
+    );
+    assert.deepEqual(manifest.files, []);
+  } catch (error) {
+    await source.capture("failure");
+    throw error;
+  } finally {
+    await source.close();
   }
 });
 

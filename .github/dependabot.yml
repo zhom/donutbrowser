@@ -69,22 +69,6 @@ updates:
       include: "scope"
 
   # Standalone SDKs for the local REST API
-  - package-ecosystem: "npm"
-    directory: "/sdk/node"
-    schedule:
-      interval: "weekly"
-      day: "saturday"
-      time: "09:00"
-    allow:
-      - dependency-type: "all"
-    groups:
-      sdk-node-dependencies:
-        patterns:
-          - "*"
-    commit-message:
-      prefix: "deps(sdk)"
-      include: "scope"
-
   - package-ecosystem: "pip"
     directory: "/sdk/python"
     schedule:

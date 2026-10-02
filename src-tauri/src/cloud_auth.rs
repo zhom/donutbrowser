@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 use crate::browser::ProxySettings;
@@ -17,6 +18,60 @@ pub const CLOUD_SYNC_URL: &str = "https://sync.donutbrowser.com";
 /// Default per-hour cap on local automation API / MCP requests, used when the
 /// cloud API has not sent one.
 const DEFAULT_REQUESTS_PER_HOUR: i64 = 100;
+
+const ACCESS_TOKEN_REFRESH_MARGIN_SECS: i64 = 15 * 60;
+const SYNC_TOKEN_REFRESH_MARGIN_SECS: i64 = 120;
+const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(60);
+const MAX_RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
+
+pub(crate) fn parse_retry_after(value: &str, now: chrono::DateTime<Utc>) -> Option<Duration> {
+  let value = value.trim();
+  if let Ok(seconds) = value.parse::<u64>() {
+    return Some(Duration::from_secs(seconds).min(MAX_RETRY_AFTER));
+  }
+  let at = chrono::DateTime::parse_from_rfc2822(value).ok()?;
+  let seconds = u64::try_from((at.with_timezone(&Utc) - now).num_seconds()).unwrap_or(0);
+  Some(Duration::from_secs(seconds).min(MAX_RETRY_AFTER))
+}
+
+pub(crate) fn retry_after(headers: &reqwest::header::HeaderMap) -> Duration {
+  headers
+    .get(reqwest::header::RETRY_AFTER)
+    .and_then(|value| value.to_str().ok())
+    .and_then(|value| parse_retry_after(value, Utc::now()))
+    .unwrap_or(DEFAULT_RETRY_AFTER)
+}
+
+fn is_refused_refresh(error: &str) -> bool {
+  error.contains("(401") || error.contains("No refresh token")
+}
+
+#[derive(Debug)]
+pub(crate) enum AuthorizedError {
+  SignedOut,
+  RateLimited(Duration),
+  Transport(String),
+}
+
+impl AuthorizedError {
+  fn from_token_error(error: String) -> Self {
+    if error.contains("Not logged in") || is_refused_refresh(&error) {
+      Self::SignedOut
+    } else {
+      Self::Transport(error)
+    }
+  }
+}
+
+impl std::fmt::Display for AuthorizedError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::SignedOut => write!(f, "not signed in"),
+      Self::RateLimited(wait) => write!(f, "rate limited for {}s", wait.as_secs()),
+      Self::Transport(error) => write!(f, "{error}"),
+    }
+  }
+}
 
 /// Capability + limit set the account is entitled to, derived from its plan.
 /// Mirrors the entitlement set the cloud API sends. Features are gated on these
@@ -341,6 +396,7 @@ pub struct CloudAuthManager {
   client: Client,
   state: Mutex<Option<CloudAuthState>>,
   refresh_lock: tokio::sync::Mutex<()>,
+  refresh_deferred_until: std::sync::Mutex<Option<Instant>>,
   wayfern_token: Mutex<Option<String>>,
   /// The server's reason for refusing this desktop a Wayfern token under a
   /// device rule, until a token is acquired again. The engine reports a
@@ -366,6 +422,7 @@ impl CloudAuthManager {
       client,
       state: Mutex::new(state),
       refresh_lock: tokio::sync::Mutex::new(()),
+      refresh_deferred_until: std::sync::Mutex::new(None),
       wayfern_token: Mutex::new(None),
       wayfern_device_refusal: std::sync::Mutex::new(None),
     }
@@ -426,6 +483,14 @@ impl CloudAuthManager {
     Self::decrypt_from_file(&path, b"DBCST")
   }
 
+  pub(crate) fn discard_cloud_sync_token(refused: &str) {
+    if let Ok(Some(cached)) = Self::load_cloud_sync_token() {
+      if cached == refused {
+        let _ = fs::remove_file(Self::get_settings_dir().join("cloud_sync_token.dat"));
+      }
+    }
+  }
+
   fn store_auth_state(state: &CloudAuthState) -> Result<(), String> {
     let path = Self::get_settings_dir().join("cloud_auth_state.json");
     if let Some(parent) = path.parent() {
@@ -465,10 +530,10 @@ impl CloudAuthManager {
 
   // --- JWT expiry check ---
 
-  fn is_jwt_expiring_soon(token: &str) -> bool {
+  fn jwt_expiry(token: &str) -> Option<i64> {
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
-      return true;
+      return None;
     }
 
     use base64::{engine::general_purpose, Engine as _};
@@ -476,25 +541,32 @@ impl CloudAuthManager {
       Ok(bytes) => bytes,
       Err(_) => {
         // Try standard base64 with padding
-        match general_purpose::STANDARD.decode(parts[1]) {
-          Ok(bytes) => bytes,
-          Err(_) => return true,
-        }
+        general_purpose::STANDARD.decode(parts[1]).ok()?
       }
     };
 
-    let json: serde_json::Value = match serde_json::from_slice(&payload) {
-      Ok(v) => v,
-      Err(_) => return true,
-    };
+    let json: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    json.get("exp").and_then(|v| v.as_i64())
+  }
 
-    let exp = match json.get("exp").and_then(|v| v.as_i64()) {
-      Some(exp) => exp,
-      None => return true,
-    };
+  fn jwt_expires_within(token: &str, margin_secs: i64, now: i64) -> bool {
+    Self::jwt_expiry(token).is_none_or(|exp| exp - now < margin_secs)
+  }
 
-    let now = Utc::now().timestamp();
-    exp - now < 120
+  fn is_jwt_expiring_soon(token: &str) -> bool {
+    Self::jwt_expires_within(
+      token,
+      SYNC_TOKEN_REFRESH_MARGIN_SECS,
+      Utc::now().timestamp(),
+    )
+  }
+
+  fn access_token_needs_refresh(token: &str) -> bool {
+    Self::jwt_expires_within(
+      token,
+      ACCESS_TOKEN_REFRESH_MARGIN_SECS,
+      Utc::now().timestamp(),
+    )
   }
 
   // --- API methods ---
@@ -612,6 +684,16 @@ impl CloudAuthManager {
 
   pub async fn refresh_access_token(&self) -> Result<(), String> {
     let _guard = self.refresh_lock.lock().await;
+    self.refresh_while_locked().await
+  }
+
+  async fn refresh_while_locked(&self) -> Result<(), String> {
+    if let Some(wait) = self.refresh_deferral() {
+      return Err(format!(
+        "Token refresh deferred for {}s (429 Too Many Requests)",
+        wait.as_secs()
+      ));
+    }
     log::info!("Refreshing access token (holding lock)...");
 
     let refresh_token =
@@ -629,6 +711,14 @@ impl CloudAuthManager {
     if !response.status().is_success() {
       let status = response.status();
       log::warn!("Token refresh failed ({status})");
+      if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        self.defer_refresh(retry_after(response.headers()));
+      } else if status == reqwest::StatusCode::UNAUTHORIZED {
+        Self::forget_refresh_token();
+        tauri::async_runtime::spawn(async {
+          CLOUD_AUTH.invalidate_session().await;
+        });
+      }
       return Err(format!("Token refresh failed ({status})"));
     }
 
@@ -642,6 +732,102 @@ impl CloudAuthManager {
 
     log::info!("Access token refreshed successfully");
     Ok(())
+  }
+
+  fn refresh_deferral(&self) -> Option<Duration> {
+    let until = (*self
+      .refresh_deferred_until
+      .lock()
+      .unwrap_or_else(std::sync::PoisonError::into_inner))?;
+    until.checked_duration_since(Instant::now())
+  }
+
+  fn defer_refresh(&self, wait: Duration) {
+    *self
+      .refresh_deferred_until
+      .lock()
+      .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Instant::now() + wait);
+  }
+
+  fn forget_refresh_token() {
+    let path = Self::get_settings_dir().join("cloud_refresh_token.dat");
+    if path.exists() {
+      let _ = fs::remove_file(path);
+    }
+  }
+
+  async fn ensure_fresh_access_token(&self) -> Result<String, String> {
+    let token = Self::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
+    if !Self::access_token_needs_refresh(&token) {
+      return Ok(token);
+    }
+    let _guard = self.refresh_lock.lock().await;
+    let current = Self::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
+    if current != token && !Self::access_token_needs_refresh(&current) {
+      return Ok(current);
+    }
+    self.refresh_while_locked().await?;
+    Self::load_access_token()?.ok_or_else(|| "Not logged in after refresh".to_string())
+  }
+
+  async fn usable_access_token(&self) -> Result<String, String> {
+    let token = Self::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
+    if !Self::access_token_needs_refresh(&token) {
+      return Ok(token);
+    }
+    match self.ensure_fresh_access_token().await {
+      Ok(fresh) => Ok(fresh),
+      Err(e) if e.contains("(401") => Err(e),
+      Err(e) => {
+        log::debug!("Early access token refresh did not complete: {e}");
+        Ok(token)
+      }
+    }
+  }
+
+  async fn refresh_after_rejection(&self, rejected: &str) -> Result<String, String> {
+    let _guard = self.refresh_lock.lock().await;
+    if let Some(current) = Self::load_access_token()? {
+      if current != rejected && !current.is_empty() {
+        log::info!("Token was already refreshed by another caller, retrying...");
+        return Ok(current);
+      }
+    }
+    self.refresh_while_locked().await?;
+    Self::load_access_token()?.ok_or_else(|| "Not logged in after refresh".to_string())
+  }
+
+  pub(crate) async fn authorized_request<F>(
+    &self,
+    build: F,
+  ) -> Result<reqwest::Response, AuthorizedError>
+  where
+    F: Fn(&Client, &str) -> reqwest::RequestBuilder + Send,
+  {
+    let token = self
+      .usable_access_token()
+      .await
+      .map_err(AuthorizedError::from_token_error)?;
+    let mut response = build(&self.client, &token)
+      .send()
+      .await
+      .map_err(|e| AuthorizedError::Transport(e.to_string()))?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+      let token = self
+        .refresh_after_rejection(&token)
+        .await
+        .map_err(AuthorizedError::from_token_error)?;
+      response = build(&self.client, &token)
+        .send()
+        .await
+        .map_err(|e| AuthorizedError::Transport(e.to_string()))?;
+    }
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+      return Err(AuthorizedError::RateLimited(retry_after(
+        response.headers(),
+      )));
+    }
+    Ok(response)
   }
 
   /// Invalidate the session: clear all auth state and notify the frontend.
@@ -663,6 +849,10 @@ impl CloudAuthManager {
     // itself is retired from the account page.
     Self::forget_mcp_key_locally("after the session expired");
     self.clear_auth().await;
+    crate::team_lock::PROFILE_LOCK.disconnect().await;
+    sync::stop_subscription();
+    crate::remote_session::stop_session_events();
+    crate::agent::stop_run_events();
     let _ = crate::events::emit_empty("cloud-auth-expired");
   }
 
@@ -937,6 +1127,10 @@ impl CloudAuthManager {
     self.clear_wayfern_token().await;
     self.set_wayfern_device_refusal(None);
 
+    crate::team_lock::PROFILE_LOCK
+      .release_all_held_within(crate::team_lock::SHUTDOWN_RELEASE_TIMEOUT)
+      .await;
+
     // Disconnect profile lock manager
     crate::team_lock::PROFILE_LOCK.disconnect().await;
 
@@ -1124,10 +1318,23 @@ impl CloudAuthManager {
     state.clone()
   }
 
+  async fn plan_marker(&self) -> Option<(String, bool, bool)> {
+    let state = self.state.lock().await;
+    state.as_ref().map(|auth| {
+      let entitlements = auth.user.entitlements();
+      (
+        auth.user.effective_plan().to_string(),
+        entitlements.active,
+        entitlements.cloud_backup,
+      )
+    })
+  }
+
   async fn clear_auth(&self) {
     let mut state = self.state.lock().await;
     *state = None;
     Self::delete_all_cloud_files();
+    crate::cookie_bot::forget_enrolments();
   }
 
   /// API call with 401 retry: if first attempt gets 401, refresh access token and retry once.
@@ -1137,7 +1344,7 @@ impl CloudAuthManager {
     F: Fn(String) -> Fut + Send,
     Fut: std::future::Future<Output = Result<T, String>> + Send,
   {
-    let access_token = Self::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
+    let access_token = self.usable_access_token().await?;
 
     match make_request(access_token.clone()).await {
       Ok(result) => Ok(result),
@@ -1151,9 +1358,7 @@ impl CloudAuthManager {
           return make_request(current_token).await;
         }
 
-        self.refresh_access_token().await?;
-        let new_token =
-          Self::load_access_token()?.ok_or_else(|| "Not logged in after refresh".to_string())?;
+        let new_token = self.refresh_after_rejection(&access_token).await?;
         log::info!("Token refreshed, retrying request...");
         make_request(new_token).await
       }
@@ -1446,13 +1651,11 @@ impl CloudAuthManager {
       // Proactively refresh the access token if it's expired or expiring soon.
       // This runs first so subsequent API calls use a fresh token.
       if let Ok(Some(token)) = Self::load_access_token() {
-        if Self::is_jwt_expiring_soon(&token) {
-          if let Err(e) = CLOUD_AUTH.refresh_access_token().await {
+        if Self::access_token_needs_refresh(&token) {
+          if let Err(e) = CLOUD_AUTH.ensure_fresh_access_token().await {
             log::warn!("Failed to refresh cloud access token: {e}");
             // If the refresh token itself was rejected, session is irrecoverable
             if e.contains("(401") || e.contains("Unauthorized") {
-              log::warn!("Refresh token rejected — invalidating session");
-              CLOUD_AUTH.invalidate_session().await;
               continue;
             }
           }
@@ -1469,11 +1672,17 @@ impl CloudAuthManager {
         }
       }
 
+      let plan_before = CLOUD_AUTH.plan_marker().await;
+
       // Refresh profile data periodically. A failure here leaves the cached
       // plan stale, which silently gates paid features, so it belongs at warn
       // rather than debug where the shipped log level hides it.
       if let Err(e) = CLOUD_AUTH.fetch_profile().await {
         log::warn!("Failed to refresh cloud profile: {e}");
+      }
+
+      if CLOUD_AUTH.plan_marker().await != plan_before {
+        sync::resume_subscription(app_handle.clone()).await;
       }
 
       // Reconnect profile lock manager if needed
@@ -2156,5 +2365,188 @@ mod tests {
     let spent_extra = merge_proxy_usage(&usage_response(Some(500), Some(0)), 500, 100);
     assert_eq!(spent_extra.recurring_limit_mb, 500);
     assert_eq!(spent_extra.extra_limit_mb, 0);
+  }
+
+  fn token_expiring_at(exp: i64) -> String {
+    use base64::{engine::general_purpose, Engine as _};
+    let header = general_purpose::URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","typ":"JWT"}"#);
+    let payload =
+      general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({ "exp": exp }).to_string());
+    format!("{header}.{payload}.signature")
+  }
+
+  #[test]
+  fn the_access_token_is_renewed_fifteen_minutes_before_it_expires() {
+    let now = 1_800_000_000;
+    let ten_minutes_left = token_expiring_at(now + 10 * 60);
+    let twenty_minutes_left = token_expiring_at(now + 20 * 60);
+
+    assert!(CloudAuthManager::jwt_expires_within(
+      &ten_minutes_left,
+      ACCESS_TOKEN_REFRESH_MARGIN_SECS,
+      now
+    ));
+    assert!(!CloudAuthManager::jwt_expires_within(
+      &twenty_minutes_left,
+      ACCESS_TOKEN_REFRESH_MARGIN_SECS,
+      now
+    ));
+    assert!(!CloudAuthManager::jwt_expires_within(
+      &ten_minutes_left,
+      SYNC_TOKEN_REFRESH_MARGIN_SECS,
+      now
+    ));
+    assert!(CloudAuthManager::jwt_expires_within(
+      "not-a-jwt",
+      ACCESS_TOKEN_REFRESH_MARGIN_SECS,
+      now
+    ));
+  }
+
+  #[test]
+  fn the_background_loop_renews_before_the_margin_runs_out() {
+    let source = include_str!("cloud_auth.rs");
+    let body = source
+      .split("pub async fn start_sync_token_refresh_loop(")
+      .nth(1)
+      .expect("the refresh loop must exist");
+    let period = body
+      .split("tokio::time::sleep(std::time::Duration::from_secs(")
+      .nth(1)
+      .and_then(|rest| rest.split(')').next())
+      .and_then(|secs| secs.parse::<i64>().ok())
+      .expect("the loop sleeps a fixed number of seconds");
+    assert!(period < ACCESS_TOKEN_REFRESH_MARGIN_SECS);
+    assert!(body.contains("access_token_needs_refresh(&token)"));
+  }
+
+  #[test]
+  fn a_plan_change_brings_a_stopped_sync_subscription_back() {
+    let source = include_str!("cloud_auth.rs");
+    let body = source
+      .split("pub async fn start_sync_token_refresh_loop(")
+      .nth(1)
+      .expect("the refresh loop must exist");
+    let before = body
+      .find("let plan_before = CLOUD_AUTH.plan_marker().await;")
+      .expect("the plan is read before the profile refresh");
+    let fetch = body
+      .find("CLOUD_AUTH.fetch_profile().await")
+      .expect("the profile refresh");
+    let resume = body
+      .find("sync::resume_subscription(app_handle.clone()).await;")
+      .expect("a changed plan resumes the subscription");
+    assert!(before < fetch && fetch < resume);
+  }
+
+  #[test]
+  fn retry_after_accepts_seconds_and_http_dates() {
+    let now = chrono::DateTime::parse_from_rfc3339("2026-09-27T10:00:00Z")
+      .unwrap()
+      .with_timezone(&Utc);
+    assert_eq!(
+      parse_retry_after("120", now),
+      Some(Duration::from_secs(120))
+    );
+    assert_eq!(
+      parse_retry_after("Sun, 27 Sep 2026 10:01:30 GMT", now),
+      Some(Duration::from_secs(90))
+    );
+    assert_eq!(
+      parse_retry_after("Sun, 27 Sep 2026 09:00:00 GMT", now),
+      Some(Duration::ZERO)
+    );
+    assert_eq!(parse_retry_after("999999", now), Some(MAX_RETRY_AFTER));
+    assert_eq!(parse_retry_after("soon", now), None);
+  }
+
+  #[test]
+  fn a_missing_retry_after_falls_back_to_a_default_wait() {
+    let mut headers = reqwest::header::HeaderMap::new();
+    assert_eq!(retry_after(&headers), DEFAULT_RETRY_AFTER);
+    headers.insert(reqwest::header::RETRY_AFTER, "7".parse().unwrap());
+    assert_eq!(retry_after(&headers), Duration::from_secs(7));
+  }
+
+  #[test]
+  fn only_a_dead_session_reads_as_signed_out() {
+    assert!(matches!(
+      AuthorizedError::from_token_error("Token refresh failed (401 Unauthorized)".to_string()),
+      AuthorizedError::SignedOut
+    ));
+    assert!(matches!(
+      AuthorizedError::from_token_error("Not logged in".to_string()),
+      AuthorizedError::SignedOut
+    ));
+    assert!(matches!(
+      AuthorizedError::from_token_error("No refresh token stored".to_string()),
+      AuthorizedError::SignedOut
+    ));
+    assert!(matches!(
+      AuthorizedError::from_token_error("Failed to refresh token: connection reset".to_string()),
+      AuthorizedError::Transport(_)
+    ));
+    assert!(matches!(
+      AuthorizedError::from_token_error(
+        "Token refresh deferred for 30s (429 Too Many Requests)".to_string()
+      ),
+      AuthorizedError::Transport(_)
+    ));
+  }
+
+  #[test]
+  fn a_refused_refresh_ends_the_session_and_a_throttled_one_waits() {
+    let source = include_str!("cloud_auth.rs");
+    let body = source
+      .split("async fn refresh_while_locked(&self)")
+      .nth(1)
+      .expect("refresh_while_locked must exist");
+    let body = &body[..body.find("\n  }").unwrap_or(body.len())];
+    let refused = body
+      .find("StatusCode::UNAUTHORIZED")
+      .expect("a 401 must be handled");
+    let invalidate = body
+      .find("invalidate_session()")
+      .expect("a refused refresh must end the session");
+    assert!(refused < invalidate);
+    assert!(body.contains("forget_refresh_token()"));
+    assert!(body.contains("defer_refresh(retry_after(response.headers()))"));
+    assert!(body.find("refresh_deferral()") < body.find(".send()"));
+  }
+
+  #[test]
+  fn an_ended_session_stops_every_loop_that_sends_a_token() {
+    let source = include_str!("cloud_auth.rs");
+    let body = source
+      .split("pub async fn invalidate_session(&self)")
+      .nth(1)
+      .expect("invalidate_session must exist");
+    let body = &body[..body.find("\n  }").unwrap_or(body.len())];
+    for stop in [
+      "crate::team_lock::PROFILE_LOCK.disconnect()",
+      "sync::stop_subscription()",
+      "crate::remote_session::stop_session_events()",
+      "crate::agent::stop_run_events()",
+      "crate::mcp_remote::stop(None)",
+    ] {
+      assert!(body.contains(stop), "invalidate_session must call {stop}");
+    }
+  }
+
+  #[test]
+  fn every_api_call_starts_from_a_token_that_is_not_about_to_expire() {
+    let source = include_str!("cloud_auth.rs");
+    for owner in [
+      "pub async fn api_call_with_retry<",
+      "pub(crate) async fn authorized_request<",
+    ] {
+      let body = source
+        .split(owner)
+        .nth(1)
+        .unwrap_or_else(|| panic!("{owner} must exist"));
+      let body = &body[..body.find("\n  }").unwrap_or(body.len())];
+      assert!(body.contains(".usable_access_token()"), "{owner}");
+      assert!(body.contains("refresh_after_rejection("), "{owner}");
+    }
   }
 }

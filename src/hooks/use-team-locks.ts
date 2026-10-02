@@ -18,20 +18,13 @@ export function useTeamLocks(currentUserId?: string) {
   useEffect(() => {
     void fetchLocks();
 
-    const unlistenAcquired = listen<{ profileId: string }>(
-      "team-lock-acquired",
-      () => void fetchLocks(),
-    );
-    const unlistenReleased = listen<{ profileId: string }>(
-      "team-lock-released",
-      () => void fetchLocks(),
-    );
+    const unlistenChanged = listen<{
+      profileId: string | null;
+      action: string;
+    }>("profile-lock-changed", () => void fetchLocks());
 
     return () => {
-      void unlistenAcquired.then((fn) => {
-        fn();
-      });
-      void unlistenReleased.then((fn) => {
+      void unlistenChanged.then((fn) => {
         fn();
       });
     };

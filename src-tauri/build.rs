@@ -10,8 +10,7 @@ fn main() {
   // Generate tray icon PNG files from SVG (macOS template icon format)
   generate_tray_icons();
 
-  #[cfg(target_os = "macos")]
-  {
+  if build_target.ends_with("-apple-darwin") {
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
     println!("cargo:rustc-link-lib=framework=CoreServices");
   }
@@ -72,16 +71,16 @@ fn main() {
     // or they crash with STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139). We embed the
     // manifest for all targets, then suppress the duplicate for bins with /MANIFEST:NO
     // (tauri_build's resource-embedded manifest still takes effect for bins).
-    #[cfg(target_os = "windows")]
-    {
+    if build_target.contains("windows") {
       embed_windows_manifest();
       println!("cargo:rustc-link-arg-bins=/MANIFEST:NO");
     }
   } else {
     println!("cargo:warning=Skipping tauri_build: external binaries not found. This is expected when building sidecar binaries.");
 
-    #[cfg(target_os = "windows")]
-    embed_windows_manifest();
+    if build_target.contains("windows") {
+      embed_windows_manifest();
+    }
   }
 }
 
@@ -139,7 +138,6 @@ fn ensure_dist_folder_exists() {
   println!("cargo:rerun-if-changed=../dist");
 }
 
-#[cfg(target_os = "windows")]
 fn embed_windows_manifest() {
   use std::path::PathBuf;
 

@@ -548,7 +548,7 @@ pub async fn update_recipe(
 
 /// Delete one.
 pub async fn delete_recipe(id: &str) -> Result<bool, String> {
-  let outcome: RecipeDeleted = request(
+  let outcome: Option<RecipeDeleted> = request(
     reqwest::Method::DELETE,
     format!("{}/recipes/{}", base(), urlencoding::encode(id)),
     Vec::new(),
@@ -557,7 +557,11 @@ pub async fn delete_recipe(id: &str) -> Result<bool, String> {
   )
   .await
   .map_err(|e| agent_error("recipe delete", e))?;
-  Ok(outcome.deleted.unwrap_or(true))
+  Ok(recipe_deleted(outcome))
+}
+
+fn recipe_deleted(outcome: Option<RecipeDeleted>) -> bool {
+  outcome.and_then(|reply| reply.deleted).unwrap_or(true)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -925,14 +929,23 @@ async fn request<T: DeserializeOwned>(
           return Err(format!("({status}) {text}"));
         }
 
-        response
-          .json::<T>()
+        let bytes = response
+          .bytes()
           .await
-          .map_err(|e| format!("decode response: {e}"))
+          .map_err(|e| format!("decode response: {e}"))?;
+        decode_body::<T>(&bytes).map_err(|e| format!("decode response: {e}"))
       }
     })
     .await
     .map_err(|e| AgentError(cloud_errors::classify_message(&e, codes)))
+}
+
+fn decode_body<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, serde_json::Error> {
+  if bytes.iter().all(u8::is_ascii_whitespace) {
+    serde_json::from_slice(b"null")
+  } else {
+    serde_json::from_slice(bytes)
+  }
 }
 
 // --- Tauri commands ---------------------------------------------------------
@@ -1025,6 +1038,26 @@ pub fn get_agent_run_events_status() -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_recipe_delete_with_no_body_is_a_success() {
+    let empty: Option<RecipeDeleted> = decode_body(b"").expect("a 204 has no body");
+    assert!(recipe_deleted(empty));
+    let blank: Option<RecipeDeleted> = decode_body(b" \n").expect("whitespace is no body");
+    assert!(recipe_deleted(blank));
+    let refused: Option<RecipeDeleted> =
+      decode_body(br#"{"deleted":false}"#).expect("an explicit answer");
+    assert!(!recipe_deleted(refused));
+    let bare: Option<RecipeDeleted> = decode_body(b"{}").expect("an empty object");
+    assert!(recipe_deleted(bare));
+  }
+
+  #[test]
+  fn an_empty_body_is_still_a_failure_where_a_value_is_required() {
+    assert!(decode_body::<RecipeDeleted>(b"").is_err());
+    assert!(decode_body::<AgentRecipe>(b"").is_err());
+    assert!(decode_body::<Option<RecipeDeleted>>(b"<html>").is_err());
+  }
 
   #[test]
   fn a_blank_goal_is_refused_before_anything_is_spent() {

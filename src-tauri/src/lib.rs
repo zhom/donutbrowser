@@ -3356,6 +3356,8 @@ pub fn run_with_builder(
           // with its work still in cloud storage. Signing in is the first moment
           // that pull can succeed, so it is where it is retried.
           remote_handoff::resume_pending_pulls(&app_handle_cloud);
+
+          tauri::async_runtime::spawn(cookie_bot::report_enrolled_profiles());
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });
@@ -3656,6 +3658,9 @@ pub fn run_with_builder(
         // one account holds one bridge at a time, so an instance that exits
         // without hanging up delays the account's next machine.
         mcp_remote::stop(None);
+        tauri::async_runtime::block_on(
+          team_lock::PROFILE_LOCK.release_all_held_within(team_lock::SHUTDOWN_RELEASE_TIMEOUT),
+        );
       }
 
       #[cfg(target_os = "macos")]

@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, Weak};
 use std::time::Instant;
 use tokio::sync::{Mutex as TokioMutex, Semaphore};
 
@@ -37,6 +37,22 @@ impl ProfileSyncOutcome {
   pub fn is_completed(&self) -> bool {
     matches!(self, Self::Completed)
   }
+}
+
+fn profile_sync_lock(profile_id: &str) -> Arc<TokioMutex<()>> {
+  static LOCKS: std::sync::OnceLock<StdMutex<HashMap<String, Weak<TokioMutex<()>>>>> =
+    std::sync::OnceLock::new();
+  let mut locks = LOCKS
+    .get_or_init(StdMutex::default)
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  locks.retain(|_, lock| lock.strong_count() > 0);
+  if let Some(lock) = locks.get(profile_id).and_then(Weak::upgrade) {
+    return lock;
+  }
+  let lock = Arc::new(TokioMutex::new(()));
+  locks.insert(profile_id.to_string(), Arc::downgrade(&lock));
+  lock
 }
 
 static SYNC_CANCEL_FLAGS: std::sync::LazyLock<StdMutex<HashMap<String, Arc<AtomicBool>>>> =
@@ -605,8 +621,7 @@ impl SyncEngine {
 
   /// Reconcile a profile, stating which side wins and whether anything happened.
   ///
-  /// The outcome matters to exactly one caller: the pull that follows a remote
-  /// session. Every skip below returns `Ok(())` from `sync_profile`, so a caller
+  /// Every skip below returns `Ok(())` from `sync_profile`, so a caller
   /// that treated success as "the profile is now current" would clear the local
   /// launch gate without having downloaded a single byte — and the user would
   /// then open a stale profile over the session's work. `Skipped` says so.
@@ -628,6 +643,38 @@ impl SyncEngine {
     bias: DiffBias,
     reencrypt: bool,
   ) -> SyncResult<ProfileSyncOutcome> {
+    let profile_id = profile.id.to_string();
+    let _sync_guard = profile_sync_lock(&profile_id).lock_owned().await;
+    let pending_session = match crate::remote_handoff::session_for(&profile_id) {
+      Some((crate::remote_handoff::HandoffState::Running, _)) => {
+        return Ok(ProfileSyncOutcome::Skipped("profile is running remotely"));
+      }
+      Some((crate::remote_handoff::HandoffState::PendingSync, session_id)) => Some(session_id),
+      None => None,
+    };
+    if bias == DiffBias::PreferRemote && pending_session.is_none() {
+      return Ok(ProfileSyncOutcome::Skipped(
+        "remote work was already pulled",
+      ));
+    }
+    if reencrypt && pending_session.is_some() {
+      return Err(SyncError::InvalidData(
+        "Remote profile changes are pending".to_string(),
+      ));
+    }
+    let bias = if pending_session.is_some() {
+      DiffBias::PreferRemote
+    } else {
+      bias
+    };
+    let current_profile = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| SyncError::IoError(format!("Failed to read profile: {e}")))?
+      .into_iter()
+      .find(|current| current.id == profile.id)
+      .ok_or_else(|| SyncError::InvalidData(format!("Profile {profile_id} not found")))?;
+    let profile = &current_profile;
+
     if profile.is_cross_os() {
       log::info!(
         "Cross-OS profile: {} ({}) — syncing metadata only",
@@ -664,6 +711,16 @@ impl SyncEngine {
 
     // Skip if profile is locked by another team member, or by one of this
     // user's own remote sessions.
+    if pending_session.is_some()
+      && crate::team_lock::TEAM_LOCK
+        .is_locked_by_another(&profile_id)
+        .await
+    {
+      crate::team_lock::TEAM_LOCK
+        .fetch_locks()
+        .await
+        .map_err(SyncError::NetworkError)?;
+    }
     if crate::team_lock::TEAM_LOCK
       .is_locked_by_another(&profile.id.to_string())
       .await
@@ -781,11 +838,20 @@ impl SyncEngine {
         .await?
     };
 
+    if pending_session.is_some() && remote_manifest.is_none() {
+      return Ok(ProfileSyncOutcome::Skipped(
+        "remote manifest is not available yet",
+      ));
+    }
+
     // Compute diff
     let diff = compute_diff_with_bias(&local_manifest, remote_manifest.as_ref(), bias);
 
-    if diff.is_empty() && !reencrypt {
+    if diff.is_empty() && !reencrypt && remote_manifest.is_some() && profile.last_sync.is_some() {
       log::info!("Profile {} is already in sync", profile_id);
+      if let Some(session_id) = &pending_session {
+        crate::remote_handoff::clear_pending(&profile_id, session_id);
+      }
       let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
@@ -849,6 +915,11 @@ impl SyncEngine {
 
     // Perform downloads
     if !diff.files_to_download.is_empty() {
+      if pending_session.is_some() {
+        // The diff already excludes files whose hashes match. A resume record
+        // from an older session must not skip a file that changed again.
+        SyncResumeState::delete(&profile_dir);
+      }
       self
         .download_profile_files(
           app_handle,
@@ -904,6 +975,9 @@ impl SyncEngine {
       !diff.files_to_download.is_empty() || !diff.files_to_delete_local.is_empty();
     let final_manifest = if local_changed {
       let mut new_cache = HashCache::load(&cache_path);
+      for file in &diff.files_to_download {
+        new_cache.entries.remove(&file.path);
+      }
       let mut regenerated = generate_manifest(&profile_id, &profile_dir, &mut new_cache)?;
       new_cache.save(&cache_path)?;
       regenerated.encrypted = encryption_key.is_some();
@@ -914,28 +988,39 @@ impl SyncEngine {
       m
     };
 
-    // Upload manifest.json last for atomicity
-    self
-      .upload_manifest(
-        &profile_id,
-        &final_manifest,
-        encryption_key.as_ref(),
-        &key_prefix,
-      )
-      .await?;
+    if pending_session.is_some() {
+      // Partial downloads must remain pending, including files outside the
+      // critical-file list. Never publish an incomplete return as the new copy.
+      if !compute_diff_with_bias(&final_manifest, remote_manifest.as_ref(), bias).is_empty() {
+        return Err(SyncError::NetworkError(
+          "Remote profile download is incomplete".to_string(),
+        ));
+      }
+    } else {
+      self
+        .upload_manifest(
+          &profile_id,
+          &final_manifest,
+          encryption_key.as_ref(),
+          &key_prefix,
+        )
+        .await?;
+    }
 
     // Sync completed successfully — clean up resume state
     SyncResumeState::delete(&profile_dir);
 
     // Sync associated proxy, group, and VPN
-    if let Some(proxy_id) = &profile.proxy_id {
-      let _ = self.sync_proxy(proxy_id, Some(app_handle)).await;
-    }
-    if let Some(group_id) = &profile.group_id {
-      let _ = self.sync_group(group_id, Some(app_handle)).await;
-    }
-    if let Some(vpn_id) = &profile.vpn_id {
-      let _ = self.sync_vpn(vpn_id, Some(app_handle)).await;
+    if pending_session.is_none() {
+      if let Some(proxy_id) = &profile.proxy_id {
+        let _ = self.sync_proxy(proxy_id, Some(app_handle)).await;
+      }
+      if let Some(group_id) = &profile.group_id {
+        let _ = self.sync_group(group_id, Some(app_handle)).await;
+      }
+      if let Some(vpn_id) = &profile.vpn_id {
+        let _ = self.sync_vpn(vpn_id, Some(app_handle)).await;
+      }
     }
 
     let mut updated_profile = profile.clone();
@@ -952,6 +1037,10 @@ impl SyncEngine {
       })?;
     let _ = events::emit("profiles-changed", ());
 
+    if let Some(session_id) = &pending_session {
+      crate::remote_handoff::clear_pending(&profile_id, session_id);
+    }
+
     let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
@@ -960,6 +1049,8 @@ impl SyncEngine {
         "status": "synced"
       }),
     );
+
+    crate::cookie_bot::report_profile_state(&updated_profile);
 
     log::info!("Profile {} synced successfully", profile_id);
     Ok(ProfileSyncOutcome::Completed)
@@ -1791,6 +1882,7 @@ impl SyncEngine {
     })?;
 
     log::info!("Proxy {} uploaded", proxy.id);
+    crate::cookie_bot::report_profiles_using_proxy(&proxy.id);
     Ok(())
   }
 
@@ -2173,6 +2265,7 @@ impl SyncEngine {
     }
 
     log::info!("VPN {} uploaded", vpn.id);
+    crate::cookie_bot::report_profiles_using_vpn(&vpn.id);
     Ok(())
   }
 
@@ -4551,6 +4644,23 @@ pub async fn rollover_encryption_for_all_entities(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn sync_calls_share_a_lock_only_for_the_same_profile() {
+    let first = profile_sync_lock("sync-lock-profile-1")
+      .try_lock_owned()
+      .unwrap();
+    assert!(profile_sync_lock("sync-lock-profile-1")
+      .try_lock_owned()
+      .is_err());
+    assert!(profile_sync_lock("sync-lock-profile-2")
+      .try_lock_owned()
+      .is_ok());
+    drop(first);
+    assert!(profile_sync_lock("sync-lock-profile-1")
+      .try_lock_owned()
+      .is_ok());
+  }
 
   /// The whole of issue 534, at the only place the user ever sees it.
   ///

@@ -31,28 +31,15 @@
 use crate::log_redaction::ShortId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
+use tokio::sync::Notify;
 
 /// Emitted whenever the set of gated profiles changes.
 pub const EVENT_REMOTE_HANDOFF: &str = "remote-handoff-changed";
 
-/// Attempts at pulling a finished session's work before giving up for now.
-///
-/// The entry survives a failure, so "giving up" only means this burst stops;
-/// the next stream event, app start or manual sync tries again. What the retries
-/// buy is the common case: the profile lock is released a moment before this
-/// machine's cached copy of it expires, and a single attempt would hit
-/// `Skipped("profile is locked elsewhere")` and leave the user blocked for no
-/// reason.
-const PULL_ATTEMPTS: u32 = 5;
-
-/// Delay before the second pull attempt. Doubles, capped by [`PULL_RETRY_MAX`].
-const PULL_RETRY_BASE: Duration = Duration::from_secs(2);
-
-/// Ceiling on the pull backoff. Above the 30s profile-lock refresh, so a run of
-/// attempts is guaranteed to span at least one refresh of the lock cache.
-const PULL_RETRY_MAX: Duration = Duration::from_secs(45);
+const PULL_RETRY_BASE: Duration = Duration::from_secs(1);
+const PULL_RETRY_MAX: Duration = Duration::from_secs(15);
 
 /// Where a profile stands with respect to remote execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +64,64 @@ struct HandoffEntry {
 type Store = HashMap<String, HandoffEntry>;
 
 static STORE: RwLock<Option<Store>> = RwLock::new(None);
+static PULL_WORKERS: Mutex<Option<HashMap<String, Arc<Notify>>>> = Mutex::new(None);
+
+fn with_workers<T>(f: impl FnOnce(&mut HashMap<String, Arc<Notify>>) -> T) -> T {
+  let mut guard = PULL_WORKERS
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  f(guard.get_or_insert_with(HashMap::new))
+}
+
+struct PullWorker {
+  profile_id: String,
+  wake: Arc<Notify>,
+}
+
+impl PullWorker {
+  fn claim(profile_id: String) -> Option<Self> {
+    with_workers(|workers| {
+      if let Some(wake) = workers.get(&profile_id) {
+        wake.notify_one();
+        return None;
+      }
+      let wake = Arc::new(Notify::new());
+      workers.insert(profile_id.clone(), wake.clone());
+      Some(Self { profile_id, wake })
+    })
+  }
+
+  fn pending_session(&self) -> Option<String> {
+    // Retire under the same lock as claim, so a new request cannot wake a
+    // worker that has already decided to exit.
+    with_workers(|workers| {
+      let pending = pending_session_for(&self.profile_id);
+      if pending.is_none() {
+        workers.remove(&self.profile_id);
+      }
+      pending
+    })
+  }
+}
+
+impl Drop for PullWorker {
+  fn drop(&mut self) {
+    with_workers(|workers| {
+      if workers
+        .get(&self.profile_id)
+        .is_some_and(|wake| Arc::ptr_eq(wake, &self.wake))
+      {
+        workers.remove(&self.profile_id);
+      }
+    });
+  }
+}
+
+fn pull_retry_delay(attempt: u32) -> Duration {
+  PULL_RETRY_BASE
+    .saturating_mul(1u32 << attempt.min(16))
+    .min(PULL_RETRY_MAX)
+}
 
 fn store_path() -> std::path::PathBuf {
   crate::app_dirs::settings_dir().join("remote_handoff.json")
@@ -166,6 +211,14 @@ pub fn states() -> HashMap<String, HandoffState> {
 /// Where this profile stands, if it is gated at all.
 pub fn state_for(profile_id: &str) -> Option<HandoffState> {
   with_store(|store| store.get(profile_id).map(|entry| entry.state))
+}
+
+pub(crate) fn session_for(profile_id: &str) -> Option<(HandoffState, String)> {
+  with_store(|store| {
+    store
+      .get(profile_id)
+      .map(|entry| (entry.state, entry.session_id.clone()))
+  })
 }
 
 /// The session currently holding this profile remotely, if any.
@@ -265,9 +318,23 @@ pub fn note_ended(profile_id: &str, session_id: &str) -> bool {
   transitioned
 }
 
-/// Drop the gate. Called only after a pull has actually completed.
-pub fn clear(profile_id: &str) {
-  mutate(|store| store.remove(profile_id).is_some());
+pub(crate) fn pending_session_for(profile_id: &str) -> Option<String> {
+  session_for(profile_id)
+    .filter(|(state, _)| *state == HandoffState::PendingSync)
+    .map(|(_, session_id)| session_id)
+}
+
+/// A completed pull must not clear a newer session's gate.
+pub(crate) fn clear_pending(profile_id: &str, session_id: &str) {
+  mutate(|store| {
+    let matches = store.get(profile_id).is_some_and(|entry| {
+      entry.state == HandoffState::PendingSync && entry.session_id == session_id
+    });
+    if matches {
+      store.remove(profile_id);
+    }
+    matches
+  });
 }
 
 /// Bring stored `Running` entries back in line with what the backend reports.
@@ -322,11 +389,7 @@ pub fn ensure_local_launch_allowed(profile_id: &str) -> Result<(), String> {
 
 /// Restart the pull for every profile still waiting on one.
 ///
-/// A pull can fail for as long as the machine is offline, and its retries are
-/// bounded, so without this a profile could stay blocked from launching until
-/// the user found the manual sync button. Called whenever the app has a cloud
-/// session again, which is exactly when a previously impossible pull becomes
-/// possible.
+/// Existing workers wake at once when the connection or sync settings recover.
 pub fn resume_pending_pulls(app_handle: &tauri::AppHandle) {
   let pending: Vec<String> = with_store(|store| {
     store
@@ -336,7 +399,6 @@ pub fn resume_pending_pulls(app_handle: &tauri::AppHandle) {
       .collect()
   });
   for profile_id in pending {
-    log::info!("Resuming the post-session pull for profile {profile_id}");
     schedule_pull(app_handle.clone(), profile_id);
   }
 }
@@ -364,54 +426,57 @@ fn profile_exists_locally(profile_id: &str) -> bool {
 /// whole attempt, so there is no window in which the user can open the stale
 /// copy while this is in flight.
 pub fn schedule_pull(app_handle: tauri::AppHandle, profile_id: String) {
+  let Some(worker) = PullWorker::claim(profile_id.clone()) else {
+    return;
+  };
   tauri::async_runtime::spawn(async move {
-    for attempt in 0..PULL_ATTEMPTS {
-      if state_for(&profile_id) != Some(HandoffState::PendingSync) {
-        // A new session started, or another pull got there first.
-        return;
-      }
-      if attempt > 0 {
-        let delay = PULL_RETRY_BASE
-          .saturating_mul(1u32 << (attempt - 1).min(16))
-          .min(PULL_RETRY_MAX);
-        tokio::time::sleep(delay).await;
-      }
+    run_pull_worker(
+      worker,
+      || crate::sync::pull_profile_after_remote_session(&app_handle, &profile_id),
+      || profile_exists_locally(&profile_id),
+    )
+    .await;
+  });
+}
 
-      match crate::sync::pull_profile_after_remote_session(&app_handle, &profile_id).await {
-        Ok(outcome) if outcome.is_completed() => {
-          log::info!("Pulled remote session work for profile {profile_id}");
-          clear(&profile_id);
-          return;
+async fn run_pull_worker<F, Fut, E>(worker: PullWorker, mut pull: F, exists: E)
+where
+  F: FnMut() -> Fut,
+  Fut: std::future::Future<Output = Result<crate::sync::ProfileSyncOutcome, String>>,
+  E: Fn() -> bool,
+{
+  let mut attempt = 0u32;
+  while let Some(session_id) = worker.pending_session() {
+    let profile_id = &worker.profile_id;
+    match pull().await {
+      Ok(outcome) if outcome.is_completed() => {
+        log::info!("Pulled remote session work for profile {profile_id}");
+        clear_pending(profile_id, &session_id);
+        attempt = 0;
+        continue;
+      }
+      Ok(crate::sync::ProfileSyncOutcome::Skipped(reason)) => {
+        log::debug!("Post-session pull for profile {profile_id} is waiting: {reason}");
+      }
+      Ok(_) => unreachable!("is_completed covers every completed outcome"),
+      Err(e) => {
+        if !exists() {
+          clear_pending(profile_id, &session_id);
+          continue;
         }
-        Ok(crate::sync::ProfileSyncOutcome::Skipped(reason)) => {
-          log::info!("Post-session pull for profile {profile_id} did nothing ({reason}); retrying");
-        }
-        Ok(_) => unreachable!("is_completed covers every completed outcome"),
-        Err(e) => {
-          // A profile that was created and run entirely on a remote host may
-          // not exist on this device at all: nothing to pull, nothing to gate.
-          // The pull would fail with "not found" on every attempt and the entry
-          // would sit in the handoff store for ever. Clear it — the gate only
-          // protects a LOCAL profile from being opened over unsynced remote
-          // work, and there is no local profile here.
-          if !profile_exists_locally(&profile_id) {
-            log::info!(
-              "Clearing the post-session gate for profile {profile_id}: it has no local copy \
-               (created and run remotely), so there is nothing to pull or protect"
-            );
-            clear(&profile_id);
-            return;
-          }
-          log::warn!("Post-session pull for profile {profile_id} failed: {e}");
-        }
+        log::warn!("Post-session pull for profile {profile_id} failed: {e}");
       }
     }
-
-    log::warn!(
-      "Could not pull remote session work for profile {profile_id} yet; it stays blocked from \
-       launching locally until the pull succeeds"
-    );
-  });
+    if worker.pending_session().is_none() {
+      return;
+    }
+    tokio::select! {
+      _ = tokio::time::sleep(pull_retry_delay(attempt)) => {
+        attempt = attempt.saturating_add(1);
+      }
+      _ = worker.wake.notified() => attempt = 0,
+    }
+  }
 }
 
 /// Serialises every test that can reach [`STORE`], wherever it lives.
@@ -441,6 +506,102 @@ pub(crate) fn lock_for_test() -> std::sync::MutexGuard<'static, ()> {
 mod tests {
   use super::*;
   use std::collections::HashSet;
+
+  #[test]
+  fn retries_continue_after_an_outage_longer_than_five_attempts() {
+    let _iso = isolated();
+    note_running("p1", "s1");
+    note_ended("p1", "s1");
+    let worker = PullWorker::claim("p1".into()).unwrap();
+    let wake = worker.wake.clone();
+    let mut attempts = 0;
+    tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .unwrap()
+      .block_on(run_pull_worker(
+        worker,
+        || {
+          attempts += 1;
+          wake.notify_one();
+          std::future::ready(if attempts <= 7 {
+            assert_eq!(state_for("p1"), Some(HandoffState::PendingSync));
+            if attempts % 2 == 0 {
+              Ok(crate::sync::ProfileSyncOutcome::Skipped("locked elsewhere"))
+            } else {
+              Err("network unavailable".to_string())
+            }
+          } else {
+            Ok(crate::sync::ProfileSyncOutcome::Completed)
+          })
+        },
+        || true,
+      ));
+    assert_eq!(attempts, 8);
+    assert!(ensure_local_launch_allowed("p1").is_ok());
+    assert!(PullWorker::claim("p1".into()).is_some());
+  }
+
+  #[test]
+  fn duplicate_requests_wake_one_worker_and_a_retired_worker_cannot_remove_its_replacement() {
+    let _iso = isolated();
+    note_running("p1", "s1");
+    note_ended("p1", "s1");
+    let worker = PullWorker::claim("p1".into()).unwrap();
+    assert!(PullWorker::claim("p1".into()).is_none());
+    assert!(futures_util::FutureExt::now_or_never(worker.wake.notified()).is_some());
+    clear_pending("p1", "s1");
+    assert!(worker.pending_session().is_none());
+    note_running("p1", "s2");
+    note_ended("p1", "s2");
+    let replacement = PullWorker::claim("p1".into()).unwrap();
+    drop(worker);
+    assert!(PullWorker::claim("p1".into()).is_none());
+    assert_eq!(replacement.pending_session().as_deref(), Some("s2"));
+  }
+
+  #[test]
+  fn completion_of_an_old_pull_keeps_the_new_session_blocked() {
+    let _iso = isolated();
+    note_running("p1", "s1");
+    note_ended("p1", "s1");
+    note_running("p1", "s2");
+    clear_pending("p1", "s1");
+    assert_eq!(state_for("p1"), Some(HandoffState::Running));
+    note_ended("p1", "s2");
+    clear_pending("p1", "s1");
+    assert_eq!(pending_session_for("p1").as_deref(), Some("s2"));
+  }
+
+  #[test]
+  fn a_new_running_session_stops_the_waiting_pull() {
+    let _iso = isolated();
+    note_running("p1", "s1");
+    note_ended("p1", "s1");
+    let worker = PullWorker::claim("p1".into()).unwrap();
+    tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .unwrap()
+      .block_on(run_pull_worker(
+        worker,
+        || {
+          note_running("p1", "s2");
+          std::future::ready(Err("network unavailable".to_string()))
+        },
+        || true,
+      ));
+    assert_eq!(state_for("p1"), Some(HandoffState::Running));
+    assert!(PullWorker::claim("p1".into()).is_some());
+  }
+
+  #[test]
+  fn pull_retries_start_quickly_and_remain_bounded() {
+    assert_eq!(pull_retry_delay(0), Duration::from_secs(1));
+    assert_eq!(pull_retry_delay(1), Duration::from_secs(2));
+    assert_eq!(pull_retry_delay(2), Duration::from_secs(4));
+    assert_eq!(pull_retry_delay(u32::MAX), Duration::from_secs(15));
+  }
 
   /// Point the store at a scratch directory and start it empty.
   ///
@@ -485,7 +646,7 @@ mod tests {
     let err = ensure_local_launch_allowed("p1").expect_err("pending work must block a launch");
     assert!(err.contains("PROFILE_REMOTE_SYNC_PENDING"));
 
-    clear("p1");
+    clear_pending("p1", "s1");
     assert!(ensure_local_launch_allowed("p1").is_ok());
   }
 
@@ -528,7 +689,7 @@ mod tests {
     let _iso = isolated();
     note_running("p1", "s1");
     note_ended("p1", "s1");
-    clear("p1");
+    clear_pending("p1", "s1");
     assert!(!note_ended("p1", "s1"));
     assert!(ensure_local_launch_allowed("p1").is_ok());
   }

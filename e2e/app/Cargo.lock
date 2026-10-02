@@ -969,9 +969,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-expr"
-version = "0.20.9"
+version = "0.20.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4ece8474b5f766c63426647e7b4b316b67431ade1036a8313cee24a03ae917"
+checksum = "9ba9e9ec16c447027685b1f897b720e18e9a8afd00bd7332c483537e38086c9f"
 dependencies = [
  "smallvec",
  "target-lexicon 0.13.5",
@@ -1724,7 +1724,7 @@ dependencies = [
 
 [[package]]
 name = "donutbrowser"
-version = "0.31.2"
+version = "0.31.3"
 dependencies = [
  "aes 0.9.3",
  "aes-gcm 0.11.1",
@@ -6516,7 +6516,7 @@ version = "7.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "396a35feb67335377e0251fcbc1092fc85c484bd4e3a7a54319399da127796e7"
 dependencies = [
- "cfg-expr 0.20.9",
+ "cfg-expr 0.20.10",
  "heck 0.5.0",
  "pkg-config",
  "toml 1.1.6+spec-1.1.0",

@@ -108,13 +108,25 @@ async function attachListeners() {
   // detach had already run, leaking a listener that no unsubscribe can reach
   // and double-emitting every session transition for the rest of the session.
   const generation = ++attachGeneration;
+  const recover = () => {
+    if (!enabled) return;
+    void attachStream();
+    void refreshCookieBot();
+  };
+  const recoverOnFocus = () => {
+    if (document.visibilityState === "visible" && !snapshot.streamConnected) {
+      recover();
+    }
+  };
   const offs = await Promise.all([
     onRemoteSessionState((session) => {
       if (!session.profile_id) return;
       const over = isSessionOver(session);
       const next = { ...snapshot.liveSessions };
       if (over) {
-        delete next[session.profile_id];
+        if (next[session.profile_id]?.session_id === session.session_id) {
+          delete next[session.profile_id];
+        }
       } else {
         next[session.profile_id] = session;
       }
@@ -125,11 +137,20 @@ async function attachListeners() {
     }),
     onRemoteSessionSnapshot((payload) => {
       emit({ liveSessions: indexOpenSessions(payload.sessions) });
+      void refreshCookieBot();
     }),
     onRemoteSessionStream((status) => {
       emit({ streamConnected: status.connected });
     }),
   ]);
+  window.addEventListener("online", recover);
+  window.addEventListener("focus", recoverOnFocus);
+  document.addEventListener("visibilitychange", recoverOnFocus);
+  offs.push(() => {
+    window.removeEventListener("online", recover);
+    window.removeEventListener("focus", recoverOnFocus);
+    document.removeEventListener("visibilitychange", recoverOnFocus);
+  });
   if (generation !== attachGeneration) {
     for (const off of offs) off();
     return;

@@ -104,6 +104,119 @@ struct ProxyTestTracker {
   binary_path: std::path::PathBuf,
 }
 
+struct ProxyWorkerProcess {
+  child: std::process::Child,
+  config_id: String,
+}
+
+impl Drop for ProxyWorkerProcess {
+  fn drop(&mut self) {
+    let _ = self.child.kill();
+    let _ = self.child.wait();
+    donutbrowser_lib::proxy_storage::delete_proxy_config(&self.config_id);
+  }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_worker_publishes_its_pid_with_readiness(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  use donutbrowser_lib::proxy_storage::{
+    generate_proxy_id, get_proxy_config, save_proxy_config, ProxyConfig,
+  };
+
+  let binary_path = setup_test().await?;
+  let config_id = generate_proxy_id();
+  let config = ProxyConfig::new(config_id.clone(), "DIRECT".to_string(), Some(0))
+    .with_local_protocol(Some("socks5".to_string()));
+  save_proxy_config(&config).map_err(|error| error.to_string())?;
+  let worker = ProxyWorkerProcess {
+    child: std::process::Command::new(&binary_path)
+      .args(["proxy-worker", "start", "--id", &config_id])
+      .stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()?,
+    config_id: config_id.clone(),
+  };
+
+  let ready = tokio::time::timeout(Duration::from_secs(10), async {
+    loop {
+      if let Some(config) = get_proxy_config(&config_id) {
+        if config.local_url.is_some() {
+          break config;
+        }
+      }
+      sleep(Duration::from_millis(20)).await;
+    }
+  })
+  .await?;
+
+  assert_eq!(ready.pid, Some(worker.child.id()));
+  let port = ready.local_port.unwrap();
+  assert_eq!(ready.local_url, Some(format!("socks5://127.0.0.1:{port}")));
+  let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
+  stream.write_all(&[5, 1, 0]).await?;
+  let mut response = [0; 2];
+  tokio::time::timeout(Duration::from_secs(2), stream.read_exact(&mut response)).await??;
+  assert_eq!(response, [5, 0]);
+
+  let stopped =
+    TestUtils::execute_command(&binary_path, &["proxy", "stop", "--id", &config_id]).await?;
+  assert!(stopped.status.success());
+  assert!(wait_for_port_closed(port, Duration::from_secs(5)).await);
+  assert!(get_proxy_config(&config_id).is_none());
+  Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_concurrent_proxy_starts_keep_worker_state(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  use donutbrowser_lib::proxy_storage::{get_proxy_config, is_process_running};
+
+  let binary_path = setup_test().await?;
+  let mut tracker = ProxyTestTracker::new(binary_path.clone());
+  let results = futures_util::future::join_all((0..8).map(|_| {
+    TestUtils::execute_command(
+      &binary_path,
+      &["proxy", "start", "--local-protocol", "socks5"],
+    )
+  }))
+  .await;
+  let mut failures = Vec::new();
+  let mut workers = Vec::new();
+  for result in results {
+    match result {
+      Ok(output) if output.status.success() => {
+        let config: Value = serde_json::from_slice(&output.stdout)?;
+        let id = config["id"].as_str().unwrap().to_string();
+        tracker.track_proxy(id.clone());
+        workers.push(id);
+      }
+      Ok(output) => failures.push(String::from_utf8_lossy(&output.stderr).into_owned()),
+      Err(error) => failures.push(error.to_string()),
+    }
+  }
+  assert!(failures.is_empty(), "{}", failures.join("\n"));
+  let mut pids = std::collections::HashSet::new();
+  for id in workers {
+    let config = get_proxy_config(&id).unwrap();
+    let pid = config.pid.unwrap();
+    assert!(pids.insert(pid));
+    assert!(is_process_running(pid));
+    let port = config.local_port.unwrap();
+    assert_eq!(config.local_url, Some(format!("socks5://127.0.0.1:{port}")));
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
+    stream.write_all(&[5, 1, 0]).await?;
+    let mut response = [0; 2];
+    tokio::time::timeout(Duration::from_secs(2), stream.read_exact(&mut response)).await??;
+    assert_eq!(response, [5, 0]);
+  }
+  tracker.cleanup_all().await;
+  Ok(())
+}
+
 impl ProxyTestTracker {
   fn new(binary_path: std::path::PathBuf) -> Self {
     Self {

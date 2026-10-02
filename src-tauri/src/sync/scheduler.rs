@@ -425,7 +425,13 @@ impl SyncScheduler {
           received = work_rx.recv(), if work_channel_open => {
             match received {
               Some(work_item) => match work_item {
-                SyncWorkItem::Profile(id) => scheduler.queue_profile_sync(id).await,
+                SyncWorkItem::Profile(id) => {
+                  if crate::remote_handoff::pending_session_for(&id).is_some() {
+                    crate::remote_handoff::schedule_pull(app_handle_clone.clone(), id);
+                  } else {
+                    scheduler.queue_profile_sync(id).await;
+                  }
+                }
                 SyncWorkItem::Proxy(id) => scheduler.queue_proxy_sync(id).await,
                 SyncWorkItem::Group(id) => scheduler.queue_group_sync(id).await,
                 SyncWorkItem::Vpn(id) => scheduler.queue_vpn_sync(id).await,
@@ -535,7 +541,11 @@ impl SyncScheduler {
         };
 
         let result = match SyncEngine::create_from_settings(&app).await {
-          Ok(engine) => engine.sync_profile(&app, &profile).await,
+          Ok(engine) => {
+            engine
+              .sync_profile_with_bias(&app, &profile, super::DiffBias::Auto)
+              .await
+          }
           Err(e) => {
             log::error!("Failed to create sync engine: {}", e);
             Err(super::types::SyncError::NotConfigured)
@@ -548,7 +558,7 @@ impl SyncScheduler {
         }
 
         match result {
-          Ok(()) => {
+          Ok(super::ProfileSyncOutcome::Completed) => {
             log::info!("Profile {} synced successfully", profile_id);
             let _ = events::emit(
               "profile-sync-status",
@@ -557,6 +567,9 @@ impl SyncScheduler {
                 "status": "synced"
               }),
             );
+          }
+          Ok(super::ProfileSyncOutcome::Skipped(reason)) => {
+            log::debug!("Profile {profile_id} sync is waiting: {reason}");
           }
           Err(e) => {
             log::error!("Failed to sync profile {}: {}", profile_id, e);

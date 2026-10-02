@@ -1601,12 +1601,14 @@ test("schedule displays every timezone and slot, and skipped run details work by
       const schedules = arguments[0], id = arguments[1];
       const previous = window.fetch;
       window.__donutScheduleCalls = [];
+      window.__donutRemainingHours = 199.8;
       const response = value => Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json", "Tauri-Response": "ok" } }));
       window.fetch = function(input, init) {
         let command = "";
         try { const url = new URL(typeof input === "string" ? input : input.url); if (url.hostname === "localhost" && url.protocol === "ipc:" || url.hostname === "ipc.localhost") command = decodeURIComponent(url.pathname.split("/").pop() || ""); } catch {}
         if (command === "get_cookie_bot_schedules") return response({ schedules });
-        if (command === "get_remote_hours_quota") return response({ granted_hours: 200, remaining_hours: 199.8, used_hours: 0.2, seats: 1, per_seat_hours: 200, members: [] });
+        if (command === "start_remote_session_events") { window.__donutScheduleCalls.push(command); return response(null); }
+        if (command === "get_remote_hours_quota") return response({ granted_hours: 200, remaining_hours: window.__donutRemainingHours, used_hours: 200 - window.__donutRemainingHours, seats: 1, per_seat_hours: 200, members: [] });
         if (command === "get_cookie_bot_runs") return response({ runs: [{ id: "skipped-fixture", profile_id: id, profile_name: "Two daily slots", status: "skipped", scheduled_for: "2026-09-08T02:00:00Z", max_minutes: 30, chunks_total: 1, chunk_index: 0, sites_total: 0, sites_visited: 0, sites_failed: 0, consent_dismissed: 0, billed_seconds: 0, outcome_code: "profile_locked" }], next_before: null });
         return previous.apply(window, arguments);
       };
@@ -1628,6 +1630,22 @@ test("schedule displays every timezone and slot, and skipped run details work by
     );
     assert.equal(await app.visibleTextIncludes("Asia/Yerevan"), true);
     assert.equal(await app.visibleTextIncludes("199.8"), true);
+    await app.execute("window.__donutRemainingHours = 199.7;");
+    await emit(app, "remote-session-snapshot", { sessions: [] });
+    await app.waitForText("199.7");
+    const connections = await app.execute(
+      "return window.__donutScheduleCalls.length;",
+    );
+    await app.execute(`
+      window.__donutRemainingHours = 199.6;
+      window.dispatchEvent(new Event("online"));
+    `);
+    await app.waitForText("199.6");
+    assert.ok(
+      (await app.execute("return window.__donutScheduleCalls.length;")) >
+        connections,
+      "network recovery wakes the remote session connection",
+    );
     await app.capture("every-schedule-slot");
     await app.clickText(en.cookieBot.tabs.activity, { roles: ["tab"] });
     await app.clickSelector('[role="combobox"]');

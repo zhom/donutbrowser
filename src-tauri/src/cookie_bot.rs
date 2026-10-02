@@ -14,6 +14,7 @@ use crate::cloud_errors::{self, BackendFailure, FailureCodes};
 use crate::profile::types::BrowserProfile;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -21,6 +22,10 @@ use std::time::Duration;
 /// OS, a typo) has no host, so it is refused here rather than as a failed run
 /// at 02:00.
 pub const BOT_PLATFORMS: [&str; 3] = ["windows", "macos", "linux"];
+
+const MAX_PROFILE_NAME_UNITS: usize = 200;
+
+static ENROLLED_PROFILES: std::sync::Mutex<Option<HashSet<String>>> = std::sync::Mutex::new(None);
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -809,14 +814,18 @@ pub async fn list_schedules(scope: Option<&str>) -> Result<CookieBotScheduleList
   let query = scope
     .map(|s| vec![("scope".to_string(), s.to_string())])
     .unwrap_or_default();
-  request(
+  let list: CookieBotScheduleList = request(
     reqwest::Method::GET,
     format!("{}/schedules", base()),
     query,
     None,
     SCHEDULE_CODES,
   )
-  .await
+  .await?;
+  if scope.is_none_or(|requested| requested == "mine") {
+    record_own_schedules(&mut enrolled_profiles(), &list);
+  }
+  Ok(list)
 }
 
 /// This profile's enrolment, or `None` when there is none.
@@ -834,8 +843,14 @@ pub async fn get_schedule(profile_id: &str) -> Result<Option<CookieBotSchedule>,
   .await;
 
   match result {
-    Ok(envelope) => Ok(Some(envelope.schedule)),
-    Err(e) if e.code() == "COOKIE_BOT_NOT_ENROLLED" => Ok(None),
+    Ok(envelope) => {
+      record_enrolment(&mut enrolled_profiles(), profile_id, true);
+      Ok(Some(envelope.schedule))
+    }
+    Err(e) if e.code() == "COOKIE_BOT_NOT_ENROLLED" => {
+      record_enrolment(&mut enrolled_profiles(), profile_id, false);
+      Ok(None)
+    }
     Err(e) => Err(e),
   }
 }
@@ -868,14 +883,16 @@ pub async fn save_schedule(
     );
   }
 
-  request(
+  let saved: CookieBotScheduleSaved = request(
     reqwest::Method::PUT,
     format!("{}/schedules/{}", base(), urlencoding::encode(profile_id)),
     Vec::new(),
     Some(body),
     SCHEDULE_CODES,
   )
-  .await
+  .await?;
+  record_enrolment(&mut enrolled_profiles(), profile_id, true);
+  Ok(saved)
 }
 
 /// Re-declare the profile facts the server cannot observe for itself.
@@ -885,24 +902,9 @@ pub async fn save_schedule(
 pub async fn update_profile_state(
   profile_id: &str,
   state: ProfileState,
-  timezone: Option<&str>,
+  identity: &ProfileIdentity,
 ) -> Result<CookieBotSchedule, CookieBotError> {
-  let mut body = serde_json::Map::new();
-  body.insert("sync_enabled".to_string(), state.sync_enabled.into());
-  body.insert("encrypted_sync".to_string(), state.encrypted_sync.into());
-  body.insert("has_proxy".to_string(), state.has_proxy.into());
-  body.insert(
-    "proxy_remote_reachable".to_string(),
-    state.proxy_remote_reachable.into(),
-  );
-  body.insert(
-    "touch_fingerprint".to_string(),
-    state.touch_fingerprint.into(),
-  );
-  body.insert("sticky_exit".to_string(), state.sticky_exit.into());
-  if let Some(zone) = timezone {
-    body.insert("timezone".to_string(), zone.into());
-  }
+  let body = profile_state_body(state, identity);
 
   let envelope: ScheduleEnvelope = request(
     reqwest::Method::POST,
@@ -912,7 +914,7 @@ pub async fn update_profile_state(
       urlencoding::encode(profile_id)
     ),
     Vec::new(),
-    Some(serde_json::Value::Object(body)),
+    Some(body),
     SCHEDULE_CODES,
   )
   .await?;
@@ -934,35 +936,189 @@ pub async fn update_profile_state(
 /// which is the normal case, and the next edit re-declares the same facts.
 pub fn report_profile_state(profile: &BrowserProfile) {
   let profile_id = profile.id.to_string();
+  if !should_report(&enrolled_profiles(), &profile_id) {
+    return;
+  }
   let state = profile_state(profile);
+  let identity = profile_identity(profile);
   tauri::async_runtime::spawn(async move {
-    if !crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
-      return;
-    }
-    match update_profile_state(&profile_id, state, None).await {
+    send_profile_state(profile_id, state, identity).await;
+  });
+}
+
+async fn send_profile_state(profile_id: String, state: ProfileState, identity: ProfileIdentity) {
+  if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
+    match update_profile_state(&profile_id, state, &identity).await {
       Ok(_) => {
+        record_enrolment(&mut enrolled_profiles(), &profile_id, true);
         log::debug!("Re-declared cookie-bot profile state for {profile_id}");
       }
       // Not enrolled is the common answer and not worth a log line at warn.
-      Err(e) if e.code() == "COOKIE_BOT_NOT_ENROLLED" => {}
+      Err(e) if e.code() == "COOKIE_BOT_NOT_ENROLLED" => {
+        record_enrolment(&mut enrolled_profiles(), &profile_id, false);
+      }
       Err(e) => {
         log::warn!("Could not re-declare cookie-bot profile state for {profile_id}: {e}");
       }
     }
-  });
+  }
+}
+
+pub fn report_profiles_using_proxy(proxy_id: &str) {
+  report_matching(|profile| profile.proxy_id.as_deref() == Some(proxy_id));
+}
+
+pub fn report_profiles_using_vpn(vpn_id: &str) {
+  report_matching(|profile| profile.vpn_id.as_deref() == Some(vpn_id));
+}
+
+fn report_matching(matches: impl Fn(&BrowserProfile) -> bool) {
+  let Ok(profiles) = crate::profile::ProfileManager::instance().list_profiles() else {
+    return;
+  };
+  for profile in profiles.iter().filter(|profile| matches(profile)) {
+    report_profile_state(profile);
+  }
+}
+
+pub async fn report_enrolled_profiles() {
+  let auth = &crate::cloud_auth::CLOUD_AUTH;
+  if !auth.is_logged_in().await || !auth.can_use_cookie_bot().await {
+    return;
+  }
+  let list = match list_schedules(None).await {
+    Ok(list) => list,
+    Err(e) => {
+      log::debug!("Could not list cookie-bot schedules at startup: {e}");
+      return;
+    }
+  };
+  let Ok(profiles) = crate::profile::ProfileManager::instance().list_profiles() else {
+    return;
+  };
+  for profile in enrolled_local_profiles(&list, profiles) {
+    send_profile_state(
+      profile.id.to_string(),
+      profile_state(&profile),
+      profile_identity(&profile),
+    )
+    .await;
+  }
+}
+
+fn enrolled_local_profiles(
+  list: &CookieBotScheduleList,
+  profiles: Vec<BrowserProfile>,
+) -> Vec<BrowserProfile> {
+  let enrolled: HashSet<&str> = list
+    .schedules
+    .iter()
+    .map(|schedule| schedule.profile_id.as_str())
+    .collect();
+  profiles
+    .into_iter()
+    .filter(|profile| enrolled.contains(profile.id.to_string().as_str()))
+    .collect()
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProfileIdentity {
+  pub timezone: Option<String>,
+  pub platform: Option<String>,
+  pub profile_name: Option<String>,
+}
+
+pub fn profile_identity(profile: &BrowserProfile) -> ProfileIdentity {
+  let name = profile.name.trim();
+  ProfileIdentity {
+    timezone: crate::fingerprint_consistency::fingerprint_timezone(profile)
+      .map(|zone| zone.trim().to_string())
+      .filter(|zone| !zone.is_empty()),
+    platform: profile
+      .resolved_os()
+      .filter(|os| BOT_PLATFORMS.contains(os))
+      .map(str::to_string),
+    profile_name: (!name.is_empty() && name.encode_utf16().count() <= MAX_PROFILE_NAME_UNITS)
+      .then(|| name.to_string()),
+  }
+}
+
+fn profile_state_body(state: ProfileState, identity: &ProfileIdentity) -> serde_json::Value {
+  let mut body = serde_json::Map::new();
+  body.insert("sync_enabled".to_string(), state.sync_enabled.into());
+  body.insert("encrypted_sync".to_string(), state.encrypted_sync.into());
+  body.insert("has_proxy".to_string(), state.has_proxy.into());
+  body.insert(
+    "proxy_remote_reachable".to_string(),
+    state.proxy_remote_reachable.into(),
+  );
+  body.insert(
+    "touch_fingerprint".to_string(),
+    state.touch_fingerprint.into(),
+  );
+  body.insert("sticky_exit".to_string(), state.sticky_exit.into());
+  if let Some(zone) = &identity.timezone {
+    body.insert("timezone".to_string(), zone.as_str().into());
+  }
+  if let Some(platform) = &identity.platform {
+    body.insert("platform".to_string(), platform.as_str().into());
+  }
+  if let Some(name) = &identity.profile_name {
+    body.insert("profile_name".to_string(), name.as_str().into());
+  }
+  serde_json::Value::Object(body)
+}
+
+pub fn forget_enrolments() {
+  *enrolled_profiles() = None;
+}
+
+fn enrolled_profiles() -> std::sync::MutexGuard<'static, Option<HashSet<String>>> {
+  ENROLLED_PROFILES
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn should_report(enrolled: &Option<HashSet<String>>, profile_id: &str) -> bool {
+  enrolled.as_ref().is_none_or(|ids| ids.contains(profile_id))
+}
+
+fn record_enrolment(enrolled: &mut Option<HashSet<String>>, profile_id: &str, is_enrolled: bool) {
+  if let Some(ids) = enrolled.as_mut() {
+    if is_enrolled {
+      ids.insert(profile_id.to_string());
+    } else {
+      ids.remove(profile_id);
+    }
+  }
+}
+
+fn record_own_schedules(enrolled: &mut Option<HashSet<String>>, list: &CookieBotScheduleList) {
+  if list.scope.as_deref() == Some("team") {
+    return;
+  }
+  *enrolled = Some(
+    list
+      .schedules
+      .iter()
+      .map(|schedule| schedule.profile_id.clone())
+      .collect(),
+  );
 }
 
 /// Turn the bot off for this profile. Safe to repeat: deleting an enrolment
 /// that is already gone succeeds with `deleted: false`.
 pub async fn delete_schedule(profile_id: &str) -> Result<CookieBotScheduleDeleted, CookieBotError> {
-  request(
+  let deleted: CookieBotScheduleDeleted = request(
     reqwest::Method::DELETE,
     format!("{}/schedules/{}", base(), urlencoding::encode(profile_id)),
     Vec::new(),
     None,
     SCHEDULE_CODES,
   )
-  .await
+  .await?;
+  record_enrolment(&mut enrolled_profiles(), profile_id, false);
+  Ok(deleted)
 }
 
 /// Ask, without writing anything, who else already warms this profile.
@@ -1386,6 +1542,166 @@ mod tests {
       proxy_id: Some("proxy-1".to_string()),
       ..Default::default()
     }
+  }
+
+  fn profile_in_zone(zone: &str) -> BrowserProfile {
+    let mut profile = eligible_profile();
+    profile.wayfern_config = Some(crate::wayfern_manager::WayfernConfig {
+      fingerprint: Some(serde_json::json!({ "timezone": zone, "language": "de-DE" }).to_string()),
+      ..Default::default()
+    });
+    profile
+  }
+
+  #[test]
+  fn a_report_names_the_zone_the_platform_and_the_profile() {
+    let identity = profile_identity(&profile_in_zone("Europe/Berlin"));
+    assert_eq!(
+      identity,
+      ProfileIdentity {
+        timezone: Some("Europe/Berlin".to_string()),
+        platform: Some("macos".to_string()),
+        profile_name: Some("warm me".to_string()),
+      }
+    );
+
+    let body = profile_state_body(profile_state(&eligible_profile()), &identity);
+    assert_eq!(body["timezone"], "Europe/Berlin");
+    assert_eq!(body["platform"], "macos");
+    assert_eq!(body["profile_name"], "warm me");
+    assert_eq!(body["has_proxy"], true);
+    assert_eq!(body["sync_enabled"], true);
+  }
+
+  #[test]
+  fn a_report_leaves_out_what_the_server_would_refuse() {
+    let mut profile = eligible_profile();
+    profile.host_os = Some("android".to_string());
+    profile.name = "n".repeat(MAX_PROFILE_NAME_UNITS + 1);
+    let identity = profile_identity(&profile);
+    assert_eq!(identity, ProfileIdentity::default());
+
+    let body = profile_state_body(profile_state(&profile), &identity);
+    for key in ["timezone", "platform", "profile_name"] {
+      assert!(body.get(key).is_none(), "{key} must be omitted");
+    }
+    assert!(body.get("sync_enabled").is_some());
+  }
+
+  #[test]
+  fn a_profile_name_is_measured_the_way_the_server_measures_it() {
+    let mut profile = eligible_profile();
+    profile.name = "😀".repeat(MAX_PROFILE_NAME_UNITS / 2);
+    assert!(profile_identity(&profile).profile_name.is_some());
+    profile.name = "😀".repeat(MAX_PROFILE_NAME_UNITS / 2 + 1);
+    assert!(profile_identity(&profile).profile_name.is_none());
+    profile.name = "   ".to_string();
+    assert!(profile_identity(&profile).profile_name.is_none());
+  }
+
+  fn schedule_list(scope: Option<&str>, ids: &[&str]) -> CookieBotScheduleList {
+    let schedules = ids
+      .iter()
+      .map(|id| {
+        serde_json::from_value(serde_json::json!({
+          "profile_id": id, "profile_name": "p", "platform": "macos", "enabled": true,
+          "run_at_minute": 0, "days_mask": 1, "timezone": "UTC", "preset": "light",
+          "max_minutes": 20
+        }))
+        .expect("a minimal schedule")
+      })
+      .collect();
+    CookieBotScheduleList {
+      schedules,
+      team_id: None,
+      scope: scope.map(str::to_string),
+    }
+  }
+
+  #[test]
+  fn only_enrolled_profiles_are_reported_once_the_enrolments_are_known() {
+    let mut enrolled = None;
+    assert!(should_report(&enrolled, "any"));
+
+    record_own_schedules(&mut enrolled, &schedule_list(Some("mine"), &["p1"]));
+    assert!(should_report(&enrolled, "p1"));
+    assert!(!should_report(&enrolled, "p2"));
+
+    record_enrolment(&mut enrolled, "p2", true);
+    assert!(should_report(&enrolled, "p2"));
+    record_enrolment(&mut enrolled, "p1", false);
+    assert!(!should_report(&enrolled, "p1"));
+  }
+
+  #[test]
+  fn a_team_listing_does_not_replace_the_callers_own_enrolments() {
+    let mut enrolled = None;
+    record_own_schedules(&mut enrolled, &schedule_list(Some("mine"), &["mine-1"]));
+    record_own_schedules(
+      &mut enrolled,
+      &schedule_list(Some("team"), &["mine-1", "teammate-1"]),
+    );
+    assert!(should_report(&enrolled, "mine-1"));
+    assert!(!should_report(&enrolled, "teammate-1"));
+  }
+
+  #[test]
+  fn an_unknown_enrolment_list_is_not_filled_in_by_single_answers() {
+    let mut enrolled = None;
+    record_enrolment(&mut enrolled, "p1", false);
+    assert!(enrolled.is_none());
+    assert!(should_report(&enrolled, "p1"));
+  }
+
+  #[test]
+  fn startup_reports_every_enrolled_profile_this_machine_has() {
+    let mut here = eligible_profile();
+    here.id = uuid::Uuid::from_u128(1);
+    let mut elsewhere = eligible_profile();
+    elsewhere.id = uuid::Uuid::from_u128(2);
+    let list = schedule_list(Some("mine"), &[&here.id.to_string(), "not-on-this-machine"]);
+    let picked = enrolled_local_profiles(&list, vec![here.clone(), elsewhere]);
+    assert_eq!(picked.len(), 1);
+    assert_eq!(picked[0].id, here.id);
+  }
+
+  #[test]
+  fn uploads_and_startup_re_declare_the_profile_state() {
+    let engine = include_str!("sync/engine.rs");
+    let lib = include_str!("lib.rs");
+    let upload_proxy = engine
+      .split("async fn upload_proxy(")
+      .nth(1)
+      .expect("upload_proxy must exist");
+    assert!(upload_proxy[..upload_proxy.find("\n  }").unwrap()]
+      .contains("crate::cookie_bot::report_profiles_using_proxy(&proxy.id);"));
+    let upload_vpn = engine
+      .split("async fn upload_vpn(")
+      .nth(1)
+      .expect("upload_vpn must exist");
+    assert!(upload_vpn[..upload_vpn.find("\n  }").unwrap()]
+      .contains("crate::cookie_bot::report_profiles_using_vpn(&vpn.id);"));
+    let profile_sync = engine
+      .split("async fn sync_profile_inner(")
+      .nth(1)
+      .expect("sync_profile_inner must exist");
+    let profile_sync = &profile_sync[..profile_sync.find("\n  }").unwrap()];
+    let uploaded = profile_sync
+      .find(".upload_manifest(")
+      .expect("the manifest upload");
+    let reported = profile_sync
+      .find("crate::cookie_bot::report_profile_state(&updated_profile);")
+      .expect("the report after a finished upload");
+    assert!(uploaded < reported);
+    assert!(lib.contains("tauri::async_runtime::spawn(cookie_bot::report_enrolled_profiles());"));
+    let auth = include_str!("cloud_auth.rs");
+    let clear = auth
+      .split("async fn clear_auth(&self)")
+      .nth(1)
+      .expect("clear_auth must exist");
+    assert!(
+      clear[..clear.find("\n  }").unwrap()].contains("crate::cookie_bot::forget_enrolments();")
+    );
   }
 
   #[test]

@@ -762,47 +762,21 @@ impl HeadlessWayfern {
       page_ws_url: String::new(),
     };
 
-    if let Err(e) = manager
+    let targets = match manager
       .wait_for_cdp_ready_while_running(port, &mut session.child, &log)
       .await
     {
-      session.stop().await;
-      return Err(e);
-    }
-
-    // The debugging endpoint answers as soon as the process is up, which is
-    // BEFORE the first window exists, so the target list is legitimately empty
-    // for a moment and a single read races it. Poll until a page target
-    // appears, and stop early if the process dies so a refused start is
-    // reported as its own reason rather than as a timeout.
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    loop {
-      if let Ok(Some(status)) = session.child.try_wait() {
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        let said = log.lines().join("\n");
+      Ok(targets) => targets,
+      Err(e) => {
         session.stop().await;
-        return Err(early_exit_error(&said, &status).into());
+        return Err(e);
       }
-      let detail = match manager.get_cdp_targets(port).await {
-        Ok(targets) => {
-          if let Some(url) = targets
-            .into_iter()
-            .find(|t| t.target_type == "page")
-            .and_then(|t| t.websocket_debugger_url)
-          {
-            session.page_ws_url = url;
-            return Ok(session);
-          }
-          "the browser reported no page target".to_string()
-        }
-        Err(e) => e.to_string(),
-      };
-      if std::time::Instant::now() >= deadline {
-        session.stop().await;
-        return Err(format!("No page target found for CDP: {detail}").into());
-      }
-      tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    };
+    session.page_ws_url = targets
+      .into_iter()
+      .find_map(|target| target.websocket_debugger_url)
+      .expect("CDP is ready only when a page has a socket");
+    Ok(session)
   }
 
   pub(crate) fn page_ws_url(&self) -> &str {
@@ -1576,7 +1550,7 @@ impl WayfernManager {
     port: u16,
     child: &mut tokio::process::Child,
     log: &BrowserLogTap,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<Vec<CdpTarget>, Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("http://127.0.0.1:{port}/json/version");
     let max_attempts = 120;
     let delay = Duration::from_millis(500);
@@ -1591,8 +1565,10 @@ impl WayfernManager {
       }
       match self.http_client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
-          log::info!("CDP ready on port {port} after {attempt} attempts");
-          return Ok(());
+          log::info!("CDP port {port} is open after {attempt} attempts");
+          return self
+            .wait_for_page_targets_while_running(port, child, log)
+            .await;
         }
         Ok(resp) => {
           last_error = Some(format!("HTTP {} from {url}", resp.status()));
@@ -1610,12 +1586,60 @@ impl WayfernManager {
     Err(format!("CDP not ready after {max_attempts} attempts on port {port}: {detail}").into())
   }
 
+  // The control port can open before the first tab. Both launch paths must
+  // wait for a page socket before they apply or check the fingerprint.
+  async fn wait_for_page_targets_while_running(
+    &self,
+    port: u16,
+    child: &mut tokio::process::Child,
+    log: &BrowserLogTap,
+  ) -> Result<Vec<CdpTarget>, Box<dyn std::error::Error + Send + Sync>> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+      if let Ok(Some(status)) = child.try_wait() {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        return Err(early_exit_error(&log.lines().join("\n"), &status).into());
+      }
+      let detail = match self.get_cdp_targets(port).await {
+        Ok(mut targets) => {
+          targets.retain(|target| {
+            target.target_type == "page"
+              && target
+                .websocket_debugger_url
+                .as_ref()
+                .is_some_and(|url| !url.is_empty())
+          });
+          if !targets.is_empty() {
+            return Ok(targets);
+          }
+          "the browser reported no page target with a socket".to_string()
+        }
+        Err(e) => e.to_string(),
+      };
+      if std::time::Instant::now() >= deadline {
+        return Err(
+          crate::backend_error_with_detail(
+            "WAYFERN_FINGERPRINT_APPLY_FAILED",
+            format!("No page target found for CDP: {detail}"),
+          )
+          .into(),
+        );
+      }
+      tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+  }
+
   async fn get_cdp_targets(
     &self,
     port: u16,
   ) -> Result<Vec<CdpTarget>, Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("http://127.0.0.1:{port}/json");
-    let resp = self.http_client.get(&url).send().await?;
+    let resp = self
+      .http_client
+      .get(&url)
+      .send()
+      .await?
+      .error_for_status()?;
     let targets: Vec<CdpTarget> = resp.json().await?;
     Ok(targets)
   }
@@ -2680,15 +2704,20 @@ impl WayfernManager {
       tap_browser_stderr(stderr, log_tap.clone(), profile.name.clone());
     }
 
-    self
+    let page_targets = match self
       .wait_for_cdp_ready_while_running(port, &mut child, &log_tap)
-      .await?;
+      .await
+    {
+      Ok(targets) => targets,
+      Err(e) => {
+        if let Some(pid) = process_id {
+          kill_browser_process(pid);
+        }
+        return Err(e);
+      }
+    };
     drop(child);
 
-    let targets = self.get_cdp_targets(port).await?;
-    log::info!("Found {} CDP targets", targets.len());
-
-    let page_targets: Vec<_> = targets.iter().filter(|t| t.target_type == "page").collect();
     log::info!("Found {} page targets", page_targets.len());
 
     // An identity-backed profile: the id, the user's overrides and the exit's
@@ -4228,6 +4257,128 @@ mod tests {
     terminate_process(pid);
     let _ = child.wait();
     assert!(wait_for_exit(pid, Duration::from_secs(5)).await);
+  }
+
+  fn cdp_test_process() -> tokio::process::Child {
+    #[cfg(unix)]
+    let mut command = {
+      let mut command = TokioCommand::new("sleep");
+      command.arg("60");
+      command
+    };
+    #[cfg(windows)]
+    let mut command = {
+      let mut command = TokioCommand::new("ping");
+      command.args(["-n", "60", "127.0.0.1"]);
+      command
+    };
+    command
+      .kill_on_drop(true)
+      .stdin(Stdio::null())
+      .stdout(Stdio::null())
+      .stderr(Stdio::null())
+      .spawn()
+      .unwrap()
+  }
+
+  async fn cdp_startup_server(
+    replies: Vec<(axum::http::StatusCode, serde_json::Value)>,
+  ) -> (
+    u16,
+    Arc<std::sync::atomic::AtomicUsize>,
+    tokio::task::JoinHandle<()>,
+  ) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let requests = Arc::new(AtomicUsize::new(0));
+    let seen = requests.clone();
+    let app = axum::Router::new()
+      .route("/json/version", axum::routing::get(|| async { "{}" }))
+      .route(
+        "/json",
+        axum::routing::get(move || {
+          let attempt = seen.fetch_add(1, Ordering::SeqCst);
+          let (status, body) = replies[attempt.min(replies.len() - 1)].clone();
+          async move { (status, axum::Json(body)) }
+        }),
+      );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+      axum::serve(listener, app).await.unwrap();
+    });
+    (port, requests, server)
+  }
+
+  #[tokio::test]
+  async fn cdp_readiness_waits_for_a_page_socket_after_the_port_opens() {
+    use axum::http::StatusCode;
+    use std::sync::atomic::Ordering;
+
+    let ready = json!([
+      { "type": "page" },
+      { "type": "page", "webSocketDebuggerUrl": "" },
+      { "type": "service_worker", "webSocketDebuggerUrl": "ws://worker" },
+      { "type": "page", "webSocketDebuggerUrl": "ws://ready-page" }
+    ]);
+    let (port, requests, server) = cdp_startup_server(vec![
+      (StatusCode::OK, json!([])),
+      (StatusCode::SERVICE_UNAVAILABLE, ready.clone()),
+      (StatusCode::OK, json!([{ "type": "page" }])),
+      (StatusCode::OK, ready),
+    ])
+    .await;
+    let mut child = cdp_test_process();
+    let targets = tokio::time::timeout(
+      Duration::from_secs(5),
+      WayfernManager::new().wait_for_cdp_ready_while_running(
+        port,
+        &mut child,
+        &BrowserLogTap::default(),
+      ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(requests.load(Ordering::SeqCst), 4);
+    assert_eq!(targets.len(), 1);
+    assert_eq!(
+      targets[0].websocket_debugger_url.as_deref(),
+      Some("ws://ready-page")
+    );
+    child.kill().await.unwrap();
+    server.abort();
+  }
+
+  #[tokio::test]
+  async fn cdp_page_wait_stops_when_the_browser_exits() {
+    use std::sync::atomic::Ordering;
+
+    let (port, requests, server) =
+      cdp_startup_server(vec![(axum::http::StatusCode::OK, json!([]))]).await;
+    let mut child = cdp_test_process();
+    let pid = child.id().unwrap();
+    let stop = tokio::spawn(async move {
+      while requests.load(Ordering::SeqCst) == 0 {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+      }
+      force_kill_process(pid);
+    });
+    let log = BrowserLogTap::default();
+    log.push("Wayfern instance limit reached: 4 browsers are already running on this plan.".into());
+    let error = tokio::time::timeout(
+      Duration::from_secs(5),
+      WayfernManager::new().wait_for_cdp_ready_while_running(port, &mut child, &log),
+    )
+    .await
+    .unwrap()
+    .unwrap_err();
+    assert_eq!(
+      code_of(&error.to_string()),
+      "WAYFERN_INSTANCE_LIMIT_REACHED"
+    );
+    stop.await.unwrap();
+    server.abort();
   }
 
   #[test]

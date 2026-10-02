@@ -101,7 +101,8 @@ pub fn classify_backend_status(status: u16, body: &str) -> RemoteSessionError {
     503 => RemoteSessionError::NoCapacity(message),
     409 => RemoteSessionError::Conflict(message),
     401..=403 => RemoteSessionError::NotAuthorised(message),
-    _ => RemoteSessionError::Other(message),
+    _ if cloud_errors::carries_code(body) => RemoteSessionError::Other(message),
+    _ => RemoteSessionError::Other(format!("({status}) {message}")),
   }
 }
 
@@ -674,7 +675,10 @@ fn index_session(app: Option<&AppHandle>, session: &RemoteSessionState) {
   // the only frames that exist. It is deliberately keyed off `is_terminal`
   // rather than `is_drivable`: a provisioning host already owns the profile.
   if is_terminal(session) {
-    if crate::remote_handoff::note_ended(&profile_id, &session.session_id) {
+    crate::remote_handoff::note_ended(&profile_id, &session.session_id);
+    if crate::remote_handoff::pending_session_for(&profile_id).as_deref()
+      == Some(session.session_id.as_str())
+    {
       if let Some(app) = app {
         crate::remote_handoff::schedule_pull(app.clone(), profile_id.clone());
       }
@@ -716,6 +720,9 @@ fn reindex(app: Option<&AppHandle>, sessions: &[RemoteSessionState]) {
     if let Some(app) = app {
       crate::remote_handoff::schedule_pull(app.clone(), profile_id);
     }
+  }
+  if let Some(app) = app {
+    crate::remote_handoff::resume_pending_pulls(app);
   }
 
   let next: HashMap<String, RemoteSessionState> = sessions
@@ -778,10 +785,12 @@ pub const EVENT_STREAM_STATUS: &str = "remote-session-stream";
 /// well above the heartbeat interval so a slow network cannot cause a churn of
 /// reconnects.
 const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(90);
+const STREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// First reconnect delay. Doubles per failure.
 const RECONNECT_BASE: Duration = Duration::from_secs(1);
 /// Ceiling on the reconnect delay.
 const RECONNECT_MAX: Duration = Duration::from_secs(60);
+const RECOVERY_RECONNECT_MAX: Duration = Duration::from_secs(10);
 /// Where the backoff restarts after an auth failure. Being signed out or
 /// unentitled is not something a fast retry fixes, and hammering an endpoint
 /// that will keep saying no is how a background task becomes a battery bug.
@@ -792,6 +801,7 @@ const SHUTDOWN_POLL: Duration = Duration::from_millis(250);
 
 static STREAM_RUNNING: AtomicBool = AtomicBool::new(false);
 static STREAM_TASK: Mutex<Option<tauri::async_runtime::JoinHandle<()>>> = Mutex::new(None);
+static STREAM_WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
 
 /// One frame off the wire.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -953,10 +963,11 @@ pub fn reconnect_delay(attempt: u32) -> Duration {
     .min(RECONNECT_MAX)
 }
 
-/// Start receiving session transitions. Idempotent: a second call while the
-/// stream is up is a no-op rather than a second socket.
+/// Start or wake the one subscriber that receives session transitions.
 pub fn start_session_events(app: AppHandle) {
+  crate::remote_handoff::resume_pending_pulls(&app);
   if STREAM_RUNNING.swap(true, Ordering::SeqCst) {
+    STREAM_WAKE.notify_one();
     return;
   }
   let handle = tauri::async_runtime::spawn(async move {
@@ -998,6 +1009,7 @@ async fn run_session_events(app: AppHandle) {
   let mut last_event_id: Option<String> = None;
 
   while STREAM_RUNNING.load(Ordering::SeqCst) {
+    let mut auth_failure = false;
     match connect_session_events(last_event_id.as_deref()).await {
       Ok(response) => {
         attempt = 0;
@@ -1016,6 +1028,7 @@ async fn run_session_events(app: AppHandle) {
       Err(err) => {
         let reason = err.to_string();
         if matches!(err, RemoteSessionError::NotAuthorised(_)) {
+          auth_failure = true;
           attempt = attempt.max(AUTH_BACKOFF_ATTEMPT);
         }
         log::warn!("Remote session stream could not connect: {reason}");
@@ -1026,12 +1039,28 @@ async fn run_session_events(app: AppHandle) {
     if !STREAM_RUNNING.load(Ordering::SeqCst) {
       break;
     }
-    let delay = jittered(reconnect_delay(attempt));
+    let delay = jittered(session_reconnect_delay(
+      attempt,
+      !crate::remote_handoff::states().is_empty(),
+      auth_failure,
+    ));
     attempt = attempt.saturating_add(1);
-    sleep_unless_stopped(delay).await;
+    tokio::select! {
+      _ = sleep_unless_stopped(delay) => {},
+      _ = STREAM_WAKE.notified() => attempt = 0,
+    }
   }
 
   log::info!("Remote session stream stopped");
+}
+
+fn session_reconnect_delay(attempt: u32, has_remote_work: bool, auth_failure: bool) -> Duration {
+  let delay = reconnect_delay(attempt);
+  if has_remote_work && !auth_failure {
+    delay.min(RECOVERY_RECONNECT_MAX)
+  } else {
+    delay
+  }
 }
 
 /// Spread reconnects so every desktop that lost the same backend does not come
@@ -1095,9 +1124,9 @@ async fn connect_session_events(
           request = request.header("Last-Event-ID", id);
         }
 
-        let response = request
-          .send()
+        let response = tokio::time::timeout(STREAM_CONNECT_TIMEOUT, request.send())
           .await
+          .map_err(|_| "reach backend: session stream response timed out".to_string())?
           .map_err(|e| format!("reach backend: {e}"))?;
 
         let status = response.status().as_u16();
@@ -1127,7 +1156,10 @@ async fn consume_session_events(
       return Ok(());
     }
 
-    let next = tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next()).await;
+    let next = tokio::select! {
+      next = tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next()) => next,
+      _ = STREAM_WAKE.notified() => return Ok(()),
+    };
     let chunk = match next {
       // No heartbeat. The socket is gone even though nothing errored, which
       // is what a machine returning from sleep sees.
@@ -1222,6 +1254,38 @@ mod tests {
       classify_backend_status(500, "boom"),
       RemoteSessionError::Other(_)
     ));
+  }
+
+  #[test]
+  fn a_failure_without_a_code_keeps_its_http_status() {
+    let code = |status: u16, body: &str| {
+      let json = classify_backend_status(status, body).to_error_json();
+      serde_json::from_str::<serde_json::Value>(&json).unwrap()["code"]
+        .as_str()
+        .unwrap()
+        .to_string()
+    };
+    assert_eq!(
+      code(404, "No such remote session"),
+      "REMOTE_SESSION_NOT_FOUND"
+    );
+    assert_eq!(code(400, "Bad Request"), "REMOTE_SESSION_REFUSED");
+    assert_eq!(code(429, "Too Many Requests"), cloud_errors::RATE_LIMITED);
+    assert_eq!(code(500, "boom"), cloud_errors::UNAVAILABLE);
+    assert_eq!(code(502, ""), cloud_errors::UNAVAILABLE);
+    assert_eq!(
+      code(404, r#"{"message":"Not Found","statusCode":404}"#),
+      "REMOTE_SESSION_NOT_FOUND"
+    );
+  }
+
+  #[test]
+  fn a_failure_with_a_code_keeps_the_body_untouched() {
+    let body = r#"{"code":"REMOTE_SESSION_NOT_FOUND"}"#;
+    let RemoteSessionError::Other(kept) = classify_backend_status(404, body) else {
+      panic!("a 404 is not one of the typed kinds");
+    };
+    assert_eq!(kept, body);
   }
 
   #[test]
@@ -1608,6 +1672,20 @@ mod tests {
     // times, nor overflow the shift.
     assert_eq!(reconnect_delay(20), RECONNECT_MAX);
     assert_eq!(reconnect_delay(u32::MAX), RECONNECT_MAX);
+  }
+
+  #[test]
+  fn unfinished_remote_work_reconnects_quickly_without_retrying_auth_failures_faster() {
+    assert_eq!(
+      session_reconnect_delay(0, true, false),
+      Duration::from_secs(1)
+    );
+    assert_eq!(
+      session_reconnect_delay(20, true, false),
+      Duration::from_secs(10)
+    );
+    assert_eq!(session_reconnect_delay(20, false, false), RECONNECT_MAX);
+    assert_eq!(session_reconnect_delay(20, true, true), RECONNECT_MAX);
   }
 
   #[test]

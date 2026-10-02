@@ -62,6 +62,38 @@ pub fn stop_pipeline() {
   }
 }
 
+pub fn stop_subscription() {
+  if let Ok(mut guard) = GLOBAL_SUBSCRIPTION.lock() {
+    if let Some(subscription) = guard.as_mut() {
+      subscription.stop();
+    }
+  }
+}
+
+pub async fn resume_subscription(app_handle: tauri::AppHandle) {
+  let _building = PIPELINE_LOCK.lock().await;
+
+  let taken = GLOBAL_SUBSCRIPTION
+    .lock()
+    .ok()
+    .and_then(|mut guard| guard.take());
+  let Some(mut subscription_manager) = taken else {
+    return;
+  };
+
+  if !subscription_manager.is_running() {
+    if let Err(e) = subscription_manager.start(app_handle).await {
+      log::warn!("Failed to resume sync subscription: {e}");
+    }
+  }
+
+  if let Ok(mut guard) = GLOBAL_SUBSCRIPTION.lock() {
+    if guard.is_none() {
+      *guard = Some(subscription_manager);
+    }
+  }
+}
+
 /// Build and start the sync pipeline. Safe to call again to restart it.
 ///
 /// Startup and `restart_sync_service` each held their own copy of this, and the
@@ -80,6 +112,7 @@ pub async fn start_pipeline(app_handle: tauri::AppHandle) {
   let _building = PIPELINE_LOCK.lock().await;
 
   stop_pipeline();
+  crate::remote_handoff::resume_pending_pulls(&app_handle);
 
   let mut subscription_manager = SubscriptionManager::new();
   let Some(work_rx) = subscription_manager.take_work_receiver() else {

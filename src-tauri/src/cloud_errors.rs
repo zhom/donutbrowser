@@ -120,6 +120,10 @@ pub fn transport_failure(message: &str) -> BackendFailure {
   }
 }
 
+pub fn carries_code(body: &str) -> bool {
+  from_body(0, body).is_some()
+}
+
 fn code_for_status(status: u16, codes: FailureCodes) -> &'static str {
   match status {
     400 | 422 => codes.bad_request,

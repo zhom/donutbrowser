@@ -1665,7 +1665,7 @@ async fn unwind_launch(profile: &BrowserProfile, acquired_team_lock: bool) {
 
 /// Whether a live browser process is recorded for this profile right now.
 /// Re-read from disk: the caller's copy predates the launch attempt.
-fn browser_is_running_for(profile_id: &str) -> bool {
+pub(crate) fn browser_is_running_for(profile_id: &str) -> bool {
   BrowserRunner::instance()
     .profile_manager
     .list_profiles()
