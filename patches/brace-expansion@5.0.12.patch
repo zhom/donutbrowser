@@ -1,19 +1,19 @@
 diff --git a/dist/commonjs/index.d.ts b/dist/commonjs/index.d.ts
-index f3e2de9d87e1ce462517e49f35733bed8bdf85af..7a19917a209b84b30938957ea67d4ad60dd748c5 100644
+index 1d86e5ec52083b00be390eefad66a03f54c1bffa..8d4bc13621590d805a7dfa978e8cf008a00e7330 100644
 --- a/dist/commonjs/index.d.ts
 +++ b/dist/commonjs/index.d.ts
-@@ -5,4 +5,5 @@ export type BraceExpansionOptions = {
-     maxLength?: number;
+@@ -9,4 +9,5 @@ export type BraceExpansionOptions = {
+     maxRewrites?: number;
  };
  export declare function expand(str: string, options?: BraceExpansionOptions): string[];
 +export default expand;
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/commonjs/index.js b/dist/commonjs/index.js
-index 869a6bee23807b9f01c18c99ab8e952b4b242f97..cd8fa65b1a1521aa0b27b3e661797763b8365138 100644
+index 48cf0d3dabc885249c65909c4912712c834786f5..351788b212bc24a559ea16c6e57e11121fd31693 100644
 --- a/dist/commonjs/index.js
 +++ b/dist/commonjs/index.js
-@@ -286,4 +286,5 @@ function expand_(str, max, maxLength, isTop) {
+@@ -330,4 +330,5 @@ function expand_(str, max, maxLength, maxDepth, depth, maxRewrites, isTop) {
      }
      return acc;
  }
@@ -21,21 +21,21 @@ index 869a6bee23807b9f01c18c99ab8e952b4b242f97..cd8fa65b1a1521aa0b27b3e661797763
  //# sourceMappingURL=index.js.map
 \ No newline at end of file
 diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
-index f3e2de9d87e1ce462517e49f35733bed8bdf85af..7a19917a209b84b30938957ea67d4ad60dd748c5 100644
+index 1d86e5ec52083b00be390eefad66a03f54c1bffa..8d4bc13621590d805a7dfa978e8cf008a00e7330 100644
 --- a/dist/esm/index.d.ts
 +++ b/dist/esm/index.d.ts
-@@ -5,4 +5,5 @@ export type BraceExpansionOptions = {
-     maxLength?: number;
+@@ -9,4 +9,5 @@ export type BraceExpansionOptions = {
+     maxRewrites?: number;
  };
  export declare function expand(str: string, options?: BraceExpansionOptions): string[];
 +export default expand;
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index fd68f57029207ac1bcafe7fb1c14ad5305b3ffa4..f3ef09ac8ad02d3fde8150e7f64f40ac874a47e3 100644
+index 0e0cc962307eb697dc8139ef4c1f86b82380e5cc..dbce6953f0abf8266d3380ca5382abed2531f9fb 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
-@@ -282,4 +282,5 @@ function expand_(str, max, maxLength, isTop) {
+@@ -326,4 +326,5 @@ function expand_(str, max, maxLength, maxDepth, depth, maxRewrites, isTop) {
      }
      return acc;
  }

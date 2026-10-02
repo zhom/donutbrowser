@@ -30,7 +30,7 @@ overrides:
   js-yaml@>=4.0.0 <4.3.2: '>=4.3.2 <5'
   browserslist@<4.28.7: '>=4.28.7'
   '@babel/core@<7.29.6': '>=7.29.6 <8'
-  brace-expansion@<5.0.9: 5.0.9
+  brace-expansion@<5.0.12: 5.0.12
   sharp@<0.35.0: '>=0.35.0 <0.36'
 
 allowBuilds:
@@ -40,4 +40,4 @@ allowBuilds:
   unrs-resolver: true
 
 patchedDependencies:
-  brace-expansion@5.0.9: patches/brace-expansion@5.0.9.patch
+  brace-expansion@5.0.12: patches/brace-expansion@5.0.12.patch

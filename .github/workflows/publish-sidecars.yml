@@ -185,9 +185,9 @@ jobs:
           fi
 
           if command -v sha256sum >/dev/null; then
-            digest="$(sha256sum "$dest" | cut -d' ' -f1)"
+            digest="$(sha256sum --binary < "$dest" | cut -d' ' -f1)"
           else
-            digest="$(shasum -a 256 "$dest" | cut -d' ' -f1)"
+            digest="$(shasum -a 256 -b < "$dest" | cut -d' ' -f1)"
           fi
 
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
@@ -286,9 +286,9 @@ jobs:
           aws s3 cp "s3://${bucket}/${ARTIFACT}" "$verify" \
             --endpoint-url "$endpoint" --only-show-errors
           if command -v sha256sum >/dev/null; then
-            got="$(sha256sum "$verify" | cut -d' ' -f1)"
+            got="$(sha256sum --binary < "$verify" | cut -d' ' -f1)"
           else
-            got="$(shasum -a 256 "$verify" | cut -d' ' -f1)"
+            got="$(shasum -a 256 -b < "$verify" | cut -d' ' -f1)"
           fi
           if [ "$got" != "$DIGEST" ]; then
             echo "::error::Round-trip mismatch for $ARTIFACT: uploaded $DIGEST, bucket returned $got"
