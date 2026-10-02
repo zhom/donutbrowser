@@ -4501,7 +4501,7 @@ pub async fn rollover_encryption_for_all_entities(
   };
   let engine = SyncEngine::create_from_settings(&app_handle)
     .await
-    .map_err(&internal_error)?;
+    .map_err(internal_error)?;
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
