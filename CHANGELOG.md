@@ -1,6 +1,62 @@
 # Changelog
 
 
+## v0.31.3 (2026-10-03)
+
+### Features
+
+- flatpak and snap support
+- german translation
+- privacy settings
+
+### Bug Fixes
+
+- flake next build
+- settings bar fade
+- unused static on linux and macos
+- flake build
+- donut-sync test storage
+- windows e2e harness
+- windows path handling
+- first browser download stuck at 0%
+- windows default browser detection
+
+### Refactoring
+
+- cleanup
+- cleanup
+- use std LazyLock
+
+### Maintenance
+
+- chore: linting
+- chore: linting
+- chore: linting
+- ci(deps): bump the github-actions group with 3 updates
+- chore: linting
+- chore: pnpm self-update
+- ci(deps): bump the github-actions group across 1 directory with 2 updates
+- ci: test flatpak in release runs
+- chore: keep shadowsocks below 1.25
+- ci: attach flatpak and snap to releases
+- ci: hold back breaking majors
+- ci: fix snap smoke test
+- test: fix schedule e2e race
+- ci: fix linux packages cache
+- chore: sync e2e lockfile
+- chore: fix node deprecation warning
+- chore: cleanup
+- ci: cleanup
+- chore: update dependencies
+- test: cleanup
+- chore: update flake.nix for v0.31.2 [skip ci] (#623)
+
+### Other
+
+- deps(deps): bump the frontend-dependencies group with 67 updates (#635)
+- deps(rust)(deps): bump the rust-dependencies group (#630)
+
+
 ## v0.31.2 (2026-09-23)
 
 ### Bug Fixes
