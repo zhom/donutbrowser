@@ -130,7 +130,7 @@ image = "0.25"
 dirs = "7"
 crossbeam-channel = "0.5"
 sys-locale = "0.3"
-jsonc-parser = { version = "0.33", features = ["cst", "serde_json"] }
+jsonc-parser = { version = "0.34", features = ["cst", "serde_json"] }
 toml_edit = "0.25"
 
 [target.'cfg(unix)'.dependencies]
