@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import en from "../../src/i18n/locales/en.json" with { type: "json" };
 import { WebDriverClient } from "./webdriver.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -300,7 +301,51 @@ export class AppSession {
         timeoutMs: 60_000,
       },
     );
+    await this.dismissStartupPermissions();
     return this;
+  }
+
+  async dismissStartupPermissions() {
+    if (
+      process.platform !== "darwin" ||
+      !(await this.invoke("get_onboarding_completed"))
+    ) {
+      return;
+    }
+    const [microphone, camera] = await Promise.all([
+      this.invoke("plugin:macos-permissions|check_microphone_permission"),
+      this.invoke("plugin:macos-permissions|check_camera_permission"),
+    ]);
+    if (microphone && camera) return;
+
+    const title = microphone
+      ? en.permissionDialog.titleCamera
+      : en.permissionDialog.titleMicrophone;
+    await this.clickElement(
+      () =>
+        this.execute(
+          `
+            const dialog = [...document.querySelectorAll("[role='dialog']")].find(
+              (node) => node.querySelector("h2")?.textContent === arguments[0]
+            );
+            return [...(dialog?.querySelectorAll("button") ?? [])].find(
+              (button) => button.textContent.trim() === arguments[1]
+            ) ?? null;
+          `,
+          [title, en.permissionDialog.cancelButton],
+        ),
+      "startup permission dialog Cancel button",
+    );
+    await this.waitFor(
+      () =>
+        this.execute(
+          `return ![...document.querySelectorAll("[role='dialog']")].some(
+            (node) => node.querySelector("h2")?.textContent === arguments[0]
+          );`,
+          [title],
+        ),
+      { description: "startup permission dialog to close" },
+    );
   }
 
   async restart() {

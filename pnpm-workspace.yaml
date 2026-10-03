@@ -11,9 +11,11 @@ onlyBuiltDependencies:
   - sqlite3
   - unrs-resolver
 
-# Pinned for security. Moved from package.json#pnpm.overrides — pnpm 11
+# Dependency pins. Moved from package.json#pnpm.overrides — pnpm 11
 # no longer reads that field; settings live here now.
 overrides:
+  # Keep the API used by plugins on the Rust crate's minor version.
+  '@tauri-apps/api': '~2.11.1'
   picomatch@>=4.0.0 <4.0.4: '>=4.0.4'
   path-to-regexp@>=8.0.0 <8.4.0: '>=8.4.0'
   postcss@<8.5.18: '>=8.5.18'
