@@ -1,5 +1,6 @@
 "use client";
 
+import { cloneElement, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { LuArrowDown, LuArrowUp, LuTrash2 } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
@@ -13,27 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { RecipeStep, RecipeStepType } from "@/lib/agent";
-
-/** The kinds a recipe may hold, in the order the editor offers them. */
-const STEP_TYPES: RecipeStepType[] = [
-  "navigate",
-  "click",
-  "type",
-  "waitFor",
-  "extract",
-  "pressKey",
-  "scroll",
-  "screenshot",
-  "sleep",
-];
-
-/** The kinds that name an element, and so carry exactly one target. */
-const TARGETED: RecipeStepType[] = ["click", "type", "waitFor", "extract"];
-
-export function isTargeted(type: RecipeStepType): boolean {
-  return TARGETED.includes(type);
-}
+import {
+  isTargeted,
+  type RecipeStep,
+  type RecipeStepType,
+  STEP_TYPES,
+} from "@/lib/recipes";
 
 /** A step of `type` with the fields that kind needs, and nothing else. */
 export function emptyStep(type: RecipeStepType): RecipeStep {
@@ -164,7 +150,10 @@ export function RecipeStepsEditor({
                 update(index, emptyStep(value as RecipeStepType));
               }}
             >
-              <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectTrigger
+                className="h-8 w-40 text-xs"
+                aria-label={t("agent.recipes.stepType")}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -237,6 +226,7 @@ function StepFields({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  const fullPageId = useId();
   const set = (patch: Partial<RecipeStep>) => {
     onChange({ ...step, ...patch });
   };
@@ -322,7 +312,10 @@ function StepFields({
               set({ direction: value as "up" | "down" });
             }}
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger
+              className="h-8 text-xs"
+              aria-label={t("agent.recipes.fields.direction")}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -352,14 +345,14 @@ function StepFields({
       {step.type === "screenshot" && (
         <div className="flex items-center gap-x-2">
           <Checkbox
-            id="agent-recipe-fullpage"
+            id={fullPageId}
             checked={step.fullPage === true}
             disabled={disabled}
             onCheckedChange={(checked) => {
               set({ fullPage: checked === true });
             }}
           />
-          <Label htmlFor="agent-recipe-fullpage">
+          <Label htmlFor={fullPageId}>
             {t("agent.recipes.fields.fullPage")}
           </Label>
         </div>
@@ -412,12 +405,15 @@ function Field({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: React.ReactElement<{ id?: string }>;
 }) {
+  const id = useId();
   return (
     <div className="flex flex-col gap-1">
-      <Label className="text-xs">{label}</Label>
-      {children}
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      {cloneElement(children, { id })}
     </div>
   );
 }

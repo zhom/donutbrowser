@@ -31,7 +31,6 @@ const ALL_PLAN = {
   cookieBot: true,
   crossOsFingerprints: true,
   browserAutomation: true,
-  agentAutomation: true,
   teamCollaboration: true,
   remoteControl: true,
 };
@@ -46,7 +45,6 @@ const NONE = {
   cookieBot: false,
   crossOsFingerprints: false,
   browserAutomation: false,
-  agentAutomation: false,
   teamCollaboration: false,
   remoteControl: false,
 };

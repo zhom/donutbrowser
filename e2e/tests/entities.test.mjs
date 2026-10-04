@@ -236,6 +236,22 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         profileId: profile.id,
         newName: "Renamed Profile",
       });
+      // Its own name, another case, or extra spaces are not a conflict.
+      for (const [newName, stored] of [
+        ["Renamed Profile", "Renamed Profile"],
+        ["  renamed profile  ", "renamed profile"],
+        ["Renamed Profile ", "Renamed Profile"],
+      ]) {
+        assert.equal(
+          (
+            await app.invoke("rename_profile", {
+              profileId: profile.id,
+              newName,
+            })
+          ).name,
+          stored,
+        );
+      }
       await app.invoke("update_profile_tags", {
         profileId: profile.id,
         tags: ["alpha", "automation"],
@@ -1641,4 +1657,146 @@ test("proxies distribute one to one, and group bookmarks reach the profile's Boo
       await app.invoke("delete_stored_proxy", { proxyId: proxy.id });
     }
   });
+});
+
+test("custom launch arguments require Pro and can be cleared after access ends", async () => {
+  await withApp(
+    "entities-launch-args-free",
+    async (app) => {
+      const profile = await createProfile(app, "Free Launch Arguments");
+      const error = await app.invokeError("update_wayfern_config", {
+        profileId: profile.id,
+        config: { ...profile.wayfern_config, launch_args: ["--disable-gpu"] },
+      });
+      assert.match(error, /"code":"WAYFERN_LAUNCH_ARGS_REQUIRES_PRO"/);
+      assert.deepEqual(
+        (await app.invoke("list_browser_profiles"))[0].wayfern_config
+          .launch_args ?? [],
+        [],
+      );
+      const createError = await app.invokeError("create_browser_profile_new", {
+        name: "Refused Launch Arguments",
+        browserStr: "wayfern",
+        version: profile.version,
+        releaseType: "stable",
+        wayfernConfig: { fingerprint: "{}", launch_args: ["--disable-gpu"] },
+      });
+      assert.match(createError, /"code":"WAYFERN_LAUNCH_ARGS_REQUIRES_PRO"/);
+      assert.equal((await app.invoke("list_browser_profiles")).length, 1);
+
+      const metadata = path.join(
+        app.dataRoot,
+        "data",
+        "profiles",
+        profile.id,
+        "metadata.json",
+      );
+      const stored = JSON.parse(await readFile(metadata, "utf8"));
+      stored.wayfern_config.launch_args = ["--disable-gpu"];
+      stored.updated_at = 1;
+      await writeFile(metadata, JSON.stringify(stored));
+      await app.invoke("update_wayfern_config", {
+        profileId: profile.id,
+        config: { ...stored.wayfern_config, launch_args: [] },
+      });
+      const cleared = (await app.invoke("list_browser_profiles"))[0];
+      assert.deepEqual(cleared.wayfern_config.launch_args ?? [], []);
+      assert.ok(cleared.updated_at > 1);
+      assert.equal(
+        cleared.wayfern_config.fingerprint,
+        profile.wayfern_config.fingerprint,
+      );
+      assert.match(
+        await app.invokeError("update_wayfern_config", {
+          profileId: profile.id,
+          config: {
+            ...cleared.wayfern_config,
+            fingerprint: '{"userAgent":"changed"}',
+          },
+        }),
+        /"code":"FINGERPRINT_REQUIRES_PRO"/,
+      );
+    },
+    { extraEnv: { WAYFERN_TEST_TOKEN: "" } },
+  );
+});
+
+test("Pro launch arguments persist, clone, validate, and update the edit time", async () => {
+  await withApp(
+    "entities-launch-args-pro",
+    async (app) => {
+      const profile = await createProfile(app, "Pro Launch Arguments");
+      const metadata = path.join(
+        app.dataRoot,
+        "data",
+        "profiles",
+        profile.id,
+        "metadata.json",
+      );
+      const stored = JSON.parse(await readFile(metadata, "utf8"));
+      stored.updated_at = 1;
+      await writeFile(metadata, JSON.stringify(stored));
+      const custom = [
+        "--disable-gpu",
+        "--autoplay-policy=no-user-gesture-required",
+      ];
+      await app.invoke("update_wayfern_config", {
+        profileId: profile.id,
+        config: {
+          ...stored.wayfern_config,
+          launch_args: ["  --disable-gpu  ", "", custom[1]],
+        },
+      });
+      const saved = JSON.parse(await readFile(metadata, "utf8"));
+      assert.deepEqual(saved.wayfern_config.launch_args, custom);
+      assert.ok(saved.updated_at > 1);
+      const cloned = await app.invoke("clone_profile", {
+        profileId: profile.id,
+        name: "Cloned Launch Arguments",
+      });
+      assert.deepEqual(cloned.wayfern_config.launch_args, custom);
+      saved.updated_at = 2;
+      await writeFile(metadata, JSON.stringify(saved));
+      await app.invoke("update_wayfern_config", {
+        profileId: profile.id,
+        config: saved.wayfern_config,
+      });
+      assert.equal(JSON.parse(await readFile(metadata, "utf8")).updated_at, 2);
+      for (const [arg, code] of [
+        ["--user-data-dir=/tmp/other", "WAYFERN_LAUNCH_ARG_RESERVED"],
+        ["--window-size 800,600", "WAYFERN_LAUNCH_ARG_INVALID"],
+        ["--renderer-cmd-prefix=/tmp/x", "WAYFERN_LAUNCH_ARG_NOT_ALLOWED"],
+        ["--renderer-process-limit=999", "WAYFERN_LAUNCH_ARG_VALUE_INVALID"],
+      ]) {
+        assert.match(
+          await app.invokeError("update_wayfern_config", {
+            profileId: profile.id,
+            config: { ...saved.wayfern_config, launch_args: [arg] },
+          }),
+          new RegExp(`"code":"${code}"`),
+        );
+        assert.deepEqual(
+          JSON.parse(await readFile(metadata, "utf8")).wayfern_config
+            .launch_args,
+          custom,
+        );
+      }
+      await app.invoke("update_wayfern_config", {
+        profileId: profile.id,
+        config: { ...saved.wayfern_config, launch_args: [] },
+      });
+      assert.deepEqual(
+        JSON.parse(await readFile(metadata, "utf8")).wayfern_config
+          .launch_args ?? [],
+        [],
+      );
+      assert.deepEqual(
+        (await app.invoke("list_browser_profiles")).find(
+          (p) => p.id === cloned.id,
+        ).wayfern_config.launch_args,
+        custom,
+      );
+    },
+    { extraEnv: { WAYFERN_TEST_TOKEN: "e2e-local-launch-args" } },
+  );
 });

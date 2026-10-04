@@ -1188,7 +1188,6 @@
     "serverError": "Error del servidor. Por favor intenta de nuevo más tarde.",
     "unknownError": "Ocurrió un error desconocido. Por favor intenta de nuevo.",
     "noProfilesForUrl": "No hay perfiles disponibles. Crea un perfil antes de abrir URLs.",
-    "updateWayfernConfigFailed": "Error al actualizar la configuración de wayfern: {{error}}",
     "createProfileFailed": "Error al crear el perfil: {{error}}",
     "launchBrowserFailed": "Error al iniciar el navegador: {{error}}",
     "cannotDeleteRunningProfile": "No se puede eliminar el perfil mientras el navegador esté en ejecución. Detén el navegador primero.",
@@ -1337,7 +1336,10 @@
     "regenerateConfirmDescription": "El perfil conserva sus cookies y sesiones, pero mostrará un dispositivo distinto. Los sitios que ya conocen este perfil pueden pedirte iniciar sesión de nuevo, someterte a una verificación o bloquear la cuenta. Regenera solo un perfil que aún no hayas usado o que estés dispuesto a perder. Esta acción no se puede deshacer.",
     "canvasNoiseSeedPlaceholder": "Introduce una semilla para la huella digital del canvas",
     "addFontsPlaceholder": "Agregar fuentes...",
-    "enterAsJson": "Ingresa {{title}} como JSON"
+    "enterAsJson": "Ingresa {{title}} como JSON",
+    "launchArgs": "Argumentos de inicio",
+    "launchArgsDescription": "Introduce un argumento por línea, como --name o --name=value. Solo se aceptan argumentos compatibles, por ejemplo --disable-gpu, --mute-audio o --disable-features=Name. Donut controla los argumentos de perfil, proxy, ventana y depuración.",
+    "launchArgsSkipped": "No se usaron los argumentos de inicio personalizados de {{profile}}. {{reason}}"
   },
   "warnings": {
     "windowResizeTitle": "Dimensiones de ventana personalizadas",
@@ -2308,13 +2310,13 @@
     "profileImportTooNew": "Este archivo se creó con una versión más reciente de Donut Browser. Actualiza la aplicación e inténtalo de nuevo.",
     "profileImportUnsafeArchive": "Este archivo intenta escribir fuera de la carpeta del perfil, así que se rechazó.",
     "recordingAlreadyRunning": "Ya hay una grabación en curso. Deténla antes de empezar otra.",
-    "profileNotRunning": "Inicia el navegador de este perfil antes de grabar.",
+    "profileNotRunning": "El navegador de este perfil no se está ejecutando. Inícialo primero.",
     "wayfern152Required": "La grabación necesita Wayfern 152 o posterior. Actualiza el navegador de este perfil.",
     "recordingFailed": "No se pudo iniciar la grabación. {{detail}}",
     "mcpRemoteRequiresSignIn": "Inicia sesión en tu cuenta de Donut antes de activar el control remoto.",
     "mcpRemoteUnauthorized": "Donut cloud rechazó las credenciales de este dispositivo. Cierra sesión y vuelve a iniciarla.",
     "mcpRemoteSlotTaken": "Ya hay otra instancia de Donut conectada en esta cuenta. Solo una puede controlarse de forma remota a la vez.",
-    "mcpRemoteNotEntitled": "El MCP remoto requiere el plan Pro o superior.",
+    "mcpRemoteNotEntitled": "Tu plan no incluye el MCP remoto.",
     "mcpRemoteUnreachable": "No se puede conectar con Donut cloud ahora mismo. Reconectando automáticamente.",
     "mcpRemoteKeyMissing": "Este dispositivo aún no tiene una credencial MCP remota. Crea una primero y vuelve a añadir el cliente.",
     "mcpRemoteKeyLimit": "Esta cuenta ya tiene el máximo de credenciales MCP que puede tener. Revoca una en la página de la cuenta e inténtalo de nuevo.",
@@ -2332,21 +2334,18 @@
     "remoteSessionNotDrivable": "Esta sesión remota aún no está lista para controlarse. Espera a que esté activa.",
     "remotePlatformUnsupported": "Las sesiones remotas solo se ejecutan en hosts macOS, Windows o Linux. La plataforma de este perfil es {{platform}}.",
     "remoteProfileNotSynced": "Este perfil aún no ha terminado de subirse a la sincronización en la nube. Espera a que se complete su primera sincronización e inténtalo de nuevo.",
-    "mcpLocalRemoved": "El servidor MCP local de Donut se ha eliminado. Ahora MCP es remoto y requiere el plan Pro o superior.",
+    "mcpLocalRemoved": "Se ha eliminado el servidor MCP local de Donut. Ahora MCP es remoto y requiere un plan de pago.",
     "trashEntryNotFound": "Este perfil ya no está en la papelera.",
     "trashRestoreConflict": "Ya existe un perfil con el mismo ID, por lo que este no se puede restaurar.",
-    "agentNotEntitled": "Tu plan no incluye el agente.",
-    "agentNotConfigured": "El agente todavía no está disponible en esta instalación.",
-    "agentTargetOffline": "No se ha podido contactar con el navegador que necesita la ejecución.",
-    "agentBudgetExceeded": "La ejecución se detuvo porque alcanzó uno de sus límites.",
-    "agentRunLimitReached": "Ya tienes tantas ejecuciones en curso como permite tu plan.",
-    "agentRunNotFound": "Esa ejecución ya no existe.",
-    "agentRunNotCancellable": "Esa ejecución ya ha terminado.",
-    "agentGoalInvalid": "El objetivo está vacío o es demasiado largo.",
-    "agentBudgetInvalid": "Uno de los límites no es un número válido.",
-    "agentTokenProfileMismatch": "Esta ejecución se inició para otro perfil. Vuelve a iniciar sesión e inténtalo de nuevo.",
+    "recipesNotEntitled": "Las recetas requieren el plan Pro o superior.",
     "agentRecipeInvalid": "Una receta necesita un nombre y al menos un paso.",
     "agentRecipeNotFound": "Esa receta ya no existe.",
+    "agentRequestNotFound": "Esa solicitud ya no existe.",
+    "agentRequestClosed": "Esa solicitud ya se respondió o se descartó.",
+    "agentAnswerEmpty": "Escribe primero una respuesta.",
+    "agentNoteEmpty": "Escribe primero una nota.",
+    "agentTextTooLong": "Este texto es demasiado largo. El límite es de {{max}} caracteres.",
+    "agentSessionNotFound": "Ese agente ya no está conectado.",
     "profilePairedTwice": "Este perfil aparece más de una vez en la misma distribución",
     "extensionUrlInvalid": "Eso no es un enlace de Chrome Web Store, un ID de extensión ni un enlace directo .crx o .zip.",
     "extensionDownloadFailed": "No se pudo descargar la extensión. Comprueba el enlace y tu conexión.",
@@ -2371,7 +2370,13 @@
     "extensionPathInvalid": "Esa ruta no está permitida: contiene '..'.",
     "systemProxyUnreachable": "Donut no pudo conectarse a través del proxy del sistema {{proxy}}. Corrige o desactiva el proxy en la configuración de red del sistema e inténtalo de nuevo.",
     "profileRouteRequired": "Este perfil no tiene proxy ni VPN. Los inicios sin ellos están bloqueados en Ajustes, en Privacidad.",
-    "profileRouteUnavailable": "El proxy o la VPN de este perfil no está disponible, así que el inicio se detuvo para mantener oculta tu dirección IP. Asigna al perfil un proxy o una VPN que funcione."
+    "profileRouteUnavailable": "El proxy o la VPN de este perfil no está disponible, así que el inicio se detuvo para mantener oculta tu dirección IP. Asigna al perfil un proxy o una VPN que funcione.",
+    "wayfernLaunchArgsRequiresPro": "Los argumentos de inicio personalizados requieren Pro o un plan superior. Borra los argumentos o mejora tu plan.",
+    "wayfernLaunchArgInvalid": "Usa --name o --name=value para cada argumento. No se permiten caracteres de control.",
+    "wayfernLaunchArgReserved": "Donut controla {{argument}}. Elimina este argumento.",
+    "wayfernLaunchArgNotAllowed": "{{argument}} no es un argumento de inicio compatible. Elimínalo.",
+    "wayfernLaunchArgValueInvalid": "El valor de {{argument}} no es compatible.",
+    "wayfernLaunchArgsLimit": "Usa como máximo {{count}} argumentos de inicio, de hasta {{length}} caracteres cada uno."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2397,7 +2402,8 @@
     "account": "Cuenta",
     "cookieBot": "Cookie Bot",
     "cookieBotRunning": "Cookie Bot: en ejecución ahora",
-    "agent": "Agente"
+    "agent": "Agente",
+    "agentWaiting": "Agente, solicitudes en espera: {{count}}"
   },
   "pageTitle": {
     "proxies": "Red",
@@ -2610,8 +2616,7 @@
     "titleConfigure": "Configurar huella - {{name}} ({{browser}})",
     "invalidFingerprint": "Configuración de huella inválida",
     "invalidFingerprintDescription": "La configuración de huella contiene JSON inválido. Revisa la configuración avanzada.",
-    "saveFailed": "Error al guardar la configuración",
-    "unknownError": "Ocurrió un error desconocido"
+    "saveFailed": "Error al guardar la configuración"
   },
   "cookieCopy": {
     "noOtherTargets": "No hay otros perfiles Wayfern seleccionados"
@@ -3211,126 +3216,155 @@
     "loadFailed": "No se pudo cargar la papelera: {{error}}"
   },
   "agent": {
-    "title": "Agente",
-    "description": "Dale un objetivo al agente y lo llevará a cabo en uno de tus perfiles.",
+    "description": "Mira lo que hace tu agente de IA en Donut, responde a sus preguntas e intervén cuando una página te necesite.",
     "tabs": {
-      "run": "Nueva ejecución",
-      "history": "Historial",
+      "conversation": "Conversación",
+      "profiles": "Perfiles",
+      "activity": "Actividad",
       "recipes": "Recetas"
     },
-    "unavailable": {
-      "signInTitle": "Inicia sesión para usar el agente",
-      "signInHint": "Las ejecuciones del agente pasan por la nube de Donut. Inicia sesión desde la página Cuenta para empezar.",
-      "planTitle": "El agente no está incluido en tu plan",
-      "planHint": "Cambia a un plan que incluya automatización del navegador para darle un objetivo al agente.",
-      "notConfiguredTitle": "El agente todavía no está disponible",
-      "notConfiguredHint": "Esta instalación de Donut no tiene el agente configurado. No hay ningún problema con tu cuenta."
+    "header": {
+      "quota": "Quedan {{left}} de {{limit}} llamadas esta hora",
+      "connect": "Conectar un agente"
     },
-    "form": {
-      "profile": "Perfil",
-      "profilePlaceholder": "Elige un perfil",
-      "noProfiles": "Crea antes un perfil: el agente necesita uno para navegar.",
-      "target": "Se ejecuta en",
-      "targetDesktopHint": "El navegador se abre en este equipo y puedes verlo trabajar.",
-      "targetFleetHint": "El navegador se abre en un equipo alquilado, así este queda libre.",
-      "platform": "Sistema operativo del equipo",
-      "platformPlaceholder": "Elige un sistema operativo",
-      "platformRequired": "El sistema operativo de este perfil no tiene equipo alquilado. Elige uno disponible.",
-      "recipeInsert": "Insertar una receta",
-      "goal": "Objetivo",
-      "goalPlaceholder": "Describe con tus palabras lo que debe lograr el agente.",
-      "goalEmpty": "Escribe un objetivo para iniciar una ejecución.",
-      "goalTooLong": "Este objetivo es demasiado largo.",
-      "goalCount": "{{chars}} / {{max}}",
-      "limits": "Límites y alcance",
-      "limitsHint": "Deja un límite vacío para usar el tope del plan.",
-      "maxSteps": "Pasos máximos",
-      "maxMinutes": "Minutos máximos",
-      "maxTokens": "Tokens máximos",
-      "budgetUnset": "Sin límite",
-      "budgetInvalid": "Introduce un número entero mayor que cero.",
-      "effort": "Esfuerzo",
-      "allowedHosts": "Hosts permitidos",
-      "allowedHostsPlaceholder": "example.com\ndocs.example.com",
-      "allowedHostsHint": "Un host por línea. Déjalo vacío para que el agente navegue sin restricciones.",
-      "allowedHostsCount": "Navegación limitada a: {{hosts}}",
-      "submit": "Iniciar ejecución",
-      "starting": "Iniciando…",
-      "started": "Ejecución iniciada"
+    "pause": {
+      "label": "Pausar agentes",
+      "noteLabel": "Nota para tus agentes (opcional)",
+      "notePlaceholder": "Por ejemplo: estoy cambiando los proxies. Espera a que reanude.",
+      "explain": "Mientras están en pausa, los agentes pueden seguir leyendo tus notas y haciéndote preguntas.",
+      "confirm": "Pausar agentes",
+      "banner": "Agentes en pausa desde las {{time}}.",
+      "bannerNote": "Tu nota: {{note}}",
+      "resume": "Reanudar",
+      "pausedToast": "Agentes en pausa",
+      "resumedToast": "Agentes reanudados"
     },
-    "target": {
-      "desktop": "Este equipo",
-      "fleet": "Equipo alquilado"
+    "setup": {
+      "signedOutTitle": "Inicia sesión para trabajar con tu agente",
+      "signedOutBody": "Tu agente llega a Donut a través de tu cuenta de Donut. Inicia sesión para conectarlo.",
+      "signedOutAction": "Abrir Cuenta",
+      "planTitle": "El control remoto no forma parte de tu plan",
+      "planBody": "Para conectar tu propio agente necesitas un plan con control remoto.",
+      "planAction": "Abrir Cuenta",
+      "remoteOffTitle": "El control remoto está desactivado",
+      "remoteOffBody": "Tu agente se conecta a Donut mediante el control remoto. Actívalo y luego añade Donut a tu agente.",
+      "remoteOffAction": "Activar el control remoto",
+      "remoteOffInline": "El control remoto está desactivado, así que tus agentes no pueden llegar a Donut ahora mismo.",
+      "waitingTitle": "Esperando a tu agente",
+      "waitingBody": "Añade Donut a tu agente y después pégale las instrucciones de abajo para que se comunique contigo mientras trabaja.",
+      "starterLabel": "Instrucciones para tu agente",
+      "starter": "Puedes controlar mis perfiles de Donut Browser con las herramientas de Donut. Al empezar, y entre un paso y otro, llama a get_human_updates para leer mis notas y ver qué perfiles estoy usando. Si no sabes qué hacer, pregúntame con ask_human. Si una página necesita a una persona, por ejemplo para iniciar sesión, una verificación o un pago, llama a request_human_help y espera hasta que te devuelva el perfil. En tareas largas, llama a report_progress para que pueda ver cuánto llevas.",
+      "starterCopied": "Instrucciones copiadas"
     },
-    "platform": {
-      "windows": "Windows",
-      "macos": "macOS",
-      "linux": "Linux"
+    "request": {
+      "needsYou": "Te necesita",
+      "waitingCount": "Solicitudes que te esperan: {{count}}",
+      "questionTitle": "{{agent}} pregunta",
+      "helpTitle": "{{agent}} necesita a una persona",
+      "choices": "Respuestas sugeridas",
+      "answerLabel": "Tu respuesta",
+      "answerPlaceholder": "Escribe una respuesta",
+      "send": "Enviar"
     },
-    "effort": {
-      "standard": "Estándar",
-      "high": "Alto"
+    "actions": {
+      "dismiss": "Descartar",
+      "showWindow": "Mostrar ventana",
+      "handBack": "Devolver",
+      "handBackPlaceholder": "Por ejemplo: ya he iniciado sesión, puedes continuar.",
+      "takeOver": "Tomar el control",
+      "takeOverPlaceholder": "Por ejemplo: estoy arreglando este perfil, sáltalo por ahora.",
+      "note": "Enviar una nota",
+      "noteOptional": "Nota para el agente (opcional)"
     },
-    "live": {
-      "newRun": "Nueva ejecución",
-      "notFound": "No se ha podido leer esta ejecución.",
-      "onProfile": "en {{profile}} · {{target}}",
-      "cancel": "Cancelar ejecución",
-      "cancelling": "Cancelando…",
-      "cancelled": "Ejecución cancelada",
-      "elapsed": "Transcurrido",
-      "steps": "Pasos",
-      "tokens": "Tokens",
-      "cost": "Coste",
-      "costValue": "${{amount}}",
-      "endedBecause": "Finalizada: {{reason}}",
-      "streamOffline": "Ahora mismo no llegan pasos. Reconectando.",
-      "waiting": "Esperando el primer paso.",
-      "noSteps": "Esta ejecución no registró pasos.",
-      "result": "Resultado"
+    "notify": {
+      "questionTitle": "{{agent}} tiene una pregunta",
+      "helpTitle": "{{agent}} te necesita en un perfil",
+      "open": "Abrir"
     },
-    "step": {
-      "thought": "Razonamiento",
-      "tool": "Acción",
-      "error": "Error",
-      "finish": "Finalizado",
-      "unknown": "Paso"
+    "sessions": {
+      "title": "Agentes",
+      "all": "Todos los agentes",
+      "fallback": "Cliente MCP",
+      "active": "Activo",
+      "idle": "Inactivo",
+      "ended": "Finalizado",
+      "counts": "Llamadas: {{calls}} · Errores: {{errors}}",
+      "progress": "{{done}} de {{total}}",
+      "showEarlier": "Mostrar anteriores ({{count}})",
+      "hideEarlier": "Ocultar anteriores",
+      "website": "Sitio web de Donut"
     },
-    "status": {
-      "queued": "En cola",
-      "running": "En ejecución",
-      "succeeded": "Correcta",
-      "failed": "Fallida",
-      "cancelled": "Cancelada",
-      "unknown": "Desconocido"
+    "thread": {
+      "label": "Conversación",
+      "empty": "Aquí aparecen las preguntas, las notas y el progreso de tus agentes.",
+      "waiting": "Esperando tu respuesta",
+      "answered": "Respondiste: {{answer}}",
+      "handedBack": "Devolviste el perfil.",
+      "handedBackNote": "Devolviste el perfil: {{note}}",
+      "dismissed": "Descartada",
+      "noteToAll": "Para todos los agentes",
+      "noteTo": "Para {{agent}}",
+      "notePending": "Esperando el siguiente paso del agente",
+      "noteSeenAt": "Vista a las {{time}}",
+      "noteSeen": "Vista",
+      "joined": "{{agent}} se unió",
+      "left": "{{agent}} se fue"
     },
-    "closeReason": {
-      "completed": "se alcanzó el objetivo",
-      "budget": "se alcanzó un límite",
-      "cancelled": "la cancelaste",
-      "navigationBlocked": "intentó salir de los hosts permitidos",
-      "targetOffline": "no se pudo contactar con el navegador",
-      "targetError": "el navegador falló",
-      "modelError": "el modelo falló",
-      "modelRefused": "el modelo rechazó el objetivo",
-      "modelStopped": "el modelo se detuvo antes de tiempo",
-      "contextExceeded": "la ejecución superó el contexto del modelo",
-      "orphaned": "la ejecución perdió su navegador",
-      "internalError": "algo falló por nuestra parte"
+    "composer": {
+      "label": "Nota para tu agente",
+      "placeholderAll": "Escribe una nota para todos los agentes",
+      "placeholderOne": "Escribe una nota para {{agent}}",
+      "profile": "Perfil al que se refiere la nota",
+      "noProfile": "Ningún perfil",
+      "profileSearch": "Buscar perfiles",
+      "profileNotFound": "No se encontró ningún perfil.",
+      "hint": "Intro envía. Mayús+Intro añade una línea.",
+      "send": "Enviar nota"
     },
-    "history": {
-      "columnStarted": "Inicio",
-      "columnProfile": "Perfil",
-      "columnGoal": "Objetivo",
-      "columnTarget": "Se ejecuta en",
-      "columnStatus": "Estado",
-      "empty": "Todavía no hay ejecuciones.",
-      "loadMore": "Cargar más",
-      "backToList": "Volver al historial",
-      "unknownProfile": "Perfil desconocido"
+    "filters": {
+      "errorsOnly": "Solo errores"
+    },
+    "profiles": {
+      "search": "Buscar perfiles",
+      "columns": {
+        "profile": "Perfil",
+        "agent": "Agente",
+        "lastAction": "Última acción",
+        "result": "Resultado",
+        "when": "Cuándo",
+        "state": "Estado"
+      },
+      "state": {
+        "held": "En tus manos",
+        "working": "Trabajando",
+        "idle": "Inactivo",
+        "error": "Error"
+      },
+      "takeOverSelected": "Tomar el control de la selección",
+      "handBackSelected": "Devolver la selección",
+      "selectRow": "Seleccionar {{name}}",
+      "empty": "Aquí aparecen los perfiles en los que trabajan tus agentes.",
+      "noMatches": "Ningún perfil coincide con estos filtros."
+    },
+    "result": {
+      "ok": "OK",
+      "error": "Error"
+    },
+    "activity": {
+      "label": "Actividad de los agentes",
+      "agentFilter": "Agente",
+      "profileSearch": "Buscar por perfil",
+      "stats": "Últimos 5 minutos · Llamadas: {{calls}} · Errores: {{rate}} % · Media: {{average}}",
+      "statsNone": "Ninguna llamada en los últimos 5 minutos.",
+      "empty": "Aquí aparecen las llamadas a herramientas de tus agentes.",
+      "noMatches": "Ninguna llamada coincide con estos filtros.",
+      "typed": "Caracteres escritos: {{count}}",
+      "profiles": "Perfiles: {{count}}",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s"
     },
     "recipes": {
-      "hint": "Objetivos guardados que puedes insertar en una nueva ejecución.",
+      "hint": "Graba un flujo una vez y tu agente podrá repetirlo en otros perfiles.",
       "new": "Nueva receta",
       "recording": {
         "record": "Grabar",
@@ -3339,8 +3373,6 @@
         "stop": "Detener la grabación",
         "steps": "{{count}} pasos grabados",
         "hint": "Elige un perfil en ejecución para grabar.",
-        "save": "Guardar como receta",
-        "discard": "Descartar",
         "empty": "No se grabó nada. Haz clic y escribe en el navegador, y luego detén la grabación."
       },
       "empty": "Todavía no hay recetas guardadas.",
@@ -3348,6 +3380,7 @@
       "name": "Nombre",
       "namePlaceholder": "Revisión nocturna",
       "steps": "Pasos",
+      "stepType": "Tipo de paso",
       "stepsHint": "Cada paso dice qué hacer y, cuando actúa sobre un elemento, indica su rol y nombre o un selector CSS. No ambos.",
       "addStep": "Añadir un paso",
       "moveStepUp": "Subir este paso",
@@ -3383,7 +3416,8 @@
       "updated": "Receta actualizada",
       "deleted": "Receta eliminada",
       "deleteTitle": "¿Eliminar {{name}}?",
-      "deleteDescription": "La receta se elimina de todos los dispositivos. Las ejecuciones ya iniciadas conservan su objetivo."
+      "deleteDescription": "La receta se elimina de todos los dispositivos.",
+      "needsAutomation": "Las recetas abren y controlan navegadores, por eso requieren el plan Pro o superior. Tu agente puede seguir gestionando perfiles, proxies y grupos."
     }
   },
   "proxyDistribution": {
@@ -3538,9 +3572,9 @@
         "action": "Abrir Integraciones"
       },
       "agent": {
-        "label": "Agente",
-        "title": "Deja los clics a un agente",
-        "body": "Describe una tarea y el agente controla un perfil paso a paso, registra lo que hizo y puede repetirlo como una receta.",
+        "label": "Tu propio agente",
+        "title": "Trabaja junto a tu agente de IA",
+        "body": "Conecta Claude Code, Cursor u otro agente a Donut. Te pregunta cuando tiene dudas, y puedes tomar el control de un perfil y devolverlo en cualquier momento.",
         "action": "Abrir Agente"
       },
       "team": {

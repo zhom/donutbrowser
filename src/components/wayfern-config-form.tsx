@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useCloudAuth } from "@/hooks/use-cloud-auth";
+import { getEntitlements } from "@/lib/entitlements";
 import type {
   PersonaField,
   WayfernConfig,
@@ -179,6 +181,61 @@ interface WayfernConfigFormProps {
   /// The saved profile whose persona is edited here. Absent while a profile is
   /// being created: there is no seed yet, so there is no person to show.
   profileId?: string;
+}
+
+export function LaunchArgumentsEditor({
+  config,
+  onConfigChange,
+  readOnly,
+}: Pick<WayfernConfigFormProps, "config" | "onConfigChange"> & {
+  readOnly: boolean;
+}) {
+  const { t } = useTranslation();
+  const { user } = useCloudAuth();
+  const unlocked = getEntitlements(user).browserAutomation;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label
+          htmlFor="wayfern-launch-args"
+          className="flex items-center gap-2"
+        >
+          {t("fingerprint.launchArgs")}
+          {!unlocked && <ProBadge />}
+        </Label>
+        {config.launch_args?.some((arg) => arg.trim()) && (
+          <RippleButton
+            variant="ghost"
+            size="sm"
+            disabled={readOnly}
+            onClick={() => onConfigChange("launch_args", [])}
+          >
+            {t("common.buttons.clear")}
+          </RippleButton>
+        )}
+      </div>
+      <Textarea
+        id="wayfern-launch-args"
+        aria-describedby="wayfern-launch-args-description"
+        value={(config.launch_args ?? []).join("\n")}
+        onChange={(event) => {
+          onConfigChange("launch_args", event.target.value.split("\n"));
+        }}
+        disabled={readOnly || !unlocked}
+        placeholder={t("common.placeholders.example", {
+          value: "--disable-gpu",
+        })}
+        className="min-h-24 font-mono text-sm"
+        spellCheck={false}
+      />
+      <p
+        id="wayfern-launch-args-description"
+        className="text-sm text-muted-foreground"
+      >
+        {t("fingerprint.launchArgsDescription")}
+      </p>
+    </div>
+  );
 }
 
 const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
@@ -451,6 +508,12 @@ export function WayfernConfigForm({
         onChange={(checked) => {
           onConfigChange("restore_session", checked);
         }}
+        readOnly={readOnly}
+      />
+
+      <LaunchArgumentsEditor
+        config={config}
+        onConfigChange={onConfigChange}
         readOnly={readOnly}
       />
 

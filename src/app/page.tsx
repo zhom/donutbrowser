@@ -61,6 +61,7 @@ import { WayfernConfigDialog } from "@/components/wayfern-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { WelcomeDialog } from "@/components/welcome-dialog";
 import { WindowResizeWarningDialog } from "@/components/window-resize-warning-dialog";
+import { useAgentConsole } from "@/hooks/use-agent-console";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
@@ -464,7 +465,8 @@ export default function Home() {
   const [cookieBotInitialTab, setCookieBotInitialTab] =
     useState<CookieBotTab>("overview");
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
-  const [agentInitialTab, setAgentInitialTab] = useState<AgentTab>("run");
+  const [agentInitialTab, setAgentInitialTab] =
+    useState<AgentTab>("conversation");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   // A settings section to land on, set by a tip's action for one opening.
@@ -655,6 +657,15 @@ export default function Home() {
     }
   }, []);
 
+  const openAgentConversation = useCallback(() => {
+    setAgentInitialTab("conversation");
+    handleRailNavigate("agent");
+  }, [handleRailNavigate]);
+  const agentConsole = useAgentConsole({
+    onOpenPage: openAgentConversation,
+    pageVisible: currentPage === "agent",
+  });
+
   const runTipAction = useCallback(
     (action: TipAction) => {
       closeTips();
@@ -737,13 +748,14 @@ export default function Home() {
           break;
         }
         case "goAgent": {
-          // Mod+J: navigate first time; flip run↔history while already there,
-          // matching how Mod+B flips the Cookie Bot tabs.
+          // Mod+J: navigate first time; flip conversation↔activity while
+          // already there, matching how Mod+B flips the Cookie Bot tabs.
           if (currentPage === "agent") {
-            setAgentInitialTab((cur) => (cur === "run" ? "history" : "run"));
+            setAgentInitialTab((cur) =>
+              cur === "conversation" ? "activity" : "conversation",
+            );
           } else {
-            setAgentInitialTab("run");
-            handleRailNavigate("agent");
+            openAgentConversation();
           }
           break;
         }
@@ -781,6 +793,7 @@ export default function Home() {
       proxyManagementInitialTab,
       cloudUser,
       openTips,
+      openAgentConversation,
     ],
   );
 
@@ -1130,13 +1143,10 @@ export default function Home() {
         setWayfernConfigDialogOpen(false);
       } catch (err: unknown) {
         console.error("Failed to update wayfern config:", err);
-        showErrorToast(
-          t("errors.updateWayfernConfigFailed", { error: JSON.stringify(err) }),
-        );
         throw err;
       }
     },
-    [t],
+    [],
   );
 
   const handleCreateProfile = useCallback(
@@ -1236,6 +1246,26 @@ export default function Home() {
               : undefined,
           id: `fingerprint-mismatch-${exit_timezone ?? "unknown"}`,
         });
+      },
+    );
+    return () => {
+      void unlisten.then((fn) => {
+        fn();
+      });
+    };
+  }, [t]);
+
+  useEffect(() => {
+    const unlisten = listen<{ profile_name: string; error: string }>(
+      "profile-launch-args-skipped",
+      (event) => {
+        showErrorToast(
+          t("fingerprint.launchArgsSkipped", {
+            profile: event.payload.profile_name,
+            reason: translateBackendError(t, event.payload.error),
+          }),
+          { id: `launch-args-skipped-${event.payload.profile_name}` },
+        );
       },
     );
     return () => {
@@ -2320,6 +2350,7 @@ export default function Home() {
             }}
             onOpenTips={() => openTips()}
             cookieBotRunning={Object.keys(cookieBotLiveSessions).length > 0}
+            agentRequests={agentConsole.openRequests.length}
           />
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {currentPage === "profiles" && (
@@ -2496,8 +2527,17 @@ export default function Home() {
                 }}
                 subPage={currentPage === "agent"}
                 initialTab={agentInitialTab}
+                onTabChange={setAgentInitialTab}
                 profiles={profiles}
                 cloudUser={cloudUser}
+                agentConsole={agentConsole}
+                onConnectAgent={() => {
+                  setIntegrationsInitialTab("remote");
+                  handleRailNavigate("integrations");
+                }}
+                onOpenAccount={() => {
+                  handleRailNavigate("account");
+                }}
               />
             )}
 

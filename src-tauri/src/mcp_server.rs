@@ -134,6 +134,10 @@ pub struct McpRequest {
 
 const PROTOCOL_VERSION: &str = "2025-11-25";
 
+const INITIALIZE_INSTRUCTIONS: &str = "Donut Browser MCP server. Use tools/list to discover the browser tools. A person watches your work in Donut: call get_human_updates when you start and between steps, report_progress during longer jobs, ask_human when you are unsure, and request_human_help when a page needs a person. A call refused with AGENT_PAUSED or PROFILE_HELD_BY_HUMAN means the person is in control; do not retry it until get_human_updates shows the pause or hold is gone.";
+
+const PLAN_WITHOUT_AUTOMATION: &str = " This account's plan does not include browser automation: tools that launch, drive or read a browser are refused with PLAN_REQUIRED. Managing profiles, groups, proxies, VPNs and extensions works.";
+
 /// Every MCP protocol revision this engine can speak, newest first.
 ///
 /// The spec says a server MUST echo the client's requested version when it
@@ -2214,8 +2218,8 @@ impl McpServer {
       log::warn!("[mcp] Rejected '{feature}' — plan does not include it ({summary})");
       return Err(McpError {
         code: -32000,
-        message: format!("{feature} requires a plan that includes this feature"),
-        data: None,
+        message: format!("{feature} is not included in this account's plan"),
+        data: Some(serde_json::json!({ "code": "PLAN_REQUIRED", "feature": feature })),
       });
     }
     Ok(())
@@ -2496,6 +2500,7 @@ impl McpServer {
       match inner.sessions.remove(session_id) {
         Some(session) => {
           log::info!("[mcp] Session terminated: {}", ShortId(session_id));
+          crate::agent_console::session_ended(session_id);
           session.cached_pages
         }
         None => return,
@@ -2668,7 +2673,7 @@ impl McpServer {
       }
     }
 
-    if Self::is_automation_tool_call(&request) {
+    if Self::is_automation_tool_call(&request) && !Self::refused_by_console(&request) {
       if let crate::automation_rate_limiter::RateLimitOutcome::Limited { retry_after_secs } =
         crate::automation_rate_limiter::check_automation_rate_limit().await
       {
@@ -2777,6 +2782,24 @@ impl McpServer {
       return false;
     };
 
+    Self::is_automation_tool(tool_name)
+  }
+
+  /// A call the person has paused or taken over does not count against the quota.
+  fn refused_by_console(request: &McpRequest) -> bool {
+    let Some(params) = request.params.as_ref() else {
+      return false;
+    };
+    let tool_name = params
+      .get("name")
+      .and_then(serde_json::Value::as_str)
+      .unwrap_or_default();
+    let empty = serde_json::json!({});
+    let arguments = params.get("arguments").unwrap_or(&empty);
+    crate::agent_console::check_call(Self::is_passive_tool(tool_name), arguments).is_err()
+  }
+
+  fn is_automation_tool(tool_name: &str) -> bool {
     matches!(
       tool_name,
       "run_profile"
@@ -4546,6 +4569,68 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      McpTool {
+        name: "ask_human".to_string(),
+        description: "Ask the person at this computer a question and wait for the answer. Use it when you are unsure what they want, need a value only they know (a code, an account choice), or before a step that cannot be undone. Offer choices when you can. Returns {status: \"answered\", answer}, or {status: \"pending\", request_id} when they have not answered within wait_seconds; then call wait_for_human.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "question": { "type": "string", "description": "One short, clear question" },
+            "choices": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Optional answers to pick from (at most 8)"
+            },
+            "profile_id": { "type": "string", "description": "The profile the question is about, if any" },
+            "wait_seconds": { "type": "integer", "description": "How long to wait for the answer (default 45, max 55)" }
+          },
+          "required": ["question"]
+        }),
+      },
+      McpTool {
+        name: "request_human_help".to_string(),
+        description: "Hand a profile to the person at this computer when its page needs a human: a sign-in, a verification challenge, a payment, or anything you cannot do. The profile is held for them, and your calls on it are refused with PROFILE_HELD_BY_HUMAN until they hand it back. Returns {status: \"done\", note} when they hand it back, or {status: \"pending\", request_id}; then call wait_for_human, or work on other profiles meanwhile.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The UUID of the profile that needs the person" },
+            "reason": { "type": "string", "description": "What the person should do, in one sentence" },
+            "wait_seconds": { "type": "integer", "description": "How long to wait (default 45, max 55)" }
+          },
+          "required": ["profile_id", "reason"]
+        }),
+      },
+      McpTool {
+        name: "wait_for_human".to_string(),
+        description: "Keep waiting for the outcome of an ask_human or request_human_help request. Returns status answered, done, dismissed, or pending (call again).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "request_id": { "type": "integer", "description": "The request_id from ask_human or request_human_help" },
+            "wait_seconds": { "type": "integer", "description": "How long to wait (default 45, max 55)" }
+          },
+          "required": ["request_id"]
+        }),
+      },
+      McpTool {
+        name: "get_human_updates".to_string(),
+        description: "Read what the person at this computer wants you to know: their notes to you, the profiles they have taken over, whether agents are paused, and outcomes of your earlier requests. Call it when you start, between steps of a long job, and whenever a tool is refused with AGENT_PAUSED or PROFILE_HELD_BY_HUMAN.".to_string(),
+        input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+      },
+      McpTool {
+        name: "report_progress".to_string(),
+        description: "Tell the person what you are doing, in one short sentence, with done and total counts for a job over many items. It is shown next to your name in Donut. Call it when you start a job and every few items.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "message": { "type": "string", "description": "What you are doing now (at most 280 characters)" },
+            "done": { "type": "integer", "description": "Items finished so far" },
+            "total": { "type": "integer", "description": "Items in the whole job" },
+            "profile_id": { "type": "string", "description": "The profile you are working on, if one" }
+          },
+          "required": ["message"]
+        }),
+      },
     ]
   }
 
@@ -4574,8 +4659,23 @@ impl McpServer {
         .and_then(serde_json::Value::as_str),
     );
 
+    let client_info = request
+      .params
+      .as_ref()
+      .and_then(|params| params.get("clientInfo"));
+    let client_field = |key: &str| {
+      client_info
+        .and_then(|info| info.get(key))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+    };
+    let (client_name, client_version) = (client_field("name"), client_field("version"));
+
     // Create session
     let session_id = Uuid::new_v4().to_string();
+    let mut evicted = Vec::new();
     {
       let mut inner = self.inner.lock().await;
       inner.sessions.insert(
@@ -4606,9 +4706,18 @@ impl McpServer {
         };
         log::warn!("[mcp] Session cap reached; evicting the oldest session");
         inner.sessions.remove(&oldest);
+        evicted.push(oldest);
       }
     }
+    crate::agent_console::session_started(&session_id, client_name, client_version);
+    for oldest in evicted {
+      crate::agent_console::session_ended(&oldest);
+    }
 
+    let mut instructions = INITIALIZE_INSTRUCTIONS.to_string();
+    if !CLOUD_AUTH.can_use_browser_automation().await {
+      instructions.push_str(PLAN_WITHOUT_AUTOMATION);
+    }
     let result = serde_json::json!({
       "protocolVersion": negotiated,
       "capabilities": {
@@ -4620,7 +4729,7 @@ impl McpServer {
         "name": SERVER_NAME,
         "version": SERVER_VERSION,
       },
-      "instructions": "Donut Browser MCP server. Use tools/list to discover available browser automation tools."
+      "instructions": instructions
     });
 
     log::info!("[mcp] New session initialized: {}", ShortId(&session_id));
@@ -4728,11 +4837,44 @@ impl McpServer {
       });
     }
 
-    let result = self
+    let human_tool = crate::agent_console::HUMAN_TOOLS.contains(&tool_name);
+    if let Err(refusal) =
+      crate::agent_console::check_call(Self::is_passive_tool(tool_name), &arguments)
+    {
+      let error = Self::console_refusal(refusal);
+      crate::agent_console::record_call(crate::agent_console::CallRecord {
+        session_id: caller.session,
+        tool: tool_name,
+        arguments: &arguments,
+        error_code: Some(Self::error_code_of(&error)),
+        duration_ms: 0,
+      })
+      .await;
+      return Err(error);
+    }
+
+    let mut result = self
       .dispatch_tool_call(caller, tool_name, &arguments)
       .await
       .map_err(|error| explain_engine_refusal(error, CLOUD_AUTH.wayfern_device_refusal()));
     let elapsed_ms = started.elapsed().as_millis();
+    if human_tool {
+      crate::agent_console::touch_session(caller.session);
+    } else {
+      crate::agent_console::record_call(crate::agent_console::CallRecord {
+        session_id: caller.session,
+        tool: tool_name,
+        arguments: &arguments,
+        error_code: result.as_ref().err().map(Self::error_code_of),
+        duration_ms: elapsed_ms as u64,
+      })
+      .await;
+    }
+    if tool_name != "get_human_updates" {
+      if let Ok(value) = result.as_mut() {
+        Self::attach_notes(value, caller.session);
+      }
+    }
     match &result {
       Ok(_) => {
         log::info!(
@@ -4757,6 +4899,13 @@ impl McpServer {
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
     match tool_name {
+      "ask_human" => self.handle_ask_human(caller, arguments).await,
+      "request_human_help" => self.handle_request_human_help(caller, arguments).await,
+      "wait_for_human" => self.handle_wait_for_human(arguments).await,
+      "get_human_updates" => {
+        Self::json_content(&crate::agent_console::human_updates(caller.session))
+      }
+      "report_progress" => Self::handle_report_progress(caller, arguments),
       "list_profiles" => self.handle_list_profiles().await,
       "get_profile" => self.handle_get_profile(arguments).await,
       "run_profile" => {
@@ -5682,7 +5831,12 @@ impl McpServer {
     };
     let pm = ProfileManager::instance();
 
-    if let Some(new_name) = arguments.get("name").and_then(|v| v.as_str()) {
+    // Agents often send every optional field; an empty name means "unchanged".
+    if let Some(new_name) = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .filter(|name| !name.trim().is_empty())
+    {
       pm.rename_profile(&app_handle, profile_id, new_name)
         .map_err(|e| McpError {
           code: -32000,
@@ -9127,6 +9281,241 @@ impl McpServer {
     Self::json_content(&extraction)
   }
 
+  /// Reads and the human channel keep working while agents are paused.
+  fn is_passive_tool(tool_name: &str) -> bool {
+    crate::agent_console::HUMAN_TOOLS.contains(&tool_name)
+      || ((tool_name.starts_with("list_") || tool_name.starts_with("get_"))
+        && !Self::is_automation_tool(tool_name))
+  }
+
+  fn error_code_of(error: &McpError) -> String {
+    if let Some(code) = error
+      .data
+      .as_ref()
+      .and_then(|data| data.get("code"))
+      .and_then(serde_json::Value::as_str)
+    {
+      return code.to_string();
+    }
+    if let Some(code) = serde_json::from_str::<serde_json::Value>(&error.message)
+      .ok()
+      .and_then(|value| {
+        value
+          .get("code")
+          .and_then(serde_json::Value::as_str)
+          .map(str::to_string)
+      })
+    {
+      return code;
+    }
+    match error.code {
+      -32602 => "INVALID_ARGUMENT".to_string(),
+      _ => "TOOL_ERROR".to_string(),
+    }
+  }
+
+  fn console_refusal(refusal: crate::agent_console::Refusal) -> McpError {
+    match refusal {
+      crate::agent_console::Refusal::Paused { note } => McpError {
+        code: -32000,
+        message: match &note {
+          Some(note) => format!("The person at this computer paused all agents: {note}. Wait, then call get_human_updates before you continue."),
+          None => "The person at this computer paused all agents. Wait, then call get_human_updates before you continue.".to_string(),
+        },
+        data: Some(serde_json::json!({ "code": "AGENT_PAUSED", "note": note })),
+      },
+      crate::agent_console::Refusal::ProfileHeld { profile_id, note } => McpError {
+        code: -32000,
+        message: match &note {
+          Some(note) => format!("The person at this computer has taken over profile {profile_id}: {note}. Work on other profiles; get_human_updates shows when it is handed back."),
+          None => format!("The person at this computer has taken over profile {profile_id}. Work on other profiles; get_human_updates shows when it is handed back."),
+        },
+        data: Some(serde_json::json!({ "code": "PROFILE_HELD_BY_HUMAN", "profileId": profile_id, "note": note })),
+      },
+    }
+  }
+
+  fn attach_notes(value: &mut serde_json::Value, session: Option<&str>) {
+    let Some(content) = value
+      .get_mut("content")
+      .and_then(serde_json::Value::as_array_mut)
+    else {
+      return;
+    };
+    for note in crate::agent_console::take_notes(session) {
+      content.push(serde_json::json!({
+        "type": "text",
+        "text": crate::agent_console::note_text(&note),
+      }));
+    }
+  }
+
+  fn wait_seconds(arguments: &serde_json::Value) -> u64 {
+    arguments
+      .get("wait_seconds")
+      .and_then(serde_json::Value::as_u64)
+      .unwrap_or(crate::agent_console::DEFAULT_WAIT_SECS)
+      .min(crate::agent_console::MAX_WAIT_SECS)
+  }
+
+  fn invalid_argument(message: impl Into<String>) -> McpError {
+    McpError {
+      code: -32602,
+      message: message.into(),
+      data: Some(serde_json::json!({ "code": "INVALID_ARGUMENT" })),
+    }
+  }
+
+  fn optional_profile(&self, arguments: &serde_json::Value) -> Result<Option<String>, McpError> {
+    let Some(profile_id) = arguments
+      .get("profile_id")
+      .and_then(serde_json::Value::as_str)
+      .map(str::trim)
+      .filter(|id| !id.is_empty())
+    else {
+      return Ok(None);
+    };
+    let known = crate::profile::manager::ProfileManager::instance()
+      .list_profiles()
+      .map(|profiles| profiles.iter().any(|p| p.id.to_string() == profile_id))
+      .unwrap_or(false);
+    if !known {
+      return Err(Self::invalid_argument(format!(
+        "Unknown profile_id {profile_id}"
+      )));
+    }
+    Ok(Some(profile_id.to_string()))
+  }
+
+  async fn handle_ask_human(
+    &self,
+    caller: McpCaller<'_>,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let question = arguments
+      .get("question")
+      .and_then(serde_json::Value::as_str)
+      .unwrap_or_default();
+    let choices: Vec<String> = arguments
+      .get("choices")
+      .and_then(serde_json::Value::as_array)
+      .map(|list| {
+        list
+          .iter()
+          .filter_map(|v| v.as_str().map(str::to_string))
+          .collect()
+      })
+      .unwrap_or_default();
+    let (question, choices) = crate::agent_console::validate_question(question, &choices)
+      .map_err(Self::invalid_argument)?;
+    let profile_id = self.optional_profile(arguments)?;
+    let request_id = crate::agent_console::open_request(crate::agent_console::NewRequest {
+      session_id: caller.session.map(str::to_string),
+      kind: crate::agent_console::ThreadKind::Question,
+      text: question,
+      profile_id,
+      choices,
+    })
+    .await;
+    let outcome = crate::agent_console::wait_for(request_id, Self::wait_seconds(arguments))
+      .await
+      .unwrap_or(crate::agent_console::RequestOutcome::Pending);
+    Self::json_content(&crate::agent_console::outcome_json(request_id, &outcome))
+  }
+
+  async fn handle_request_human_help(
+    &self,
+    caller: McpCaller<'_>,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = self
+      .optional_profile(arguments)?
+      .ok_or_else(|| Self::invalid_argument("profile_id is required"))?;
+    let reason = arguments
+      .get("reason")
+      .and_then(serde_json::Value::as_str)
+      .unwrap_or_default();
+    let (reason, _) = crate::agent_console::validate_question(reason, &[]).map_err(|_| {
+      Self::invalid_argument(format!(
+        "reason must be 1 to {} characters",
+        crate::agent_console::MAX_TEXT_CHARS
+      ))
+    })?;
+    let request_id = crate::agent_console::open_request(crate::agent_console::NewRequest {
+      session_id: caller.session.map(str::to_string),
+      kind: crate::agent_console::ThreadKind::Help,
+      text: reason,
+      profile_id: Some(profile_id),
+      choices: Vec::new(),
+    })
+    .await;
+    let outcome = crate::agent_console::wait_for(request_id, Self::wait_seconds(arguments))
+      .await
+      .unwrap_or(crate::agent_console::RequestOutcome::Pending);
+    Self::json_content(&crate::agent_console::outcome_json(request_id, &outcome))
+  }
+
+  async fn handle_wait_for_human(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let request_id = arguments
+      .get("request_id")
+      .and_then(serde_json::Value::as_u64)
+      .ok_or_else(|| Self::invalid_argument("request_id is required"))?;
+    if !crate::agent_console::request_exists(request_id) {
+      return Err(McpError {
+        code: -32602,
+        message: format!("No request {request_id}; it may be from before Donut restarted"),
+        data: Some(serde_json::json!({ "code": "AGENT_REQUEST_NOT_FOUND" })),
+      });
+    }
+    let outcome = crate::agent_console::wait_for(request_id, Self::wait_seconds(arguments))
+      .await
+      .unwrap_or(crate::agent_console::RequestOutcome::Pending);
+    Self::json_content(&crate::agent_console::outcome_json(request_id, &outcome))
+  }
+
+  fn handle_report_progress(
+    caller: McpCaller<'_>,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let message = arguments
+      .get("message")
+      .and_then(serde_json::Value::as_str)
+      .map(str::trim)
+      .filter(|message| !message.is_empty())
+      .ok_or_else(|| Self::invalid_argument("message is required"))?;
+    let done = arguments.get("done").and_then(serde_json::Value::as_u64);
+    let total = arguments.get("total").and_then(serde_json::Value::as_u64);
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(serde_json::Value::as_str)
+      .map(str::trim)
+      .filter(|id| !id.is_empty())
+      .map(str::to_string);
+    crate::agent_console::report_progress(caller.session, message, done, total, profile_id);
+    Self::json_content(&serde_json::json!({ "ok": true }))
+  }
+
+  pub(crate) async fn bring_profile_to_front(&self, profile_id: &str) -> Result<(), String> {
+    let target = self
+      .resolve_cdp_target(profile_id)
+      .await
+      .map_err(|_| crate::backend_error("PROFILE_NOT_RUNNING"))?;
+    self
+      .send_cdp(&target, "Page.bringToFront", serde_json::json!({}))
+      .await
+      .map(|_| ())
+      .map_err(|e| {
+        log::warn!(
+          "[mcp] Could not bring profile {profile_id} to front: {}",
+          e.message
+        );
+        crate::backend_error("PROFILE_NOT_RUNNING")
+      })
+  }
+
   async fn handle_pick_element(
     &self,
     caller: McpCaller<'_>,
@@ -9823,7 +10212,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      87,
+      92,
       "the tool list is a published contract; update this number deliberately"
     );
 
@@ -12326,5 +12715,145 @@ mod tests {
     assert_eq!(canonical.name.as_deref(), Some("Email"));
     assert_eq!(canonical.attributes, full.attributes);
     assert!(canonical_locator(&LocatorDescription::default()).is_empty());
+  }
+
+  #[tokio::test]
+  async fn an_agent_and_the_person_can_talk_through_the_bridge() {
+    let server = McpServer::new();
+    server.mark_engine_ready_for_tests();
+    let call = |session: Option<String>, body: serde_json::Value| {
+      let server = &server;
+      async move {
+        let bytes = body.to_string();
+        match server
+          .handle_message(McpOrigin::Bridge, session.as_deref(), bytes.as_bytes())
+          .await
+        {
+          McpOutcome::Body {
+            body,
+            new_session_id,
+          } => (body, new_session_id),
+          _ => panic!("expected an answer"),
+        }
+      }
+    };
+    let tool = |id: u64, name: &str, arguments: serde_json::Value| {
+      serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": "tools/call",
+        "params": { "name": name, "arguments": arguments }
+      })
+    };
+    let text = |body: &serde_json::Value, index: usize| -> serde_json::Value {
+      serde_json::from_str(
+        body["result"]["content"][index]["text"]
+          .as_str()
+          .unwrap_or("null"),
+      )
+      .unwrap_or(serde_json::Value::Null)
+    };
+
+    let (init, session) = call(
+      None,
+      serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": { "protocolVersion": "2025-06-18", "clientInfo": { "name": "Claude Code", "version": "2.1.0" } }
+      }),
+    )
+    .await;
+    let session = session.expect("initialize opens a session");
+    assert!(init["result"]["instructions"]
+      .as_str()
+      .unwrap()
+      .contains("get_human_updates"));
+    let recorded = crate::agent_console::snapshot()
+      .await
+      .sessions
+      .into_iter()
+      .find(|s| s.session_id == session)
+      .expect("the console knows the session");
+    assert_eq!(recorded.client_name.as_deref(), Some("Claude Code"));
+
+    let (asked, _) = call(
+      Some(session.clone()),
+      tool(2, "ask_human", serde_json::json!({ "question": "Which account?", "choices": ["A", "B"], "wait_seconds": 0 })),
+    )
+    .await;
+    let pending = text(&asked, 0);
+    assert_eq!(pending["status"], "pending", "{asked}");
+    let request_id = pending["request_id"].as_u64().unwrap();
+    crate::agent_console::answer_agent_request(request_id, "B".to_string())
+      .await
+      .unwrap();
+    let (waited, _) = call(
+      Some(session.clone()),
+      tool(
+        3,
+        "wait_for_human",
+        serde_json::json!({ "request_id": request_id, "wait_seconds": 0 }),
+      ),
+    )
+    .await;
+    assert_eq!(text(&waited, 0)["answer"], "B");
+
+    crate::agent_console::send_agent_note(
+      "Skip profile 7".to_string(),
+      Some(session.clone()),
+      None,
+    )
+    .await
+    .unwrap();
+    let (progress, _) = call(
+      Some(session.clone()),
+      tool(
+        4,
+        "report_progress",
+        serde_json::json!({ "message": "Checking", "done": 1, "total": 3 }),
+      ),
+    )
+    .await;
+    let note = progress["result"]["content"][1]["text"]
+      .as_str()
+      .unwrap_or_default();
+    assert!(note.contains("Skip profile 7"), "{progress}");
+
+    let held = format!("held-{}", Uuid::new_v4());
+    let help = crate::agent_console::open_request(crate::agent_console::NewRequest {
+      session_id: Some(session.clone()),
+      kind: crate::agent_console::ThreadKind::Help,
+      text: "Sign in".to_string(),
+      profile_id: Some(held.clone()),
+      choices: Vec::new(),
+    })
+    .await;
+    let (refused, _) = call(
+      Some(session.clone()),
+      tool(
+        5,
+        "navigate",
+        serde_json::json!({ "profile_id": held, "url": "https://example.com" }),
+      ),
+    )
+    .await;
+    assert_eq!(
+      refused["error"]["data"]["code"], "PROFILE_HELD_BY_HUMAN",
+      "{refused}"
+    );
+    let (updates, _) = call(
+      Some(session.clone()),
+      tool(6, "get_human_updates", serde_json::json!({})),
+    )
+    .await;
+    assert!(text(&updates, 0)["held_profiles"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .any(|hold| hold["profile_id"] == held.as_str()));
+    crate::agent_console::dismiss_agent_request(help)
+      .await
+      .unwrap();
   }
 }

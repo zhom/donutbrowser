@@ -110,15 +110,6 @@ pub struct Entitlements {
   /// cycle out of date must not be what refuses a customer their own machine.
   #[serde(rename = "remoteControl", default)]
   pub remote_control: bool,
-  /// Whether the plan may run the browsing agent: a goal the cloud pursues on
-  /// one profile, on this desktop or on a leased host.
-  ///
-  /// Read only by the UI, and never back-filled from `browser_automation`. A
-  /// backend too old to send this key is a backend with no `api/agent` routes
-  /// to be entitled to, so `false` is the true answer rather than a gap to
-  /// guess at — the same reasoning `remote_control` is held to.
-  #[serde(rename = "agentAutomation", default)]
-  pub agent_automation: bool,
   #[serde(rename = "profileLimit", default)]
   pub profile_limit: i64,
   #[serde(rename = "requestsPerHour", default)]
@@ -149,22 +140,21 @@ fn derive_entitlements(
       cookie_bot: false,
       remote_interactive: false,
       remote_control: false,
-      agent_automation: false,
       profile_limit: 0,
       requests_per_hour: 0,
       remote_browser_hours: 0,
     };
   }
   // Tuple order: (browser_automation, cross_os_fingerprints, cloud_backup,
-  // team_collaboration, cookie_bot, remote_interactive, remote_control,
-  // agent_automation).
+  // team_collaboration, cookie_bot, remote_interactive, remote_control).
   //
   // pro and any unrecognized paid plan -> pro-level (never team). Solo is the
   // one row where cookie_bot and browser_automation disagree, which is why
   // cookie_bot can no longer be derived from browser_automation below.
   //
-  // remote_control belongs to pro, team and enterprise, and is withheld from
-  // the unrecognized row rather than granted with the rest. Everything else here defaults
+  // remote_control belongs to solo (MCP without browser automation), pro,
+  // team and enterprise, and is withheld from the unrecognized row rather
+  // than granted with the rest. Everything else here defaults
   // generous so a comped account is never locked out of what it is paying for;
   // an internet-facing hook into this machine is the one capability where
   // guessing "probably yes" is not the safe direction to guess in.
@@ -176,13 +166,12 @@ fn derive_entitlements(
     cookie_bot,
     remote_interactive,
     remote_control,
-    agent_automation,
   ) = match plan {
-    "solo" => (false, false, true, false, true, false, false, false),
-    "enterprise" => (true, true, true, true, true, true, true, true),
-    "team" => (true, true, true, true, true, true, true, true),
-    "pro" => (true, true, true, false, true, true, true, true),
-    _ => (true, true, true, false, true, true, false, true),
+    "solo" => (false, false, true, false, true, false, true),
+    "enterprise" => (true, true, true, true, true, true, true),
+    "team" => (true, true, true, true, true, true, true),
+    "pro" => (true, true, true, false, true, true, true),
+    _ => (true, true, true, false, true, true, false),
   };
   Entitlements {
     active,
@@ -193,7 +182,6 @@ fn derive_entitlements(
     cookie_bot,
     remote_interactive,
     remote_control,
-    agent_automation,
     profile_limit,
     requests_per_hour: if browser_automation {
       DEFAULT_REQUESTS_PER_HOUR
@@ -852,7 +840,7 @@ impl CloudAuthManager {
     crate::team_lock::PROFILE_LOCK.disconnect().await;
     sync::stop_subscription();
     crate::remote_session::stop_session_events();
-    crate::agent::stop_run_events();
+    crate::agent_console::reset();
     let _ = crate::events::emit_empty("cloud-auth-expired");
   }
 
@@ -1139,6 +1127,7 @@ impl CloudAuthManager {
     // an "unauthorized" the account page shows to somebody who has simply
     // signed out, and it would hold the account's bridge slot meanwhile.
     crate::mcp_remote::stop(None);
+    crate::agent_console::reset();
 
     // Before the session is closed server-side and the tokens are deleted:
     // both of those take away the only thing that can revoke it.
@@ -2158,40 +2147,17 @@ mod tests {
   }
 
   #[test]
-  fn the_agent_follows_browser_automation_and_is_never_derived_from_it() {
-    // Solo funds a nightly bot and nothing that drives a browser by hand, so
-    // it does not get the agent either.
-    assert!(!active_solo().agent_automation);
-    for plan in ["pro", "team", "enterprise", "some-comped-plan"] {
-      let derived = derive_entitlements(plan, Some("monthly"), "active", 50);
-      assert!(derived.agent_automation, "{plan} should get the agent");
-    }
-    // An inactive subscription buys nothing, whatever the plan says.
-    assert!(!derive_entitlements("pro", Some("monthly"), "canceled", 50).agent_automation);
-  }
-
-  #[test]
-  fn remote_control_is_granted_to_pro_team_and_enterprise_only() {
-    for plan in ["pro", "team", "enterprise"] {
+  fn remote_control_is_granted_to_every_sold_plan_but_not_an_unknown_one() {
+    for plan in ["solo", "pro", "team", "enterprise"] {
       let derived = derive_entitlements(plan, Some("monthly"), "active", 50);
       assert!(derived.remote_control, "{plan} should get remote control");
     }
-    assert!(!active_solo().remote_control);
+    assert!(
+      !active_solo().browser_automation,
+      "solo gets MCP without browser automation"
+    );
     assert!(!derive_entitlements("some-comped-plan", Some("monthly"), "active", 50).remote_control);
     assert!(!derive_entitlements("pro", Some("monthly"), "canceled", 50).remote_control);
-  }
-
-  #[test]
-  fn a_backend_that_never_heard_of_the_agent_reports_no_agent() {
-    // The whole point of `default` here: an older backend's entitlements object
-    // must decode, and the missing key must read as "no agent routes exist"
-    // rather than being back-filled from browser automation.
-    let older: Entitlements = serde_json::from_str(
-      r#"{"active":true,"browserAutomation":true,"cloudBackup":true,"profileLimit":50}"#,
-    )
-    .unwrap();
-    assert!(older.active && older.browser_automation);
-    assert!(!older.agent_automation);
   }
 
   #[test]
@@ -2526,7 +2492,6 @@ mod tests {
       "crate::team_lock::PROFILE_LOCK.disconnect()",
       "sync::stop_subscription()",
       "crate::remote_session::stop_session_events()",
-      "crate::agent::stop_run_events()",
       "crate::mcp_remote::stop(None)",
     ] {
       assert!(body.contains(stop), "invalidate_session must call {stop}");

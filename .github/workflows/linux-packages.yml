@@ -149,8 +149,8 @@ jobs:
     timeout-minutes: 45
     container:
       # flatpak, flatpak-builder, flatpak-builder-lint and appstreamcli, with
-      # org.gnome.Platform//50 and org.gnome.Sdk//50 already installed.
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      # org.gnome.Platform//51 and org.gnome.Sdk//51 already installed.
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1

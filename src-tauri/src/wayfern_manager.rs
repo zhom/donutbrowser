@@ -65,6 +65,8 @@ pub struct WayfernConfig {
   /// carry the host device for its whole lifetime.
   #[serde(default)]
   pub restore_session: Option<bool>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub launch_args: Vec<String>,
   #[serde(default)]
   pub block_webgl: Option<bool>,
   #[serde(default, skip_serializing)]
@@ -90,6 +92,281 @@ pub struct WayfernConfig {
   /// piece of device state an identity-backed profile persists.
   #[serde(default)]
   pub location: Option<String>,
+}
+
+impl WayfernConfig {
+  pub async fn checked_launch_args(&self) -> Result<Vec<String>, String> {
+    let has_args = self.launch_args.iter().any(|arg| !arg.trim().is_empty());
+    let allowed = !has_args
+      || crate::cloud_auth::CLOUD_AUTH
+        .can_use_browser_automation()
+        .await;
+    validate_launch_args(&self.launch_args, allowed)
+  }
+
+  /// For imports: keep only arguments this account may store, or none.
+  pub async fn sanitize_launch_args(&mut self) {
+    match self.checked_launch_args().await {
+      Ok(args) => self.launch_args = args,
+      Err(error) => {
+        log::warn!("Dropped imported launch arguments: {error}");
+        self.launch_args.clear();
+      }
+    }
+  }
+}
+
+pub const MAX_LAUNCH_ARGS: usize = 64;
+pub const MAX_LAUNCH_ARG_CHARS: usize = 1024;
+
+#[derive(Clone, Copy)]
+enum SwitchValue {
+  Flag,
+  OneOf(&'static [&'static str]),
+  Count(u32, u32),
+  Features,
+}
+
+// Arguments reach a profile from team members, sync storage and archives, so
+// only switches that cannot run programs, weaken the sandbox or change what
+// Donut controls are accepted.
+const ALLOWED_LAUNCH_SWITCHES: &[(&str, SwitchValue)] = &[
+  (
+    "--autoplay-policy",
+    SwitchValue::OneOf(&[
+      "no-user-gesture-required",
+      "user-gesture-required",
+      "document-user-activation-required",
+    ]),
+  ),
+  ("--disable-background-networking", SwitchValue::Flag),
+  (
+    "--disable-backgrounding-occluded-windows",
+    SwitchValue::Flag,
+  ),
+  ("--disable-default-apps", SwitchValue::Flag),
+  ("--disable-features", SwitchValue::Features),
+  ("--disable-gpu", SwitchValue::Flag),
+  ("--disable-gpu-compositing", SwitchValue::Flag),
+  ("--disable-hang-monitor", SwitchValue::Flag),
+  ("--disable-ipc-flooding-protection", SwitchValue::Flag),
+  ("--disable-notifications", SwitchValue::Flag),
+  ("--disable-pinch", SwitchValue::Flag),
+  ("--disable-popup-blocking", SwitchValue::Flag),
+  ("--disable-print-preview", SwitchValue::Flag),
+  ("--disable-renderer-backgrounding", SwitchValue::Flag),
+  ("--disable-session-crashed-bubble", SwitchValue::Flag),
+  ("--disable-smooth-scrolling", SwitchValue::Flag),
+  ("--disable-software-rasterizer", SwitchValue::Flag),
+  ("--enable-features", SwitchValue::Features),
+  ("--enable-gpu-rasterization", SwitchValue::Flag),
+  ("--enable-smooth-scrolling", SwitchValue::Flag),
+  ("--enable-zero-copy", SwitchValue::Flag),
+  ("--force-dark-mode", SwitchValue::Flag),
+  ("--hide-scrollbars", SwitchValue::Flag),
+  ("--ignore-gpu-blocklist", SwitchValue::Flag),
+  ("--mute-audio", SwitchValue::Flag),
+  ("--num-raster-threads", SwitchValue::Count(1, 16)),
+  ("--process-per-site", SwitchValue::Flag),
+  ("--renderer-process-limit", SwitchValue::Count(1, 64)),
+];
+
+// Switches Donut sets or depends on; named in the refusal so the user knows why.
+const DONUT_MANAGED_SWITCHES: &[&str] = &[
+  "--accept-lang",
+  "--crash-server-url",
+  "--disable-extensions-except",
+  "--disk-cache-dir",
+  "--disk-cache-size",
+  "--enable-logging",
+  "--headless",
+  "--host-resolver-rules",
+  "--host-rules",
+  "--kiosk",
+  "--lang",
+  "--load-extension",
+  "--log-file",
+  "--log-level",
+  "--no-proxy-server",
+  "--no-sandbox",
+  "--password-store",
+  "--profile-directory",
+  "--restore-last-session",
+  "--start-fullscreen",
+  "--start-maximized",
+  "--type",
+  "--use-mock-keychain",
+  "--user-agent",
+  "--user-data-dir",
+  "--window-position",
+  "--window-size",
+];
+
+// Lowercase fragments of feature names that touch privacy, the network path,
+// the sandbox or fingerprint surfaces.
+const BLOCKED_FEATURE_FRAGMENTS: &[&str] = &[
+  "automation",
+  "battery",
+  "bluetooth",
+  "canvas",
+  "certificate",
+  "clienthint",
+  "cookie",
+  "devtools",
+  "dns",
+  "extension",
+  "fingerprint",
+  "font",
+  "gamepad",
+  "geolocation",
+  "headless",
+  "hid",
+  "incognito",
+  "insecure",
+  "isolation",
+  "language",
+  "locale",
+  "partition",
+  "prefetch",
+  "privacy",
+  "privatenetwork",
+  "proxy",
+  "remote",
+  "sandbox",
+  "sensor",
+  "serial",
+  "storage",
+  "sync",
+  "thirdparty",
+  "timezone",
+  "tracking",
+  "unsafe",
+  "update",
+  "usb",
+  "useragent",
+  "wayfern",
+  "webgl",
+  "webgpu",
+  "webrtc",
+];
+
+fn feature_list_allowed(value: &str) -> bool {
+  !value.is_empty()
+    && value.split(',').all(|feature| {
+      let lower = feature.to_ascii_lowercase();
+      feature.starts_with(|c: char| c.is_ascii_alphabetic())
+        && feature.chars().all(|c| c.is_ascii_alphanumeric())
+        && !BLOCKED_FEATURE_FRAGMENTS
+          .iter()
+          .any(|fragment| lower.contains(fragment))
+    })
+}
+
+fn launch_arg_error(code: &str, name: &str) -> String {
+  serde_json::json!({ "code": code, "params": { "argument": name } }).to_string()
+}
+
+fn validate_launch_args(args: &[String], allowed: bool) -> Result<Vec<String>, String> {
+  let args: Vec<&str> = args
+    .iter()
+    .map(|arg| arg.trim())
+    .filter(|arg| !arg.is_empty())
+    .collect();
+  if args.is_empty() {
+    return Ok(Vec::new());
+  }
+  if !allowed {
+    return Err(crate::backend_error("WAYFERN_LAUNCH_ARGS_REQUIRES_PRO"));
+  }
+  if args.len() > MAX_LAUNCH_ARGS
+    || args
+      .iter()
+      .any(|arg| arg.chars().count() > MAX_LAUNCH_ARG_CHARS)
+  {
+    return Err(
+      serde_json::json!({
+        "code": "WAYFERN_LAUNCH_ARGS_LIMIT",
+        "params": {
+          "count": MAX_LAUNCH_ARGS.to_string(),
+          "length": MAX_LAUNCH_ARG_CHARS.to_string(),
+        }
+      })
+      .to_string(),
+    );
+  }
+  let mut result = Vec::new();
+  for arg in args {
+    let (name, value) = match arg.split_once('=') {
+      Some((name, value)) => (name, Some(value)),
+      None => (arg, None),
+    };
+    let valid_name = name.strip_prefix("--").is_some_and(|name| {
+      name.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && name
+          .chars()
+          .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    });
+    if !valid_name || arg.chars().any(char::is_control) {
+      return Err(crate::backend_error("WAYFERN_LAUNCH_ARG_INVALID"));
+    }
+    let Some((_, kind)) = ALLOWED_LAUNCH_SWITCHES
+      .iter()
+      .find(|(allowed, _)| *allowed == name)
+    else {
+      let managed = DONUT_MANAGED_SWITCHES.contains(&name)
+        || name.starts_with("--remote-debugging-")
+        || name.starts_with("--proxy-")
+        || name.starts_with("--wayfern-");
+      return Err(launch_arg_error(
+        if managed {
+          "WAYFERN_LAUNCH_ARG_RESERVED"
+        } else {
+          "WAYFERN_LAUNCH_ARG_NOT_ALLOWED"
+        },
+        name,
+      ));
+    };
+    let value_ok = match (kind, value) {
+      (SwitchValue::Flag, None) => true,
+      (SwitchValue::OneOf(choices), Some(value)) => choices.contains(&value),
+      (SwitchValue::Count(min, max), Some(value)) => value
+        .parse::<u32>()
+        .is_ok_and(|count| (*min..=*max).contains(&count)),
+      (SwitchValue::Features, Some(value)) => feature_list_allowed(value),
+      _ => false,
+    };
+    if !value_ok {
+      return Err(launch_arg_error("WAYFERN_LAUNCH_ARG_VALUE_INVALID", name));
+    }
+    result.push(arg.to_string());
+  }
+  Ok(result)
+}
+
+fn apply_launch_args(args: &mut Vec<String>, custom: &[String]) {
+  for arg in custom {
+    let name = arg.split('=').next().unwrap_or_default();
+    if name == "--disable-features" || name == "--enable-features" {
+      let mut features = Vec::new();
+      for value in args.iter().chain(std::iter::once(arg)) {
+        if let Some((key, value)) = value.split_once('=') {
+          if key == name {
+            for feature in value.split(',').filter(|feature| !feature.is_empty()) {
+              if !features.contains(&feature) {
+                features.push(feature);
+              }
+            }
+          }
+        }
+      }
+      let merged = format!("{name}={}", features.join(","));
+      args.retain(|existing| existing.split('=').next() != Some(name));
+      args.push(merged);
+    } else {
+      args.retain(|existing| existing.split('=').next() != Some(name));
+      args.push(arg.clone());
+    }
+  }
 }
 
 /// First Wayfern version that ships `createIdentity`/`setIdentity`/
@@ -2273,6 +2550,20 @@ impl WayfernManager {
     headless: bool,
     kind: LaunchKind,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+    let custom_launch_args = match config.checked_launch_args().await {
+      Ok(args) => args,
+      Err(error) => {
+        log::warn!(
+          "Launching profile {} without its custom launch arguments: {error}",
+          profile.name
+        );
+        let _ = crate::events::emit(
+          "profile-launch-args-skipped",
+          serde_json::json!({ "profile_name": profile.name, "error": error }),
+        );
+        Vec::new()
+      }
+    };
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
       .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
@@ -2676,6 +2967,7 @@ impl WayfernManager {
       );
     }
 
+    apply_launch_args(&mut args, &custom_launch_args);
     let mut command = TokioCommand::new(&executable_path);
     command
       .args(&args)
@@ -3513,6 +3805,198 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn launch_args_default_and_round_trip() {
+    let legacy: WayfernConfig = serde_json::from_str("{}").unwrap();
+    assert!(legacy.launch_args.is_empty());
+    let config: WayfernConfig = serde_json::from_str(
+      r#"{"launch_args":["--disable-gpu","--disk-cache-dir=/tmp/cache with spaces"]}"#,
+    )
+    .unwrap();
+    let saved = serde_json::to_string(&config).unwrap();
+    let loaded: WayfernConfig = serde_json::from_str(&saved).unwrap();
+    assert_eq!(loaded.launch_args, config.launch_args);
+  }
+
+  fn code_and_argument(error: &str) -> (String, String) {
+    let value: serde_json::Value = serde_json::from_str(error).unwrap();
+    (
+      value["code"].as_str().unwrap_or_default().to_string(),
+      value["params"]["argument"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string(),
+    )
+  }
+
+  #[test]
+  fn launch_args_accept_supported_switches_as_single_arguments() {
+    let args = vec![
+      "  --disable-gpu  ".to_string(),
+      "".to_string(),
+      "--autoplay-policy=no-user-gesture-required".to_string(),
+      "--renderer-process-limit=8".to_string(),
+      "--disable-features=OverlayScrollbar,TranslateUI".to_string(),
+    ];
+    assert_eq!(
+      validate_launch_args(&args, true).unwrap(),
+      vec![
+        "--disable-gpu",
+        "--autoplay-policy=no-user-gesture-required",
+        "--renderer-process-limit=8",
+        "--disable-features=OverlayScrollbar,TranslateUI",
+      ]
+    );
+  }
+
+  #[test]
+  fn launch_args_need_automation_but_clearing_them_does_not() {
+    assert!(validate_launch_args(&[], false).unwrap().is_empty());
+    assert!(validate_launch_args(&["  ".to_string()], false)
+      .unwrap()
+      .is_empty());
+    let error = validate_launch_args(&["--disable-gpu".to_string()], false).unwrap_err();
+    assert_eq!(
+      code_and_argument(&error).0,
+      "WAYFERN_LAUNCH_ARGS_REQUIRES_PRO"
+    );
+  }
+
+  #[test]
+  fn launch_args_refuse_switches_that_run_programs_or_weaken_the_browser() {
+    for arg in [
+      "--renderer-cmd-prefix=/tmp/x",
+      "--gpu-launcher=/tmp/x",
+      "--utility-cmd-prefix=/tmp/x",
+      "--browser-subprocess-path=/tmp/x",
+      "--zygote-cmd-prefix=/tmp/x",
+      "--disable-web-security",
+      "--ignore-certificate-errors",
+      "--allow-file-access-from-files",
+      "--remote-allow-origins=*",
+      "--custom-devtools-frontend=http://x",
+      "--js-flags=--expose-gc",
+      "--single-process",
+      "--log-net-log=/tmp/net.json",
+      "--force-webrtc-ip-handling-policy=default",
+      "--disable-blink-features=AutomationControlled",
+      "--enable-automation",
+    ] {
+      let error = validate_launch_args(&[arg.to_string()], true).unwrap_err();
+      let (code, argument) = code_and_argument(&error);
+      assert_eq!(code, "WAYFERN_LAUNCH_ARG_NOT_ALLOWED", "{arg}");
+      assert_eq!(argument, arg.split('=').next().unwrap());
+    }
+  }
+
+  #[test]
+  fn launch_args_name_the_switches_donut_controls() {
+    for arg in [
+      "--user-data-dir=/tmp/other",
+      "--profile-directory=Other",
+      "--remote-debugging-port=9222",
+      "--remote-debugging-pipe",
+      "--proxy-server=http://other:8080",
+      "--no-proxy-server",
+      "--host-resolver-rules=MAP * other",
+      "--host-rules=MAP * other",
+      "--headless=new",
+      "--wayfern-identity-file=/tmp/other",
+      "--window-size=800,600",
+      "--load-extension=/tmp/ext",
+      "--enable-logging=stderr",
+      "--log-level=3",
+      "--password-store=gnome",
+      "--no-sandbox",
+      "--user-agent=Other",
+      "--lang=de",
+      "--disk-cache-dir=/tmp/cache",
+    ] {
+      let error = validate_launch_args(&[arg.to_string()], true).unwrap_err();
+      let (code, argument) = code_and_argument(&error);
+      assert_eq!(code, "WAYFERN_LAUNCH_ARG_RESERVED", "{arg}");
+      assert_eq!(argument, arg.split('=').next().unwrap());
+    }
+  }
+
+  #[test]
+  fn launch_args_reject_malformed_input_and_bad_values() {
+    for arg in [
+      "--",
+      "https://example.com",
+      "--window-size 800,600",
+      "--USER-DATA-DIR=/tmp/other",
+      "-disable-gpu",
+      "/disable-gpu",
+      "--disable\u{200b}-gpu",
+      "--value=one\ntwo",
+      "--value=one\0two",
+    ] {
+      let error = validate_launch_args(&[arg.to_string()], true).unwrap_err();
+      assert!(error.contains("WAYFERN_LAUNCH_ARG_INVALID"), "{arg:?}");
+    }
+    for arg in [
+      "--disable-gpu=1",
+      "--autoplay-policy=always",
+      "--renderer-process-limit=0",
+      "--renderer-process-limit=1000",
+      "--num-raster-threads=two",
+      "--disable-features=",
+      "--disable-features=WebRtcHideLocalIpsWithMdns",
+      "--enable-features=WayfernSomething",
+      "--enable-features=Good,AsyncDns",
+      "--enable-features=Name<Trial",
+      "--enable-features=Name:param/value",
+    ] {
+      let error = validate_launch_args(&[arg.to_string()], true).unwrap_err();
+      assert_eq!(
+        code_and_argument(&error).0,
+        "WAYFERN_LAUNCH_ARG_VALUE_INVALID",
+        "{arg}"
+      );
+    }
+  }
+
+  #[test]
+  fn launch_args_are_limited_in_count_and_length() {
+    let many = vec!["--disable-gpu".to_string(); MAX_LAUNCH_ARGS + 1];
+    let error = validate_launch_args(&many, true).unwrap_err();
+    assert_eq!(code_and_argument(&error).0, "WAYFERN_LAUNCH_ARGS_LIMIT");
+    let long = format!("--disable-features={}", "A".repeat(MAX_LAUNCH_ARG_CHARS));
+    let error = validate_launch_args(&[long], true).unwrap_err();
+    assert_eq!(code_and_argument(&error).0, "WAYFERN_LAUNCH_ARGS_LIMIT");
+    assert!(validate_launch_args(&vec!["--mute-audio".to_string(); MAX_LAUNCH_ARGS], true).is_ok());
+  }
+
+  #[test]
+  fn launch_args_merge_feature_lists_with_donuts_own() {
+    let mut args = vec![
+      "--user-data-dir=/tmp/profile".to_string(),
+      "--disable-features=AsyncDns,Prefetch".to_string(),
+    ];
+    let custom = validate_launch_args(
+      &[
+        "--disable-features=OverlayScrollbar,CustomFeature".to_string(),
+        "--disable-features=AnotherFeature".to_string(),
+        "--enable-features=EnabledFeature".to_string(),
+        "--enable-features=OtherEnabledFeature".to_string(),
+        "--disable-gpu".to_string(),
+      ],
+      true,
+    )
+    .unwrap();
+    apply_launch_args(&mut args, &custom);
+    assert_eq!(
+      args,
+      vec![
+        "--user-data-dir=/tmp/profile",
+        "--disable-features=AsyncDns,Prefetch,OverlayScrollbar,CustomFeature,AnotherFeature",
+        "--enable-features=EnabledFeature,OtherEnabledFeature",
+        "--disable-gpu",
+      ]
+    );
+  }
 
   #[test]
   fn remote_socks_url_detection() {

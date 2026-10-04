@@ -39,6 +39,10 @@ updates:
       # from 1.25 it pulls in aws-lc, which needs CMake and NASM to build.
       - dependency-name: "shadowsocks"
         versions: [">=1.25"]
+      # Moves with Tauri (see the note in src-tauri/Cargo.toml): two gtk-sys
+      # versions cannot both link gtk-3.
+      - dependency-name: "gtk"
+        versions: [">=0.19"]
     groups:
       rust-dependencies:
         patterns:
@@ -60,6 +64,10 @@ updates:
       # from 1.25 it pulls in aws-lc, which needs CMake and NASM to build.
       - dependency-name: "shadowsocks"
         versions: [">=1.25"]
+      # Moves with Tauri (see the note in src-tauri/Cargo.toml): two gtk-sys
+      # versions cannot both link gtk-3.
+      - dependency-name: "gtk"
+        versions: [">=0.19"]
     groups:
       e2e-rust-dependencies:
         patterns:
@@ -93,8 +101,7 @@ updates:
       day: "saturday"
       time: "09:00"
     ignore:
-      # Node majors follow .node-version (the LTS line), not the newest
-      # "Current" release; moving to the next LTS is done by hand.
+      # Node majors follow .node-version and are moved by hand.
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
     groups:

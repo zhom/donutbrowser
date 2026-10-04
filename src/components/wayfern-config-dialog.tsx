@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { translateBackendError } from "@/lib/backend-errors";
 import type { BrowserProfile, WayfernConfig, WayfernOS } from "@/types";
 import { LoadingButton } from "./loading-button";
 import { RippleButton } from "./ui/ripple";
@@ -86,10 +87,7 @@ export function WayfernConfigDialog({
       console.error("Failed to save config:", error);
       const { toast } = await import("sonner");
       toast.error(t("wayfernConfigDialog.saveFailed"), {
-        description:
-          error instanceof Error
-            ? error.message
-            : t("wayfernConfigDialog.unknownError"),
+        description: translateBackendError(t, error),
       });
     } finally {
       setIsSaving(false);

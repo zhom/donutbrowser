@@ -10,7 +10,6 @@ interface Capabilities {
   cookieBot: boolean;
   remoteInteractive: boolean;
   remoteControl: boolean;
-  agentAutomation: boolean;
 }
 
 const NONE: Entitlements = {
@@ -22,7 +21,6 @@ const NONE: Entitlements = {
   cookieBot: false,
   remoteInteractive: false,
   remoteControl: false,
-  agentAutomation: false,
   profileLimit: 0,
   requestsPerHour: 0,
   remoteBrowserHours: 0,
@@ -31,9 +29,8 @@ const NONE: Entitlements = {
 // Mirror of the plan capability matrix the API resolves. Keep in sync — a new
 // plan must be declared here too, or it falls back to DEFAULT_PAID.
 const PLAN_CAPABILITIES: Record<string, Capabilities> = {
-  // The one row where cookieBot, browserAutomation and remoteInteractive all
-  // disagree: solo pays for a nightly bot and nothing else that drives a
-  // browser. No fingerprint editing either.
+  // Solo pays for a nightly bot and MCP without browser automation. No
+  // fingerprint editing either.
   solo: {
     browserAutomation: false,
     crossOsFingerprints: false,
@@ -41,8 +38,7 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
     teamCollaboration: false,
     cookieBot: true,
     remoteInteractive: false,
-    remoteControl: false,
-    agentAutomation: false,
+    remoteControl: true,
   },
   pro: {
     browserAutomation: true,
@@ -52,7 +48,6 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
     cookieBot: true,
     remoteInteractive: true,
     remoteControl: true,
-    agentAutomation: true,
   },
   team: {
     browserAutomation: true,
@@ -62,7 +57,6 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
     cookieBot: true,
     remoteInteractive: true,
     remoteControl: true,
-    agentAutomation: true,
   },
   enterprise: {
     browserAutomation: true,
@@ -72,7 +66,6 @@ const PLAN_CAPABILITIES: Record<string, Capabilities> = {
     cookieBot: true,
     remoteInteractive: true,
     remoteControl: true,
-    agentAutomation: true,
   },
 };
 
@@ -87,7 +80,6 @@ const DEFAULT_PAID: Capabilities = {
   cookieBot: true,
   remoteInteractive: true,
   remoteControl: false,
-  agentAutomation: true,
 };
 
 /**
@@ -122,10 +114,6 @@ export function getEntitlements(
       // backend with no remote-control endpoint to be entitled to, so `false`
       // is the true answer rather than a conservative guess.
       remoteControl: server.remoteControl ?? false,
-      // Not back-filled either, and for the same reason: a backend that omits
-      // this key serves no `api/agent` routes, so reading it as `false` is the
-      // truth rather than a conservative guess.
-      agentAutomation: server.agentAutomation ?? false,
       remoteBrowserHours: server.remoteBrowserHours ?? 0,
     };
   }
@@ -146,7 +134,6 @@ export function getEntitlements(
     cookieBot: caps.cookieBot,
     remoteInteractive: caps.remoteInteractive,
     remoteControl: caps.remoteControl,
-    agentAutomation: caps.agentAutomation,
     profileLimit: user.profileLimit,
     requestsPerHour: caps.browserAutomation ? DEFAULT_REQUESTS_PER_HOUR : 0,
     remoteBrowserHours: 0,
@@ -188,22 +175,6 @@ export function canUseRemoteControl(
 ): boolean {
   const entitlements = getEntitlements(user);
   return entitlements.active && entitlements.remoteControl;
-}
-
-/**
- * Whether this user may start agent runs.
- *
- * The page reads this to decide between the run form and an honest explanation
- * of what is missing; it never invents a gate of its own. The API is the real
- * authority and answers `AGENT_NOT_ENTITLED` regardless, so a cached
- * entitlement that is one refresh out of date costs a translated refusal, not a
- * hidden feature.
- */
-export function canUseAgentAutomation(
-  user: CloudUser | null | undefined,
-): boolean {
-  const entitlements = getEntitlements(user);
-  return entitlements.active && entitlements.agentAutomation;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TipsDialogMode } from "@/components/tips-dialog";
-import { getAgentRuns } from "@/lib/agent";
+import { getAgentConsole } from "@/lib/agent-console";
 import { effectivePlanOf, getEntitlements } from "@/lib/entitlements";
 import { getCurrentOS } from "@/lib/platform";
 import {
@@ -112,7 +112,9 @@ async function loadFeatureUsage(
           )
         : undefined,
       wants("agent")
-        ? known(getAgentRuns({ limit: 1 }).then((page) => page.runs.length > 0))
+        ? known(
+            getAgentConsole().then((snapshot) => snapshot.sessions.length > 0),
+          )
         : undefined,
     ]);
   return {

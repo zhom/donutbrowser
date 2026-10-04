@@ -859,6 +859,162 @@ test("local MCP is removed: enabling it and installing a local client are refuse
   });
 });
 
+test("the agent console keeps notes, take-overs and the pause for connected agents", async () => {
+  await withApp("integrations-agent-console", async (app) => {
+    await seedTerms(app);
+    const empty = await app.invoke("get_agent_console");
+    assert.deepEqual(empty.sessions, []);
+    assert.deepEqual(empty.activity, []);
+    assert.deepEqual(empty.thread, []);
+    assert.deepEqual(empty.holds, []);
+    assert.equal(empty.paused, null);
+
+    const note = await app.invoke("send_agent_note", {
+      text: "  Use the EU proxies today  ",
+    });
+    assert.equal(note.kind, "note");
+    assert.equal(note.state, "pending");
+    assert.equal(note.text, "Use the EU proxies today");
+    assert.equal(note.session_id, null);
+    await assertCommandErrorCode(app, "send_agent_note", "AGENT_NOTE_EMPTY", {
+      text: "   ",
+    });
+    await assertCommandErrorCode(
+      app,
+      "send_agent_note",
+      "AGENT_TEXT_TOO_LONG",
+      {
+        text: "x".repeat(2001),
+      },
+    );
+    await assertCommandErrorCode(
+      app,
+      "send_agent_note",
+      "AGENT_SESSION_NOT_FOUND",
+      {
+        text: "hello",
+        sessionId: "missing-e2e-session",
+      },
+    );
+
+    await assertCommandErrorCode(
+      app,
+      "answer_agent_request",
+      "AGENT_REQUEST_NOT_FOUND",
+      {
+        requestId: 987654,
+        answer: "yes",
+      },
+    );
+    await assertCommandErrorCode(
+      app,
+      "dismiss_agent_request",
+      "AGENT_REQUEST_NOT_FOUND",
+      {
+        requestId: 987654,
+      },
+    );
+
+    const missingProfileId = "00000000-0000-4000-8000-00000000e2e0";
+    await assertCommandErrorCode(
+      app,
+      "take_over_profile",
+      "PROFILE_NOT_FOUND",
+      {
+        profileId: missingProfileId,
+      },
+    );
+    await assertCommandErrorCode(
+      app,
+      "show_profile_window",
+      "PROFILE_NOT_FOUND",
+      {
+        profileId: missingProfileId,
+      },
+    );
+
+    const profile = await app.invoke("create_browser_profile_new", {
+      name: "Agent Console Profile",
+      browserStr: "wayfern",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+      proxyId: null,
+      vpnId: null,
+      wayfernConfig: { fingerprint: "{}" },
+      groupId: null,
+      ephemeral: false,
+      dnsBlocklist: null,
+      launchHook: null,
+    });
+    await assertCommandErrorCode(
+      app,
+      "show_profile_window",
+      "PROFILE_NOT_RUNNING",
+      {
+        profileId: profile.id,
+      },
+    );
+
+    const hold = await app.invoke("take_over_profile", {
+      profileId: profile.id,
+      note: "Checking the payment page",
+    });
+    assert.equal(hold.profile_id, profile.id);
+    assert.equal(hold.note, "Checking the payment page");
+    assert.equal(hold.request_id, null);
+    // A second take-over keeps the hold and updates its note.
+    await app.invoke("take_over_profile", {
+      profileId: profile.id,
+      note: "Still here",
+    });
+    let state = await app.invoke("get_agent_console");
+    assert.deepEqual(
+      state.holds.map((h) => [h.profile_id, h.note]),
+      [[profile.id, "Still here"]],
+    );
+
+    await app.invoke("hand_back_profile", {
+      profileId: profile.id,
+      note: "Done, you can continue",
+    });
+    state = await app.invoke("get_agent_console");
+    assert.deepEqual(state.holds, []);
+    const handBackNote = state.thread.find(
+      (item) => item.kind === "note" && item.text === "Done, you can continue",
+    );
+    assert.ok(
+      handBackNote,
+      "handing back with a note leaves the note for the agents",
+    );
+    assert.equal(handBackNote.profile_id, profile.id);
+    // Handing back a profile nobody holds is a no-op.
+    await app.invoke("hand_back_profile", { profileId: profile.id });
+
+    const pause = await app.invoke("set_agents_paused", {
+      paused: true,
+      note: "Lunch break",
+    });
+    assert.equal(pause.note, "Lunch break");
+    assert.equal(
+      (await app.invoke("get_agent_console")).paused.note,
+      "Lunch break",
+    );
+    assert.equal(
+      await app.invoke("set_agents_paused", { paused: false }),
+      null,
+    );
+    assert.equal((await app.invoke("get_agent_console")).paused, null);
+
+    await app.invoke("clear_agent_activity");
+    state = await app.invoke("get_agent_console");
+    assert.deepEqual(state.activity, []);
+    assert.ok(
+      state.thread.some((item) => item.text === "Use the EU proxies today"),
+      "clearing activity keeps the conversation",
+    );
+  });
+});
+
 test("the remote-control bridge refuses a signed-out desktop and stays off", async () => {
   await withApp("integrations-mcp-remote", async (app) => {
     await seedTerms(app);
@@ -1459,23 +1615,7 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         /"code":"PROFILE_NOT_FOUND"/,
       );
 
-      // The agent plane is brokered by the same cloud. Signed out, every read
-      // and write must refuse as a translatable code, and the two things the
-      // desktop can judge for itself — is this profile here, does the goal say
-      // anything — must be judged BEFORE any of that, so a bad request never
-      // becomes a model bill.
-      assert.match(
-        await app.invokeError("get_agent_runs", { limit: 5 }),
-        notSignedIn,
-      );
-      assert.match(
-        await app.invokeError("get_agent_run", { runId: "missing-e2e-run" }),
-        notSignedIn,
-      );
-      assert.match(
-        await app.invokeError("cancel_agent_run", { runId: "missing-e2e-run" }),
-        notSignedIn,
-      );
+      // Recipes live in the cloud; signed out, every call refuses with a code.
       assert.match(await app.invokeError("get_agent_recipes"), notSignedIn);
       assert.match(
         await app.invokeError("create_agent_recipe", {
@@ -1498,32 +1638,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         }),
         notSignedIn,
       );
-
-      // A goal is judged before the profile is even looked up: an empty goal is
-      // the one refusal that costs nothing to make locally, and it must not
-      // depend on being signed in.
-      assert.match(
-        await app.invokeError("start_agent_run", {
-          input: {
-            profileId: missingProfileId,
-            target: "desktop",
-            goal: "   ",
-          },
-        }),
-        /"code":"AGENT_GOAL_INVALID"/,
-      );
-      assert.match(
-        await app.invokeError("start_agent_run", {
-          input: {
-            profileId: missingProfileId,
-            target: "desktop",
-            goal: "Open the dashboard and export last week's report",
-          },
-        }),
-        /"code":"PROFILE_NOT_FOUND"/,
-      );
-      // Recipes are validated the same way, and with the code the rest of the
-      // app already uses for a blank name rather than an agent-specific one.
       assert.match(
         await app.invokeError("create_agent_recipe", {
           name: "  ",
@@ -1531,9 +1645,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         }),
         /"code":"NAME_CANNOT_BE_EMPTY"/,
       );
-      // A step is an object the API validates, never a line of prose: the old
-      // string shape is refused here rather than sent and rejected by the
-      // server. So is a step that names an element without saying which.
       for (const steps of [
         [],
         ["open the dashboard"],
@@ -1551,33 +1662,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
           `${JSON.stringify(steps)} must be refused before any network call`,
         );
       }
-
-      // The step stream is how the run panel fills; without it a page opened
-      // during a run shows a goal and nothing else. It has to start, name the
-      // run it is watching, follow a switch to another run, and stop on demand.
-      assert.equal(await app.invoke("get_agent_run_events_status"), null);
-      await app.invoke("start_agent_run_events", { runId: "e2e-agent-run-1" });
-      assert.equal(
-        await app.invoke("get_agent_run_events_status"),
-        "e2e-agent-run-1",
-      );
-      // A second start for the same run is a no-op, not a second socket.
-      await app.invoke("start_agent_run_events", { runId: "e2e-agent-run-1" });
-      assert.equal(
-        await app.invoke("get_agent_run_events_status"),
-        "e2e-agent-run-1",
-      );
-      // Opening a different run replaces the stream: the panel shows one run.
-      await app.invoke("start_agent_run_events", { runId: "e2e-agent-run-2" });
-      assert.equal(
-        await app.invoke("get_agent_run_events_status"),
-        "e2e-agent-run-2",
-      );
-      await app.invoke("stop_agent_run_events");
-      assert.equal(await app.invoke("get_agent_run_events_status"), null);
-      // A second stop must not fail.
-      await app.invoke("stop_agent_run_events");
-      assert.equal(await app.invoke("get_agent_run_events_status"), null);
 
       const trial = await app.invoke("get_commercial_trial_status");
       assert.ok(trial && typeof trial === "object");

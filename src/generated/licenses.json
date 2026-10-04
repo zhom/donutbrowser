@@ -876,10 +876,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "ctor-proc-macro",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "ctr",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1062,14 +1058,6 @@
   {
     "name": "dtoa-short",
     "license": "MPL-2.0"
-  },
-  {
-    "name": "dtor",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "dtor-proc-macro",
-    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "dunce",
@@ -2944,26 +2932,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "unic-char-property",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "unic-char-range",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "unic-common",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "unic-ucd-ident",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
-    "name": "unic-ucd-version",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "unicase",
     "license": "Apache-2.0 OR MIT"
   },
@@ -3106,6 +3074,10 @@
   {
     "name": "wayland-sys",
     "license": "MIT"
+  },
+  {
+    "name": "web-time",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "web_atoms",

@@ -12,7 +12,6 @@ export type TipRequirement = Extract<
   | "cookieBot"
   | "crossOsFingerprints"
   | "browserAutomation"
-  | "agentAutomation"
   | "teamCollaboration"
   | "remoteControl"
 >;
@@ -80,6 +79,7 @@ export interface FeatureUsage {
   proxyChecked?: boolean;
   isDefaultBrowser?: boolean;
   trashUsed?: boolean;
+  /** An agent has connected over remote control during this app session. */
   agentUsed?: boolean;
 }
 
@@ -214,7 +214,7 @@ export const TIPS: readonly TipDefinition[] = [
   {
     id: "agent",
     action: { kind: "page", page: "agent" },
-    requires: "agentAutomation",
+    requires: "remoteControl",
     inUse: (usage) => usage.agentUsed === true,
   },
   {

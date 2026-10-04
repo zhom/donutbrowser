@@ -17,35 +17,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RippleButton } from "@/components/ui/ripple";
 import { Skeleton } from "@/components/ui/skeleton";
+import { translateBackendError } from "@/lib/backend-errors";
 import {
   type AgentRecipe,
   createAgentRecipe,
   deleteAgentRecipe,
+  getAgentRecipes,
   type RecipeStep,
   updateAgentRecipe,
-} from "@/lib/agent";
-import { translateBackendError } from "@/lib/backend-errors";
+} from "@/lib/recipes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { BrowserProfile } from "@/types";
 
 interface AgentRecipesProps {
   /** Running profiles are the ones a recording can be made from. */
   profiles: BrowserProfile[];
-  recipes: AgentRecipe[];
-  isLoading: boolean;
-  error: unknown;
-  /** Re-read the library after any write, so every surface agrees at once. */
-  onChanged: () => void;
 }
 
-export function AgentRecipes({
-  profiles,
-  recipes,
-  isLoading,
-  error,
-  onChanged,
-}: AgentRecipesProps) {
+export function AgentRecipes({ profiles }: AgentRecipesProps) {
   const { t } = useTranslation();
+  const [recipes, setRecipes] = useState<AgentRecipe[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+
+  const loadRecipes = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      setRecipes(await getAgentRecipes());
+      setError(null);
+    } catch (loadError) {
+      setError(loadError);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRecipes();
+  }, [loadRecipes]);
   /** The recipe being edited, `"new"` while composing one, or null. */
   const [editing, setEditing] = useState<AgentRecipe | "new" | null>(null);
   /** Steps a recording just produced, waiting to be reviewed and named. */
@@ -62,13 +71,13 @@ export function AgentRecipes({
       await deleteAgentRecipe(pendingRemoval.id);
       showSuccessToast(t("agent.recipes.deleted"));
       setPendingRemoval(null);
-      onChanged();
+      void loadRecipes();
     } catch (removeError) {
       showErrorToast(translateBackendError(t, removeError));
     } finally {
       setIsRemoving(false);
     }
-  }, [pendingRemoval, onChanged, t]);
+  }, [pendingRemoval, loadRecipes, t]);
 
   return (
     <div
@@ -118,7 +127,7 @@ export function AgentRecipes({
           onSaved={() => {
             setRecorded(null);
             setEditing(null);
-            onChanged();
+            void loadRecipes();
           }}
         />
       )}

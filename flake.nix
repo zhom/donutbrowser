@@ -7,16 +7,19 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+    # Not eachDefaultSystem: nixpkgs 26.11 dropped x86_64-darwin, and evaluating
+    # it there aborts `nix flake show --all-systems` for every system.
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
         };
         lib = pkgs.lib;
+        isLinux = pkgs.stdenv.hostPlatform.isLinux;
 
-        # The version in .node-version; 22 only where 24 is not packaged.
-        nodejs = pkgs.nodejs_24 or pkgs.nodejs_22;
+        # The version in .node-version; 24 only where 26 is not packaged.
+        nodejs = pkgs.nodejs_26 or pkgs.nodejs_24;
 
         rustPackages = with pkgs; [
           cargo
@@ -26,7 +29,9 @@
           rustfmt
         ];
 
-        commonLibs = with pkgs; [
+        # The Linux GTK/WebKit stack. On macOS, Tauri uses the system WebKit
+        # through the Apple SDK that stdenv already provides.
+        commonLibs = lib.optionals isLinux (with pkgs; [
           webkitgtk_4_1
           libsoup_3
           glib
@@ -70,11 +75,11 @@
           gmp
           zlib
           stdenv.cc.cc.lib
-        ];
+        ]);
 
         runtimeLibPath = lib.makeLibraryPath commonLibs;
         nixLd = pkgs.stdenv.cc.bintools.dynamicLinker;
-        pkgConfigLibs = [
+        pkgConfigLibs = [ pkgs.openssl pkgs.zlib ] ++ lib.optionals isLinux [
           pkgs.at-spi2-atk
           pkgs.at-spi2-core
           pkgs.cairo
@@ -85,11 +90,9 @@
           pkgs.libayatana-appindicator
           pkgs.libsoup_3
           pkgs.libxkbcommon
-          pkgs.openssl
           pkgs.pango
           pkgs.harfbuzz
           pkgs.webkitgtk_4_1
-          pkgs.zlib
         ];
         # The .pc files these name in Requires have to resolve too: gdk-3.0
         # requires zlib, and a list of direct dependencies alone left it out,
@@ -189,6 +192,17 @@
               '';
             };
 
+        linuxLibraryEnv = lib.optionalString isLinux ''
+          export NIX_LD="${nixLd}"
+          export NIX_LD_LIBRARY_PATH="${runtimeLibPath}:''${NIX_LD_LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="${runtimeLibPath}:''${LD_LIBRARY_PATH:-}"
+          export LIBRARY_PATH="${runtimeLibPath}:''${LIBRARY_PATH:-}"
+          export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share:''${XDG_DATA_DIRS:-}"
+        '';
+        pkgConfigModules =
+          (lib.optionals isLinux [ "gdk-3.0" "webkit2gtk-4.1" "javascriptcoregtk-4.1" "libsoup-3.0" "ayatana-appindicator3-0.1" ])
+          ++ [ "openssl" ];
+
         mkApp = name: text:
           let
             app = pkgs.writeShellApplication {
@@ -201,7 +215,7 @@
                 gnugrep
                 gnused
                 curl
-                gcc
+                stdenv.cc
                 pkg-config
                 openssl
                 cargo
@@ -214,10 +228,7 @@
               ];
               text = ''
                 export NODE_ENV=development
-                export NIX_LD="${nixLd}"
-                export NIX_LD_LIBRARY_PATH="${runtimeLibPath}:''${NIX_LD_LIBRARY_PATH:-}"
-                export LD_LIBRARY_PATH="${runtimeLibPath}:''${LD_LIBRARY_PATH:-}"
-                export LIBRARY_PATH="${runtimeLibPath}:''${LIBRARY_PATH:-}"
+                ${linuxLibraryEnv}
                 export PKG_CONFIG_PATH="${pkgConfigPath}:''${PKG_CONFIG_PATH:-}"
                 export RUST_SRC_PATH="${pkgs.rustPlatform.rustLibSrc}"
                 ${text}
@@ -254,13 +265,9 @@
 
           shellHook = ''
             export NODE_ENV=development
-            export NIX_LD="${nixLd}"
-            export NIX_LD_LIBRARY_PATH="${runtimeLibPath}:''${NIX_LD_LIBRARY_PATH:-}"
-            export LD_LIBRARY_PATH="${runtimeLibPath}:''${LD_LIBRARY_PATH:-}"
-            export LIBRARY_PATH="${runtimeLibPath}:''${LIBRARY_PATH:-}"
+            ${linuxLibraryEnv}
             export PKG_CONFIG_PATH="${pkgConfigPath}:''${PKG_CONFIG_PATH:-}"
             export RUST_SRC_PATH="${pkgs.rustPlatform.rustLibSrc}"
-            export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share:${pkgs.gtk3}/share:''${XDG_DATA_DIRS:-}"
 
             echo "Donut Browser dev shell ready."
             echo "Quick start:"
@@ -283,7 +290,8 @@
           # Every library the Rust build links through pkg-config, with the
           # packages their .pc files require. A gap fails here in seconds
           # instead of minutes into `nix run .#build`.
-          for module in gdk-3.0 webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 ayatana-appindicator3-0.1 openssl; do
+          modules=(${lib.escapeShellArgs pkgConfigModules})
+          for module in "''${modules[@]}"; do
             pkg-config --cflags --libs "$module" > /dev/null
             echo "$module: $(pkg-config --modversion "$module")"
           done

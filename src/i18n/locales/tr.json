@@ -1182,7 +1182,6 @@
     "serverError": "Sunucu hatası. Lütfen daha sonra yeniden deneyin.",
     "unknownError": "Bilinmeyen bir hata oluştu. Lütfen yeniden deneyin.",
     "noProfilesForUrl": "Kullanılabilir profil yok. Lütfen URL açmadan önce bir profil oluşturun.",
-    "updateWayfernConfigFailed": "Wayfern yapılandırması güncellenemedi: {{error}}",
     "createProfileFailed": "Profil oluşturulamadı: {{error}}",
     "launchBrowserFailed": "Tarayıcı başlatılamadı: {{error}}",
     "cannotDeleteRunningProfile": "Tarayıcı çalışırken profil silinemez. Lütfen önce tarayıcıyı durdurun.",
@@ -1331,7 +1330,10 @@
     "regenerateConfirmDescription": "Profil çerezlerini ve oturumlarını korur, ancak farklı bir cihaz olarak görünür. Bu profili zaten tanıyan siteler yeniden giriş yapmanızı isteyebilir, doğrulama uygulayabilir veya hesabı engelleyebilir. Yalnızca henüz kullanmadığınız ya da kaybetmeyi göze aldığınız bir profili yeniden oluşturun. Bu işlem geri alınamaz.",
     "canvasNoiseSeedPlaceholder": "Canvas parmak izi için bir tohum dizesi girin",
     "addFontsPlaceholder": "Yazı tipi ekleyin...",
-    "enterAsJson": "{{title}} değerini JSON olarak girin"
+    "enterAsJson": "{{title}} değerini JSON olarak girin",
+    "launchArgs": "Başlatma argümanları",
+    "launchArgsDescription": "Her satıra bir argüman girin: --name veya --name=value. Yalnızca desteklenen argümanlar kabul edilir; örneğin --disable-gpu, --mute-audio veya --disable-features=Name. Profil, proxy, pencere ve hata ayıklama argümanlarını Donut yönetir.",
+    "launchArgsSkipped": "{{profile}} için özel başlatma argümanları kullanılmadı. {{reason}}"
   },
   "warnings": {
     "windowResizeTitle": "Özel Pencere Boyutları",
@@ -2298,13 +2300,13 @@
     "profileImportTooNew": "Bu arşiv Donut Browser'ın daha yeni bir sürümüyle yazıldı. Uygulamayı güncelleyip yeniden deneyin.",
     "profileImportUnsafeArchive": "Bu arşiv profil klasörünün dışına yazmaya çalıştığı için reddedildi.",
     "recordingAlreadyRunning": "Zaten bir kayıt sürüyor. Yenisine başlamadan önce durdurun.",
-    "profileNotRunning": "Kaydetmeden önce bu profilin tarayıcısını başlatın.",
+    "profileNotRunning": "Bu profilin tarayıcısı çalışmıyor. Önce başlatın.",
     "wayfern152Required": "Kayıt için Wayfern 152 veya üzeri gerekir. Bu profilin tarayıcısını güncelleyin.",
     "recordingFailed": "Kayıt başlatılamadı. {{detail}}",
     "mcpRemoteRequiresSignIn": "Uzaktan kontrolü açmadan önce Donut hesabınıza giriş yapın.",
     "mcpRemoteUnauthorized": "Donut cloud bu cihazın kimlik bilgilerini reddetti. Çıkış yapıp yeniden giriş yapın.",
     "mcpRemoteSlotTaken": "Bu hesapta başka bir Donut örneği zaten bağlı. Aynı anda yalnızca biri uzaktan kontrol edilebilir.",
-    "mcpRemoteNotEntitled": "Uzak MCP, Pro veya daha üst bir plan gerektirir.",
+    "mcpRemoteNotEntitled": "Planınız uzak MCP'yi içermiyor.",
     "mcpRemoteUnreachable": "Şu anda Donut cloud'a ulaşılamıyor. Otomatik olarak yeniden bağlanılıyor.",
     "mcpRemoteKeyMissing": "Bu cihazda henüz uzak MCP kimlik bilgisi yok. Önce bir tane oluşturun, ardından istemciyi yeniden ekleyin.",
     "mcpRemoteKeyLimit": "Bu hesap tutabileceği en fazla MCP kimlik bilgisine zaten sahip. Hesap sayfasından birini iptal edip yeniden deneyin.",
@@ -2322,21 +2324,18 @@
     "remoteSessionNotDrivable": "Bu uzak oturum henüz yönetilmeye hazır değil. Etkin duruma gelmesini bekleyin.",
     "remotePlatformUnsupported": "Uzak oturumlar yalnızca macOS, Windows veya Linux sunucularında çalışır. Bu profilin platformu {{platform}}.",
     "remoteProfileNotSynced": "Bu profil buluta yüklenmeyi henüz tamamlamadı. İlk eşitlemenin bitmesini bekleyip tekrar deneyin.",
-    "mcpLocalRemoved": "Donut'un yerel MCP sunucusu kaldırıldı. MCP artık uzaktan çalışıyor ve Pro veya daha üst bir plan gerektiriyor.",
+    "mcpLocalRemoved": "Donut'un yerel MCP sunucusu kaldırıldı. MCP artık uzaktan çalışıyor ve ücretli bir plan gerektiriyor.",
     "trashEntryNotFound": "Bu profil artık çöp kutusunda değil.",
     "trashRestoreConflict": "Aynı kimliğe sahip bir profil zaten var, bu nedenle bu profil geri yüklenemez.",
-    "agentNotEntitled": "Planınız ajanı içermiyor.",
-    "agentNotConfigured": "Ajan bu kurulumda henüz kullanılamıyor.",
-    "agentTargetOffline": "Çalıştırmanın ihtiyaç duyduğu tarayıcıya ulaşılamadı.",
-    "agentBudgetExceeded": "Çalıştırma sınırlarından birine ulaştığı için durdu.",
-    "agentRunLimitReached": "Planınızın izin verdiği kadar çalıştırma zaten sürüyor.",
-    "agentRunNotFound": "Bu çalıştırma artık yok.",
-    "agentRunNotCancellable": "Bu çalıştırma zaten bitti.",
-    "agentGoalInvalid": "Hedef boş ya da çok uzun.",
-    "agentBudgetInvalid": "Sınırlardan biri kullanılabilir bir sayı değil.",
-    "agentTokenProfileMismatch": "Bu çalıştırma başka bir profil için başlatıldı. Yeniden oturum açıp deneyin.",
+    "recipesNotEntitled": "Tarifler, Pro veya daha üst bir plan gerektirir.",
     "agentRecipeInvalid": "Bir tarifin adı ve en az bir adımı olmalı.",
     "agentRecipeNotFound": "Bu tarif artık yok.",
+    "agentRequestNotFound": "Bu istek artık yok.",
+    "agentRequestClosed": "Bu istek zaten yanıtlandı veya kapatıldı.",
+    "agentAnswerEmpty": "Önce bir yanıt yazın.",
+    "agentNoteEmpty": "Önce bir not yazın.",
+    "agentTextTooLong": "Bu metin çok uzun. Sınır {{max}} karakterdir.",
+    "agentSessionNotFound": "Bu ajan artık bağlı değil.",
     "profilePairedTwice": "Bu profil aynı dağıtımda birden fazla kez yer alıyor",
     "extensionUrlInvalid": "Bu bir Chrome Web Mağazası bağlantısı, uzantı kimliği ya da doğrudan .crx veya .zip bağlantısı değil.",
     "extensionDownloadFailed": "Uzantı indirilemedi. Bağlantıyı ve internet erişiminizi kontrol edin.",
@@ -2361,7 +2360,13 @@
     "extensionPathInvalid": "Bu yol kullanılamaz: '..' içeriyor.",
     "systemProxyUnreachable": "Donut, {{proxy}} sistem proxy'si üzerinden bağlanamadı. Sistem ağ ayarlarınızda proxy'yi düzeltin veya kapatın, ardından yeniden deneyin.",
     "profileRouteRequired": "Bu profilin proxy'si veya VPN'i yok. Bunlar olmadan başlatma, Ayarlar'daki Gizlilik bölümünde engellendi.",
-    "profileRouteUnavailable": "Bu profilin proxy'si veya VPN'i kullanılamıyor, bu yüzden IP adresinizi gizli tutmak için başlatma durduruldu. Profile çalışan bir proxy veya VPN atayın."
+    "profileRouteUnavailable": "Bu profilin proxy'si veya VPN'i kullanılamıyor, bu yüzden IP adresinizi gizli tutmak için başlatma durduruldu. Profile çalışan bir proxy veya VPN atayın.",
+    "wayfernLaunchArgsRequiresPro": "Özel başlatma argümanları için Pro veya üstü bir plan gerekir. Argümanları temizleyin veya planınızı yükseltin.",
+    "wayfernLaunchArgInvalid": "Her argüman için --name veya --name=value kullanın. Kontrol karakterlerine izin verilmez.",
+    "wayfernLaunchArgReserved": "{{argument}} argümanını Donut yönetir. Bu argümanı kaldırın.",
+    "wayfernLaunchArgNotAllowed": "{{argument}} desteklenen bir başlatma argümanı değil. Kaldırın.",
+    "wayfernLaunchArgValueInvalid": "{{argument}} için girilen değer desteklenmiyor.",
+    "wayfernLaunchArgsLimit": "En fazla {{count}} başlatma argümanı kullanın; her biri en fazla {{length}} karakter olsun."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2387,7 +2392,8 @@
     "account": "Hesap",
     "cookieBot": "Cookie Bot",
     "cookieBotRunning": "Cookie Bot — şu anda çalışıyor",
-    "agent": "Ajan"
+    "agent": "Ajan",
+    "agentWaiting": "Ajan, bekleyen istekler: {{count}}"
   },
   "pageTitle": {
     "proxies": "Ağ",
@@ -2600,8 +2606,7 @@
     "titleConfigure": "Parmak İzi Ayarlarını Yapılandır - {{name}} ({{browser}})",
     "invalidFingerprint": "Geçersiz parmak izi yapılandırması",
     "invalidFingerprintDescription": "Parmak izi yapılandırması geçersiz JSON içeriyor. Lütfen gelişmiş ayarlarınızı kontrol edin.",
-    "saveFailed": "Yapılandırma kaydedilemedi",
-    "unknownError": "Bilinmeyen bir hata oluştu"
+    "saveFailed": "Yapılandırma kaydedilemedi"
   },
   "cookieCopy": {
     "noOtherTargets": "Başka Wayfern profili seçilmedi"
@@ -3176,126 +3181,155 @@
     "loadFailed": "Çöp kutusu yüklenemedi: {{error}}"
   },
   "agent": {
-    "title": "Ajan",
-    "description": "Ajana bir hedef verin, profillerinizden birinde bunu yerine getirsin.",
+    "description": "Yapay zekâ ajanınızın Donut'ta ne yaptığını görün, sorularını yanıtlayın ve bir sayfa size ihtiyaç duyduğunda devreye girin.",
     "tabs": {
-      "run": "Yeni çalıştırma",
-      "history": "Geçmiş",
+      "conversation": "Konuşma",
+      "profiles": "Profiller",
+      "activity": "Etkinlik",
       "recipes": "Tarifler"
     },
-    "unavailable": {
-      "signInTitle": "Ajanı kullanmak için oturum açın",
-      "signInHint": "Ajan çalıştırmaları Donut bulutu üzerinden yapılır. Başlatmak için Hesap sayfasından oturum açın.",
-      "planTitle": "Ajan planınıza dahil değil",
-      "planHint": "Ajana hedef verebilmek için tarayıcı otomasyonu içeren bir plana geçin.",
-      "notConfiguredTitle": "Ajan henüz kullanılamıyor",
-      "notConfiguredHint": "Bu Donut kurulumunda ajan yapılandırılmamış. Hesabınızda bir sorun yok."
+    "header": {
+      "quota": "Bu saat için {{limit}} çağrıdan {{left}} kaldı",
+      "connect": "Ajan bağla"
     },
-    "form": {
-      "profile": "Profil",
-      "profilePlaceholder": "Bir profil seçin",
-      "noProfiles": "Önce bir profil oluşturun; ajan gezinmek için bir profile ihtiyaç duyar.",
-      "target": "Çalışma yeri",
-      "targetDesktopHint": "Tarayıcı bu bilgisayarda açılır ve çalışmasını izleyebilirsiniz.",
-      "targetFleetHint": "Tarayıcı kiralanmış bir makinede açılır, bu bilgisayar boşta kalır.",
-      "platform": "Makine işletim sistemi",
-      "platformPlaceholder": "Bir işletim sistemi seçin",
-      "platformRequired": "Bu profilin işletim sistemi için kiralanmış makine yok. Kullanılabilir birini seçin.",
-      "recipeInsert": "Tarif ekle",
-      "goal": "Hedef",
-      "goalPlaceholder": "Ajanın neyi başarması gerektiğini kendi sözlerinizle yazın.",
-      "goalEmpty": "Çalıştırmayı başlatmak için bir hedef yazın.",
-      "goalTooLong": "Bu hedef çok uzun.",
-      "goalCount": "{{chars}} / {{max}}",
-      "limits": "Sınırlar ve kapsam",
-      "limitsHint": "Bir sınırı boş bırakırsanız planın kendi tavanı geçerli olur.",
-      "maxSteps": "En fazla adım",
-      "maxMinutes": "En fazla dakika",
-      "maxTokens": "En fazla token",
-      "budgetUnset": "Sınırsız",
-      "budgetInvalid": "Sıfırdan büyük bir tam sayı girin.",
-      "effort": "Çaba",
-      "allowedHosts": "İzin verilen ana bilgisayarlar",
-      "allowedHostsPlaceholder": "example.com\ndocs.example.com",
-      "allowedHostsHint": "Her satıra bir ana bilgisayar. Boş bırakırsanız ajan her yere gidebilir.",
-      "allowedHostsCount": "Gezinme şunlarla sınırlı: {{hosts}}",
-      "submit": "Çalıştır",
-      "starting": "Başlatılıyor…",
-      "started": "Çalıştırma başladı"
+    "pause": {
+      "label": "Ajanları duraklat",
+      "noteLabel": "Ajanlarınız için not (isteğe bağlı)",
+      "notePlaceholder": "Örneğin: Proxy'leri değiştiriyorum. Devam edene kadar bekleyin.",
+      "explain": "Duraklatılmışken ajanlar notlarınızı okumaya ve size soru sormaya devam edebilir.",
+      "confirm": "Ajanları duraklat",
+      "banner": "Ajanlar {{time}} saatinden beri duraklatıldı.",
+      "bannerNote": "Notunuz: {{note}}",
+      "resume": "Devam et",
+      "pausedToast": "Ajanlar duraklatıldı",
+      "resumedToast": "Ajanlar devam ediyor"
     },
-    "target": {
-      "desktop": "Bu bilgisayar",
-      "fleet": "Kiralanmış makine"
+    "setup": {
+      "signedOutTitle": "Ajanınızla çalışmak için giriş yapın",
+      "signedOutBody": "Ajanınız Donut'a Donut hesabınız üzerinden ulaşır. Bağlamak için giriş yapın.",
+      "signedOutAction": "Hesabı aç",
+      "planTitle": "Uzaktan kontrol planınıza dahil değil",
+      "planBody": "Kendi ajanınızı bağlamak için uzaktan kontrol içeren bir plan gerekir.",
+      "planAction": "Hesabı aç",
+      "remoteOffTitle": "Uzaktan kontrol kapalı",
+      "remoteOffBody": "Ajanınız Donut'a uzaktan kontrol üzerinden bağlanır. Uzaktan kontrolü açın, ardından Donut'u ajanınıza ekleyin.",
+      "remoteOffAction": "Uzaktan kontrolü aç",
+      "remoteOffInline": "Uzaktan kontrol kapalı olduğu için ajanlarınız şu anda Donut'a ulaşamıyor.",
+      "waitingTitle": "Ajanınız bekleniyor",
+      "waitingBody": "Donut'u ajanınıza ekleyin, ardından aşağıdaki talimatları ajana yapıştırın; böylece çalışırken sizinle iletişim kurar.",
+      "starterLabel": "Ajanınız için talimatlar",
+      "starter": "Donut araçlarıyla Donut Browser profillerimi kontrol edebilirsin. Başlarken ve adımlar arasında get_human_updates çağır; notlarımı oku ve hangi profilleri kullandığımı gör. Ne yapacağından emin değilsen bana ask_human ile sor. Bir sayfa bir insana ihtiyaç duyarsa, örneğin giriş, doğrulama veya ödeme için, request_human_help çağır ve profili sana geri verene kadar bekle. Uzun işler sırasında report_progress çağır ki ne kadar ilerlediğini göreyim.",
+      "starterCopied": "Talimatlar kopyalandı"
     },
-    "platform": {
-      "windows": "Windows",
-      "macos": "macOS",
-      "linux": "Linux"
+    "request": {
+      "needsYou": "Size ihtiyaç var",
+      "waitingCount": "Sizi bekleyen istekler: {{count}}",
+      "questionTitle": "{{agent}} soruyor",
+      "helpTitle": "{{agent}} bir insana ihtiyaç duyuyor",
+      "choices": "Önerilen yanıtlar",
+      "answerLabel": "Yanıtınız",
+      "answerPlaceholder": "Bir yanıt yazın",
+      "send": "Gönder"
     },
-    "effort": {
-      "standard": "Standart",
-      "high": "Yüksek"
+    "actions": {
+      "dismiss": "Kapat",
+      "showWindow": "Pencereyi göster",
+      "handBack": "Geri ver",
+      "handBackPlaceholder": "Örneğin: Giriş yaptım, devam edebilirsin.",
+      "takeOver": "Devral",
+      "takeOverPlaceholder": "Örneğin: Bu profili düzeltiyorum, şimdilik atla.",
+      "note": "Not gönder",
+      "noteOptional": "Ajan için not (isteğe bağlı)"
     },
-    "live": {
-      "newRun": "Yeni çalıştırma",
-      "notFound": "Bu çalıştırma okunamadı.",
-      "onProfile": "{{profile}} · {{target}}",
-      "cancel": "Çalıştırmayı iptal et",
-      "cancelling": "İptal ediliyor…",
-      "cancelled": "Çalıştırma iptal edildi",
-      "elapsed": "Geçen süre",
-      "steps": "Adımlar",
-      "tokens": "Token",
-      "cost": "Maliyet",
-      "costValue": "${{amount}}",
-      "endedBecause": "Bitti: {{reason}}",
-      "streamOffline": "Şu anda adım gelmiyor. Yeniden bağlanılıyor.",
-      "waiting": "İlk adım bekleniyor.",
-      "noSteps": "Bu çalıştırmada adım kaydedilmedi.",
-      "result": "Sonuç"
+    "notify": {
+      "questionTitle": "{{agent}} bir soru sordu",
+      "helpTitle": "{{agent}} bir profilde size ihtiyaç duyuyor",
+      "open": "Aç"
     },
-    "step": {
-      "thought": "Düşünce",
-      "tool": "Eylem",
-      "error": "Hata",
-      "finish": "Tamamlandı",
-      "unknown": "Adım"
+    "sessions": {
+      "title": "Ajanlar",
+      "all": "Tüm ajanlar",
+      "fallback": "MCP istemcisi",
+      "active": "Etkin",
+      "idle": "Boşta",
+      "ended": "Sona erdi",
+      "counts": "Çağrılar: {{calls}} · Hatalar: {{errors}}",
+      "progress": "{{done}} / {{total}}",
+      "showEarlier": "Öncekileri göster ({{count}})",
+      "hideEarlier": "Öncekileri gizle",
+      "website": "Donut web sitesi"
     },
-    "status": {
-      "queued": "Sırada",
-      "running": "Çalışıyor",
-      "succeeded": "Başarılı",
-      "failed": "Başarısız",
-      "cancelled": "İptal edildi",
-      "unknown": "Bilinmiyor"
+    "thread": {
+      "label": "Konuşma",
+      "empty": "Ajanlarınızdan gelen sorular, notlar ve ilerleme burada görünür.",
+      "waiting": "Sizi bekliyor",
+      "answered": "Yanıtınız: {{answer}}",
+      "handedBack": "Profili geri verdiniz.",
+      "handedBackNote": "Profili geri verdiniz: {{note}}",
+      "dismissed": "Kapatıldı",
+      "noteToAll": "Tüm ajanlara",
+      "noteTo": "Alıcı: {{agent}}",
+      "notePending": "Ajanın bir sonraki adımı bekleniyor",
+      "noteSeenAt": "{{time}} saatinde görüldü",
+      "noteSeen": "Görüldü",
+      "joined": "{{agent}} katıldı",
+      "left": "{{agent}} ayrıldı"
     },
-    "closeReason": {
-      "completed": "hedefe ulaşıldı",
-      "budget": "bir sınıra ulaşıldı",
-      "cancelled": "siz iptal ettiniz",
-      "navigationBlocked": "izin verilen ana bilgisayarların dışına çıkmaya çalıştı",
-      "targetOffline": "tarayıcıya ulaşılamadı",
-      "targetError": "tarayıcı hata verdi",
-      "modelError": "model hata verdi",
-      "modelRefused": "model hedefi reddetti",
-      "modelStopped": "model erken durdu",
-      "contextExceeded": "çalıştırma modelin bağlamını aştı",
-      "orphaned": "çalıştırma tarayıcısını kaybetti",
-      "internalError": "bizim tarafımızda bir şey bozuldu"
+    "composer": {
+      "label": "Ajanınız için not",
+      "placeholderAll": "Tüm ajanlara bir not yazın",
+      "placeholderOne": "{{agent}} için bir not yazın",
+      "profile": "Notun ilgili olduğu profil",
+      "noProfile": "Profil yok",
+      "profileSearch": "Profil ara",
+      "profileNotFound": "Profil bulunamadı.",
+      "hint": "Enter gönderir. Shift+Enter yeni satır ekler.",
+      "send": "Notu gönder"
     },
-    "history": {
-      "columnStarted": "Başlangıç",
-      "columnProfile": "Profil",
-      "columnGoal": "Hedef",
-      "columnTarget": "Çalışma yeri",
-      "columnStatus": "Durum",
-      "empty": "Henüz çalıştırma yok.",
-      "loadMore": "Daha fazla yükle",
-      "backToList": "Geçmişe dön",
-      "unknownProfile": "Bilinmeyen profil"
+    "filters": {
+      "errorsOnly": "Yalnızca hatalar"
+    },
+    "profiles": {
+      "search": "Profil ara",
+      "columns": {
+        "profile": "Profil",
+        "agent": "Ajan",
+        "lastAction": "Son işlem",
+        "result": "Sonuç",
+        "when": "Ne zaman",
+        "state": "Durum"
+      },
+      "state": {
+        "held": "Sizde",
+        "working": "Çalışıyor",
+        "idle": "Boşta",
+        "error": "Hata"
+      },
+      "takeOverSelected": "Seçilenleri devral",
+      "handBackSelected": "Seçilenleri geri ver",
+      "selectRow": "Seç: {{name}}",
+      "empty": "Ajanlarınızın çalıştığı profiller burada görünür.",
+      "noMatches": "Bu filtrelere uyan profil yok."
+    },
+    "result": {
+      "ok": "Tamam",
+      "error": "Hata"
+    },
+    "activity": {
+      "label": "Ajan etkinliği",
+      "agentFilter": "Ajan",
+      "profileSearch": "Profile göre ara",
+      "stats": "Son 5 dakika · Çağrılar: {{calls}} · Hatalar: %{{rate}} · Ortalama: {{average}}",
+      "statsNone": "Son 5 dakikada çağrı yok.",
+      "empty": "Ajanlarınızın araç çağrıları burada görünür.",
+      "noMatches": "Bu filtrelere uyan çağrı yok.",
+      "typed": "Yazılan karakter: {{count}}",
+      "profiles": "Profil sayısı: {{count}}",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} sn"
     },
     "recipes": {
-      "hint": "Yeni bir çalıştırmaya ekleyebileceğiniz kayıtlı hedefler.",
+      "hint": "Bir akışı bir kez kaydedin; ajanınız onu diğer profillerde tekrarlayabilir.",
       "new": "Yeni tarif",
       "recording": {
         "record": "Kaydet",
@@ -3304,8 +3338,6 @@
         "stop": "Kaydı durdur",
         "steps": "{{count}} adım kaydedildi",
         "hint": "Kaydetmek için çalışan bir profil seçin.",
-        "save": "Tarif olarak kaydet",
-        "discard": "At",
         "empty": "Hiçbir şey kaydedilmedi. Tarayıcıda tıklayıp yazın, sonra durdurun."
       },
       "empty": "Henüz kayıtlı tarif yok.",
@@ -3313,6 +3345,7 @@
       "name": "Ad",
       "namePlaceholder": "Gecelik kontrol",
       "steps": "Adımlar",
+      "stepType": "Adım türü",
       "stepsHint": "Her adım ne yapılacağını söyler; bir öğe üzerinde çalışıyorsa ya rolünü ve adını ya da bir CSS seçici belirtir. İkisini birden değil.",
       "addStep": "Adım ekle",
       "moveStepUp": "Bu adımı yukarı taşı",
@@ -3348,7 +3381,8 @@
       "updated": "Tarif güncellendi",
       "deleted": "Tarif silindi",
       "deleteTitle": "{{name}} silinsin mi?",
-      "deleteDescription": "Tarif tüm cihazlardan silinir. Başlamış çalıştırmalar hedeflerini korur."
+      "deleteDescription": "Tarif tüm cihazlardan silinir.",
+      "needsAutomation": "Tarifler tarayıcıları açıp yönettiği için Pro veya daha üst bir plan gerektirir. Ajanınız profilleri, proxy'leri ve grupları yönetmeye devam edebilir."
     }
   },
   "proxyDistribution": {
@@ -3503,9 +3537,9 @@
         "action": "Entegrasyonları aç"
       },
       "agent": {
-        "label": "Ajan",
-        "title": "Tıklamaları bir ajana bırakın",
-        "body": "Bir görevi tarif edin; ajan profili adım adım yönetir, yaptıklarını kaydeder ve bunu bir tarif olarak yeniden oynatabilir.",
+        "label": "Kendi ajanınız",
+        "title": "Yapay zekâ ajanınızla birlikte çalışın",
+        "body": "Claude Code, Cursor veya başka bir ajanı Donut'a bağlayın. Emin olmadığında size sorar; siz de istediğiniz zaman bir profili devralıp geri verebilirsiniz.",
         "action": "Ajanı aç"
       },
       "team": {

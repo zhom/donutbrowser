@@ -15,25 +15,10 @@ onlyBuiltDependencies:
 # no longer reads that field; settings live here now.
 overrides:
   # Keep the API used by plugins on the Rust crate's minor version.
-  '@tauri-apps/api': '~2.11.1'
-  picomatch@>=4.0.0 <4.0.4: '>=4.0.4'
-  path-to-regexp@>=8.0.0 <8.4.0: '>=8.4.0'
-  postcss@<8.5.18: '>=8.5.18'
-  fast-xml-parser@<5.7.0: '>=5.7.2'
-  fast-uri@<3.1.5: '>=3.1.5 <4'
-  fast-xml-builder@<1.2.0: '>=1.2.0'
-  qs@<6.16.0: '>=6.16.0'
-  js-cookie@<3.0.7: '>=3.0.7'
-  nanoid@<3.3.17: '>=3.3.17 <4'
-  fast-uri@>=4.0.0 <4.1.1: '>=4.1.1 <5'
-  multer@>=2.0.0 <2.3.0: '>=2.3.0'
-  form-data@>=4.0.0 <4.0.6: '>=4.0.6'
-  js-yaml@<3.15.2: '>=3.15.2 <4'
-  js-yaml@>=4.0.0 <4.3.2: '>=4.3.2 <5'
-  browserslist@<4.28.7: '>=4.28.7'
-  '@babel/core@<7.29.6': '>=7.29.6 <8'
+  '@tauri-apps/api': '~2.12.1'
+  # Fixes the brace-expansion advisories for every major still in the tree;
+  # patches/brace-expansion@5.0.12.patch keeps the older CommonJS imports working.
   brace-expansion@<5.0.12: 5.0.12
-  sharp@<0.35.0: '>=0.35.0 <0.36'
 
 allowBuilds:
   '@nestjs/core': true

@@ -159,7 +159,7 @@ impl ProfileManager {
     release_type: &str,
     proxy_id: Option<String>,
     vpn_id: Option<String>,
-    wayfern_config: Option<WayfernConfig>,
+    mut wayfern_config: Option<WayfernConfig>,
     group_id: Option<String>,
     ephemeral: bool,
     dns_blocklist: Option<String>,
@@ -185,6 +185,10 @@ impl ProfileManager {
 
     let launch_hook = Self::normalize_launch_hook(launch_hook)?;
 
+    if let Some(config) = wayfern_config.as_mut() {
+      config.launch_args = config.checked_launch_args().await?;
+    }
+
     // Sync cloud proxy credentials if the profile uses a cloud or cloud-derived proxy
     if let Some(ref pid) = proxy_id {
       if PROXY_MANAGER.is_cloud_or_derived(pid) || pid == crate::proxy_manager::CLOUD_PROXY_ID {
@@ -209,7 +213,11 @@ impl ProfileManager {
       .iter()
       .any(|p| p.name.to_lowercase() == name.to_lowercase())
     {
-      return Err(format!("Profile with name '{name}' already exists").into());
+      return Err(
+        serde_json::json!({ "code": "PROFILE_NAME_EXISTS", "params": { "name": name } })
+          .to_string()
+          .into(),
+      );
     }
 
     // Generate a new UUID for this profile
@@ -599,7 +607,8 @@ impl ProfileManager {
     profile_id: &str,
     new_name: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    if new_name.trim().is_empty() {
+    let new_name = new_name.trim();
+    if new_name.is_empty() {
       return Err(
         serde_json::json!({ "code": "NAME_CANNOT_BE_EMPTY" })
           .to_string()
@@ -607,22 +616,28 @@ impl ProfileManager {
       );
     }
 
-    // Check if new name already exists (case insensitive)
     let existing_profiles = self.list_profiles()?;
-    if existing_profiles
-      .iter()
-      .any(|p| p.name.to_lowercase() == new_name.to_lowercase())
-    {
-      return Err(format!("Profile with name '{new_name}' already exists").into());
-    }
-
-    // Find the profile by ID
     let profile_uuid =
       uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    // Case-insensitive, but a profile never collides with itself.
+    if existing_profiles
+      .iter()
+      .any(|p| p.id != profile_uuid && p.name.to_lowercase() == new_name.to_lowercase())
+    {
+      return Err(
+        serde_json::json!({ "code": "PROFILE_NAME_EXISTS", "params": { "name": new_name } })
+          .to_string()
+          .into(),
+      );
+    }
+
     let mut profile = existing_profiles
       .into_iter()
       .find(|p| p.id == profile_uuid)
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+    if profile.name == new_name {
+      return Ok(profile);
+    }
 
     // Update profile name (no need to move directories since we use UUID)
     profile.name = new_name.to_string();
@@ -1516,25 +1531,26 @@ impl ProfileManager {
     &self,
     app_handle: tauri::AppHandle,
     profile_id: &str,
-    config: WayfernConfig,
+    mut config: WayfernConfig,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    config.launch_args = config.checked_launch_args().await?;
     // Find the profile by ID
     let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
       |_| -> Box<dyn std::error::Error + Send + Sync> {
-        format!("Invalid profile ID: {profile_id}").into()
+        crate::backend_error("INVALID_PROFILE_ID").into()
       },
     )?;
     let profiles =
       self
         .list_profiles()
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          format!("Failed to list profiles: {e}").into()
+          crate::backend_error_with_detail("INTERNAL_ERROR", e).into()
         })?;
     let mut profile = profiles
       .into_iter()
       .find(|p| p.id == profile_uuid)
       .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
-        format!("Profile with ID '{profile_id}' not found").into()
+        crate::backend_error("PROFILE_NOT_FOUND").into()
       })?;
 
     // Check if the browser is currently running using the comprehensive status check
@@ -1543,21 +1559,45 @@ impl ProfileManager {
       .await?;
 
     if is_running {
-      return Err(
-        "Cannot update Wayfern configuration while browser is running. Please stop the browser first.".into(),
-      );
+      return Err(crate::backend_error("PROFILE_RUNNING").into());
     }
 
     let config = merge_submitted_wayfern_config(profile.wayfern_config.as_ref(), config);
 
+    let stored = profile.wayfern_config.as_ref();
+    let fingerprint_changed = config.fingerprint.is_some()
+      && config.fingerprint.as_ref() != stored.and_then(|c| c.fingerprint.as_ref());
+    let overrides_changed = config.identity_overrides.is_some()
+      && config.identity_overrides.as_ref() != stored.and_then(|c| c.identity_overrides.as_ref());
+    if (fingerprint_changed || overrides_changed)
+      && !CLOUD_AUTH.can_use_cross_os_fingerprints().await
+    {
+      return Err(crate::backend_error("FINGERPRINT_REQUIRES_PRO").into());
+    }
+    if !CLOUD_AUTH
+      .is_fingerprint_os_allowed(config.os.as_deref())
+      .await
+    {
+      return Err(crate::backend_error("FINGERPRINT_REQUIRES_PRO").into());
+    }
+
     // Update the Wayfern configuration
+    if profile
+      .wayfern_config
+      .as_ref()
+      .map(serde_json::to_value)
+      .transpose()?
+      != Some(serde_json::to_value(&config)?)
+    {
+      profile.updated_at = Some(crate::proxy_manager::now_secs());
+    }
     profile.wayfern_config = Some(config);
 
     // Save the updated profile
     self
       .save_profile(&profile)
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-        format!("Failed to save profile: {e}").into()
+        crate::backend_error_with_detail("INTERNAL_ERROR", e).into()
       })?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
@@ -2554,26 +2594,11 @@ pub async fn update_wayfern_config(
   profile_id: String,
   config: WayfernConfig,
 ) -> Result<(), String> {
-  if (config.fingerprint.is_some() || config.identity_overrides.is_some())
-    && !crate::cloud_auth::CLOUD_AUTH
-      .can_use_cross_os_fingerprints()
-      .await
-  {
-    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
-  }
-
-  if !crate::cloud_auth::CLOUD_AUTH
-    .is_fingerprint_os_allowed(config.os.as_deref())
-    .await
-  {
-    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
-  }
-
   let profile_manager = ProfileManager::instance();
   profile_manager
     .update_wayfern_config(app_handle, &profile_id, config)
     .await
-    .map_err(|e| format!("Failed to update Wayfern config: {e}"))
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to update Wayfern config"))
 }
 
 #[tauri::command]

@@ -1182,7 +1182,6 @@
     "serverError": "Lỗi máy chủ. Vui lòng thử lại sau.",
     "unknownError": "Đã xảy ra lỗi không xác định. Vui lòng thử lại.",
     "noProfilesForUrl": "Không có profile nào. Vui lòng tạo profile trước khi mở URL.",
-    "updateWayfernConfigFailed": "Cập nhật cấu hình wayfern thất bại: {{error}}",
     "createProfileFailed": "Tạo profile thất bại: {{error}}",
     "launchBrowserFailed": "Khởi chạy trình duyệt thất bại: {{error}}",
     "cannotDeleteRunningProfile": "Không thể xóa profile khi trình duyệt đang chạy. Vui lòng dừng trình duyệt trước.",
@@ -1331,7 +1330,10 @@
     "regenerateConfirmDescription": "Hồ sơ vẫn giữ cookie và phiên đăng nhập, nhưng sẽ hiện ra như một thiết bị khác. Các trang đã biết hồ sơ này có thể yêu cầu bạn đăng nhập lại, bắt bạn xác minh, hoặc khóa tài khoản. Chỉ tạo lại hồ sơ mà bạn chưa dùng, hoặc hồ sơ bạn chấp nhận mất. Không thể hoàn tác thao tác này.",
     "canvasNoiseSeedPlaceholder": "Nhập chuỗi hạt giống cho vân tay canvas",
     "addFontsPlaceholder": "Thêm phông chữ...",
-    "enterAsJson": "Nhập {{title}} dưới dạng JSON"
+    "enterAsJson": "Nhập {{title}} dưới dạng JSON",
+    "launchArgs": "Tham số khởi chạy",
+    "launchArgsDescription": "Nhập một tham số trên mỗi dòng, dạng --name hoặc --name=value. Chỉ chấp nhận các tham số được hỗ trợ, ví dụ --disable-gpu, --mute-audio hoặc --disable-features=Name. Donut quản lý các tham số hồ sơ, proxy, cửa sổ và gỡ lỗi.",
+    "launchArgsSkipped": "Các tham số khởi chạy tùy chỉnh không được dùng cho {{profile}}. {{reason}}"
   },
   "warnings": {
     "windowResizeTitle": "Kích thước cửa sổ tùy chỉnh",
@@ -2298,13 +2300,13 @@
     "profileImportTooNew": "Tệp này được tạo bởi phiên bản Donut Browser mới hơn. Hãy cập nhật ứng dụng rồi thử lại.",
     "profileImportUnsafeArchive": "Tệp này cố ghi ra ngoài thư mục hồ sơ nên đã bị từ chối.",
     "recordingAlreadyRunning": "Đã có một bản ghi đang chạy. Hãy dừng nó trước khi bắt đầu bản mới.",
-    "profileNotRunning": "Hãy khởi động trình duyệt của hồ sơ này trước khi ghi.",
+    "profileNotRunning": "Trình duyệt của hồ sơ này chưa chạy. Hãy khởi động nó trước.",
     "wayfern152Required": "Ghi lại cần Wayfern 152 trở lên. Hãy cập nhật trình duyệt cho hồ sơ này.",
     "recordingFailed": "Không thể bắt đầu ghi. {{detail}}",
     "mcpRemoteRequiresSignIn": "Đăng nhập tài khoản Donut trước khi bật điều khiển từ xa.",
     "mcpRemoteUnauthorized": "Donut cloud đã từ chối thông tin xác thực của thiết bị này. Hãy đăng xuất rồi đăng nhập lại.",
     "mcpRemoteSlotTaken": "Một phiên bản Donut khác trên tài khoản này đã kết nối. Mỗi lần chỉ điều khiển từ xa được một máy.",
-    "mcpRemoteNotEntitled": "MCP từ xa yêu cầu gói Pro trở lên.",
+    "mcpRemoteNotEntitled": "Gói của bạn không bao gồm MCP từ xa.",
     "mcpRemoteUnreachable": "Hiện không kết nối được tới Donut cloud. Đang tự động kết nối lại.",
     "mcpRemoteKeyMissing": "Thiết bị này chưa có thông tin xác thực MCP từ xa. Hãy tạo một thông tin trước, rồi thêm lại ứng dụng khách.",
     "mcpRemoteKeyLimit": "Tài khoản này đã có số thông tin xác thực MCP tối đa có thể giữ. Hãy thu hồi một cái trên trang tài khoản rồi thử lại.",
@@ -2322,21 +2324,18 @@
     "remoteSessionNotDrivable": "Phiên từ xa này chưa sẵn sàng để điều khiển. Hãy đợi đến khi phiên hoạt động.",
     "remotePlatformUnsupported": "Phiên từ xa chỉ chạy trên máy chủ macOS, Windows hoặc Linux. Nền tảng của hồ sơ này là {{platform}}.",
     "remoteProfileNotSynced": "Hồ sơ này chưa tải lên xong dịch vụ đồng bộ đám mây. Hãy đợi lần đồng bộ đầu tiên hoàn tất rồi thử lại.",
-    "mcpLocalRemoved": "Máy chủ MCP cục bộ của Donut đã bị gỡ bỏ. MCP giờ chạy từ xa và yêu cầu gói Pro trở lên.",
+    "mcpLocalRemoved": "Máy chủ MCP cục bộ của Donut đã bị gỡ bỏ. MCP giờ chạy từ xa và cần gói trả phí.",
     "trashEntryNotFound": "Hồ sơ này không còn trong thùng rác.",
     "trashRestoreConflict": "Đã tồn tại một hồ sơ có cùng ID nên không thể khôi phục hồ sơ này.",
-    "agentNotEntitled": "Gói của bạn không bao gồm tác nhân.",
-    "agentNotConfigured": "Tác nhân chưa khả dụng trên bản triển khai này.",
-    "agentTargetOffline": "Không kết nối được trình duyệt mà lượt chạy cần.",
-    "agentBudgetExceeded": "Lượt chạy dừng vì đã chạm một giới hạn.",
-    "agentRunLimitReached": "Bạn đã chạy tối đa số lượt mà gói cho phép.",
-    "agentRunNotFound": "Lượt chạy đó không còn nữa.",
-    "agentRunNotCancellable": "Lượt chạy đó đã kết thúc.",
-    "agentGoalInvalid": "Mục tiêu trống hoặc quá dài.",
-    "agentBudgetInvalid": "Một trong các giới hạn không phải số hợp lệ.",
-    "agentTokenProfileMismatch": "Lượt chạy này được bắt đầu cho hồ sơ khác. Hãy đăng nhập lại rồi thử lại.",
+    "recipesNotEntitled": "Công thức yêu cầu gói Pro trở lên.",
     "agentRecipeInvalid": "Công thức cần có tên và ít nhất một bước.",
     "agentRecipeNotFound": "Công thức đó không còn nữa.",
+    "agentRequestNotFound": "Yêu cầu đó không còn nữa.",
+    "agentRequestClosed": "Yêu cầu đó đã được trả lời hoặc bỏ qua.",
+    "agentAnswerEmpty": "Hãy viết câu trả lời trước.",
+    "agentNoteEmpty": "Hãy viết ghi chú trước.",
+    "agentTextTooLong": "Văn bản quá dài. Giới hạn là {{max}} ký tự.",
+    "agentSessionNotFound": "Tác nhân đó không còn kết nối.",
     "profilePairedTwice": "Hồ sơ này xuất hiện nhiều lần trong cùng một lần phân bổ",
     "extensionUrlInvalid": "Đây không phải liên kết Chrome Web Store, ID tiện ích hay liên kết .crx hoặc .zip trực tiếp.",
     "extensionDownloadFailed": "Không tải được tiện ích. Hãy kiểm tra liên kết và kết nối của bạn.",
@@ -2361,7 +2360,13 @@
     "extensionPathInvalid": "Đường dẫn đó không được phép: nó chứa '..'.",
     "systemProxyUnreachable": "Donut không thể kết nối qua proxy hệ thống {{proxy}}. Hãy sửa hoặc tắt proxy trong cài đặt mạng của hệ thống rồi thử lại.",
     "profileRouteRequired": "Hồ sơ này không có proxy hoặc VPN. Việc khởi chạy khi không có chúng đang bị chặn trong Cài đặt, mục Quyền riêng tư.",
-    "profileRouteUnavailable": "Proxy hoặc VPN của hồ sơ này không khả dụng, nên việc khởi chạy đã dừng để giữ địa chỉ IP của bạn được ẩn. Hãy gán cho hồ sơ một proxy hoặc VPN hoạt động được."
+    "profileRouteUnavailable": "Proxy hoặc VPN của hồ sơ này không khả dụng, nên việc khởi chạy đã dừng để giữ địa chỉ IP của bạn được ẩn. Hãy gán cho hồ sơ một proxy hoặc VPN hoạt động được.",
+    "wayfernLaunchArgsRequiresPro": "Tham số khởi chạy tùy chỉnh yêu cầu gói Pro trở lên. Xóa các tham số hoặc nâng cấp gói của bạn.",
+    "wayfernLaunchArgInvalid": "Dùng --name hoặc --name=value cho mỗi tham số. Không cho phép ký tự điều khiển.",
+    "wayfernLaunchArgReserved": "Donut quản lý {{argument}}. Hãy xóa tham số này.",
+    "wayfernLaunchArgNotAllowed": "{{argument}} không phải là tham số khởi chạy được hỗ trợ. Hãy xóa nó.",
+    "wayfernLaunchArgValueInvalid": "Giá trị của {{argument}} không được hỗ trợ.",
+    "wayfernLaunchArgsLimit": "Dùng tối đa {{count}} tham số khởi chạy, mỗi tham số tối đa {{length}} ký tự."
   },
   "rail": {
     "profiles": "Profile",
@@ -2387,7 +2392,8 @@
     "account": "Tài khoản",
     "cookieBot": "Cookie Bot",
     "cookieBotRunning": "Cookie Bot — đang chạy",
-    "agent": "Tác nhân"
+    "agent": "Tác nhân",
+    "agentWaiting": "Tác nhân, yêu cầu đang chờ: {{count}}"
   },
   "pageTitle": {
     "proxies": "Mạng",
@@ -2600,8 +2606,7 @@
     "titleConfigure": "Cấu hình cài đặt vân tay - {{name}} ({{browser}})",
     "invalidFingerprint": "Cấu hình vân tay không hợp lệ",
     "invalidFingerprintDescription": "Cấu hình vân tay chứa JSON không hợp lệ. Vui lòng kiểm tra cài đặt nâng cao.",
-    "saveFailed": "Lưu cấu hình thất bại",
-    "unknownError": "Đã xảy ra lỗi không xác định"
+    "saveFailed": "Lưu cấu hình thất bại"
   },
   "cookieCopy": {
     "noOtherTargets": "Chưa chọn profile Wayfern nào khác"
@@ -3176,126 +3181,155 @@
     "loadFailed": "Không thể tải thùng rác: {{error}}"
   },
   "agent": {
-    "title": "Tác nhân",
-    "description": "Đặt mục tiêu cho tác nhân và nó sẽ thực hiện trên một hồ sơ của bạn.",
+    "description": "Xem tác nhân AI của bạn làm gì trong Donut, trả lời câu hỏi của nó và can thiệp khi một trang cần đến bạn.",
     "tabs": {
-      "run": "Lượt chạy mới",
-      "history": "Lịch sử",
+      "conversation": "Hội thoại",
+      "profiles": "Hồ sơ",
+      "activity": "Hoạt động",
       "recipes": "Công thức"
     },
-    "unavailable": {
-      "signInTitle": "Đăng nhập để dùng tác nhân",
-      "signInHint": "Lượt chạy của tác nhân đi qua đám mây Donut. Đăng nhập ở trang Tài khoản để bắt đầu.",
-      "planTitle": "Tác nhân không nằm trong gói của bạn",
-      "planHint": "Nâng cấp lên gói có tự động hoá trình duyệt để giao mục tiêu cho tác nhân.",
-      "notConfiguredTitle": "Tác nhân chưa sẵn sàng",
-      "notConfiguredHint": "Bản triển khai Donut này chưa cấu hình tác nhân. Tài khoản của bạn không có vấn đề gì."
+    "header": {
+      "quota": "Còn {{left}}/{{limit}} lượt gọi trong giờ này",
+      "connect": "Kết nối tác nhân"
     },
-    "form": {
-      "profile": "Hồ sơ",
-      "profilePlaceholder": "Chọn hồ sơ",
-      "noProfiles": "Hãy tạo hồ sơ trước, tác nhân cần hồ sơ để duyệt web.",
-      "target": "Chạy trên",
-      "targetDesktopHint": "Trình duyệt mở trên máy này và bạn có thể theo dõi.",
-      "targetFleetHint": "Trình duyệt mở trên máy chủ thuê, máy này vẫn rảnh.",
-      "platform": "Hệ điều hành máy chủ",
-      "platformPlaceholder": "Chọn hệ điều hành",
-      "platformRequired": "Hệ điều hành của hồ sơ này chưa có máy chủ thuê. Hãy chọn một hệ điều hành khả dụng.",
-      "recipeInsert": "Chèn công thức",
-      "goal": "Mục tiêu",
-      "goalPlaceholder": "Mô tả bằng lời của bạn điều tác nhân cần đạt được.",
-      "goalEmpty": "Hãy viết mục tiêu để bắt đầu.",
-      "goalTooLong": "Mục tiêu này quá dài.",
-      "goalCount": "{{chars}} / {{max}}",
-      "limits": "Giới hạn và phạm vi",
-      "limitsHint": "Để trống một giới hạn để dùng mức trần của gói.",
-      "maxSteps": "Số bước tối đa",
-      "maxMinutes": "Số phút tối đa",
-      "maxTokens": "Số token tối đa",
-      "budgetUnset": "Không giới hạn",
-      "budgetInvalid": "Nhập một số nguyên lớn hơn không.",
-      "effort": "Mức độ suy luận",
-      "allowedHosts": "Máy chủ được phép",
-      "allowedHostsPlaceholder": "example.com\ndocs.example.com",
-      "allowedHostsHint": "Mỗi dòng một máy chủ. Để trống thì tác nhân được duyệt mọi nơi.",
-      "allowedHostsCount": "Chỉ được duyệt: {{hosts}}",
-      "submit": "Bắt đầu chạy",
-      "starting": "Đang bắt đầu…",
-      "started": "Đã bắt đầu chạy"
+    "pause": {
+      "label": "Tạm dừng tác nhân",
+      "noteLabel": "Ghi chú cho tác nhân (không bắt buộc)",
+      "notePlaceholder": "Ví dụ: Tôi đang đổi proxy. Hãy chờ đến khi tôi tiếp tục.",
+      "explain": "Khi tạm dừng, tác nhân vẫn có thể đọc ghi chú và đặt câu hỏi cho bạn.",
+      "confirm": "Tạm dừng tác nhân",
+      "banner": "Tác nhân đã tạm dừng từ {{time}}.",
+      "bannerNote": "Ghi chú của bạn: {{note}}",
+      "resume": "Tiếp tục",
+      "pausedToast": "Đã tạm dừng tác nhân",
+      "resumedToast": "Tác nhân đã tiếp tục"
     },
-    "target": {
-      "desktop": "Máy này",
-      "fleet": "Máy chủ thuê"
+    "setup": {
+      "signedOutTitle": "Đăng nhập để làm việc với tác nhân của bạn",
+      "signedOutBody": "Tác nhân kết nối với Donut qua tài khoản Donut của bạn. Hãy đăng nhập để kết nối.",
+      "signedOutAction": "Mở Tài khoản",
+      "planTitle": "Gói của bạn không có điều khiển từ xa",
+      "planBody": "Để kết nối tác nhân của riêng bạn, bạn cần gói có điều khiển từ xa.",
+      "planAction": "Mở Tài khoản",
+      "remoteOffTitle": "Điều khiển từ xa đang tắt",
+      "remoteOffBody": "Tác nhân kết nối với Donut qua điều khiển từ xa. Hãy bật nó, rồi thêm Donut vào tác nhân của bạn.",
+      "remoteOffAction": "Bật điều khiển từ xa",
+      "remoteOffInline": "Điều khiển từ xa đang tắt nên lúc này tác nhân không thể kết nối với Donut.",
+      "waitingTitle": "Đang chờ tác nhân của bạn",
+      "waitingBody": "Thêm Donut vào tác nhân, rồi dán hướng dẫn bên dưới vào đó để nó trao đổi với bạn trong khi làm việc.",
+      "starterLabel": "Hướng dẫn cho tác nhân",
+      "starter": "Bạn có thể điều khiển các hồ sơ Donut Browser của tôi bằng các công cụ Donut. Khi bắt đầu và giữa các bước, hãy gọi get_human_updates để đọc ghi chú của tôi và xem tôi đang dùng hồ sơ nào. Nếu không chắc phải làm gì, hãy hỏi tôi bằng ask_human. Nếu một trang cần đến người thật, chẳng hạn để đăng nhập, xác minh hoặc thanh toán, hãy gọi request_human_help và chờ đến khi tôi trả lại hồ sơ. Trong các công việc dài, hãy gọi report_progress để tôi biết bạn đã làm đến đâu.",
+      "starterCopied": "Đã sao chép hướng dẫn"
     },
-    "platform": {
-      "windows": "Windows",
-      "macos": "macOS",
-      "linux": "Linux"
+    "request": {
+      "needsYou": "Cần bạn",
+      "waitingCount": "Yêu cầu đang chờ bạn: {{count}}",
+      "questionTitle": "{{agent}} hỏi",
+      "helpTitle": "{{agent}} cần người thật",
+      "choices": "Câu trả lời gợi ý",
+      "answerLabel": "Câu trả lời của bạn",
+      "answerPlaceholder": "Nhập câu trả lời",
+      "send": "Gửi"
     },
-    "effort": {
-      "standard": "Tiêu chuẩn",
-      "high": "Cao"
+    "actions": {
+      "dismiss": "Bỏ qua",
+      "showWindow": "Hiện cửa sổ",
+      "handBack": "Trả lại",
+      "handBackPlaceholder": "Ví dụ: Tôi đã đăng nhập, bạn có thể tiếp tục.",
+      "takeOver": "Tiếp quản",
+      "takeOverPlaceholder": "Ví dụ: Tôi đang sửa hồ sơ này, tạm thời bỏ qua nó.",
+      "note": "Gửi ghi chú",
+      "noteOptional": "Ghi chú cho tác nhân (không bắt buộc)"
     },
-    "live": {
-      "newRun": "Lượt chạy mới",
-      "notFound": "Không đọc được lượt chạy này.",
-      "onProfile": "trên {{profile}} · {{target}}",
-      "cancel": "Huỷ lượt chạy",
-      "cancelling": "Đang huỷ…",
-      "cancelled": "Đã huỷ lượt chạy",
-      "elapsed": "Đã trôi qua",
-      "steps": "Số bước",
-      "tokens": "Token",
-      "cost": "Chi phí",
-      "costValue": "${{amount}}",
-      "endedBecause": "Đã kết thúc: {{reason}}",
-      "streamOffline": "Hiện chưa nhận được bước nào. Đang kết nối lại.",
-      "waiting": "Đang chờ bước đầu tiên.",
-      "noSteps": "Lượt chạy này không ghi bước nào.",
-      "result": "Kết quả"
+    "notify": {
+      "questionTitle": "{{agent}} có câu hỏi",
+      "helpTitle": "{{agent}} cần bạn trong một hồ sơ",
+      "open": "Mở"
     },
-    "step": {
-      "thought": "Suy nghĩ",
-      "tool": "Hành động",
-      "error": "Lỗi",
-      "finish": "Hoàn tất",
-      "unknown": "Bước"
+    "sessions": {
+      "title": "Tác nhân",
+      "all": "Tất cả tác nhân",
+      "fallback": "Ứng dụng MCP",
+      "active": "Đang hoạt động",
+      "idle": "Đang rảnh",
+      "ended": "Đã kết thúc",
+      "counts": "Lượt gọi: {{calls}} · Lỗi: {{errors}}",
+      "progress": "{{done}}/{{total}}",
+      "showEarlier": "Hiện mục cũ hơn ({{count}})",
+      "hideEarlier": "Ẩn mục cũ hơn",
+      "website": "Trang web Donut"
     },
-    "status": {
-      "queued": "Đang chờ",
-      "running": "Đang chạy",
-      "succeeded": "Thành công",
-      "failed": "Thất bại",
-      "cancelled": "Đã huỷ",
-      "unknown": "Không rõ"
+    "thread": {
+      "label": "Hội thoại",
+      "empty": "Câu hỏi, ghi chú và tiến độ từ tác nhân sẽ hiện ở đây.",
+      "waiting": "Đang chờ bạn",
+      "answered": "Bạn đã trả lời: {{answer}}",
+      "handedBack": "Bạn đã trả lại hồ sơ.",
+      "handedBackNote": "Bạn đã trả lại hồ sơ: {{note}}",
+      "dismissed": "Đã bỏ qua",
+      "noteToAll": "Gửi tất cả tác nhân",
+      "noteTo": "Gửi {{agent}}",
+      "notePending": "Đang chờ bước tiếp theo của tác nhân",
+      "noteSeenAt": "Đã xem lúc {{time}}",
+      "noteSeen": "Đã xem",
+      "joined": "{{agent}} đã tham gia",
+      "left": "{{agent}} đã rời đi"
     },
-    "closeReason": {
-      "completed": "đã đạt mục tiêu",
-      "budget": "đã chạm giới hạn",
-      "cancelled": "bạn đã huỷ",
-      "navigationBlocked": "đã cố rời khỏi các máy chủ được phép",
-      "targetOffline": "không kết nối được trình duyệt",
-      "targetError": "trình duyệt gặp lỗi",
-      "modelError": "mô hình gặp lỗi",
-      "modelRefused": "mô hình từ chối mục tiêu",
-      "modelStopped": "mô hình dừng sớm",
-      "contextExceeded": "lượt chạy vượt quá ngữ cảnh của mô hình",
-      "orphaned": "lượt chạy mất trình duyệt",
-      "internalError": "có lỗi ở phía chúng tôi"
+    "composer": {
+      "label": "Ghi chú cho tác nhân",
+      "placeholderAll": "Viết ghi chú cho tất cả tác nhân",
+      "placeholderOne": "Viết ghi chú cho {{agent}}",
+      "profile": "Hồ sơ mà ghi chú nói đến",
+      "noProfile": "Không có hồ sơ",
+      "profileSearch": "Tìm hồ sơ",
+      "profileNotFound": "Không tìm thấy hồ sơ.",
+      "hint": "Enter để gửi. Shift+Enter để xuống dòng.",
+      "send": "Gửi ghi chú"
     },
-    "history": {
-      "columnStarted": "Bắt đầu",
-      "columnProfile": "Hồ sơ",
-      "columnGoal": "Mục tiêu",
-      "columnTarget": "Chạy trên",
-      "columnStatus": "Trạng thái",
-      "empty": "Chưa có lượt chạy nào.",
-      "loadMore": "Tải thêm",
-      "backToList": "Quay lại lịch sử",
-      "unknownProfile": "Hồ sơ không rõ"
+    "filters": {
+      "errorsOnly": "Chỉ lỗi"
+    },
+    "profiles": {
+      "search": "Tìm hồ sơ",
+      "columns": {
+        "profile": "Hồ sơ",
+        "agent": "Tác nhân",
+        "lastAction": "Thao tác gần nhất",
+        "result": "Kết quả",
+        "when": "Thời gian",
+        "state": "Trạng thái"
+      },
+      "state": {
+        "held": "Bạn đang giữ",
+        "working": "Đang làm việc",
+        "idle": "Đang rảnh",
+        "error": "Lỗi"
+      },
+      "takeOverSelected": "Tiếp quản mục đã chọn",
+      "handBackSelected": "Trả lại mục đã chọn",
+      "selectRow": "Chọn {{name}}",
+      "empty": "Các hồ sơ mà tác nhân đang làm việc sẽ hiện ở đây.",
+      "noMatches": "Không có hồ sơ nào khớp với bộ lọc."
+    },
+    "result": {
+      "ok": "OK",
+      "error": "Lỗi"
+    },
+    "activity": {
+      "label": "Hoạt động của tác nhân",
+      "agentFilter": "Tác nhân",
+      "profileSearch": "Tìm theo hồ sơ",
+      "stats": "5 phút gần nhất · Lượt gọi: {{calls}} · Lỗi: {{rate}}% · Trung bình: {{average}}",
+      "statsNone": "Không có lượt gọi nào trong 5 phút gần nhất.",
+      "empty": "Các lượt gọi công cụ của tác nhân sẽ hiện ở đây.",
+      "noMatches": "Không có lượt gọi nào khớp với bộ lọc.",
+      "typed": "Số ký tự đã nhập: {{count}}",
+      "profiles": "Số hồ sơ: {{count}}",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} giây"
     },
     "recipes": {
-      "hint": "Các mục tiêu đã lưu, có thể chèn vào lượt chạy mới.",
+      "hint": "Ghi lại một quy trình một lần và tác nhân có thể lặp lại nó trên các hồ sơ khác.",
       "new": "Công thức mới",
       "recording": {
         "record": "Ghi lại",
@@ -3304,8 +3338,6 @@
         "stop": "Dừng ghi",
         "steps": "Đã ghi {{count}} bước",
         "hint": "Chọn một hồ sơ đang chạy để ghi.",
-        "save": "Lưu thành công thức",
-        "discard": "Bỏ",
         "empty": "Chưa ghi được gì. Hãy nhấp và gõ trong trình duyệt rồi dừng lại."
       },
       "empty": "Chưa lưu công thức nào.",
@@ -3313,6 +3345,7 @@
       "name": "Tên",
       "namePlaceholder": "Kiểm tra hằng đêm",
       "steps": "Các bước",
+      "stepType": "Loại bước",
       "stepsHint": "Mỗi bước cho biết cần làm gì và, khi tác động lên một phần tử, nêu vai trò và tên của nó hoặc một bộ chọn CSS. Không dùng cả hai.",
       "addStep": "Thêm một bước",
       "moveStepUp": "Chuyển bước này lên",
@@ -3348,7 +3381,8 @@
       "updated": "Đã cập nhật công thức",
       "deleted": "Đã xoá công thức",
       "deleteTitle": "Xoá {{name}}?",
-      "deleteDescription": "Công thức bị xoá trên mọi thiết bị. Các lượt chạy đã bắt đầu vẫn giữ mục tiêu."
+      "deleteDescription": "Công thức bị xoá trên mọi thiết bị.",
+      "needsAutomation": "Công thức mở và điều khiển trình duyệt nên cần gói Pro trở lên. Tác nhân của bạn vẫn có thể quản lý hồ sơ, proxy và nhóm."
     }
   },
   "proxyDistribution": {
@@ -3503,9 +3537,9 @@
         "action": "Mở Tích hợp"
       },
       "agent": {
-        "label": "Tác nhân",
-        "title": "Giao việc nhấp chuột cho tác nhân",
-        "body": "Mô tả một nhiệm vụ và tác nhân sẽ điều khiển hồ sơ từng bước, ghi lại những gì đã làm và có thể phát lại như một công thức.",
+        "label": "Tác nhân của riêng bạn",
+        "title": "Làm việc cùng tác nhân AI của bạn",
+        "body": "Kết nối Claude Code, Cursor hoặc tác nhân khác với Donut. Nó sẽ hỏi bạn khi không chắc chắn, và bạn có thể tiếp quản một hồ sơ rồi trả lại bất cứ lúc nào.",
         "action": "Mở Tác nhân"
       },
       "team": {

@@ -30,29 +30,3 @@ ignoreUntil = 2026-12-31
 id = "RUSTSEC-2024-0370"
 reason = "Unmaintained crate, no fix published; transitive build dependency on Linux targets."
 ignoreUntil = 2026-12-31
-
-# unic-* <- urlpattern <- tauri-utils. One upstream family, five advisories.
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0081"
-reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
-ignoreUntil = 2026-12-31
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0075"
-reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
-ignoreUntil = 2026-12-31
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0080"
-reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
-ignoreUntil = 2026-12-31
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0100"
-reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
-ignoreUntil = 2026-12-31
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0098"
-reason = "Unmaintained unic-* family, no fix published; transitive through tauri-utils -> urlpattern."
-ignoreUntil = 2026-12-31

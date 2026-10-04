@@ -54,6 +54,8 @@ donutbrowser/
 │   │   ├── mcp_integrations.rs      # 20-client MCP installer: local URL or remote endpoint with bearer, format-preserving JSONC/TOML edits
 │   │   ├── mcp_migration.rs         # Local-to-remote MCP move: once-per-account offer, local server switch-off, removal notice
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
+│   │   ├── agent_console.rs         # The person's side of connected MCP agents: activity, questions, notes, take-over, pause
+│   │   ├── recipes.rs               # Thin client for cloud recipes; storage and replay stay in the cloud
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
 │   │   ├── xray/                    # VLESS + XTLS Vision + REALITY config/URI support

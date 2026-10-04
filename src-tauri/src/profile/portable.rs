@@ -523,7 +523,10 @@ pub async fn import_profile_archive(
       .map_err(|e| import_err(format!("its profile is malformed: {e}")))?;
   drop(archive);
 
-  let profile = imported_profile(&stored, &unique_imported_name(wanted, &taken))?;
+  let mut profile = imported_profile(&stored, &unique_imported_name(wanted, &taken))?;
+  if let Some(config) = profile.wayfern_config.as_mut() {
+    config.sanitize_launch_args().await;
+  }
   let data_dir = manager
     .get_profiles_dir()
     .join(profile.id.to_string())

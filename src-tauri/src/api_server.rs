@@ -1437,6 +1437,11 @@ async fn get_profile(
 ///   `"linux"`, `"android"`, `"ios"`). Omit it to match the host. Any other
 ///   OS is cross-OS spoofing and needs an active Pro plan; 402 otherwise.
 ///   A `wayfern_config` that fails to parse is a 400, never a silent default.
+/// - `wayfern_config.launch_args` accepts up to 64 `--name` or
+///   `--name=value` strings on plans with browser automation (402 otherwise).
+///   Each string is one argument. Only supported switches are accepted (for
+///   example `--disable-gpu`, `--mute-audio`, `--disable-features=Name`);
+///   anything else, including the switches Donut manages, is refused with 400.
 /// - Pro accounts may generate 100 profiles per rolling hour; the 101st is
 ///   refused with 429 and a `retryAfterSeconds` in the body.
 #[utoipa::path(
@@ -1447,7 +1452,7 @@ async fn get_profile(
     (status = 200, description = "Profile created successfully", body = ApiProfileResponse),
     (status = 400, description = "Invalid browser, invalid wayfern_config, or no downloaded version available"),
     (status = 401, description = "Unauthorized"),
-    (status = 402, description = "Selected proxy requires payment, or a cross-OS fingerprint requires Pro"),
+    (status = 402, description = "Selected proxy requires payment, or a cross-OS fingerprint or custom launch arguments require Pro"),
     (status = 429, description = "Hourly profile generation limit reached; the body carries retryAfterSeconds"),
     (status = 500, description = "Internal server error")
   ),
@@ -5170,6 +5175,46 @@ mod tests {
       serde_json::from_value(parsed.wayfern_config.expect("config present"))
         .expect("a well-formed config must parse");
     assert_eq!(config.os.as_deref(), Some("android"));
+  }
+
+  #[test]
+  fn openapi_documents_launch_args_and_their_plan_requirement() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let operation = &spec["paths"]["/v1/profiles"]["post"];
+    assert!(operation["description"]
+      .as_str()
+      .unwrap()
+      .contains("launch_args"));
+    assert!(operation["responses"]["402"]["description"]
+      .as_str()
+      .unwrap()
+      .contains("launch arguments"));
+    for (code, expected) in [
+      (
+        "WAYFERN_LAUNCH_ARGS_REQUIRES_PRO",
+        StatusCode::PAYMENT_REQUIRED,
+      ),
+      ("WAYFERN_LAUNCH_ARG_INVALID", StatusCode::BAD_REQUEST),
+      ("WAYFERN_LAUNCH_ARG_RESERVED", StatusCode::BAD_REQUEST),
+      ("WAYFERN_LAUNCH_ARG_NOT_ALLOWED", StatusCode::BAD_REQUEST),
+      ("WAYFERN_LAUNCH_ARG_VALUE_INVALID", StatusCode::BAD_REQUEST),
+      ("WAYFERN_LAUNCH_ARGS_LIMIT", StatusCode::BAD_REQUEST),
+    ] {
+      assert_eq!(
+        manager_error_response(crate::backend_error(code)).0,
+        expected
+      );
+    }
+
+    let request: CreateProfileRequest = serde_json::from_value(serde_json::json!({
+      "name": "With launch arguments",
+      "browser": "wayfern",
+      "wayfern_config": { "launch_args": ["--disable-gpu"] }
+    }))
+    .unwrap();
+    let config: crate::wayfern_manager::WayfernConfig =
+      serde_json::from_value(request.wayfern_config.unwrap()).unwrap();
+    assert_eq!(config.launch_args, vec!["--disable-gpu"]);
   }
 
   #[test]

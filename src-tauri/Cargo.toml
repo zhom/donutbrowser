@@ -77,7 +77,7 @@ flate2 = "1"
 lzma-rs = "0"
 msi-extract = "0"
 
-uuid = { version = "1.23", features = ["v4", "serde"] }
+uuid = { version = "1.27", features = ["v4", "serde"] }
 url = "2.5"
 blake3 = "1"
 globset = "0.4"
@@ -88,7 +88,7 @@ chrono-tz = "0.10"
 axum = { version = "0.8.9", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["cors"] }
-rand = "0.10.2"
+rand = "0.10.3"
 utoipa = { version = "6", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.3"
 argon2 = "0.6"
@@ -103,7 +103,7 @@ sha2 = "0.11"
 # alongside the `ring` this crate already ships through boringtun. Moving up is a
 # build-toolchain decision for every platform, not a routine dependency refresh.
 shadowsocks = { version = ">=1.24, <1.25", default-features = false, features = ["aead-cipher"] }
-hyper = { version = "1.10", features = ["full"] }
+hyper = { version = "1.11", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 clap = { version = "4", features = ["derive"] }
@@ -138,6 +138,9 @@ nix = { version = "0.31", features = ["signal", "process"] }
 
 # Reading the desktop's titlebar button layout for the in-app window controls.
 [target.'cfg(target_os = "linux")'.dependencies]
+# Held on the minor that tao, wry and tray-icon use. gtk-sys declares
+# `links = "gtk-3"`, and Cargo refuses two crates with the same `links` value,
+# so this moves only when Tauri moves.
 gtk = "0.18"
 # Reading the source browser's "<Brand> Safe Storage" secret during profile
 # import, so its cookies and passwords can be re-encrypted for Wayfern.
@@ -180,7 +183,7 @@ windows = { version = "0.62", features = [
 [dev-dependencies]
 tempfile = "3.27.0"
 wiremock = "0.6"
-hyper = { version = "1.10", features = ["full"] }
+hyper = { version = "1.11", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 tower = "0.5"

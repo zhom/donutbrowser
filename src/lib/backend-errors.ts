@@ -54,6 +54,12 @@ export type BackendErrorCode =
   | "SYNC_LOCKED_BY_PROFILE"
   | "SYNC_NOT_CONFIGURED"
   | "FINGERPRINT_REQUIRES_PRO"
+  | "WAYFERN_LAUNCH_ARGS_REQUIRES_PRO"
+  | "WAYFERN_LAUNCH_ARG_INVALID"
+  | "WAYFERN_LAUNCH_ARG_RESERVED"
+  | "WAYFERN_LAUNCH_ARG_NOT_ALLOWED"
+  | "WAYFERN_LAUNCH_ARG_VALUE_INVALID"
+  | "WAYFERN_LAUNCH_ARGS_LIMIT"
   | "PROXY_NOT_WORKING"
   | "PROXY_PAYMENT_REQUIRED"
   | "PROXY_TLS_HANDSHAKE_FAILED"
@@ -187,22 +193,15 @@ export type BackendErrorCode =
   // rendered as the raw machine identifier.
   | "COOKIE_BOT_REQUIRES_PROXY"
   | "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED"
-  // Agent runs. The first ten are the server's own refusals; the last two are
-  // how a bodyless status on a recipe route is classified client-side, because
-  // "that run does not exist" is the wrong sentence to show someone editing a
-  // saved goal.
-  | "AGENT_NOT_ENTITLED"
-  | "AGENT_NOT_CONFIGURED"
-  | "AGENT_TARGET_OFFLINE"
-  | "AGENT_BUDGET_EXCEEDED"
-  | "AGENT_RUN_LIMIT_REACHED"
-  | "AGENT_RUN_NOT_FOUND"
-  | "AGENT_RUN_NOT_CANCELLABLE"
-  | "AGENT_GOAL_INVALID"
-  | "AGENT_BUDGET_INVALID"
-  | "AGENT_TOKEN_PROFILE_MISMATCH"
+  | "RECIPES_NOT_ENTITLED"
   | "AGENT_RECIPE_INVALID"
   | "AGENT_RECIPE_NOT_FOUND"
+  | "AGENT_REQUEST_NOT_FOUND"
+  | "AGENT_REQUEST_CLOSED"
+  | "AGENT_ANSWER_EMPTY"
+  | "AGENT_NOTE_EMPTY"
+  | "AGENT_TEXT_TOO_LONG"
+  | "AGENT_SESSION_NOT_FOUND"
   | "FINGERPRINT_EXIT_MISMATCH"
   // The launch refuses instead of opening a window on an unmanaged device: a
   // silent fallback would leave the user browsing a random fingerprint while
@@ -417,6 +416,27 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.syncNotConfigured");
     case "FINGERPRINT_REQUIRES_PRO":
       return t("backendErrors.fingerprintRequiresPro");
+    case "WAYFERN_LAUNCH_ARGS_REQUIRES_PRO":
+      return t("backendErrors.wayfernLaunchArgsRequiresPro");
+    case "WAYFERN_LAUNCH_ARG_INVALID":
+      return t("backendErrors.wayfernLaunchArgInvalid");
+    case "WAYFERN_LAUNCH_ARG_RESERVED":
+      return t("backendErrors.wayfernLaunchArgReserved", {
+        argument: parsed.params?.argument ?? "",
+      });
+    case "WAYFERN_LAUNCH_ARG_NOT_ALLOWED":
+      return t("backendErrors.wayfernLaunchArgNotAllowed", {
+        argument: parsed.params?.argument ?? "",
+      });
+    case "WAYFERN_LAUNCH_ARG_VALUE_INVALID":
+      return t("backendErrors.wayfernLaunchArgValueInvalid", {
+        argument: parsed.params?.argument ?? "",
+      });
+    case "WAYFERN_LAUNCH_ARGS_LIMIT":
+      return t("backendErrors.wayfernLaunchArgsLimit", {
+        count: parsed.params?.count ?? "",
+        length: parsed.params?.length ?? "",
+      });
     case "PROXY_NOT_WORKING":
       return t("backendErrors.proxyNotWorking");
     case "PROXY_PAYMENT_REQUIRED":
@@ -711,32 +731,26 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "COOKIE_BOT_TOUCH_FINGERPRINT_UNSUPPORTED":
       return t("backendErrors.cookieBotTouchFingerprintUnsupported");
-    case "AGENT_NOT_ENTITLED":
-      return t("backendErrors.agentNotEntitled");
-    case "AGENT_NOT_CONFIGURED":
-      return t("backendErrors.agentNotConfigured");
-    case "AGENT_TARGET_OFFLINE":
-      return t("backendErrors.agentTargetOffline");
-    case "AGENT_BUDGET_EXCEEDED":
-      return t("backendErrors.agentBudgetExceeded");
-    case "AGENT_RUN_LIMIT_REACHED":
-      return t("backendErrors.agentRunLimitReached");
-    case "AGENT_RUN_NOT_FOUND":
-      return t("backendErrors.agentRunNotFound");
-    case "AGENT_RUN_NOT_CANCELLABLE":
-      return t("backendErrors.agentRunNotCancellable");
-    case "AGENT_GOAL_INVALID":
-      return t("backendErrors.agentGoalInvalid");
-    case "AGENT_BUDGET_INVALID":
-      return t("backendErrors.agentBudgetInvalid");
-    // The run was started against a profile the issued token does not cover.
-    // Its own code because signing in again is the fix, not editing the goal.
-    case "AGENT_TOKEN_PROFILE_MISMATCH":
-      return t("backendErrors.agentTokenProfileMismatch");
+    case "RECIPES_NOT_ENTITLED":
+      return t("backendErrors.recipesNotEntitled");
     case "AGENT_RECIPE_INVALID":
       return t("backendErrors.agentRecipeInvalid");
     case "AGENT_RECIPE_NOT_FOUND":
       return t("backendErrors.agentRecipeNotFound");
+    case "AGENT_REQUEST_NOT_FOUND":
+      return t("backendErrors.agentRequestNotFound");
+    case "AGENT_REQUEST_CLOSED":
+      return t("backendErrors.agentRequestClosed");
+    case "AGENT_ANSWER_EMPTY":
+      return t("backendErrors.agentAnswerEmpty");
+    case "AGENT_NOTE_EMPTY":
+      return t("backendErrors.agentNoteEmpty");
+    case "AGENT_TEXT_TOO_LONG":
+      return t("backendErrors.agentTextTooLong", {
+        max: parsed.params?.max ?? "2000",
+      });
+    case "AGENT_SESSION_NOT_FOUND":
+      return t("backendErrors.agentSessionNotFound");
     // The launch gate's block. The dialog renders the mismatch detail from
     // `params` itself; this string is the fallback for anywhere that only has
     // room for one sentence.

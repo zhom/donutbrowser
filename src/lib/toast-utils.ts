@@ -28,6 +28,10 @@ interface ErrorToastProps extends BaseToastProps {
   type: "error";
 }
 
+interface InfoToastProps extends BaseToastProps {
+  type: "info";
+}
+
 interface DownloadToastProps extends BaseToastProps {
   type: "download";
   stage?: "downloading" | "extracting" | "verifying" | "completed";
@@ -65,6 +69,7 @@ interface SyncProgressToastProps extends BaseToastProps {
 type ToastProps =
   | SuccessToastProps
   | ErrorToastProps
+  | InfoToastProps
   | DownloadToastProps
   | LoadingToastProps
   | VersionUpdateToastProps

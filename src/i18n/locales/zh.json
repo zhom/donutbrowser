@@ -1182,7 +1182,6 @@
     "serverError": "服务器错误。请稍后重试。",
     "unknownError": "发生未知错误。请重试。",
     "noProfilesForUrl": "没有可用的配置文件。请先创建配置文件再打开 URL。",
-    "updateWayfernConfigFailed": "更新 wayfern 配置失败: {{error}}",
     "createProfileFailed": "创建配置文件失败: {{error}}",
     "launchBrowserFailed": "启动浏览器失败: {{error}}",
     "cannotDeleteRunningProfile": "浏览器运行时无法删除配置文件。请先停止浏览器。",
@@ -1331,7 +1330,10 @@
     "regenerateConfirmDescription": "配置文件会保留 Cookie 和登录状态，但会呈现为另一台设备。已经认识此配置文件的网站可能要求你重新登录、进行验证，或封禁账号。请只对尚未使用过的配置文件，或你愿意舍弃的配置文件执行重新生成。此操作无法撤销。",
     "canvasNoiseSeedPlaceholder": "输入用于 canvas 指纹的种子字符串",
     "addFontsPlaceholder": "添加字体...",
-    "enterAsJson": "以 JSON 格式输入 {{title}}"
+    "enterAsJson": "以 JSON 格式输入 {{title}}",
+    "launchArgs": "启动参数",
+    "launchArgsDescription": "每行输入一个参数，格式为 --name 或 --name=value。只接受受支持的参数，例如 --disable-gpu、--mute-audio 或 --disable-features=Name。配置文件、代理、窗口和调试参数由 Donut 管理。",
+    "launchArgsSkipped": "{{profile}} 未使用自定义启动参数。{{reason}}"
   },
   "warnings": {
     "windowResizeTitle": "自定义窗口尺寸",
@@ -2298,13 +2300,13 @@
     "profileImportTooNew": "此存档由更新版本的 Donut Browser 写入。请更新应用后重试。",
     "profileImportUnsafeArchive": "此存档试图写入配置文件目录之外的位置，已被拒绝。",
     "recordingAlreadyRunning": "已经有一个录制在进行。请先停止它再开始新的。",
-    "profileNotRunning": "录制前请先启动该配置文件的浏览器。",
+    "profileNotRunning": "该配置文件的浏览器未在运行，请先启动它。",
     "wayfern152Required": "录制需要 Wayfern 152 或更高版本。请更新该配置文件的浏览器。",
     "recordingFailed": "无法开始录制。{{detail}}",
     "mcpRemoteRequiresSignIn": "启用远程控制前，请先登录 Donut 账户。",
     "mcpRemoteUnauthorized": "Donut 云拒绝了此设备的凭据。请退出登录后重新登录。",
     "mcpRemoteSlotTaken": "此账户已有另一个 Donut 实例连接。同一时间只能远程控制一个。",
-    "mcpRemoteNotEntitled": "远程 MCP 需要 Pro 或更高方案。",
+    "mcpRemoteNotEntitled": "你的方案不包含远程 MCP。",
     "mcpRemoteUnreachable": "当前无法连接 Donut 云。正在自动重新连接。",
     "mcpRemoteKeyMissing": "此设备尚未保存远程 MCP 凭证。请先创建一个，然后重新添加客户端。",
     "mcpRemoteKeyLimit": "此账户持有的 MCP 凭据已达上限。请在账户页面撤销一个后再试。",
@@ -2322,21 +2324,18 @@
     "remoteSessionNotDrivable": "此远程会话尚未就绪，无法控制。请等待其变为在线状态。",
     "remotePlatformUnsupported": "远程会话仅在 macOS、Windows 或 Linux 主机上运行。此配置文件的平台是 {{platform}}。",
     "remoteProfileNotSynced": "此配置文件尚未完成上传到云同步。请等待首次同步完成后再试。",
-    "mcpLocalRemoved": "Donut 的本地 MCP 服务器已移除。MCP 现在以远程方式提供，需要 Pro 或更高方案。",
+    "mcpLocalRemoved": "Donut 的本地 MCP 服务器已移除。MCP 现在以远程方式运行，需要付费方案。",
     "trashEntryNotFound": "此配置文件已不在回收站中。",
     "trashRestoreConflict": "已存在相同 ID 的配置文件，因此无法恢复。",
-    "agentNotEntitled": "你的套餐不包含智能体。",
-    "agentNotConfigured": "此部署尚未提供智能体。",
-    "agentTargetOffline": "无法连接到该运行所需的浏览器。",
-    "agentBudgetExceeded": "该运行因达到某项限制而停止。",
-    "agentRunLimitReached": "你正在进行的运行数量已达到套餐上限。",
-    "agentRunNotFound": "该运行已不存在。",
-    "agentRunNotCancellable": "该运行已经结束。",
-    "agentGoalInvalid": "目标为空或过长。",
-    "agentBudgetInvalid": "其中一项限制不是有效数字。",
-    "agentTokenProfileMismatch": "该运行是为另一个配置文件启动的。请重新登录后再试。",
+    "recipesNotEntitled": "配方需要 Pro 或更高方案。",
     "agentRecipeInvalid": "配方需要名称和至少一个步骤。",
     "agentRecipeNotFound": "该配方已不存在。",
+    "agentRequestNotFound": "该请求已不存在。",
+    "agentRequestClosed": "该请求已被回答或忽略。",
+    "agentAnswerEmpty": "请先输入回答。",
+    "agentNoteEmpty": "请先输入备注。",
+    "agentTextTooLong": "文本过长，最多 {{max}} 个字符。",
+    "agentSessionNotFound": "该智能体已不再连接。",
     "profilePairedTwice": "该配置文件在同一次分配中出现了多次",
     "extensionUrlInvalid": "这不是 Chrome 应用商店链接、扩展 ID，也不是 .crx 或 .zip 直链。",
     "extensionDownloadFailed": "无法下载该扩展。请检查链接和网络连接。",
@@ -2361,7 +2360,13 @@
     "extensionPathInvalid": "该路径不允许使用：它包含“..”。",
     "systemProxyUnreachable": "Donut 无法通过系统代理 {{proxy}} 连接。请在系统网络设置中修正或关闭该代理，然后重试。",
     "profileRouteRequired": "此配置文件没有代理或 VPN。设置的“隐私”中已阻止在没有它们的情况下启动。",
-    "profileRouteUnavailable": "此配置文件的代理或 VPN 不可用，为隐藏您的 IP 地址已停止启动。请为该配置文件分配可用的代理或 VPN。"
+    "profileRouteUnavailable": "此配置文件的代理或 VPN 不可用，为隐藏您的 IP 地址已停止启动。请为该配置文件分配可用的代理或 VPN。",
+    "wayfernLaunchArgsRequiresPro": "自定义启动参数需要 Pro 或更高套餐。请清除参数或升级套餐。",
+    "wayfernLaunchArgInvalid": "每个参数请使用 --name 或 --name=value 格式。不允许使用控制字符。",
+    "wayfernLaunchArgReserved": "{{argument}} 由 Donut 管理。请移除此参数。",
+    "wayfernLaunchArgNotAllowed": "{{argument}} 不是受支持的启动参数。请移除它。",
+    "wayfernLaunchArgValueInvalid": "{{argument}} 的值不受支持。",
+    "wayfernLaunchArgsLimit": "最多使用 {{count}} 个启动参数，每个最多 {{length}} 个字符。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2387,7 +2392,8 @@
     "account": "账号",
     "cookieBot": "Cookie Bot",
     "cookieBotRunning": "Cookie Bot — 正在运行",
-    "agent": "智能体"
+    "agent": "智能体",
+    "agentWaiting": "智能体，等待处理的请求：{{count}}"
   },
   "pageTitle": {
     "proxies": "网络",
@@ -2600,8 +2606,7 @@
     "titleConfigure": "配置指纹设置 - {{name}} ({{browser}})",
     "invalidFingerprint": "无效的指纹配置",
     "invalidFingerprintDescription": "指纹配置包含无效的 JSON。请检查高级设置。",
-    "saveFailed": "保存配置失败",
-    "unknownError": "发生未知错误"
+    "saveFailed": "保存配置失败"
   },
   "cookieCopy": {
     "noOtherTargets": "未选择其他 Wayfern 配置文件"
@@ -3176,126 +3181,155 @@
     "loadFailed": "无法加载回收站：{{error}}"
   },
   "agent": {
-    "title": "智能体",
-    "description": "给智能体一个目标，它会在你的某个配置文件中完成。",
+    "description": "查看你的 AI 智能体在 Donut 中做了什么，回答它的问题，并在页面需要人工操作时介入。",
     "tabs": {
-      "run": "新建运行",
-      "history": "历史",
+      "conversation": "对话",
+      "profiles": "配置文件",
+      "activity": "活动",
       "recipes": "配方"
     },
-    "unavailable": {
-      "signInTitle": "登录后即可使用智能体",
-      "signInHint": "智能体运行由 Donut 云端调度。请在“账户”页面登录后开始。",
-      "planTitle": "你的套餐不包含智能体",
-      "planHint": "升级到包含浏览器自动化的套餐后即可为智能体设定目标。",
-      "notConfiguredTitle": "智能体尚不可用",
-      "notConfiguredHint": "此 Donut 部署尚未配置智能体。你的账户没有问题。"
+    "header": {
+      "quota": "本小时剩余 {{left}} / {{limit}} 次调用",
+      "connect": "连接智能体"
     },
-    "form": {
-      "profile": "配置文件",
-      "profilePlaceholder": "选择配置文件",
-      "noProfiles": "请先创建配置文件，智能体需要用它来浏览。",
-      "target": "运行位置",
-      "targetDesktopHint": "浏览器在本机打开，你可以看到它的操作。",
-      "targetFleetHint": "浏览器在租用主机上打开，本机不受占用。",
-      "platform": "主机操作系统",
-      "platformPlaceholder": "选择操作系统",
-      "platformRequired": "该配置文件的操作系统没有可用的租用主机，请另选一个。",
-      "recipeInsert": "插入配方",
-      "goal": "目标",
-      "goalPlaceholder": "用你自己的话描述智能体要完成什么。",
-      "goalEmpty": "请输入目标以开始运行。",
-      "goalTooLong": "该目标太长。",
-      "goalCount": "{{chars}} / {{max}}",
-      "limits": "限制与范围",
-      "limitsHint": "留空则使用套餐自带的上限。",
-      "maxSteps": "最大步数",
-      "maxMinutes": "最长分钟数",
-      "maxTokens": "最大令牌数",
-      "budgetUnset": "无限制",
-      "budgetInvalid": "请输入大于零的整数。",
-      "effort": "推理强度",
-      "allowedHosts": "允许的主机",
-      "allowedHostsPlaceholder": "example.com\ndocs.example.com",
-      "allowedHostsHint": "每行一个主机。留空则允许智能体访问任意站点。",
-      "allowedHostsCount": "浏览仅限于：{{hosts}}",
-      "submit": "开始运行",
-      "starting": "正在开始…",
-      "started": "已开始运行"
+    "pause": {
+      "label": "暂停智能体",
+      "noteLabel": "给智能体的备注（可选）",
+      "notePlaceholder": "例如：我正在更换代理，请等我恢复后再继续。",
+      "explain": "暂停期间，智能体仍可阅读你的备注并向你提问。",
+      "confirm": "暂停智能体",
+      "banner": "智能体自 {{time}} 起已暂停。",
+      "bannerNote": "你的备注：{{note}}",
+      "resume": "恢复",
+      "pausedToast": "智能体已暂停",
+      "resumedToast": "智能体已恢复"
     },
-    "target": {
-      "desktop": "本机",
-      "fleet": "租用主机"
+    "setup": {
+      "signedOutTitle": "登录后即可与你的智能体协作",
+      "signedOutBody": "你的智能体通过你的 Donut 账户连接到 Donut。请登录以连接它。",
+      "signedOutAction": "打开账户",
+      "planTitle": "你的套餐不包含远程控制",
+      "planBody": "连接你自己的智能体需要包含远程控制的套餐。",
+      "planAction": "打开账户",
+      "remoteOffTitle": "远程控制已关闭",
+      "remoteOffBody": "你的智能体通过远程控制连接到 Donut。请先开启远程控制，然后将 Donut 添加到你的智能体。",
+      "remoteOffAction": "开启远程控制",
+      "remoteOffInline": "远程控制已关闭，你的智能体目前无法连接到 Donut。",
+      "waitingTitle": "正在等待你的智能体",
+      "waitingBody": "将 Donut 添加到你的智能体，然后把下面的说明粘贴给它，这样它在工作时会与你保持沟通。",
+      "starterLabel": "给智能体的说明",
+      "starter": "你可以使用 Donut 工具控制我的 Donut Browser 配置文件。开始时以及每两步之间，调用 get_human_updates 阅读我的备注，并查看我正在使用哪些配置文件。如果不确定该怎么做，请用 ask_human 问我。如果页面需要人工操作，例如登录、验证或付款，请调用 request_human_help，并等待我把配置文件交还给你。在耗时较长的任务中，请调用 report_progress，让我了解你的进度。",
+      "starterCopied": "说明已复制"
     },
-    "platform": {
-      "windows": "Windows",
-      "macos": "macOS",
-      "linux": "Linux"
+    "request": {
+      "needsYou": "需要你处理",
+      "waitingCount": "等待你处理的请求：{{count}}",
+      "questionTitle": "{{agent}} 提问",
+      "helpTitle": "{{agent}} 需要人工操作",
+      "choices": "建议的回答",
+      "answerLabel": "你的回答",
+      "answerPlaceholder": "输入回答",
+      "send": "发送"
     },
-    "effort": {
-      "standard": "标准",
-      "high": "高"
+    "actions": {
+      "dismiss": "忽略",
+      "showWindow": "显示窗口",
+      "handBack": "交还",
+      "handBackPlaceholder": "例如：我已登录，你可以继续了。",
+      "takeOver": "接管",
+      "takeOverPlaceholder": "例如：我正在修复这个配置文件，暂时跳过它。",
+      "note": "发送备注",
+      "noteOptional": "给智能体的备注（可选）"
     },
-    "live": {
-      "newRun": "新建运行",
-      "notFound": "无法读取该运行记录。",
-      "onProfile": "{{profile}} · {{target}}",
-      "cancel": "取消运行",
-      "cancelling": "正在取消…",
-      "cancelled": "已取消运行",
-      "elapsed": "已用时",
-      "steps": "步数",
-      "tokens": "令牌",
-      "cost": "费用",
-      "costValue": "${{amount}}",
-      "endedBecause": "结束：{{reason}}",
-      "streamOffline": "当前没有收到步骤，正在重新连接。",
-      "waiting": "正在等待第一步。",
-      "noSteps": "该运行没有记录任何步骤。",
-      "result": "结果"
+    "notify": {
+      "questionTitle": "{{agent}} 有一个问题",
+      "helpTitle": "{{agent}} 需要你在配置文件中操作",
+      "open": "打开"
     },
-    "step": {
-      "thought": "思考",
-      "tool": "操作",
-      "error": "错误",
-      "finish": "完成",
-      "unknown": "步骤"
+    "sessions": {
+      "title": "智能体",
+      "all": "所有智能体",
+      "fallback": "MCP 客户端",
+      "active": "活跃",
+      "idle": "空闲",
+      "ended": "已结束",
+      "counts": "调用：{{calls}} · 错误：{{errors}}",
+      "progress": "{{done}} / {{total}}",
+      "showEarlier": "显示更早的 ({{count}})",
+      "hideEarlier": "隐藏更早的",
+      "website": "Donut 网站"
     },
-    "status": {
-      "queued": "排队中",
-      "running": "运行中",
-      "succeeded": "成功",
-      "failed": "失败",
-      "cancelled": "已取消",
-      "unknown": "未知"
+    "thread": {
+      "label": "对话",
+      "empty": "智能体的提问、备注和进度会显示在这里。",
+      "waiting": "等待你处理",
+      "answered": "你的回答：{{answer}}",
+      "handedBack": "你已交还该配置文件。",
+      "handedBackNote": "你已交还该配置文件：{{note}}",
+      "dismissed": "已忽略",
+      "noteToAll": "发给所有智能体",
+      "noteTo": "发给 {{agent}}",
+      "notePending": "等待智能体的下一步",
+      "noteSeenAt": "已于 {{time}} 查看",
+      "noteSeen": "已查看",
+      "joined": "{{agent}} 已加入",
+      "left": "{{agent}} 已离开"
     },
-    "closeReason": {
-      "completed": "已达成目标",
-      "budget": "已达到限制",
-      "cancelled": "你取消了运行",
-      "navigationBlocked": "试图离开允许的主机",
-      "targetOffline": "无法连接到浏览器",
-      "targetError": "浏览器发生错误",
-      "modelError": "模型发生错误",
-      "modelRefused": "模型拒绝了该目标",
-      "modelStopped": "模型提前停止",
-      "contextExceeded": "运行超出了模型的上下文",
-      "orphaned": "运行与浏览器失去联系",
-      "internalError": "我们这边出现了问题"
+    "composer": {
+      "label": "给智能体的备注",
+      "placeholderAll": "给所有智能体写备注",
+      "placeholderOne": "给 {{agent}} 写备注",
+      "profile": "备注涉及的配置文件",
+      "noProfile": "无配置文件",
+      "profileSearch": "搜索配置文件",
+      "profileNotFound": "未找到配置文件。",
+      "hint": "按 Enter 发送，按 Shift+Enter 换行。",
+      "send": "发送备注"
     },
-    "history": {
-      "columnStarted": "开始时间",
-      "columnProfile": "配置文件",
-      "columnGoal": "目标",
-      "columnTarget": "运行位置",
-      "columnStatus": "状态",
-      "empty": "还没有运行记录。",
-      "loadMore": "加载更多",
-      "backToList": "返回历史",
-      "unknownProfile": "未知配置文件"
+    "filters": {
+      "errorsOnly": "仅错误"
+    },
+    "profiles": {
+      "search": "搜索配置文件",
+      "columns": {
+        "profile": "配置文件",
+        "agent": "智能体",
+        "lastAction": "最近操作",
+        "result": "结果",
+        "when": "时间",
+        "state": "状态"
+      },
+      "state": {
+        "held": "由你接管",
+        "working": "工作中",
+        "idle": "空闲",
+        "error": "错误"
+      },
+      "takeOverSelected": "接管所选",
+      "handBackSelected": "交还所选",
+      "selectRow": "选择 {{name}}",
+      "empty": "智能体正在使用的配置文件会显示在这里。",
+      "noMatches": "没有符合这些筛选条件的配置文件。"
+    },
+    "result": {
+      "ok": "正常",
+      "error": "错误"
+    },
+    "activity": {
+      "label": "智能体活动",
+      "agentFilter": "智能体",
+      "profileSearch": "按配置文件搜索",
+      "stats": "最近 5 分钟 · 调用：{{calls}} · 错误率：{{rate}}% · 平均：{{average}}",
+      "statsNone": "最近 5 分钟内没有调用。",
+      "empty": "智能体的工具调用会显示在这里。",
+      "noMatches": "没有符合这些筛选条件的调用。",
+      "typed": "输入字符数：{{count}}",
+      "profiles": "配置文件数：{{count}}",
+      "durationMs": "{{ms}} 毫秒",
+      "durationSeconds": "{{seconds}} 秒"
     },
     "recipes": {
-      "hint": "已保存的目标，可插入到新的运行中。",
+      "hint": "把一个流程录制一次，你的智能体就能在其他配置文件上重复它。",
       "new": "新建配方",
       "recording": {
         "record": "录制",
@@ -3304,8 +3338,6 @@
         "stop": "停止录制",
         "steps": "已记录 {{count}} 个步骤",
         "hint": "选择一个正在运行的配置文件进行录制。",
-        "save": "保存为配方",
-        "discard": "丢弃",
         "empty": "没有记录到任何内容。请在浏览器中点击并输入，然后停止。"
       },
       "empty": "还没有保存的配方。",
@@ -3313,6 +3345,7 @@
       "name": "名称",
       "namePlaceholder": "每夜检查",
       "steps": "步骤",
+      "stepType": "步骤类型",
       "stepsHint": "每个步骤说明要做什么；若作用于某个元素，则给出它的角色与名称，或一个 CSS 选择器，二者只取其一。",
       "addStep": "添加步骤",
       "moveStepUp": "上移此步骤",
@@ -3348,7 +3381,8 @@
       "updated": "已更新配方",
       "deleted": "已删除配方",
       "deleteTitle": "删除 {{name}}？",
-      "deleteDescription": "配方会从所有设备上删除。已开始的运行仍保留其目标。"
+      "deleteDescription": "配方会从所有设备上删除。",
+      "needsAutomation": "配方会打开并操控浏览器，因此需要 Pro 或更高方案。你的智能体仍可管理配置文件、代理和分组。"
     }
   },
   "proxyDistribution": {
@@ -3503,9 +3537,9 @@
         "action": "打开集成"
       },
       "agent": {
-        "label": "智能体",
-        "title": "把点击交给智能体",
-        "body": "描述一个任务，智能体就会一步步驱动配置文件，记录它做了什么，并能作为配方重放。",
+        "label": "你自己的智能体",
+        "title": "与你的 AI 智能体协作",
+        "body": "将 Claude Code、Cursor 或其他智能体连接到 Donut。它在不确定时会询问你，你也可以随时接管某个配置文件并交还。",
         "action": "打开智能体"
       },
       "team": {

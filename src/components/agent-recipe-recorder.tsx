@@ -1,7 +1,6 @@
 "use client";
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuCircleDot, LuSquare } from "react-icons/lu";
@@ -14,16 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { RecipeStep } from "@/lib/agent";
 import { translateBackendError } from "@/lib/backend-errors";
+import {
+  getRecipeRecording,
+  onRecordingEnded,
+  onRecordingStep,
+  type RecipeStep,
+  startRecipeRecording,
+  stopRecipeRecording,
+} from "@/lib/recipes";
 import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile } from "@/types";
-
-interface RecordingStatus {
-  profile_id: string | null;
-  steps: RecipeStep[];
-  recording: boolean;
-}
 
 /**
  * Record a task once in a real browser and keep the steps.
@@ -58,7 +58,7 @@ export function RecipeRecorder({
   // A recording survives this panel being closed and reopened, so the state
   // comes from the backend rather than from what this component remembers.
   useEffect(() => {
-    void invoke<RecordingStatus>("get_recipe_recording")
+    void getRecipeRecording()
       .then((status) => {
         setIsRecording(status.recording);
         setSteps(status.steps);
@@ -72,13 +72,10 @@ export function RecipeRecorder({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const step = await listen<RecipeStep>(
-        "recipe-recording-step",
-        (event) => {
-          setSteps((previous) => [...previous, event.payload]);
-        },
-      );
-      const ended = await listen("recipe-recording-ended", () => {
+      const step = await onRecordingStep((recorded) => {
+        setSteps((previous) => [...previous, recorded]);
+      });
+      const ended = await onRecordingEnded(() => {
         setIsRecording(false);
       });
       if (cancelled) {
@@ -99,9 +96,7 @@ export function RecipeRecorder({
     if (!profileId) return;
     setIsBusy(true);
     try {
-      const status = await invoke<RecordingStatus>("start_recipe_recording", {
-        profileId,
-      });
+      const status = await startRecipeRecording(profileId);
       setSteps(status.steps);
       setIsRecording(true);
     } catch (error) {
@@ -114,7 +109,7 @@ export function RecipeRecorder({
   const stop = useCallback(async () => {
     setIsBusy(true);
     try {
-      const status = await invoke<RecordingStatus>("stop_recipe_recording");
+      const status = await stopRecipeRecording();
       setIsRecording(false);
       setSteps(status.steps);
       if (status.steps.length > 0) onRecorded(status.steps);

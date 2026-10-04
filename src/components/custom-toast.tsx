@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import {
   LuCheckCheck,
   LuDownload,
+  LuMessageCircleQuestion,
   LuRefreshCw,
   LuTriangleAlert,
   LuX,
@@ -28,6 +29,10 @@ interface SuccessToastProps extends BaseToastProps {
 
 interface ErrorToastProps extends BaseToastProps {
   type: "error";
+}
+
+interface InfoToastProps extends BaseToastProps {
+  type: "info";
 }
 
 interface DownloadToastProps extends BaseToastProps {
@@ -73,6 +78,7 @@ type ToastProps =
   | LoadingToastProps
   | SuccessToastProps
   | ErrorToastProps
+  | InfoToastProps
   | DownloadToastProps
   | VersionUpdateToastProps
   | FetchingToastProps
@@ -131,6 +137,10 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
       return <LuCheckCheck className="size-4 shrink-0 text-foreground" />;
     case "error":
       return <LuTriangleAlert className="size-4 shrink-0 text-foreground" />;
+    case "info":
+      return (
+        <LuMessageCircleQuestion className="size-4 shrink-0 text-foreground" />
+      );
     case "download":
       if (stage === "completed") {
         return <LuCheckCheck className="size-4 shrink-0 text-foreground" />;

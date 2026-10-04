@@ -82,6 +82,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LaunchArgumentsEditor } from "@/components/wayfern-config-form";
 import { WindowDragArea } from "@/components/window-drag-area";
 import { useInputModality } from "@/hooks/use-input-modality";
 import { translateBackendError } from "@/lib/backend-errors";
@@ -2248,20 +2249,6 @@ function FingerprintSectionInline({
     );
   }
 
-  if (!crossOsUnlocked) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
-        <LuLock className="size-4 shrink-0 text-muted-foreground" />
-        <h3 className="text-sm font-medium text-foreground">
-          {t("profileInfo.fingerprint.lockedTitle")}
-        </h3>
-        <p className="max-w-[48ch] text-sm text-pretty text-muted-foreground">
-          {t("profileInfo.fingerprint.lockedDescription")}
-        </p>
-      </div>
-    );
-  }
-
   const onWayfernChange = (key: keyof WayfernConfig, value: unknown) => {
     setWayfernConfig((prev) => ({ ...prev, [key]: value }));
     setSuccess(null);
@@ -2299,17 +2286,36 @@ function FingerprintSectionInline({
         {t("profileInfo.sectionDesc.fingerprint")}
       </p>
 
-      <SharedFingerprintConfigForm
-        config={wayfernConfig}
-        onConfigChange={onWayfernChange}
-        forceAdvanced={true}
-        readOnly={isDisabled}
-        crossOsUnlocked={crossOsUnlocked}
-        limitedMode={false}
-        profileVersion={profile.version}
-        profileBrowser={profile.browser}
-        profileId={profile.id}
-      />
+      {crossOsUnlocked ? (
+        <SharedFingerprintConfigForm
+          config={wayfernConfig}
+          onConfigChange={onWayfernChange}
+          forceAdvanced={true}
+          readOnly={isDisabled}
+          crossOsUnlocked={crossOsUnlocked}
+          limitedMode={false}
+          profileVersion={profile.version}
+          profileBrowser={profile.browser}
+          profileId={profile.id}
+        />
+      ) : (
+        <>
+          <div className="flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
+            <LuLock className="size-4 shrink-0 text-muted-foreground" />
+            <h3 className="text-sm font-medium text-foreground">
+              {t("profileInfo.fingerprint.lockedTitle")}
+            </h3>
+            <p className="max-w-[48ch] text-sm text-pretty text-muted-foreground">
+              {t("profileInfo.fingerprint.lockedDescription")}
+            </p>
+          </div>
+          <LaunchArgumentsEditor
+            config={wayfernConfig}
+            onConfigChange={onWayfernChange}
+            readOnly={isDisabled}
+          />
+        </>
+      )}
 
       {error && <p className="text-xs text-destructive-text">{error}</p>}
       {success && !error && (

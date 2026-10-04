@@ -48,6 +48,25 @@ function processExists(pid) {
   }
 }
 
+function processCommandLine(pid) {
+  assert.ok(Number.isInteger(pid) && pid > 0);
+  if (process.platform === "win32") {
+    return execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}').CommandLine`,
+      ],
+      { encoding: "utf8" },
+    );
+  }
+  return execFileSync("ps", ["-ww", "-p", String(pid), "-o", "command="], {
+    encoding: "utf8",
+  });
+}
+
 async function waitForProcessExit(app, pid) {
   await app.waitFor(() => !processExists(pid), {
     timeoutMs: 20_000,
@@ -1637,6 +1656,148 @@ test("a payload profile an older version stored launches and is stored as an ide
       ).find((item) => item.process_id === browserPid);
       if (profile)
         await app.invoke("kill_browser_profile", { profile }).catch(() => {});
+    }
+    await app.close();
+  }
+});
+
+test("custom launch arguments reach only their Wayfern profile", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const app = appFromEnvironment("browser-launch-args", {
+    seedVersionCache:
+      cachedFixtureVersion(process.env.DONUT_E2E_PROJECT_ROOT) ?? false,
+    wayfernTermsAccepted: false,
+  });
+  let cdp;
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    await app.invoke("accept_wayfern_terms");
+    const profile = await createRealProfile(
+      app,
+      prepared.version,
+      "Launch Arguments",
+    );
+    const other = await createRealProfile(
+      app,
+      prepared.version,
+      "Default Arguments",
+    );
+    const custom = [
+      "--mute-audio",
+      "--disable-gpu",
+      "--renderer-process-limit=4",
+      "--disable-features=DonutLaunchArgsTest",
+    ];
+    await app.invoke("update_wayfern_config", {
+      profileId: profile.id,
+      config: { ...profile.wayfern_config, launch_args: custom },
+    });
+    const stored = (await app.invoke("list_browser_profiles")).find(
+      (p) => p.id === profile.id,
+    );
+    const settings = await app.invoke("get_app_settings");
+    const savedSettings = await app.invoke("save_app_settings", {
+      settings: {
+        ...settings,
+        api_enabled: true,
+        api_port: 0,
+        api_token: null,
+      },
+    });
+    const port = await app.invoke("start_api_server", { port: 0 });
+    const launch = async () => {
+      const result = await request(
+        `http://127.0.0.1:${port}/v1/profiles/${profile.id}/run`,
+        {
+          method: "POST",
+          token: savedSettings.api_token,
+          body: { url: "about:blank", headless: true },
+        },
+      );
+      assert.equal(result.response.status, 200, JSON.stringify(result.value));
+      return result.value;
+    };
+    const stop = async () => {
+      const current = (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      );
+      await app.invoke("kill_browser_profile", { profile: current });
+      await waitForProcessExit(app, current.process_id);
+    };
+    const launched = await launch();
+    cdp = await CdpClient.connect(launched.remote_debugging_port);
+    const running = (await app.invoke("list_browser_profiles")).find(
+      (p) => p.id === profile.id,
+    );
+    // Browser.getBrowserCommandLine needs --enable-automation, which a profile
+    // may not set, so the OS command line is what is checked.
+    const processArgs = processCommandLine(running.process_id);
+    for (const argument of custom.filter(
+      (arg) => !arg.startsWith("--disable-features="),
+    )) {
+      assert.ok(processArgs.includes(argument), argument);
+    }
+    const disabled = processArgs.match(/--disable-features=(\S+)/g) ?? [];
+    assert.equal(disabled.length, 1, "one merged --disable-features switch");
+    assert.ok(disabled[0].includes("DonutLaunchArgsTest"));
+    assert.ok(disabled[0].includes("AsyncDns"));
+    assert.ok(disabled[0].includes("Prefetch"));
+    assert.ok(
+      processArgs.includes(
+        `--user-data-dir=${path.join(app.dataRoot, "data", "profiles", profile.id, "profile")}`,
+      ),
+    );
+    assert.match(
+      await app.invokeError("update_wayfern_config", {
+        profileId: profile.id,
+        config: { ...stored.wayfern_config, launch_args: [] },
+      }),
+      /running|PROFILE_RUNNING/i,
+    );
+    cdp.close();
+    cdp = null;
+    await stop();
+    assert.deepEqual(
+      (await app.invoke("list_browser_profiles")).find((p) => p.id === other.id)
+        .wayfern_config.launch_args ?? [],
+      [],
+    );
+
+    await app.invoke("update_wayfern_config", {
+      profileId: profile.id,
+      config: {
+        ...stored.wayfern_config,
+        launch_args: ["--mute-audio"],
+      },
+    });
+    const relaunched = await launch();
+    cdp = await CdpClient.connect(relaunched.remote_debugging_port);
+    const current = (await app.invoke("list_browser_profiles")).find(
+      (p) => p.id === profile.id,
+    );
+    assert.ok(
+      !processCommandLine(current.process_id).includes("--disable-gpu"),
+    );
+    assert.ok(processCommandLine(current.process_id).includes("--mute-audio"));
+    cdp.close();
+    cdp = null;
+    await stop();
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    cdp?.close();
+    if (app.session) {
+      const profiles = await app
+        .invoke("list_browser_profiles")
+        .catch(() => []);
+      for (const profile of profiles.filter((p) => p.process_id)) {
+        await app.invoke("kill_browser_profile", { profile }).catch(() => {});
+      }
     }
     await app.close();
   }

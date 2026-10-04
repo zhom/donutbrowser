@@ -227,6 +227,8 @@ interface RailNavProps {
    * see from where you are standing may as well not be observable at all.
    */
   cookieBotRunning?: boolean;
+  /** Open agent questions and help requests waiting for the person. */
+  agentRequests?: number;
 }
 
 /** Shared-element indicator that slides between the active rail items. */
@@ -296,6 +298,7 @@ export function RailNav({
   onOpenAbout,
   onOpenTips,
   cookieBotRunning = false,
+  agentRequests = 0,
 }: RailNavProps) {
   const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -377,6 +380,13 @@ export function RailNav({
       <div className="flex min-h-0 w-full scrollbar-none flex-col items-center gap-1 overflow-y-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {TOP_ITEMS.map(({ page, Icon, labelKey }) => {
           const active = currentPage === page;
+          const waiting = page === "agent" ? agentRequests : 0;
+          const label =
+            waiting > 0
+              ? t("rail.agentWaiting", { count: waiting })
+              : page === "cookieBot" && cookieBotRunning
+                ? t("rail.cookieBotRunning")
+                : t(labelKey);
           return (
             <Tooltip key={page} delayDuration={300}>
               <TooltipTrigger asChild>
@@ -385,7 +395,7 @@ export function RailNav({
                   onClick={() => {
                     onNavigate(page);
                   }}
-                  aria-label={t(labelKey)}
+                  aria-label={label}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
@@ -402,13 +412,18 @@ export function RailNav({
                       className="absolute top-1 right-1 size-1.5 rounded-full bg-success"
                     />
                   )}
+                  {waiting > 0 && (
+                    <span
+                      aria-hidden="true"
+                      data-testid="agent-rail-badge"
+                      className="absolute -top-1 -right-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-warning px-1 text-[9px] leading-none font-semibold tabular-nums text-warning-foreground"
+                    >
+                      {waiting > 9 ? "9+" : waiting}
+                    </span>
+                  )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">
-                {page === "cookieBot" && cookieBotRunning
-                  ? t("rail.cookieBotRunning")
-                  : t(labelKey)}
-              </TooltipContent>
+              <TooltipContent side="right">{label}</TooltipContent>
             </Tooltip>
           );
         })}

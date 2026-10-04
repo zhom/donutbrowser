@@ -13,6 +13,14 @@ pub enum RateLimitOutcome {
   Limited { retry_after_secs: u64 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct AutomationQuota {
+  /// 0 means unlimited.
+  pub limit: u64,
+  pub used: u64,
+  pub resets_in_secs: Option<u64>,
+}
+
 #[derive(Default)]
 struct AutomationRateLimiter {
   requests: HashMap<String, VecDeque<Instant>>,
@@ -56,6 +64,25 @@ impl AutomationRateLimiter {
   }
 }
 
+impl AutomationRateLimiter {
+  fn usage_at(&self, identity: &str, now: Instant) -> (u64, Option<u64>) {
+    let Some(requests) = self.requests.get(identity) else {
+      return (0, None);
+    };
+    let mut live = requests
+      .iter()
+      .filter(|started| now.duration_since(**started) < RATE_LIMIT_WINDOW);
+    let resets_in_secs = live.clone().next().map(|started| {
+      RATE_LIMIT_WINDOW
+        .saturating_sub(now.duration_since(*started))
+        .as_secs()
+        .max(1)
+    });
+    let used = live.by_ref().count() as u64;
+    (used, resets_in_secs)
+  }
+}
+
 static AUTOMATION_RATE_LIMITER: LazyLock<Mutex<AutomationRateLimiter>> =
   LazyLock::new(|| Mutex::new(AutomationRateLimiter::default()));
 
@@ -70,9 +97,39 @@ pub async fn check_automation_rate_limit() -> RateLimitOutcome {
     .check_at(&identity, requests_per_hour, Instant::now())
 }
 
+pub async fn automation_quota() -> Option<AutomationQuota> {
+  let (identity, limit) = CLOUD_AUTH.automation_rate_limit().await?;
+  let (used, resets_in_secs) = AUTOMATION_RATE_LIMITER
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner())
+    .usage_at(&identity, Instant::now());
+  Some(AutomationQuota {
+    limit,
+    used,
+    resets_in_secs,
+  })
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn usage_counts_only_the_live_window_without_consuming() {
+    let mut limiter = AutomationRateLimiter::default();
+    let start = Instant::now();
+    assert_eq!(limiter.usage_at("a", start), (0, None));
+    limiter.check_at("a", 5, start);
+    limiter.check_at("a", 5, start + Duration::from_secs(10));
+    let (used, resets) = limiter.usage_at("a", start + Duration::from_secs(20));
+    assert_eq!(used, 2);
+    assert_eq!(resets, Some(RATE_LIMIT_WINDOW.as_secs() - 20));
+    assert_eq!(limiter.usage_at("a", start + Duration::from_secs(20)).0, 2);
+    assert_eq!(
+      limiter.usage_at("a", start + RATE_LIMIT_WINDOW + Duration::from_secs(11)),
+      (0, None)
+    );
+  }
 
   #[test]
   fn rolling_window_limits_per_identity_and_recovers() {

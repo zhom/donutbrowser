@@ -21,7 +21,37 @@
   </a>
 </p>
 
-<img alt="Donut Browser Preview" src="assets/donut-preview.png" />
+<p align="center">
+  <img alt="Donut Browser starts three profiles. Each one opens its own browser window with the profile name in the address bar, and shows websites a different device." src="assets/readme/hero.svg" width="100%">
+</p>
+
+<p align="center">
+  Unlimited browser profiles on one computer. Each one shows websites a different device,<br>
+  keeps its own cookies, extensions and proxy, and stays on your machine.
+</p>
+
+## Keep every account separate
+
+Websites link accounts that come from the same device, and then one ban can take all of them. In Donut, each account runs in its own profile with its own fingerprint, cookies and proxy or VPN, so every site sees a different device.
+
+<img alt="In an ordinary browser, four accounts show websites the same device, so they are linked and one ban takes down all four. In Donut Browser, each account shows a different device, so the accounts stay separate." src="assets/readme/linking.svg" width="100%">
+
+The fingerprints come from [Wayfern](https://wayfern.com), a privacy-focused Chromium fork that sets them inside the engine, not with scripts on the page.
+
+## Your data stays on your device
+
+<img alt="Profiles, with their cookies, logins, history and fingerprints, stay on your device. Optional sync sends only data that is encrypted with your password. The app sends no telemetry." src="assets/readme/local.svg" width="100%">
+
+- No account needed: profiles, cookies, logins and history live on your computer.
+- Zero telemetry: the app sends no tracking or analytics.
+- Lock a profile with a password, or make it ephemeral so that nothing is left when it closes.
+- Sync is optional and end-to-end encrypted with a password only you know. Use Donut Sync or [run your own server](https://donutbrowser.com/docs/self-hosting).
+
+## Automate with code or with AI agents
+
+<img alt="Start a profile from the local REST API and connect Playwright to it over CDP, or let your AI agent work with profiles over remote MCP." src="assets/readme/automation.svg" width="100%">
+
+Start any profile from the local REST API on `127.0.0.1:10108`, then connect Playwright, Puppeteer or Selenium to it over CDP. Or connect Claude, Cursor, Codex or another MCP client over remote MCP, and watch what each agent does. Browser automation and remote MCP come with the paid plans. See the [quickstart](https://donutbrowser.com/docs/quickstart), [Playwright with Wayfern](https://donutbrowser.com/docs/wayfern) and [MCP](https://donutbrowser.com/docs/mcp) guides.
 
 ## Features
 
@@ -30,7 +60,7 @@
 - DNS AdBlocker: block ads, trackers, and other unwanted content with per-profile DNS blocking
 - Proxy support: HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
 - VPN support: WireGuard configs per profile
-- Local API & MCP: REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
+- REST API & remote MCP: a local REST API and a remote [Model Context Protocol](https://modelcontextprotocol.io) server for Claude, Cursor, automation tools and custom workflows
 - Profile groups: organize profiles and apply bulk settings
 - Import profiles: migrate from Chrome, Edge, Brave, or other Chromium browsers
 - Cookie & extension management: import/export cookies, manage extensions per profile

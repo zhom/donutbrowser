@@ -1182,7 +1182,6 @@
     "serverError": "サーバーエラー。後でもう一度お試しください。",
     "unknownError": "不明なエラーが発生しました。もう一度お試しください。",
     "noProfilesForUrl": "利用可能なプロファイルがありません。URLを開く前にプロファイルを作成してください。",
-    "updateWayfernConfigFailed": "wayfern設定の更新に失敗しました: {{error}}",
     "createProfileFailed": "プロファイルの作成に失敗しました: {{error}}",
     "launchBrowserFailed": "ブラウザの起動に失敗しました: {{error}}",
     "cannotDeleteRunningProfile": "ブラウザの実行中にプロファイルを削除できません。先にブラウザを停止してください。",
@@ -1331,7 +1330,10 @@
     "regenerateConfirmDescription": "Cookie とログイン状態は保持されますが、プロファイルは別のデバイスとして認識されます。すでにこのプロファイルを知っているサイトでは、再ログインを求められたり、追加の確認を要求されたり、アカウントがブロックされたりする場合があります。再生成するのは、まだ使用していないプロファイル、または失っても問題ないプロファイルだけにしてください。この操作は取り消せません。",
     "canvasNoiseSeedPlaceholder": "キャンバスフィンガープリント用のシード文字列を入力",
     "addFontsPlaceholder": "フォントを追加...",
-    "enterAsJson": "{{title}} を JSON で入力"
+    "enterAsJson": "{{title}} を JSON で入力",
+    "launchArgs": "起動引数",
+    "launchArgsDescription": "1 行に 1 つの引数を --name または --name=value の形式で入力します。使用できるのは対応している引数だけです（例: --disable-gpu、--mute-audio、--disable-features=Name）。プロファイル、プロキシ、ウィンドウ、デバッグの引数は Donut が管理します。",
+    "launchArgsSkipped": "{{profile}} ではカスタム起動引数が使われませんでした。{{reason}}"
   },
   "warnings": {
     "windowResizeTitle": "カスタムウィンドウサイズ",
@@ -2298,13 +2300,13 @@
     "profileImportTooNew": "このアーカイブは新しいバージョンの Donut Browser で作成されています。アプリを更新してからもう一度お試しください。",
     "profileImportUnsafeArchive": "このアーカイブはプロファイルフォルダーの外に書き込もうとしたため、拒否しました。",
     "recordingAlreadyRunning": "すでに記録中です。別の記録を始める前に停止してください。",
-    "profileNotRunning": "記録する前にこのプロファイルのブラウザーを起動してください。",
+    "profileNotRunning": "このプロファイルのブラウザーは起動していません。先に起動してください。",
     "wayfern152Required": "記録には Wayfern 152 以降が必要です。このプロファイルのブラウザーを更新してください。",
     "recordingFailed": "記録を開始できませんでした。{{detail}}",
     "mcpRemoteRequiresSignIn": "リモート制御を有効にする前に Donut アカウントにサインインしてください。",
     "mcpRemoteUnauthorized": "Donut クラウドがこのデバイスの資格情報を拒否しました。サインアウトして、もう一度サインインしてください。",
     "mcpRemoteSlotTaken": "このアカウントの別の Donut インスタンスがすでに接続されています。リモート制御できるのは同時に 1 台だけです。",
-    "mcpRemoteNotEntitled": "リモート MCP には Pro プラン以上が必要です。",
+    "mcpRemoteNotEntitled": "現在のプランにはリモート MCP が含まれていません。",
     "mcpRemoteUnreachable": "現在 Donut クラウドに接続できません。自動的に再接続します。",
     "mcpRemoteKeyMissing": "このデバイスにはまだリモート MCP 資格情報がありません。先に作成してから、クライアントをもう一度追加してください。",
     "mcpRemoteKeyLimit": "このアカウントはすでに保持できる MCP 認証情報の上限に達しています。アカウントページで 1 つ取り消してから、もう一度お試しください。",
@@ -2322,21 +2324,18 @@
     "remoteSessionNotDrivable": "このリモートセッションはまだ操作できる状態ではありません。ライブになるまでお待ちください。",
     "remotePlatformUnsupported": "リモートセッションは macOS、Windows、Linux のホストでのみ実行できます。このプロファイルのプラットフォームは {{platform}} です。",
     "remoteProfileNotSynced": "このプロファイルはクラウド同期へのアップロードがまだ完了していません。最初の同期が完了してから、もう一度お試しください。",
-    "mcpLocalRemoved": "Donut のローカル MCP サーバーは削除されました。MCP は現在リモートで提供され、Pro プラン以上が必要です。",
+    "mcpLocalRemoved": "Donut のローカル MCP サーバーは削除されました。MCP は現在リモートで動作し、有料プランが必要です。",
     "trashEntryNotFound": "このプロファイルはもうゴミ箱にありません。",
     "trashRestoreConflict": "同じIDのプロファイルがすでに存在するため、復元できません。",
-    "agentNotEntitled": "現在のプランにはエージェントが含まれていません。",
-    "agentNotConfigured": "この環境ではエージェントをまだ利用できません。",
-    "agentTargetOffline": "実行に必要なブラウザに接続できませんでした。",
-    "agentBudgetExceeded": "上限に達したため実行を停止しました。",
-    "agentRunLimitReached": "プランで許可された数の実行がすでに進行中です。",
-    "agentRunNotFound": "その実行は存在しません。",
-    "agentRunNotCancellable": "その実行はすでに終了しています。",
-    "agentGoalInvalid": "目標が空か、長すぎます。",
-    "agentBudgetInvalid": "上限の 1 つが有効な数値ではありません。",
-    "agentTokenProfileMismatch": "この実行は別のプロファイル用に開始されました。サインインし直して再試行してください。",
+    "recipesNotEntitled": "レシピには Pro プラン以上が必要です。",
     "agentRecipeInvalid": "レシピには名前と 1 つ以上のステップが必要です。",
     "agentRecipeNotFound": "そのレシピは存在しません。",
+    "agentRequestNotFound": "そのリクエストはもう存在しません。",
+    "agentRequestClosed": "そのリクエストはすでに回答済みか、閉じられています。",
+    "agentAnswerEmpty": "先に回答を入力してください。",
+    "agentNoteEmpty": "先にメモを入力してください。",
+    "agentTextTooLong": "テキストが長すぎます。上限は {{max}} 文字です。",
+    "agentSessionNotFound": "そのエージェントはもう接続されていません。",
     "profilePairedTwice": "このプロファイルは同じ割り当てに複数回含まれています",
     "extensionUrlInvalid": "Chrome ウェブストアのリンク、拡張機能 ID、.crx または .zip の直接リンクではありません。",
     "extensionDownloadFailed": "拡張機能をダウンロードできませんでした。リンクと接続を確認してください。",
@@ -2361,7 +2360,13 @@
     "extensionPathInvalid": "そのパスは使用できません。'..' が含まれています。",
     "systemProxyUnreachable": "システムプロキシ {{proxy}} 経由で接続できませんでした。システムのネットワーク設定でプロキシを修正するか無効にしてから、もう一度お試しください。",
     "profileRouteRequired": "このプロファイルにはプロキシも VPN もありません。設定の「プライバシー」で、これらなしの起動がブロックされています。",
-    "profileRouteUnavailable": "このプロファイルのプロキシまたは VPN が利用できないため、IP アドレスを隠すために起動を停止しました。動作するプロキシまたは VPN をプロファイルに割り当ててください。"
+    "profileRouteUnavailable": "このプロファイルのプロキシまたは VPN が利用できないため、IP アドレスを隠すために起動を停止しました。動作するプロキシまたは VPN をプロファイルに割り当ててください。",
+    "wayfernLaunchArgsRequiresPro": "カスタム起動引数には Pro 以上のプランが必要です。引数を削除するか、プランをアップグレードしてください。",
+    "wayfernLaunchArgInvalid": "各引数には --name または --name=value を使用してください。制御文字は使用できません。",
+    "wayfernLaunchArgReserved": "{{argument}} は Donut が管理します。この引数を削除してください。",
+    "wayfernLaunchArgNotAllowed": "{{argument}} は対応していない起動引数です。削除してください。",
+    "wayfernLaunchArgValueInvalid": "{{argument}} の値には対応していません。",
+    "wayfernLaunchArgsLimit": "起動引数は {{count}} 個まで、1 つあたり {{length}} 文字までにしてください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2387,7 +2392,8 @@
     "account": "アカウント",
     "cookieBot": "Cookie Bot",
     "cookieBotRunning": "Cookie Bot — 実行中",
-    "agent": "エージェント"
+    "agent": "エージェント",
+    "agentWaiting": "エージェント、対応待ちのリクエスト: {{count}}"
   },
   "pageTitle": {
     "proxies": "ネットワーク",
@@ -2600,8 +2606,7 @@
     "titleConfigure": "フィンガープリント設定 - {{name}} ({{browser}})",
     "invalidFingerprint": "無効なフィンガープリント設定",
     "invalidFingerprintDescription": "フィンガープリント設定に無効な JSON が含まれています。詳細設定を確認してください。",
-    "saveFailed": "設定の保存に失敗しました",
-    "unknownError": "不明なエラーが発生しました"
+    "saveFailed": "設定の保存に失敗しました"
   },
   "cookieCopy": {
     "noOtherTargets": "他に Wayfern プロファイルが選択されていません"
@@ -3176,126 +3181,155 @@
     "loadFailed": "ゴミ箱を読み込めませんでした: {{error}}"
   },
   "agent": {
-    "title": "エージェント",
-    "description": "目標を伝えると、エージェントがプロファイルの 1 つで実行します。",
+    "description": "AI エージェントが Donut で何をしているかを確認し、質問に答え、ページに人の操作が必要なときは代わりに対応できます。",
     "tabs": {
-      "run": "新しい実行",
-      "history": "履歴",
+      "conversation": "会話",
+      "profiles": "プロファイル",
+      "activity": "アクティビティ",
       "recipes": "レシピ"
     },
-    "unavailable": {
-      "signInTitle": "エージェントを使うにはサインインしてください",
-      "signInHint": "エージェントの実行は Donut クラウド経由です。アカウントページからサインインしてください。",
-      "planTitle": "エージェントは現在のプランに含まれていません",
-      "planHint": "ブラウザ自動化を含むプランにアップグレードすると目標を設定できます。",
-      "notConfiguredTitle": "エージェントはまだ利用できません",
-      "notConfiguredHint": "この Donut 環境にはエージェントが設定されていません。アカウントに問題はありません。"
+    "header": {
+      "quota": "この 1 時間の残り呼び出し: {{left}} / {{limit}}",
+      "connect": "エージェントを接続"
     },
-    "form": {
-      "profile": "プロファイル",
-      "profilePlaceholder": "プロファイルを選択",
-      "noProfiles": "先にプロファイルを作成してください。エージェントはそれを使って閲覧します。",
-      "target": "実行先",
-      "targetDesktopHint": "このコンピューターでブラウザが開き、動作を確認できます。",
-      "targetFleetHint": "レンタルホストでブラウザが開くため、このコンピューターは占有されません。",
-      "platform": "ホストの OS",
-      "platformPlaceholder": "OS を選択",
-      "platformRequired": "このプロファイルの OS に対応するレンタルホストがありません。利用可能なものを選んでください。",
-      "recipeInsert": "レシピを挿入",
-      "goal": "目標",
-      "goalPlaceholder": "エージェントに達成してほしいことを自分の言葉で書いてください。",
-      "goalEmpty": "実行を始めるには目標を入力してください。",
-      "goalTooLong": "この目標は長すぎます。",
-      "goalCount": "{{chars}} / {{max}}",
-      "limits": "上限と範囲",
-      "limitsHint": "空欄にするとプランの上限が使われます。",
-      "maxSteps": "最大ステップ数",
-      "maxMinutes": "最大実行分数",
-      "maxTokens": "最大トークン数",
-      "budgetUnset": "上限なし",
-      "budgetInvalid": "0 より大きい整数を入力してください。",
-      "effort": "思考の深さ",
-      "allowedHosts": "許可するホスト",
-      "allowedHostsPlaceholder": "example.com\ndocs.example.com",
-      "allowedHostsHint": "1 行に 1 つのホスト。空欄ならエージェントはどこでも閲覧できます。",
-      "allowedHostsCount": "閲覧は次に限定されます: {{hosts}}",
-      "submit": "実行を開始",
-      "starting": "開始しています…",
-      "started": "実行を開始しました"
+    "pause": {
+      "label": "エージェントを一時停止",
+      "noteLabel": "エージェントへのメモ（任意）",
+      "notePlaceholder": "例: プロキシを変更中です。再開するまで待ってください。",
+      "explain": "一時停止中も、エージェントはメモを読んだり質問したりできます。",
+      "confirm": "一時停止",
+      "banner": "{{time}} からエージェントを一時停止しています。",
+      "bannerNote": "メモ: {{note}}",
+      "resume": "再開",
+      "pausedToast": "エージェントを一時停止しました",
+      "resumedToast": "エージェントを再開しました"
     },
-    "target": {
-      "desktop": "このコンピューター",
-      "fleet": "レンタルホスト"
+    "setup": {
+      "signedOutTitle": "エージェントと連携するにはサインインしてください",
+      "signedOutBody": "エージェントは Donut アカウントを通じて Donut に接続します。接続するにはサインインしてください。",
+      "signedOutAction": "アカウントを開く",
+      "planTitle": "ご利用のプランにはリモート制御が含まれていません",
+      "planBody": "独自のエージェントを接続するには、リモート制御を含むプランが必要です。",
+      "planAction": "アカウントを開く",
+      "remoteOffTitle": "リモート制御がオフです",
+      "remoteOffBody": "エージェントはリモート制御を通じて Donut に接続します。オンにしてから、エージェントに Donut を追加してください。",
+      "remoteOffAction": "リモート制御をオンにする",
+      "remoteOffInline": "リモート制御がオフのため、現在エージェントは Donut に接続できません。",
+      "waitingTitle": "エージェントを待っています",
+      "waitingBody": "エージェントに Donut を追加し、下の指示を貼り付けてください。作業中にエージェントがあなたに確認するようになります。",
+      "starterLabel": "エージェントへの指示",
+      "starter": "Donut のツールを使って、私の Donut Browser のプロファイルを操作できます。開始時とステップの合間に get_human_updates を呼び出して、私のメモと、私が使用中のプロファイルを確認してください。どうすればよいか分からないときは ask_human で私に質問してください。サインイン、認証、支払いなど、ページに人の操作が必要なときは request_human_help を呼び出し、私がプロファイルを戻すまで待ってください。長い作業の間は report_progress を呼び出して、進み具合が分かるようにしてください。",
+      "starterCopied": "指示をコピーしました"
     },
-    "platform": {
-      "windows": "Windows",
-      "macos": "macOS",
-      "linux": "Linux"
+    "request": {
+      "needsYou": "対応が必要",
+      "waitingCount": "対応待ちのリクエスト: {{count}}",
+      "questionTitle": "{{agent}} からの質問",
+      "helpTitle": "{{agent}} が人の操作を求めています",
+      "choices": "回答の候補",
+      "answerLabel": "回答",
+      "answerPlaceholder": "回答を入力",
+      "send": "送信"
     },
-    "effort": {
-      "standard": "標準",
-      "high": "高"
+    "actions": {
+      "dismiss": "閉じる",
+      "showWindow": "ウィンドウを表示",
+      "handBack": "戻す",
+      "handBackPlaceholder": "例: サインインしました。続けてください。",
+      "takeOver": "引き継ぐ",
+      "takeOverPlaceholder": "例: このプロファイルを修正中です。今はスキップしてください。",
+      "note": "メモを送る",
+      "noteOptional": "エージェントへのメモ（任意）"
     },
-    "live": {
-      "newRun": "新しい実行",
-      "notFound": "この実行を読み込めませんでした。",
-      "onProfile": "{{profile}} · {{target}}",
-      "cancel": "実行を中止",
-      "cancelling": "中止しています…",
-      "cancelled": "実行を中止しました",
-      "elapsed": "経過時間",
-      "steps": "ステップ",
-      "tokens": "トークン",
-      "cost": "コスト",
-      "costValue": "${{amount}}",
-      "endedBecause": "終了理由: {{reason}}",
-      "streamOffline": "現在ステップが届いていません。再接続中です。",
-      "waiting": "最初のステップを待っています。",
-      "noSteps": "この実行にはステップがありません。",
-      "result": "結果"
+    "notify": {
+      "questionTitle": "{{agent}} から質問があります",
+      "helpTitle": "{{agent}} がプロファイルであなたの操作を求めています",
+      "open": "開く"
     },
-    "step": {
-      "thought": "思考",
-      "tool": "操作",
-      "error": "エラー",
-      "finish": "完了",
-      "unknown": "ステップ"
+    "sessions": {
+      "title": "エージェント",
+      "all": "すべてのエージェント",
+      "fallback": "MCP クライアント",
+      "active": "アクティブ",
+      "idle": "待機中",
+      "ended": "終了",
+      "counts": "呼び出し: {{calls}} · エラー: {{errors}}",
+      "progress": "{{done}} / {{total}}",
+      "showEarlier": "以前のものを表示 ({{count}})",
+      "hideEarlier": "以前のものを隠す",
+      "website": "Donut ウェブサイト"
     },
-    "status": {
-      "queued": "待機中",
-      "running": "実行中",
-      "succeeded": "成功",
-      "failed": "失敗",
-      "cancelled": "中止",
-      "unknown": "不明"
+    "thread": {
+      "label": "会話",
+      "empty": "エージェントからの質問、メモ、進捗がここに表示されます。",
+      "waiting": "あなたの対応待ち",
+      "answered": "あなたの回答: {{answer}}",
+      "handedBack": "プロファイルを戻しました。",
+      "handedBackNote": "プロファイルを戻しました: {{note}}",
+      "dismissed": "閉じました",
+      "noteToAll": "すべてのエージェント宛て",
+      "noteTo": "{{agent}} 宛て",
+      "notePending": "エージェントの次のステップを待っています",
+      "noteSeenAt": "{{time}} に既読",
+      "noteSeen": "既読",
+      "joined": "{{agent}} が参加しました",
+      "left": "{{agent}} が退出しました"
     },
-    "closeReason": {
-      "completed": "目標を達成しました",
-      "budget": "上限に達しました",
-      "cancelled": "中止しました",
-      "navigationBlocked": "許可されたホストの外に出ようとしました",
-      "targetOffline": "ブラウザに接続できませんでした",
-      "targetError": "ブラウザでエラーが発生しました",
-      "modelError": "モデルでエラーが発生しました",
-      "modelRefused": "モデルが目標を拒否しました",
-      "modelStopped": "モデルが途中で停止しました",
-      "contextExceeded": "実行がモデルのコンテキストを超えました",
-      "orphaned": "実行がブラウザを見失いました",
-      "internalError": "こちら側で問題が発生しました"
+    "composer": {
+      "label": "エージェントへのメモ",
+      "placeholderAll": "すべてのエージェントにメモを書く",
+      "placeholderOne": "{{agent}} にメモを書く",
+      "profile": "メモの対象プロファイル",
+      "noProfile": "プロファイルなし",
+      "profileSearch": "プロファイルを検索",
+      "profileNotFound": "プロファイルが見つかりません。",
+      "hint": "Enter で送信、Shift+Enter で改行します。",
+      "send": "メモを送信"
     },
-    "history": {
-      "columnStarted": "開始",
-      "columnProfile": "プロファイル",
-      "columnGoal": "目標",
-      "columnTarget": "実行先",
-      "columnStatus": "状態",
-      "empty": "まだ実行はありません。",
-      "loadMore": "さらに読み込む",
-      "backToList": "履歴に戻る",
-      "unknownProfile": "不明なプロファイル"
+    "filters": {
+      "errorsOnly": "エラーのみ"
+    },
+    "profiles": {
+      "search": "プロファイルを検索",
+      "columns": {
+        "profile": "プロファイル",
+        "agent": "エージェント",
+        "lastAction": "最後の操作",
+        "result": "結果",
+        "when": "日時",
+        "state": "状態"
+      },
+      "state": {
+        "held": "あなたが操作中",
+        "working": "作業中",
+        "idle": "待機中",
+        "error": "エラー"
+      },
+      "takeOverSelected": "選択を引き継ぐ",
+      "handBackSelected": "選択を戻す",
+      "selectRow": "{{name}} を選択",
+      "empty": "エージェントが作業しているプロファイルがここに表示されます。",
+      "noMatches": "条件に一致するプロファイルはありません。"
+    },
+    "result": {
+      "ok": "OK",
+      "error": "エラー"
+    },
+    "activity": {
+      "label": "エージェントのアクティビティ",
+      "agentFilter": "エージェント",
+      "profileSearch": "プロファイルで検索",
+      "stats": "直近 5 分 · 呼び出し: {{calls}} · エラー率: {{rate}}% · 平均: {{average}}",
+      "statsNone": "直近 5 分間の呼び出しはありません。",
+      "empty": "エージェントのツール呼び出しがここに表示されます。",
+      "noMatches": "条件に一致する呼び出しはありません。",
+      "typed": "入力した文字数: {{count}}",
+      "profiles": "プロファイル数: {{count}}",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} 秒"
     },
     "recipes": {
-      "hint": "新しい実行に挿入できる、保存済みの目標です。",
+      "hint": "操作の流れを一度記録すれば、エージェントがほかのプロファイルで繰り返せます。",
       "new": "新しいレシピ",
       "recording": {
         "record": "記録",
@@ -3304,8 +3338,6 @@
         "stop": "記録を停止",
         "steps": "{{count}} 件の手順を記録しました",
         "hint": "記録する実行中のプロファイルを選んでください。",
-        "save": "レシピとして保存",
-        "discard": "破棄",
         "empty": "何も記録されませんでした。ブラウザーでクリックや入力をしてから停止してください。"
       },
       "empty": "保存されたレシピはまだありません。",
@@ -3313,6 +3345,7 @@
       "name": "名前",
       "namePlaceholder": "夜間チェック",
       "steps": "ステップ",
+      "stepType": "ステップの種類",
       "stepsHint": "各ステップは何をするかを示し、要素を操作する場合はロールと名前、または CSS セレクターのどちらか一方を指定します。両方は指定できません。",
       "addStep": "ステップを追加",
       "moveStepUp": "このステップを上へ",
@@ -3348,7 +3381,8 @@
       "updated": "レシピを更新しました",
       "deleted": "レシピを削除しました",
       "deleteTitle": "{{name}} を削除しますか？",
-      "deleteDescription": "レシピはすべての端末から削除されます。開始済みの実行は目標を保持します。"
+      "deleteDescription": "レシピはすべての端末から削除されます。",
+      "needsAutomation": "レシピはブラウザを開いて操作するため、Pro プラン以上が必要です。エージェントは引き続きプロファイル、プロキシ、グループを管理できます。"
     }
   },
   "proxyDistribution": {
@@ -3503,9 +3537,9 @@
         "action": "連携を開く"
       },
       "agent": {
-        "label": "エージェント",
-        "title": "クリック作業をエージェントに任せる",
-        "body": "タスクを説明すると、エージェントがプロファイルを一歩ずつ操作し、実行内容を記録して、レシピとして再実行できます。",
+        "label": "自分のエージェント",
+        "title": "AI エージェントと一緒に作業する",
+        "body": "Claude Code、Cursor などのエージェントを Donut に接続できます。迷ったときはエージェントがあなたに質問し、あなたはいつでもプロファイルを引き継いで戻せます。",
         "action": "エージェントを開く"
       },
       "team": {

@@ -1182,7 +1182,6 @@
     "serverError": "Server error. Please try again later.",
     "unknownError": "An unknown error occurred. Please try again.",
     "noProfilesForUrl": "No profiles available. Please create a profile first before opening URLs.",
-    "updateWayfernConfigFailed": "Failed to update wayfern config: {{error}}",
     "createProfileFailed": "Failed to create profile: {{error}}",
     "launchBrowserFailed": "Failed to launch browser: {{error}}",
     "cannotDeleteRunningProfile": "Cannot delete profile while browser is running. Please stop the browser first.",
@@ -1331,7 +1330,10 @@
     "regenerateConfirmDescription": "The profile keeps its cookies and logins but will present a different device. Sites that already know this profile can ask you to sign in again, challenge you, or block the account. Only regenerate a profile you have not used yet, or one you are willing to lose. This cannot be undone.",
     "canvasNoiseSeedPlaceholder": "Enter a seed string for canvas fingerprint",
     "addFontsPlaceholder": "Add fonts...",
-    "enterAsJson": "Enter {{title}} as JSON"
+    "enterAsJson": "Enter {{title}} as JSON",
+    "launchArgs": "Launch arguments",
+    "launchArgsDescription": "Enter one argument per line, as --name or --name=value. Only supported arguments are accepted, for example --disable-gpu, --mute-audio or --disable-features=Name. Donut controls the profile, proxy, window and debugging arguments.",
+    "launchArgsSkipped": "Custom launch arguments were not used for {{profile}}. {{reason}}"
   },
   "warnings": {
     "windowResizeTitle": "Custom Window Dimensions",
@@ -2298,13 +2300,13 @@
     "profileImportTooNew": "This archive was written by a newer version of Donut Browser. Update the app and try again.",
     "profileImportUnsafeArchive": "This archive tries to write outside the profile folder, so it was refused.",
     "recordingAlreadyRunning": "A recording is already running. Stop it before starting another.",
-    "profileNotRunning": "Start this profile's browser before recording.",
+    "profileNotRunning": "This profile's browser is not running. Start it first.",
     "wayfern152Required": "Recording needs Wayfern 152 or newer. Update the browser for this profile.",
     "recordingFailed": "The recording could not be started. {{detail}}",
     "mcpRemoteRequiresSignIn": "Sign in to your Donut account before enabling remote control.",
     "mcpRemoteUnauthorized": "Donut cloud refused this device's credentials. Sign out and sign in again.",
     "mcpRemoteSlotTaken": "Another Donut instance on this account is already connected. Only one at a time can be controlled remotely.",
-    "mcpRemoteNotEntitled": "Remote MCP requires the Pro plan or higher.",
+    "mcpRemoteNotEntitled": "Your plan does not include remote MCP.",
     "mcpRemoteUnreachable": "Cannot reach Donut cloud right now. Reconnecting automatically.",
     "mcpRemoteKeyMissing": "This device has no remote MCP credential yet. Create one first, then add the client again.",
     "mcpRemoteKeyLimit": "This account already has the most MCP credentials it can hold. Revoke one on the account page and try again.",
@@ -2322,21 +2324,18 @@
     "remoteSessionNotDrivable": "This remote session is not ready to be driven yet. Wait until it reports live.",
     "remotePlatformUnsupported": "Remote sessions run on macOS, Windows or Linux hosts only. This profile's platform is {{platform}}.",
     "remoteProfileNotSynced": "This profile has not finished uploading to cloud sync yet. Wait for its first sync to complete, then try again.",
-    "mcpLocalRemoved": "Donut's local MCP server has been removed. MCP is now remote and requires the Pro plan or higher.",
+    "mcpLocalRemoved": "Donut's local MCP server has been removed. MCP is now remote and needs a paid plan.",
     "trashEntryNotFound": "This profile is no longer in the trash.",
     "trashRestoreConflict": "A profile with the same ID already exists, so this one cannot be restored.",
-    "agentNotEntitled": "Your plan does not include the agent.",
-    "agentNotConfigured": "The agent is not available on this deployment yet.",
-    "agentTargetOffline": "The browser the run needs could not be reached.",
-    "agentBudgetExceeded": "The run stopped because it reached one of its limits.",
-    "agentRunLimitReached": "You already have as many runs going as your plan allows.",
-    "agentRunNotFound": "That run no longer exists.",
-    "agentRunNotCancellable": "That run has already finished.",
-    "agentGoalInvalid": "The goal is empty or too long.",
-    "agentBudgetInvalid": "One of the limits is not a usable number.",
-    "agentTokenProfileMismatch": "This run was started for a different profile. Sign in again and retry.",
+    "recipesNotEntitled": "Recipes need the Pro plan or higher.",
     "agentRecipeInvalid": "A recipe needs a name and at least one step.",
     "agentRecipeNotFound": "That recipe no longer exists.",
+    "agentRequestNotFound": "That request no longer exists.",
+    "agentRequestClosed": "That request was already answered or dismissed.",
+    "agentAnswerEmpty": "Write an answer first.",
+    "agentNoteEmpty": "Write a note first.",
+    "agentTextTooLong": "This text is too long. The limit is {{max}} characters.",
+    "agentSessionNotFound": "That agent is no longer connected.",
     "profilePairedTwice": "This profile was listed more than once in the same distribution",
     "extensionUrlInvalid": "That is not a Chrome Web Store link, an extension ID, or a direct .crx or .zip link.",
     "extensionDownloadFailed": "The extension could not be downloaded. Check the link and your connection.",
@@ -2361,7 +2360,13 @@
     "extensionPathInvalid": "That path is not allowed: it contains '..'.",
     "systemProxyUnreachable": "Donut could not connect through the system proxy {{proxy}}. Fix or turn off the proxy in your system network settings, then try again.",
     "profileRouteRequired": "This profile has no proxy or VPN. Launches without one are blocked in Settings, under Privacy.",
-    "profileRouteUnavailable": "The proxy or VPN of this profile is not available, so the launch was stopped to keep your IP address hidden. Assign a working proxy or VPN to the profile."
+    "profileRouteUnavailable": "The proxy or VPN of this profile is not available, so the launch was stopped to keep your IP address hidden. Assign a working proxy or VPN to the profile.",
+    "wayfernLaunchArgsRequiresPro": "Custom launch arguments require Pro or a higher plan. Clear the arguments or upgrade your plan.",
+    "wayfernLaunchArgInvalid": "Use --name or --name=value for each argument. Control characters are not permitted.",
+    "wayfernLaunchArgReserved": "Donut controls {{argument}}. Remove this argument.",
+    "wayfernLaunchArgNotAllowed": "{{argument}} is not a supported launch argument. Remove it.",
+    "wayfernLaunchArgValueInvalid": "The value of {{argument}} is not supported.",
+    "wayfernLaunchArgsLimit": "Use at most {{count}} launch arguments, each up to {{length}} characters."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2387,7 +2392,8 @@
     "account": "Account",
     "cookieBot": "Cookie Bot",
     "cookieBotRunning": "Cookie Bot — running now",
-    "agent": "Agent"
+    "agent": "Agent",
+    "agentWaiting": "Agent, requests waiting: {{count}}"
   },
   "pageTitle": {
     "proxies": "Network",
@@ -2600,8 +2606,7 @@
     "titleConfigure": "Configure Fingerprint Settings - {{name}} ({{browser}})",
     "invalidFingerprint": "Invalid fingerprint configuration",
     "invalidFingerprintDescription": "The fingerprint configuration contains invalid JSON. Please check your advanced settings.",
-    "saveFailed": "Failed to save configuration",
-    "unknownError": "Unknown error occurred"
+    "saveFailed": "Failed to save configuration"
   },
   "cookieCopy": {
     "noOtherTargets": "No other Wayfern profiles selected"
@@ -3176,126 +3181,155 @@
     "loadFailed": "Could not load the trash: {{error}}"
   },
   "agent": {
-    "title": "Agent",
-    "description": "Give the agent a goal and it works through it on one of your profiles.",
+    "description": "See what your AI agent does in Donut, answer its questions and step in when a page needs you.",
     "tabs": {
-      "run": "New run",
-      "history": "History",
+      "conversation": "Conversation",
+      "profiles": "Profiles",
+      "activity": "Activity",
       "recipes": "Recipes"
     },
-    "unavailable": {
-      "signInTitle": "Sign in to use the agent",
-      "signInHint": "Agent runs are brokered by Donut cloud. Sign in from the Account page to start one.",
-      "planTitle": "The agent is not part of your plan",
-      "planHint": "Upgrade to a plan that includes browser automation to give the agent a goal.",
-      "notConfiguredTitle": "The agent is not available yet",
-      "notConfiguredHint": "This Donut deployment has no agent configured. Nothing is wrong with your account."
+    "header": {
+      "quota": "{{left}} of {{limit}} calls left this hour",
+      "connect": "Connect an agent"
     },
-    "form": {
-      "profile": "Profile",
-      "profilePlaceholder": "Choose a profile",
-      "noProfiles": "Create a profile first — the agent needs one to browse with.",
-      "target": "Runs on",
-      "targetDesktopHint": "The browser opens on this computer and you can watch it work.",
-      "targetFleetHint": "The browser opens on a leased host, so this computer stays free.",
-      "platform": "Host operating system",
-      "platformPlaceholder": "Choose an operating system",
-      "platformRequired": "This profile's operating system has no leased host. Pick one the fleet can run.",
-      "recipeInsert": "Insert a recipe",
-      "goal": "Goal",
-      "goalPlaceholder": "Describe what the agent should achieve, in your own words.",
-      "goalEmpty": "Write a goal to start a run.",
-      "goalTooLong": "This goal is too long.",
-      "goalCount": "{{chars}} / {{max}}",
-      "limits": "Limits and scope",
-      "limitsHint": "Leave a limit empty to use the plan's own ceiling.",
-      "maxSteps": "Maximum steps",
-      "maxMinutes": "Maximum minutes",
-      "maxTokens": "Maximum tokens",
-      "budgetUnset": "No limit",
-      "budgetInvalid": "Enter a whole number above zero.",
-      "effort": "Effort",
-      "allowedHosts": "Allowed hosts",
-      "allowedHostsPlaceholder": "example.com\ndocs.example.com",
-      "allowedHostsHint": "One host per line. Leave empty to let the agent browse anywhere.",
-      "allowedHostsCount": "Navigation limited to: {{hosts}}",
-      "submit": "Start run",
-      "starting": "Starting…",
-      "started": "Run started"
+    "pause": {
+      "label": "Pause agents",
+      "noteLabel": "Note for your agents (optional)",
+      "notePlaceholder": "For example: I am changing proxies. Wait until I resume.",
+      "explain": "While paused, agents can still read your notes and ask you questions.",
+      "confirm": "Pause agents",
+      "banner": "Agents are paused since {{time}}.",
+      "bannerNote": "Your note: {{note}}",
+      "resume": "Resume",
+      "pausedToast": "Agents paused",
+      "resumedToast": "Agents resumed"
     },
-    "target": {
-      "desktop": "This computer",
-      "fleet": "Leased host"
+    "setup": {
+      "signedOutTitle": "Sign in to work with your agent",
+      "signedOutBody": "Your agent reaches Donut through your Donut account. Sign in to connect it.",
+      "signedOutAction": "Open Account",
+      "planTitle": "Remote control is not part of your plan",
+      "planBody": "Connecting your own agent needs a plan that includes remote control.",
+      "planAction": "Open Account",
+      "remoteOffTitle": "Remote control is off",
+      "remoteOffBody": "Your agent connects to Donut through remote control. Turn it on, then add Donut to your agent.",
+      "remoteOffAction": "Turn on remote control",
+      "remoteOffInline": "Remote control is off, so your agents cannot reach Donut right now.",
+      "waitingTitle": "Waiting for your agent",
+      "waitingBody": "Add Donut to your agent, then paste the instructions below into it so it checks in with you while it works.",
+      "starterLabel": "Instructions for your agent",
+      "starter": "You can control my Donut Browser profiles with the Donut tools. When you start, and between steps, call get_human_updates to read my notes and to see which profiles I am using. If you are not sure what to do, ask me with ask_human. If a page needs a person, such as a sign-in, a verification or a payment, call request_human_help and wait until I hand the profile back. During long jobs, call report_progress so I can see how far you are.",
+      "starterCopied": "Instructions copied"
     },
-    "platform": {
-      "windows": "Windows",
-      "macos": "macOS",
-      "linux": "Linux"
+    "request": {
+      "needsYou": "Needs you",
+      "waitingCount": "Requests waiting for you: {{count}}",
+      "questionTitle": "{{agent}} asks",
+      "helpTitle": "{{agent}} needs a person",
+      "choices": "Suggested answers",
+      "answerLabel": "Your answer",
+      "answerPlaceholder": "Type an answer",
+      "send": "Send"
     },
-    "effort": {
-      "standard": "Standard",
-      "high": "High"
+    "actions": {
+      "dismiss": "Dismiss",
+      "showWindow": "Show window",
+      "handBack": "Hand back",
+      "handBackPlaceholder": "For example: I signed in, you can continue.",
+      "takeOver": "Take over",
+      "takeOverPlaceholder": "For example: I am fixing this profile, skip it for now.",
+      "note": "Send a note",
+      "noteOptional": "Note for the agent (optional)"
     },
-    "live": {
-      "newRun": "New run",
-      "notFound": "This run could not be read.",
-      "onProfile": "on {{profile}} · {{target}}",
-      "cancel": "Cancel run",
-      "cancelling": "Cancelling…",
-      "cancelled": "Run cancelled",
-      "elapsed": "Elapsed",
-      "steps": "Steps",
-      "tokens": "Tokens",
-      "cost": "Cost",
-      "costValue": "${{amount}}",
-      "endedBecause": "Ended: {{reason}}",
-      "streamOffline": "Steps are not arriving right now. Reconnecting.",
-      "waiting": "Waiting for the first step.",
-      "noSteps": "This run recorded no steps.",
-      "result": "Result"
+    "notify": {
+      "questionTitle": "{{agent}} has a question",
+      "helpTitle": "{{agent}} needs you in a profile",
+      "open": "Open"
     },
-    "step": {
-      "thought": "Thought",
-      "tool": "Action",
-      "error": "Error",
-      "finish": "Finished",
-      "unknown": "Step"
+    "sessions": {
+      "title": "Agents",
+      "all": "All agents",
+      "fallback": "MCP client",
+      "active": "Active",
+      "idle": "Idle",
+      "ended": "Ended",
+      "counts": "Calls: {{calls}} · Errors: {{errors}}",
+      "progress": "{{done}} of {{total}}",
+      "showEarlier": "Show earlier ({{count}})",
+      "hideEarlier": "Hide earlier",
+      "website": "Donut website"
     },
-    "status": {
-      "queued": "Queued",
-      "running": "Running",
-      "succeeded": "Succeeded",
-      "failed": "Failed",
-      "cancelled": "Cancelled",
-      "unknown": "Unknown"
+    "thread": {
+      "label": "Conversation",
+      "empty": "Questions, notes and progress from your agents show up here.",
+      "waiting": "Waiting for you",
+      "answered": "You answered: {{answer}}",
+      "handedBack": "You handed the profile back.",
+      "handedBackNote": "You handed the profile back: {{note}}",
+      "dismissed": "Dismissed",
+      "noteToAll": "To all agents",
+      "noteTo": "To {{agent}}",
+      "notePending": "Waiting for the agent's next step",
+      "noteSeenAt": "Seen at {{time}}",
+      "noteSeen": "Seen",
+      "joined": "{{agent}} joined",
+      "left": "{{agent}} left"
     },
-    "closeReason": {
-      "completed": "the goal was reached",
-      "budget": "a limit was reached",
-      "cancelled": "you cancelled it",
-      "navigationBlocked": "it tried to leave the allowed hosts",
-      "targetOffline": "the browser could not be reached",
-      "targetError": "the browser failed",
-      "modelError": "the model failed",
-      "modelRefused": "the model refused the goal",
-      "modelStopped": "the model stopped early",
-      "contextExceeded": "the run outgrew the model's context",
-      "orphaned": "the run lost its browser",
-      "internalError": "something failed on our side"
+    "composer": {
+      "label": "Note for your agent",
+      "placeholderAll": "Write a note to all agents",
+      "placeholderOne": "Write a note to {{agent}}",
+      "profile": "Profile this note is about",
+      "noProfile": "No profile",
+      "profileSearch": "Search profiles",
+      "profileNotFound": "No profile found.",
+      "hint": "Enter sends. Shift+Enter starts a new line.",
+      "send": "Send note"
     },
-    "history": {
-      "columnStarted": "Started",
-      "columnProfile": "Profile",
-      "columnGoal": "Goal",
-      "columnTarget": "Runs on",
-      "columnStatus": "Status",
-      "empty": "No runs yet.",
-      "loadMore": "Load more",
-      "backToList": "Back to history",
-      "unknownProfile": "Unknown profile"
+    "filters": {
+      "errorsOnly": "Errors only"
+    },
+    "profiles": {
+      "search": "Search profiles",
+      "columns": {
+        "profile": "Profile",
+        "agent": "Agent",
+        "lastAction": "Last action",
+        "result": "Result",
+        "when": "When",
+        "state": "State"
+      },
+      "state": {
+        "held": "Held by you",
+        "working": "Working",
+        "idle": "Idle",
+        "error": "Error"
+      },
+      "takeOverSelected": "Take over selected",
+      "handBackSelected": "Hand back selected",
+      "selectRow": "Select {{name}}",
+      "empty": "Profiles your agents work in show up here.",
+      "noMatches": "No profiles match these filters."
+    },
+    "result": {
+      "ok": "OK",
+      "error": "Error"
+    },
+    "activity": {
+      "label": "Agent activity",
+      "agentFilter": "Agent",
+      "profileSearch": "Search by profile",
+      "stats": "Last 5 minutes · Calls: {{calls}} · Errors: {{rate}}% · Average: {{average}}",
+      "statsNone": "No calls in the last 5 minutes.",
+      "empty": "Tool calls from your agents show up here.",
+      "noMatches": "No calls match these filters.",
+      "typed": "Characters typed: {{count}}",
+      "profiles": "Profiles: {{count}}",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s"
     },
     "recipes": {
-      "hint": "Saved goals you can drop into a new run.",
+      "hint": "Record a flow once and your agent can repeat it on other profiles.",
       "new": "New recipe",
       "recording": {
         "record": "Record",
@@ -3304,8 +3338,6 @@
         "stop": "Stop recording",
         "steps": "{{count}} steps recorded",
         "hint": "Choose a running profile to record.",
-        "save": "Save as a recipe",
-        "discard": "Discard",
         "empty": "Nothing was recorded. Click and type in the browser, then stop."
       },
       "empty": "No recipes saved yet.",
@@ -3313,6 +3345,7 @@
       "name": "Name",
       "namePlaceholder": "Nightly check",
       "steps": "Steps",
+      "stepType": "Step type",
       "stepsHint": "Each step names what to do and, where it acts on an element, either its role and name or a CSS selector. Not both.",
       "addStep": "Add a step",
       "moveStepUp": "Move this step up",
@@ -3348,7 +3381,8 @@
       "updated": "Recipe updated",
       "deleted": "Recipe deleted",
       "deleteTitle": "Delete {{name}}?",
-      "deleteDescription": "The recipe is removed from every device. Runs already started keep their goal."
+      "deleteDescription": "The recipe is removed from every device.",
+      "needsAutomation": "Recipes open and drive browsers, so they need the Pro plan or higher. Your agent can still manage profiles, proxies and groups."
     }
   },
   "proxyDistribution": {
@@ -3503,9 +3537,9 @@
         "action": "Open Integrations"
       },
       "agent": {
-        "label": "Agent",
-        "title": "Hand the clicking to an agent",
-        "body": "Describe a task and the agent drives a profile step by step, records what it did and can replay it as a recipe.",
+        "label": "Your own agent",
+        "title": "Work alongside your AI agent",
+        "body": "Connect Claude Code, Cursor or another agent to Donut. It asks you when it is unsure, and you can take over a profile and hand it back at any time.",
         "action": "Open Agent"
       },
       "team": {

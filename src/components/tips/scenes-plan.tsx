@@ -173,86 +173,73 @@ export function CrossOsScene() {
   );
 }
 
-const AGENT_BUTTONS = [
-  { x: 36, y: 56 },
-  { x: 36, y: 82 },
-  { x: 108, y: 108 },
-];
-const AGENT_CLICKS = [0.18, 0.42, 0.66];
-
-/** The agent clicks through a page and writes each step into a recipe. */
+/** The agent asks, the person answers, and the agent carries on. */
 export function AgentScene() {
-  const { kf, tr } = useScene(5.2);
+  const { kf, tr } = useScene(5.6);
   return (
     <Scene>
-      <Window x={16} y={26} width={168} height={108} lines={0}>
-        {AGENT_BUTTONS.map((button, index) => {
-          const at = AGENT_CLICKS[index];
-          return (
-            <g key={button.y}>
-              <rect x={button.x} y={button.y} width={52} height={14} rx={4} />
-              <motion.rect
-                x={button.x}
-                y={button.y}
-                width={52}
-                height={14}
-                rx={4}
-                fill="currentColor"
-                stroke="none"
-                className="text-foreground"
-                initial={false}
-                animate={{ opacity: kf([0, 0, 0.9, 0.9]) }}
-                transition={tr([0, at, at + 0.05, 1])}
-              />
-              <Check
-                x={button.x + 58}
-                y={button.y + 6}
-                size={9}
-                className="text-success-text"
-                animate={{ pathLength: kf([0, 0, 1, 1]) }}
-                transition={tr([0, at + 0.04, at + 0.12, 1])}
-              />
-            </g>
-          );
-        })}
-      </Window>
-      <Cursor
+      <g className="text-foreground">
+        <rect x={20} y={60} width={36} height={28} rx={8} />
+        <path d="M38 60 v-8" />
+        <circle cx={38} cy={50} r={2} fill="currentColor" stroke="none" />
+        <circle cx={31} cy={74} r={2.5} fill="currentColor" stroke="none" />
+        <circle cx={45} cy={74} r={2.5} fill="currentColor" stroke="none" />
+      </g>
+      <Person cx={286} cy={82} />
+      <motion.g
+        initial={false}
+        animate={{ opacity: kf([0, 0, 1, 1]), y: kf([6, 6, 0, 0]) }}
+        transition={tr([0, 0.06, 0.14, 1])}
+      >
+        <rect x={70} y={22} width={118} height={30} rx={8} />
+        <path d="M80 52 l-8 8 l16 -8" />
+        <path d="M84 37 h62" strokeWidth={2} />
+        <text
+          x={170}
+          y={37}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={15}
+          fontFamily="inherit"
+          fill="currentColor"
+          stroke="none"
+          className="text-foreground"
+        >
+          ?
+        </text>
+      </motion.g>
+      <motion.g
         className="text-foreground"
-        animate={{
-          x: kf([150, 150, 58, 58, 58, 58, 130, 130]),
-          y: kf([120, 120, 60, 60, 86, 86, 112, 112]),
-        }}
-        transition={tr([
-          0,
-          0.06,
-          AGENT_CLICKS[0],
-          AGENT_CLICKS[0] + 0.1,
-          AGENT_CLICKS[1],
-          AGENT_CLICKS[1] + 0.1,
-          AGENT_CLICKS[2],
-          1,
-        ])}
+        initial={false}
+        animate={{ opacity: kf([0, 0, 1, 1]), y: kf([6, 6, 0, 0]) }}
+        transition={tr([0, 0.3, 0.38, 1])}
+      >
+        <rect x={152} y={64} width={104} height={28} rx={8} />
+        <path d="M246 92 l10 6 l-4 -6" />
+        <motion.path
+          d="M164 78 h72"
+          strokeWidth={2}
+          initial={false}
+          animate={{ pathLength: kf([0, 0, 1, 1]) }}
+          transition={tr([0, 0.38, 0.5, 1])}
+        />
+      </motion.g>
+      <path d="M70 124 H246" strokeDasharray="2 5" />
+      <motion.path
+        d="M70 124 H246"
+        strokeWidth={3}
+        className="text-foreground"
+        initial={false}
+        animate={{ pathLength: kf([0, 0, 1, 1]) }}
+        transition={tr([0, 0.56, 0.86, 1], { ease: "linear" })}
       />
-      <Window x={204} y={26} width={100} height={108} lines={0}>
-        {AGENT_CLICKS.map((at, index) => (
-          <g key={at}>
-            <circle
-              cx={214}
-              cy={58 + index * 22}
-              r={2}
-              fill="currentColor"
-              stroke="none"
-            />
-            <motion.path
-              d={`M222 ${58 + index * 22} h${60 - index * 10}`}
-              strokeWidth={2}
-              initial={false}
-              animate={{ pathLength: kf([0, 0, 1, 1]) }}
-              transition={tr([0, at + 0.08, at + 0.2, 1])}
-            />
-          </g>
-        ))}
-      </Window>
+      <Check
+        x={256}
+        y={124}
+        className="text-success-text"
+        animate={{ pathLength: kf([0, 0, 1, 1]) }}
+        transition={tr([0, 0.86, 0.94, 1])}
+      />
     </Scene>
   );
 }

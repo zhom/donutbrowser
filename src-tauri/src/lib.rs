@@ -93,6 +93,7 @@ pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
 pub mod proxy_udp;
+mod recipes;
 mod recorder;
 mod remote_exit;
 mod remote_handoff;
@@ -110,7 +111,7 @@ mod wayfern_persona;
 mod wayfern_terms;
 mod window_decorations;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
-mod agent;
+mod agent_console;
 pub mod cloud_auth;
 mod cloud_errors;
 mod commercial_license;
@@ -3621,20 +3622,19 @@ pub fn run_with_builder(
       cookie_bot::create_cookie_bot_user_template,
       cookie_bot::update_cookie_bot_user_template,
       cookie_bot::delete_cookie_bot_user_template,
-      // Agent commands. Defined in `agent.rs` for the same reason: every local
-      // precondition they have (the profile is on this machine, the goal says
-      // something) lives beside the transport that sends them.
-      agent::start_agent_run,
-      agent::get_agent_runs,
-      agent::get_agent_run,
-      agent::cancel_agent_run,
-      agent::get_agent_recipes,
-      agent::create_agent_recipe,
-      agent::update_agent_recipe,
-      agent::delete_agent_recipe,
-      agent::start_agent_run_events,
-      agent::stop_agent_run_events,
-      agent::get_agent_run_events_status,
+      recipes::get_agent_recipes,
+      recipes::create_agent_recipe,
+      recipes::update_agent_recipe,
+      recipes::delete_agent_recipe,
+      agent_console::get_agent_console,
+      agent_console::answer_agent_request,
+      agent_console::dismiss_agent_request,
+      agent_console::send_agent_note,
+      agent_console::take_over_profile,
+      agent_console::hand_back_profile,
+      agent_console::set_agents_paused,
+      agent_console::clear_agent_activity,
+      agent_console::show_profile_window,
       // Profile password commands
       set_profile_password,
       change_profile_password,
@@ -3651,9 +3651,6 @@ pub fn run_with_builder(
       // never waits out a reconnect backoff that is about to be pointless.
       if let tauri::RunEvent::Exit = _event {
         remote_session::stop_session_events();
-        // The agent step stream is the same shape of subscriber and would hold
-        // a shutdown for the length of its reconnect backoff.
-        agent::stop_run_events();
         // Same reasoning for the remote-control bridge, plus one of its own:
         // one account holds one bridge at a time, so an instance that exits
         // without hanging up delays the account's next machine.

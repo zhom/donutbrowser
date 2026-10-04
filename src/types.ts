@@ -139,14 +139,6 @@ export interface Entitlements {
    * bridge itself never gates on it: the server decides who may send work.
    */
   remoteControl: boolean;
-  /**
-   * May run the browsing agent: a goal the cloud pursues on one profile, on
-   * this desktop or on a leased host.
-   *
-   * Never derived from `browserAutomation`. A backend that omits this key has
-   * no agent routes to be entitled to, so `false` is the true answer.
-   */
-  agentAutomation: boolean;
   profileLimit: number;
   requestsPerHour: number;
   /**
@@ -169,25 +161,16 @@ export interface Entitlements {
  *
  * `remoteControl` is optional too, but for the opposite reason: a backend that
  * omits it has no remote-control endpoint at all, so `false` is the true answer
- * rather than a gap to fill in. `agentAutomation` is optional on exactly the
- * same terms.
+ * rather than a gap to fill in.
  */
 export type ServerEntitlements = Omit<
   Entitlements,
-  | "cookieBot"
-  | "remoteBrowserHours"
-  | "remoteInteractive"
-  | "remoteControl"
-  | "agentAutomation"
+  "cookieBot" | "remoteBrowserHours" | "remoteInteractive" | "remoteControl"
 > &
   Partial<
     Pick<
       Entitlements,
-      | "cookieBot"
-      | "remoteBrowserHours"
-      | "remoteInteractive"
-      | "remoteControl"
-      | "agentAutomation"
+      "cookieBot" | "remoteBrowserHours" | "remoteInteractive" | "remoteControl"
     >
   >;
 
@@ -527,6 +510,7 @@ export interface WayfernConfig {
   camera_crop?: string; // "x,y,width,height" in source pixels
   block_webgl?: boolean;
   restore_session?: boolean; // Reopen the last session's windows and tabs on interactive launches (default true)
+  launch_args?: string[];
   executable_path?: string;
   fingerprint?: string; // JSON string of the complete fingerprint config
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
