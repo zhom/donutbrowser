@@ -174,7 +174,7 @@ async fn main() {
           Command::new("start")
             .about(
               "Start a worker serving authenticated SOCKS5 on 127.0.0.1. The share link is \
-               read from DONUT_PROXY_SHARE_LINK, never from the command line",
+               read from the first line of stdin, never from the command line",
             )
             .arg(
               Arg::new("owner-pid")
@@ -390,25 +390,22 @@ async fn main() {
       let owner_pid = *start_matches
         .get_one::<u32>("owner-pid")
         .expect("owner-pid is required");
-      let share_link = std::env::var("DONUT_PROXY_SHARE_LINK")
-        .ok()
-        .filter(|link| !link.trim().is_empty());
-      // The worker processes started below inherit this environment.
-      std::env::remove_var("DONUT_PROXY_SHARE_LINK");
-      let Some(share_link) = share_link else {
-        eprintln!("DONUT_PROXY_SHARE_LINK is not set");
+      let mut share_link = String::new();
+      if std::io::stdin().read_line(&mut share_link).is_err() || share_link.trim().is_empty() {
+        eprintln!("No share link on stdin");
         process::exit(2);
-      };
+      }
 
-      // The detached worker would otherwise inherit the caller's stdout and
-      // stderr pipes, and a caller that reads to EOF would wait for the worker
-      // to exit. Same fix as `proxy start` (proxy_runner.rs).
+      // The detached worker would otherwise inherit the caller's pipes, and a
+      // caller that reads to EOF would wait for the worker to exit. Same fix
+      // as `proxy start` (proxy_runner.rs).
       #[cfg(windows)]
       {
         use std::os::windows::io::AsRawHandle;
         use windows::Win32::Foundation::{SetHandleInformation, HANDLE, HANDLE_FLAGS};
         const HANDLE_FLAG_INHERIT: u32 = 0x00000001;
         for handle in [
+          std::io::stdin().as_raw_handle(),
           std::io::stdout().as_raw_handle(),
           std::io::stderr().as_raw_handle(),
         ] {

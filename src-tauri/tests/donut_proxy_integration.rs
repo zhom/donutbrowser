@@ -2172,6 +2172,28 @@ async fn port_refuses_connections(port: u16) -> bool {
   false
 }
 
+/// Runs `donut-proxy xray ...` with `input` on stdin, where `start` reads the
+/// share link.
+async fn run_xray_cli(
+  binary: std::path::PathBuf,
+  cache: std::path::PathBuf,
+  args: Vec<String>,
+  input: String,
+) -> std::io::Result<std::process::Output> {
+  let mut child = tokio::process::Command::new(binary)
+    .arg("xray")
+    .args(args)
+    .env("DONUTBROWSER_CACHE_DIR", cache)
+    .stdin(std::process::Stdio::piped())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+  let mut stdin = child.stdin.take().expect("stdin is piped");
+  stdin.write_all(input.as_bytes()).await?;
+  drop(stdin);
+  child.wait_with_output().await
+}
+
 /// `donut-proxy xray start|bind|stop` is what a remote host without the app
 /// drives, so its exit codes and output shape are a contract. This runs it
 /// against a real Xray-core VLESS server on loopback.
@@ -2232,22 +2254,20 @@ async fn test_xray_cli_contract() -> Result<(), Box<dyn std::error::Error + Send
   assert!(server_ready, "the Xray-core test server did not listen");
 
   let xray_cli = |args: &[&str], share_link: Option<&str>| {
-    let mut command = tokio::process::Command::new(&binary_path);
-    command
-      .arg("xray")
-      .args(args)
-      .env("DONUTBROWSER_CACHE_DIR", cache.path())
-      .env_remove("DONUT_PROXY_SHARE_LINK");
-    if let Some(link) = share_link {
-      command.env("DONUT_PROXY_SHARE_LINK", link);
-    }
-    command.output()
+    run_xray_cli(
+      binary_path.clone(),
+      cache.path().to_path_buf(),
+      args.iter().map(|arg| arg.to_string()).collect(),
+      share_link
+        .map(|link| format!("{link}\n"))
+        .unwrap_or_default(),
+    )
   };
   let owner = std::process::id().to_string();
 
   let missing = xray_cli(&["start", "--owner-pid", &owner], None).await?;
   assert_eq!(missing.status.code(), Some(2));
-  assert!(String::from_utf8_lossy(&missing.stderr).contains("DONUT_PROXY_SHARE_LINK"));
+  assert!(String::from_utf8_lossy(&missing.stderr).contains("stdin"));
 
   let malformed = xray_cli(
     &["start", "--owner-pid", &owner],
