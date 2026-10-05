@@ -129,7 +129,9 @@ impl BlocklistMatcher {
     if self.domains.is_empty() {
       return false;
     }
-    let host_lower = host.to_lowercase();
+    // `tracker.com.` is the same name as `tracker.com`; without the trim the
+    // fully qualified spelling walked past every list entry.
+    let host_lower = host.trim_end_matches('.').to_lowercase();
     let in_set = self.set_contains(&host_lower);
     if self.allowlist_mode {
       // Allow only listed domains; block everything else.
@@ -443,25 +445,40 @@ async fn connect_via_socks(
     }
   } else {
     let mut stream = stream;
-    // SOCKS4 - simplified implementation
-    let ip: std::net::IpAddr = target_host.parse()?;
-
     let mut request = vec![0x04, 0x01]; // SOCKS4, CONNECT
     request.extend_from_slice(&target_port.to_be_bytes());
-    match ip {
-      std::net::IpAddr::V4(ipv4) => {
+    match target_host.parse::<std::net::IpAddr>() {
+      Ok(std::net::IpAddr::V4(ipv4)) => {
         request.extend_from_slice(&ipv4.octets());
+        request.push(0); // empty userid, NULL-terminated
       }
-      std::net::IpAddr::V6(_) => {
+      Ok(std::net::IpAddr::V6(_)) => {
         return Err("SOCKS4 does not support IPv6".into());
       }
+      // The browser sends names, not addresses. Resolving one here would leak
+      // the destination to this machine's DNS, so it goes as SOCKS4a: the
+      // marker address 0.0.0.1, the userid, then the name for the proxy to
+      // resolve. A proxy that speaks only plain SOCKS4 refuses it, as it
+      // refused every name before.
+      Err(_) if !target_host.is_empty() && !target_host.contains('\0') => {
+        request.extend_from_slice(&[0, 0, 0, 1]);
+        request.push(0); // empty userid, NULL-terminated
+        request.extend_from_slice(target_host.as_bytes());
+        request.push(0); // NULL-terminated hostname
+      }
+      Err(_) => return Err("SOCKS4 target host is invalid".into()),
     }
-    request.push(0); // NULL terminator for userid
 
-    stream.write_all(&request).await?;
-
-    let mut response = [0u8; 8];
-    stream.read_exact(&mut response).await?;
+    // A proxy that accepts the connection and never answers would otherwise
+    // hold this slot forever.
+    let response = tokio::time::timeout(UPSTREAM_DIAL_TIMEOUT, async {
+      stream.write_all(&request).await?;
+      let mut response = [0u8; 8];
+      stream.read_exact(&mut response).await?;
+      Ok::<_, std::io::Error>(response)
+    })
+    .await
+    .map_err(|_| "SOCKS4 upstream handshake timed out")??;
 
     if response[1] != 0x5A {
       return Err("SOCKS4 connection failed".into());
@@ -2195,6 +2212,17 @@ async fn read_upstream_connect_response<S: AsyncRead + Unpin>(
 /// only place `Proxy-Authorization` is written, so whether those credentials
 /// cross the network in the clear is decided entirely by which stream the
 /// caller hands in, nothing here can weaken it.
+/// `host:port` for a CONNECT line. An IPv6 literal (a SOCKS5 client sends one
+/// for `http://[2001:db8::1]/`) needs brackets, or the proxy reads its last
+/// group as the port.
+fn connect_authority(host: &str, port: u16) -> String {
+  if host.parse::<std::net::Ipv6Addr>().is_ok() {
+    format!("[{host}]:{port}")
+  } else {
+    format!("{host}:{port}")
+  }
+}
+
 async fn connect_via_http_proxy<S: AsyncStream + 'static>(
   mut proxy_stream: S,
   proxy_host: &str,
@@ -2203,10 +2231,8 @@ async fn connect_via_http_proxy<S: AsyncStream + 'static>(
   target_port: u16,
   upstream: &Url,
 ) -> Result<BoxedAsyncStream, Box<dyn std::error::Error>> {
-  let mut connect_req = format!(
-    "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",
-    target_host, target_port, target_host, target_port
-  );
+  let authority = connect_authority(target_host, target_port);
+  let mut connect_req = format!("CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n");
 
   let (username, password) = upstream_userpass(upstream);
   if !username.is_empty() {
@@ -2580,6 +2606,50 @@ mod tests {
     assert!(matcher.is_blocked("foo.example.com"));
     assert!(matcher.is_blocked("bar.baz.example.com"));
     assert!(matcher.is_blocked("a.b.c.example.com"));
+  }
+
+  #[tokio::test]
+  async fn a_socks4_upstream_receives_a_hostname_as_socks4a() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let server = tokio::spawn(async move {
+      let (mut socket, _) = listener.accept().await.unwrap();
+      let mut request = vec![0_u8; 8 + 1 + "example.com".len() + 1];
+      socket.read_exact(&mut request).await.unwrap();
+      socket
+        .write_all(&[0, 0x5A, 0, 0, 0, 0, 0, 0])
+        .await
+        .unwrap();
+      request
+    });
+
+    connect_via_socks(&address, "example.com", 443, false, None)
+      .await
+      .expect("SOCKS4a connect");
+    let request = server.await.unwrap();
+    assert_eq!(&request[..8], &[4, 1, 1, 187, 0, 0, 0, 1]);
+    assert_eq!(&request[8..], b"\0example.com\0");
+  }
+
+  #[test]
+  fn a_connect_authority_brackets_ipv6_literals_only() {
+    assert_eq!(connect_authority("2001:db8::1", 443), "[2001:db8::1]:443");
+    assert_eq!(connect_authority("203.0.113.5", 80), "203.0.113.5:80");
+    assert_eq!(connect_authority("example.com", 443), "example.com:443");
+  }
+
+  #[test]
+  fn a_fully_qualified_name_with_a_trailing_dot_is_still_blocked() {
+    let mut matcher = BlocklistMatcher::new();
+    let mut domains = HashSet::new();
+    domains.insert("tracker.com".to_string());
+    matcher.domains = Arc::new(domains);
+
+    assert!(matcher.is_blocked("tracker.com."));
+    assert!(matcher.is_blocked("ads.TRACKER.com."));
+    assert!(!matcher.is_blocked("safe.com."));
   }
 
   #[test]

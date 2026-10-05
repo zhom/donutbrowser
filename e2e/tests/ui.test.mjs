@@ -620,7 +620,7 @@ test("every custom theme keeps tabs, counts, group pills, and rail states readab
   });
 });
 
-test("VLESS proxy form keeps the share URI as one clear, validated input", async () => {
+test("Xray proxy form keeps the share link as one clear, validated input", async () => {
   await withApp("ui-vless-proxy-form", async (app) => {
     const uri =
       "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@vpn.example.com:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.example.com&fp=chrome&pbk=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&sid=0123456789abcdef&type=tcp#E2E";
@@ -630,9 +630,8 @@ test("VLESS proxy form keeps the share URI as one clear, validated input", async
     await app.clickSelector('[aria-label="New proxy"]');
     await app.waitForText("Add Proxy");
     await app.fillSelector("#proxy-name", "E2E VLESS");
-    // "VLESS (REALITY)" since the type list was regrouped by whether the
-    // first hop is encrypted; chooseSelectOption matches the label exactly.
-    await chooseSelectOption(app, "#proxy-type", "VLESS (REALITY)");
+    // chooseSelectOption matches the label exactly.
+    await chooseSelectOption(app, "#proxy-type", "VLESS");
 
     assert.equal(
       await app.execute(
@@ -670,27 +669,49 @@ test("VLESS proxy form keeps the share URI as one clear, validated input", async
       true,
     );
 
-    // A well-formed URI for a setup Donut cannot use must say WHICH part is
+    // A well-formed link for a setup Donut cannot use must say WHICH part is
     // unsupported, rather than implying the user mistyped it.
     await app.fillSelector(
       "#proxy-vless-uri",
-      `${uri.replace("type=tcp", "type=ws")}&path=%2Fray`,
+      `${uri.replace("type=tcp", "type=kcp")}&seed=x`,
     );
+    // The hint below the field also says "transport", so only the backend's
+    // refusal, which marks the field invalid, counts here.
     await app.waitFor(
       () =>
         app.execute(
-          `return /only|TCP|transport/i.test(
-             document.querySelector("#proxy-vless-uri-help")?.textContent || ""
-           );`,
+          `return document.querySelector("#proxy-vless-uri")?.getAttribute("aria-invalid") === "true" &&
+            /uses a transport/i.test(
+              document.querySelector("#proxy-vless-uri-help")?.textContent || ""
+            );`,
         ),
       { description: "transport-specific unsupported message" },
     );
 
-    await app.fillSelector("#proxy-vless-uri", uri);
+    // The link names its protocol, and the backend stores the proxy under it,
+    // so the form follows the link before anything is saved.
+    await app.fillSelector(
+      "#proxy-vless-uri",
+      "trojan://pw@tj.example.com:443?sni=tj.example.com",
+    );
     await app.waitFor(
       () =>
         app.execute(
-          `return document.querySelector("#proxy-vless-uri")?.getAttribute("aria-invalid") === "false";`,
+          `return document.querySelector("#proxy-type")?.textContent?.trim() === "Trojan";`,
+        ),
+      { description: "type follows a Trojan link" },
+    );
+
+    await app.fillSelector("#proxy-vless-uri", uri);
+    // The field is not marked invalid while the backend is still reading the
+    // link, so the enabled button is what proves it was accepted.
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector("#proxy-vless-uri")?.getAttribute("aria-invalid") === "false" &&
+            [...document.querySelectorAll("[role='dialog'] button")]
+              .find((button) => button.textContent?.trim() === "Add Proxy")
+              ?.disabled === false;`,
         ),
       { description: "valid VLESS endpoint feedback" },
     );

@@ -1210,10 +1210,11 @@ enum ProbeRoute {
   /// A temporary local `donut-proxy` worker dials this upstream. Carries the
   /// URL the WORKER should dial, which is not always the stored one.
   Worker(String),
-  /// The upstream is VLESS, which no `donut-proxy` worker can speak. An
-  /// Xray-core sidecar carries the VLESS hop and a `donut-proxy` worker fronts
-  /// its loopback SOCKS5 endpoint, the same two-stage path `browser_runner`
-  /// builds for a VLESS launch. Carries the VLESS URI.
+  /// The upstream is an Xray share link (VLESS, VMess, Trojan, Hysteria2),
+  /// which no `donut-proxy` worker can speak. An Xray-core sidecar carries the
+  /// hop and a `donut-proxy` worker fronts its loopback SOCKS5 endpoint, the
+  /// same two-stage path `browser_runner` builds for such a launch. Carries the
+  /// share link.
   Xray(String),
   /// Nothing available here carries this upstream. The probe is skipped and
   /// the fingerprint keeps no location at all, which is the only honest
@@ -2214,14 +2215,11 @@ impl WayfernManager {
       return ProbeRoute::Worker(upstream);
     }
 
-    if url
-      .split_once("://")
-      .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("vless"))
-    {
-      return match crate::xray::parse_vless_uri(url) {
+    if crate::xray::XrayProtocol::from_share_link(url).is_some() {
+      return match crate::xray::parse_share_link(url) {
         Ok(_) => ProbeRoute::Xray(url.to_string()),
-        // A `vless://host:port` with no id, flow or security parameters is what
-        // a stored VLESS proxy collapses to when it is rendered as
+        // A `vless://host:port` with no id or security parameters is what a
+        // stored Xray proxy collapses to when it is rendered as
         // `type://host:port`. Xray cannot dial that, so there is nothing to
         // probe through and the launch-time refresh does the location instead -
         // by then the upstream is the loopback SOCKS5 endpoint of a real Xray
@@ -4105,7 +4103,7 @@ mod tests {
     ));
   }
 
-  /// A complete VLESS + XTLS Vision + REALITY URI, the only shape Donut takes.
+  /// A complete VLESS + XTLS Vision + REALITY URI.
   fn valid_vless_uri() -> String {
     "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@vpn.example.com:443\
 ?security=reality&flow=xtls-rprx-vision&encryption=none&type=tcp&sni=a.com\
@@ -4184,6 +4182,17 @@ mod tests {
       WayfernManager::probe_route(&uri),
       ProbeRoute::Xray(uri.clone())
     );
+    // Every other protocol the sidecar speaks takes the same route.
+    for link in [
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@a.com:443?security=tls&type=ws",
+      "trojan://pw@tj.example.com:443?sni=tj.example.com",
+      "hysteria2://pw@hy.example.com:443/",
+    ] {
+      assert_eq!(
+        WayfernManager::probe_route(link),
+        ProbeRoute::Xray(link.to_string())
+      );
+    }
 
     // A `vless://host:port` is what a stored VLESS proxy collapses to when it
     // is rendered as `type://host:port`: no id, no flow, no REALITY key. Xray
@@ -4193,7 +4202,8 @@ mod tests {
       "vless://vpn.example.com:443",
       "vless://uuid@vpn.example.com:443",
       // Right shape, unsupported transport, still nothing that can carry it.
-      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@a.com:443?security=tls&type=ws",
+      "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@a.com:443?security=tls&type=kcp",
+      "trojan://gw.example.com:443",
     ] {
       assert_eq!(
         WayfernManager::probe_route(lossy),
@@ -4256,9 +4266,10 @@ mod tests {
       ProbeRoute::Worker("socks5://1.2.3.4:1080".into())
     );
 
-    // Schemes nothing here speaks. `proxy_type` is free text through the REST
-    // API and MCP, so these are reachable without a code change, and each one
-    // must end in a skipped probe rather than a fabricated location.
+    // Schemes nothing here speaks, and Xray links with no credential to dial.
+    // `proxy_type` is free text through the REST API and MCP, so these are
+    // reachable without a code change, and each one must end in a skipped
+    // probe rather than a fabricated location.
     for unroutable in [
       "trojan://gw.example.com:443",
       "hysteria2://gw.example.com:443",

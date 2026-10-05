@@ -217,6 +217,20 @@ fn explain_engine_refusal(mut error: McpError, device_refusal: Option<String>) -
 
 const DEFAULT_MCP_PORT: u16 = 51080;
 
+/// The proxy types the proxy tools accept. The last four are Xray share links
+/// passed in `vless_uri`.
+const MCP_PROXY_TYPES: [&str; 9] = [
+  "http",
+  "https",
+  "httpstls",
+  "socks4",
+  "socks5",
+  "vless",
+  "vmess",
+  "trojan",
+  "hysteria2",
+];
+
 /// The event the desktop turns into the "local MCP is being removed" dialog.
 ///
 /// Emitted by the loopback tombstone (below) when anything still tries to reach
@@ -3329,7 +3343,7 @@ impl McpServer {
             },
             "proxy_type": {
               "type": "string",
-              "enum": ["http", "https", "httpstls", "socks4", "socks5", "vless"],
+              "enum": MCP_PROXY_TYPES,
               "description": "The proxy protocol"
             },
             "host": {
@@ -3350,7 +3364,7 @@ impl McpServer {
             },
             "vless_uri": {
               "type": "string",
-              "description": "VLESS + XTLS Vision + REALITY share URI"
+              "description": "Share link for vless, vmess, trojan and hysteria2 proxies (vless://, vmess://, trojan://, hysteria2:// or hy2://). It holds the whole server configuration, and the link's own scheme decides the stored type."
             }
           },
           "required": ["name", "proxy_type"]
@@ -3372,7 +3386,7 @@ impl McpServer {
             },
             "proxy_type": {
               "type": "string",
-              "enum": ["http", "https", "httpstls", "socks4", "socks5", "vless"],
+              "enum": MCP_PROXY_TYPES,
               "description": "The proxy protocol"
             },
             "host": {
@@ -3393,7 +3407,7 @@ impl McpServer {
             },
             "vless_uri": {
               "type": "string",
-              "description": "VLESS + XTLS Vision + REALITY share URI"
+              "description": "Share link for vless, vmess, trojan and hysteria2 proxies (vless://, vmess://, trojan://, hysteria2:// or hy2://). It holds the whole server configuration, and the link's own scheme decides the stored type."
             }
           },
           "required": ["proxy_id"]
@@ -5777,8 +5791,11 @@ impl McpServer {
     }
 
     if let Some(tags) = tags {
-      let _ =
-        ProfileManager::instance().update_profile_tags(&app_handle, &profile.name, tags.clone());
+      let _ = ProfileManager::instance().update_profile_tags(
+        &app_handle,
+        &profile.id.to_string(),
+        tags.clone(),
+      );
       profile.tags = tags;
       if let Ok(profiles) = ProfileManager::instance().list_profiles() {
         let _ = crate::tag_manager::TAG_MANAGER
@@ -6580,14 +6597,10 @@ impl McpServer {
 
     // The tool schema declares an enum, but JSON-Schema enums are advisory only;
     // enforce it here so a bad value can't produce a non-functional proxy.
-    if !matches!(
-      proxy_type,
-      "http" | "https" | "httpstls" | "socks4" | "socks5" | "vless"
-    ) {
+    if !MCP_PROXY_TYPES.contains(&proxy_type) {
       return Err(McpError {
         code: -32602,
-        message: "proxy_type must be one of: http, https, httpstls, socks4, socks5, vless"
-          .to_string(),
+        message: format!("proxy_type must be one of: {}", MCP_PROXY_TYPES.join(", ")),
         data: None,
       });
     }
@@ -6596,7 +6609,7 @@ impl McpServer {
       .get("vless_uri")
       .and_then(|value| value.as_str())
       .map(str::to_string);
-    let (host, port) = if proxy_type == "vless" {
+    let (host, port) = if crate::xray::is_xray_proxy_type(proxy_type) {
       if vless_uri.is_none() {
         return Err(McpError {
           code: -32602,
@@ -6705,14 +6718,10 @@ impl McpServer {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .unwrap_or_else(|| existing.proxy_settings.proxy_type.clone());
-      if !matches!(
-        proxy_type.as_str(),
-        "http" | "https" | "httpstls" | "socks4" | "socks5" | "vless"
-      ) {
+      if !MCP_PROXY_TYPES.contains(&proxy_type.as_str()) {
         return Err(McpError {
           code: -32602,
-          message: "proxy_type must be one of: http, https, httpstls, socks4, socks5, vless"
-            .to_string(),
+          message: format!("proxy_type must be one of: {}", MCP_PROXY_TYPES.join(", ")),
           data: None,
         });
       }
@@ -12096,9 +12105,11 @@ mod tests {
       .find(|tool| tool.name == "create_proxy")
       .expect("create_proxy tool");
     let properties = &create.input_schema["properties"];
-    assert!(properties["proxy_type"]["enum"]
-      .as_array()
-      .is_some_and(|values| values.iter().any(|value| value == "vless")));
+    for xray_type in ["vless", "vmess", "trojan", "hysteria2"] {
+      assert!(properties["proxy_type"]["enum"]
+        .as_array()
+        .is_some_and(|values| values.iter().any(|value| value == xray_type)));
+    }
     assert!(properties["vless_uri"].is_object());
 
     let required = create.input_schema["required"]

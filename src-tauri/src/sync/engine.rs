@@ -1908,6 +1908,13 @@ impl SyncEngine {
         .as_secs(),
     );
 
+    // The id names the file below, and the JSON came from the server.
+    if !crate::app_dirs::is_plain_path_part(&proxy.id) {
+      return Err(SyncError::InvalidData(
+        "Remote proxy has an unsafe id".to_string(),
+      ));
+    }
+
     let proxy_manager = &crate::proxy_manager::PROXY_MANAGER;
     let proxy_file = proxy_manager.get_proxy_file_path(&proxy.id);
     if let Some(parent) = proxy_file.parent() {
@@ -2478,6 +2485,15 @@ impl SyncEngine {
         .as_secs(),
     );
     ext.sync_enabled = true;
+
+    // Both become path parts below, and the JSON came from the server.
+    if !crate::app_dirs::is_plain_path_part(&ext.id)
+      || !crate::app_dirs::is_plain_path_part(&ext.file_name)
+    {
+      return Err(SyncError::InvalidData(
+        "Remote extension has an unsafe id or file name".to_string(),
+      ));
+    }
 
     // Download the extension file
     let file_remote_key = format!("extensions/{}/file/{}", ext.id, ext.file_name);

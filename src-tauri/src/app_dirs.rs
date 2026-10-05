@@ -239,6 +239,25 @@ pub fn settings_dir() -> PathBuf {
   data_dir().join("settings")
 }
 
+/// Whether a name read from sync or an automation client can become one path
+/// part under a data directory.
+///
+/// Ids and file names such as an extension's `file_name` or a proxy's `id`
+/// arrive in JSON from the sync server and from the REST API. `..`, a separator
+/// or an absolute path would read, write or delete outside the entity's own
+/// directory: a crafted extension `file_name` wrote anywhere the user can
+/// write, and an extension id of `..` led a remote tombstone to remove the
+/// whole data directory.
+pub fn is_plain_path_part(value: &str) -> bool {
+  !value.is_empty()
+    && value != "."
+    && value != ".."
+    && !value.contains(['/', '\\', '\0'])
+    // `C:name` carries a drive prefix on Windows; elsewhere `:` is an ordinary
+    // character, which a linked folder on macOS may well have.
+    && !(cfg!(windows) && value.contains(':'))
+}
+
 pub fn proxies_dir() -> PathBuf {
   data_dir().join("proxies")
 }
@@ -362,6 +381,30 @@ pub fn write_owner_only(path: &std::path::Path, content: &[u8]) -> std::io::Resu
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn only_a_single_plain_name_is_a_plain_path_part() {
+    for plain in [
+      "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4",
+      "ublock.zip",
+      "a b.crx",
+      "..x",
+    ] {
+      assert!(is_plain_path_part(plain), "{plain}");
+    }
+    for unsafe_part in [
+      "",
+      ".",
+      "..",
+      "../x",
+      "a/b",
+      "a\\b",
+      "/etc/passwd",
+      "nul\0byte",
+    ] {
+      assert!(!is_plain_path_part(unsafe_part), "{unsafe_part:?}");
+    }
+  }
 
   #[test]
   fn test_app_name() {

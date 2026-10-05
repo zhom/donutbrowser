@@ -1455,7 +1455,13 @@ impl ProfileManager {
     let dest_dir = profiles_dir.join(new_id.to_string());
 
     if source_dir.exists() {
-      crate::profile_importer::ProfileImporter::copy_directory_recursive(&source_dir, &dest_dir)?;
+      if let Err(error) =
+        crate::profile_importer::ProfileImporter::copy_directory_recursive(&source_dir, &dest_dir)
+      {
+        // A half-copied folder would otherwise stay behind with no profile.
+        let _ = fs::remove_dir_all(&dest_dir);
+        return Err(error);
+      }
     } else {
       fs::create_dir_all(&dest_dir)?;
     }

@@ -75,7 +75,7 @@ pub fn exit_cache_key(profile: &BrowserProfile) -> Option<ExitCacheKey> {
     let settings = PROXY_MANAGER
       .resolve_proxy_for_profile(proxy_id, &profile.id.to_string())
       .or_else(|| PROXY_MANAGER.get_proxy_settings_by_id(proxy_id))?;
-    // build_proxy_url returns the VLESS URI verbatim for vless proxies, so one
+    // build_proxy_url returns the share link verbatim for Xray proxies, so one
     // call covers every transport.
     return Some(ExitCacheKey {
       scope: format!("proxy:{proxy_id}"),

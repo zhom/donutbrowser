@@ -25,7 +25,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { translateBackendError } from "@/lib/backend-errors";
-import { isFirstHopEncrypted, pickParsedProxy } from "@/lib/proxy-string";
+import {
+  isFirstHopEncrypted,
+  isXrayProxyType,
+  pickParsedProxy,
+} from "@/lib/proxy-string";
 import { canonicalProxyType } from "@/lib/proxy-type";
 import type { ProxyParseResult, StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
@@ -71,8 +75,19 @@ const DEFAULT_FORM: ProxyFormData = {
  * note directly below the Select then denied, both readable in one glance. A
  * heading that says the cipher decides is the true one, and it stays true for
  * the `none` cipher that the encrypted heading never covered either.
+ *
+ * The Xray types get one for the same reason: their share link picks TLS,
+ * REALITY or nothing at all, and until the backend accepts a link the note
+ * below says the link decides. Hysteria2 always runs over QUIC, but under the
+ * encrypted heading it met that same note, so it sits here with the others.
  */
-const ALWAYS_ENCRYPTED_FIRST_HOP_TYPES = ["httpstls", "vless"] as const;
+const ALWAYS_ENCRYPTED_FIRST_HOP_TYPES = ["httpstls"] as const;
+const LINK_DEPENDENT_FIRST_HOP_TYPES = [
+  "vless",
+  "vmess",
+  "trojan",
+  "hysteria2",
+] as const;
 const CIPHER_DEPENDENT_FIRST_HOP_TYPES = ["ss"] as const;
 const PLAINTEXT_FIRST_HOP_TYPES = [
   "http",
@@ -87,6 +102,10 @@ const TYPE_GROUPS = [
     types: ALWAYS_ENCRYPTED_FIRST_HOP_TYPES,
   },
   {
+    labelKey: "proxies.form.firstHopGroupLink",
+    types: LINK_DEPENDENT_FIRST_HOP_TYPES,
+  },
+  {
     labelKey: "proxies.form.firstHopGroupCipher",
     types: CIPHER_DEPENDENT_FIRST_HOP_TYPES,
   },
@@ -96,33 +115,18 @@ const TYPE_GROUPS = [
   },
 ] as const;
 
-interface VlessEndpoint {
+/** What `validate_vless_uri` reads out of a share link Donut can use. */
+interface ShareLinkSummary {
+  proxy_type: string;
   host: string;
   port: number;
 }
 
-function parseVlessEndpoint(uri: string): VlessEndpoint | null {
-  try {
-    const parsed = new URL(uri.trim());
-    const port = Number.parseInt(parsed.port, 10);
-    if (
-      parsed.protocol !== "vless:" ||
-      !parsed.hostname ||
-      !Number.isInteger(port) ||
-      port < 1 ||
-      port > 65535
-    ) {
-      return null;
-    }
-
-    const host =
-      parsed.hostname.startsWith("[") && parsed.hostname.endsWith("]")
-        ? parsed.hostname.slice(1, -1)
-        : parsed.hostname;
-    return { host, port };
-  } catch {
-    return null;
-  }
+/** The backend's answer for one exact link. */
+interface ShareLinkValidation {
+  link: string;
+  summary: ShareLinkSummary | null;
+  error: string | null;
 }
 
 export function ProxyFormDialog({
@@ -133,12 +137,21 @@ export function ProxyFormDialog({
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<ProxyFormData>(DEFAULT_FORM);
-  // The local parse only covers scheme/host/port. Whether Donut can actually
-  // use the server — REALITY, XTLS Vision, plain TCP — is decided by the Rust
-  // parser, so ask it (below) and show the specific reason while the user is
-  // still editing rather than after they save. Declared here because
-  // `handleSubmit` guards on it.
-  const [vlessUnsupported, setVlessUnsupported] = useState<string | null>(null);
+  // A share link is read by the Rust parser alone: VMess hides its server in
+  // base64, and whether Donut can use a transport or a security layer is the
+  // parser's call. Ask it (below) and show the specific reason while the user
+  // is still editing rather than after they save. The answer is kept with the
+  // link it is for, so an answer for an older link never counts. Declared here
+  // because `handleSubmit` guards on it.
+  const [validation, setValidation] = useState<ShareLinkValidation | null>(
+    null,
+  );
+  const trimmedLink = form.vless_uri.trim();
+  // A link left in the form after switching to, say, HTTP is not this proxy.
+  const isCurrentValidation =
+    isXrayProxyType(form.proxy_type) && validation?.link === trimmedLink;
+  const linkSummary = isCurrentValidation ? validation.summary : null;
+  const linkError = isCurrentValidation ? validation.error : null;
 
   const resetForm = useCallback(() => {
     setForm(DEFAULT_FORM);
@@ -172,25 +185,24 @@ export function ProxyFormDialog({
     }
 
     const canonicalType = canonicalProxyType(form.proxy_type);
-    const isVless = canonicalType === "vless";
-    const vlessEndpoint = isVless ? parseVlessEndpoint(form.vless_uri) : null;
+    const isXray = isXrayProxyType(canonicalType);
 
-    if (isVless && !form.vless_uri.trim()) {
+    if (isXray && !form.vless_uri.trim()) {
       toast.error(t("proxies.form.vlessUriRequired"));
       return;
     }
 
-    if (isVless && !vlessEndpoint) {
+    if (isXray && linkError) {
+      toast.error(linkError);
+      return;
+    }
+
+    if (isXray && !linkSummary) {
       toast.error(t("proxies.form.vlessUriInvalid"));
       return;
     }
 
-    if (isVless && vlessUnsupported) {
-      toast.error(vlessUnsupported);
-      return;
-    }
-
-    if (!isVless && (!form.host.trim() || !form.port)) {
+    if (!isXray && (!form.host.trim() || !form.port)) {
       toast.error(t("proxies.form.hostPortRequired"));
       return;
     }
@@ -208,12 +220,12 @@ export function ProxyFormDialog({
       const payload = {
         name: form.name.trim(),
         proxySettings: {
-          proxy_type: form.proxy_type,
-          host: vlessEndpoint?.host ?? form.host.trim(),
-          port: vlessEndpoint?.port ?? form.port,
-          username: isVless ? undefined : form.username.trim() || undefined,
-          password: isVless ? undefined : form.password.trim() || undefined,
-          vless_uri: isVless ? form.vless_uri.trim() : undefined,
+          proxy_type: linkSummary?.proxy_type ?? form.proxy_type,
+          host: linkSummary?.host ?? form.host.trim(),
+          port: linkSummary?.port ?? form.port,
+          username: isXray ? undefined : form.username.trim() || undefined,
+          password: isXray ? undefined : form.password.trim() || undefined,
+          vless_uri: isXray ? form.vless_uri.trim() : undefined,
         },
       };
 
@@ -239,7 +251,7 @@ export function ProxyFormDialog({
     } finally {
       setIsSubmitting(false);
     }
-  }, [editingProxy, form, onClose, t, vlessUnsupported]);
+  }, [editingProxy, form, onClose, t, linkError, linkSummary]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
@@ -293,21 +305,29 @@ export function ProxyFormDialog({
   // through the REST API arrives as `shadowsocks`, and every branch that asked
   // `=== "ss"` skipped it. Derive the type once and compare against that.
   const canonicalType = canonicalProxyType(form.proxy_type);
-  const isVless = canonicalType === "vless";
+  const isXray = isXrayProxyType(canonicalType);
   const isShadowsocks = canonicalType === "ss";
-  const vlessEndpoint = isVless ? parseVlessEndpoint(form.vless_uri) : null;
   // The cipher decides for Shadowsocks, and this form keeps it in `username`.
   // Asked with `canonicalType`, not the raw stored spelling, so the answer
   // cannot disagree with the field labels two lines below: a REST-stored
   // `"ss "` was trimmed for the labels and not for this, and the form called a
   // proxy with a real cipher unencrypted while calling its field "Cipher".
-  const firstHopEncrypted = isFirstHopEncrypted(canonicalType, form.username);
+  // A share link only counts once the backend has accepted it, so a link it
+  // refuses is never called encrypted.
+  const firstHopEncrypted = isFirstHopEncrypted(
+    canonicalType,
+    form.username,
+    linkSummary ? form.vless_uri : "",
+  );
   // Shadowsocks is the one type whose hop is only as encrypted as its cipher,
   // and the cipher is empty until the user fills it in. Saying "not encrypted"
   // there states as settled something nobody has chosen yet, right under a
   // heading about encryption. Nothing downstream reads this: `firstHopEncrypted`
   // stays false, so every guard still fails closed on an empty cipher.
   const cipherUndecided = isShadowsocks && form.username.trim().length === 0;
+  // The same holds for a share link that is not there yet, or that Donut
+  // cannot use: nothing has decided the hop, so the note says the link will.
+  const linkUndecided = isXray && !linkSummary;
   // What a filled field on a plaintext hop actually exposes, which is not the
   // same thing for every protocol: for the credentialed types it is the
   // username and password (see the payload built in handleSubmit), and for
@@ -315,7 +335,7 @@ export function ProxyFormDialog({
   // the cipher, it is the destination and the payload. Same condition, two
   // different truths, so the panel below picks its sentence from the type.
   const showPlaintextExposure =
-    !isVless && !firstHopEncrypted && form.username.trim().length > 0;
+    !isXray && !firstHopEncrypted && form.username.trim().length > 0;
   // Radix matches an item by its value, so the item standing for this proxy
   // carries the proxy's own spelling. Without it a stored `shadowsocks` left
   // the trigger on its placeholder, and picking the visible Shadowsocks entry
@@ -323,36 +343,50 @@ export function ProxyFormDialog({
   const typeItemValue = (type: string) =>
     type === canonicalType ? form.proxy_type : type;
 
-  const trimmedVlessUri = form.vless_uri.trim();
+  // Nothing is set here synchronously. Clearing the answer on every keystroke
+  // made the textarea lose about one typed character in 50; the answer is
+  // matched to its link above instead.
   useEffect(() => {
-    if (!isVless || trimmedVlessUri.length === 0) {
-      setVlessUnsupported(null);
+    if (!isXray || trimmedLink.length === 0) {
       return;
     }
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void invoke("validate_vless_uri", { uri: trimmedVlessUri })
-        .then(() => {
-          if (!cancelled) setVlessUnsupported(null);
+      void invoke<ShareLinkSummary>("validate_vless_uri", { uri: trimmedLink })
+        .then((summary) => {
+          if (cancelled) return;
+          setValidation({ link: trimmedLink, summary, error: null });
         })
         .catch((error: unknown) => {
-          if (!cancelled) setVlessUnsupported(translateBackendError(t, error));
+          if (cancelled) return;
+          setValidation({
+            link: trimmedLink,
+            summary: null,
+            error: translateBackendError(t, error),
+          });
         });
     }, 300);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isVless, trimmedVlessUri, t]);
+  }, [isXray, trimmedLink, t]);
 
-  const hasInvalidVlessUri =
-    isVless &&
-    trimmedVlessUri.length > 0 &&
-    (!vlessEndpoint || vlessUnsupported !== null);
+  // The link names its protocol, and the backend stores the proxy under it, so
+  // the type shown follows an accepted link: a VMess link pasted under VLESS
+  // shows as VMess, and picking another Xray type keeps the link's own.
+  const linkProxyType = linkSummary?.proxy_type;
+  useEffect(() => {
+    if (linkProxyType && linkProxyType !== canonicalType) {
+      setForm((previous) => ({ ...previous, proxy_type: linkProxyType }));
+    }
+  }, [linkProxyType, canonicalType]);
+
+  const hasInvalidLink = isXray && linkError !== null;
   const isFormValid =
     form.name.trim() &&
-    (isVless
-      ? vlessEndpoint !== null && vlessUnsupported === null
+    (isXray
+      ? linkSummary !== null
       : form.host.trim() &&
         form.port > 0 &&
         form.port <= 65535 &&
@@ -426,7 +460,9 @@ export function ProxyFormDialog({
                 ? t("proxies.form.firstHopEncryptedNote")
                 : cipherUndecided
                   ? t("proxies.form.firstHopCipherNote")
-                  : t("proxies.form.firstHopPlaintextNote")}
+                  : linkUndecided
+                    ? t("proxies.form.firstHopLinkNote")
+                    : t("proxies.form.firstHopPlaintextNote")}
             </p>
             {canonicalType === "httpstls" && (
               <p
@@ -438,7 +474,7 @@ export function ProxyFormDialog({
             )}
           </div>
 
-          {isVless ? (
+          {isXray ? (
             <div className="grid gap-2">
               <Label htmlFor="proxy-vless-uri">
                 {t("proxies.form.vlessUri")}
@@ -450,9 +486,11 @@ export function ProxyFormDialog({
                   setForm({ ...form, vless_uri: e.target.value });
                 }}
                 onPaste={handleProxyPaste}
-                placeholder={t("proxies.form.vlessUriPlaceholder")}
+                placeholder={t("proxies.form.vlessUriPlaceholder", {
+                  scheme: canonicalType,
+                })}
                 disabled={isSubmitting}
-                aria-invalid={hasInvalidVlessUri}
+                aria-invalid={hasInvalidLink}
                 aria-describedby="proxy-vless-uri-help"
                 autoCapitalize="none"
                 autoComplete="off"
@@ -462,15 +500,13 @@ export function ProxyFormDialog({
               <p
                 id="proxy-vless-uri-help"
                 className={
-                  hasInvalidVlessUri
+                  hasInvalidLink
                     ? "text-xs text-destructive-text"
                     : "text-xs text-muted-foreground"
                 }
-                role={hasInvalidVlessUri ? "alert" : undefined}
+                role={hasInvalidLink ? "alert" : undefined}
               >
-                {hasInvalidVlessUri
-                  ? (vlessUnsupported ?? t("proxies.form.vlessUriInvalid"))
-                  : t("proxies.form.vlessUriHint")}
+                {linkError ?? t("proxies.form.vlessUriHint")}
               </p>
             </div>
           ) : (

@@ -1144,7 +1144,15 @@ impl ProfileImporter {
       let source_path = entry.path();
       let dest_path = destination.join(entry.file_name());
 
-      if source_path.is_dir() {
+      // Symlinks are not followed, as in `profile_import::copy`: Chromium
+      // leaves `SingletonLock` pointing at nothing after a crash, which made
+      // every clone fail, and a link to a folder would copy content from
+      // outside the profile.
+      let file_type = entry.file_type()?;
+      if file_type.is_symlink() {
+        continue;
+      }
+      if file_type.is_dir() {
         Self::copy_directory_recursive(&source_path, &dest_path)?;
       } else {
         fs::copy(&source_path, &dest_path)?;
@@ -1309,6 +1317,29 @@ mod tests {
 
     assert_eq!(content1, "content1", "file1 content should match");
     assert_eq!(content2, "content2", "file2 content should match");
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_copy_skips_symlinks_such_as_a_stale_singleton_lock() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let source_dir = temp_dir.path().join("source");
+    let outside = temp_dir.path().join("outside");
+    fs::create_dir_all(&source_dir).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(source_dir.join("Preferences"), "{}").unwrap();
+    fs::write(outside.join("secret.txt"), "not part of the profile").unwrap();
+    // What Chromium leaves after a crash, and a link out of the profile.
+    std::os::unix::fs::symlink("host-12345", source_dir.join("SingletonLock")).unwrap();
+    std::os::unix::fs::symlink(&outside, source_dir.join("linked")).unwrap();
+
+    let dest_dir = temp_dir.path().join("dest");
+    ProfileImporter::copy_directory_recursive(&source_dir, &dest_dir)
+      .expect("a dangling lock link must not stop the copy");
+
+    assert!(dest_dir.join("Preferences").exists());
+    assert!(fs::symlink_metadata(dest_dir.join("SingletonLock")).is_err());
+    assert!(!dest_dir.join("linked").exists());
   }
 
   #[test]

@@ -1338,6 +1338,9 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
     // two things that don't go together, not a fault of this machine.
     || lower.contains("is not compatible with")
     || lower.contains("not supported for browser")
+    // A proxy import body that is not JSON is the caller's input, not a fault
+    // here; the spec for /v1/proxies/import already promises 400 for it.
+    || lower.contains("invalid json format")
   {
     StatusCode::BAD_REQUEST
   } else {
@@ -1587,7 +1590,7 @@ async fn create_profile(
       // Apply tags if provided
       if let Some(tags) = &request.tags {
         if profile_manager
-          .update_profile_tags(&state.app_handle, &profile.name, tags.clone())
+          .update_profile_tags(&state.app_handle, &profile.id.to_string(), tags.clone())
           .is_err()
         {
           return Err((
@@ -6101,6 +6104,13 @@ mod tests {
     // A group that is simply absent stays a 404.
     let (status, _) = manager_error_response("Extension group with id 'gone' not found");
     assert_eq!(status, StatusCode::NOT_FOUND);
+  }
+
+  #[test]
+  fn a_proxy_import_body_that_is_not_json_is_a_bad_request() {
+    let (status, _) =
+      manager_error_response("Invalid JSON format: expected value at line 1 column 1");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
   }
 
   #[test]

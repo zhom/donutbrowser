@@ -23,8 +23,9 @@ pub(crate) fn backend_error_with_detail(code: &str, detail: impl std::fmt::Displ
   serde_json::json!({ "code": code, "params": { "detail": detail.to_string() } }).to_string()
 }
 
-/// A VLESS URI Donut cannot use, carrying which part is unsupported so the UI
-/// can say so instead of implying a typo.
+/// A share link Donut cannot use, carrying which part is unsupported so the UI
+/// can say so instead of implying a typo. The code keeps its VLESS name because
+/// REST clients already match on it.
 pub(crate) fn vless_config_error(error: &crate::xray::XrayError) -> String {
   serde_json::json!({
     "code": "VLESS_CONFIG_INVALID",
@@ -383,13 +384,26 @@ async fn create_stored_proxy(
   }
 }
 
-/// Validate a VLESS URI without touching the network, so the proxy form can
-/// tell the user their setup is unsupported while they are still editing it
-/// rather than only after they try to save or launch.
+/// What the proxy form shows for a share link it cannot read itself: VMess
+/// hides its server inside base64.
+#[derive(serde::Serialize)]
+struct ShareLinkSummary {
+  proxy_type: &'static str,
+  host: String,
+  port: u16,
+}
+
+/// Validate an Xray share link without touching the network, so the proxy
+/// form can tell the user their setup is unsupported while they are still
+/// editing it rather than only after they try to save or launch.
 #[tauri::command]
-fn validate_vless_uri(uri: String) -> Result<(), String> {
-  crate::xray::parse_vless_uri(uri.trim())
-    .map(|_| ())
+fn validate_vless_uri(uri: String) -> Result<ShareLinkSummary, String> {
+  crate::xray::parse_share_link(uri.trim())
+    .map(|parsed| ShareLinkSummary {
+      proxy_type: parsed.config.protocol().proxy_type(),
+      host: parsed.config.address,
+      port: parsed.config.port,
+    })
     .map_err(|error| vless_config_error(&error))
 }
 

@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::{VlessRealityConfig, XrayError, XrayResult};
+use super::{
+  GrpcMode, Security, StreamSettings, TlsSettings, Transport, XrayConfig, XrayError, XrayOutbound,
+  XrayResult,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,10 +27,7 @@ impl XrayClientRuntime {
   }
 }
 
-pub fn build_client_config(
-  config: &VlessRealityConfig,
-  runtime: &XrayClientRuntime,
-) -> XrayResult<Value> {
+pub fn build_client_config(config: &XrayConfig, runtime: &XrayClientRuntime) -> XrayResult<Value> {
   config.validate()?;
   runtime.validate()?;
 
@@ -50,42 +50,173 @@ pub fn build_client_config(
         "ip": "127.0.0.1"
       }
     }],
-    "outbounds": [{
+    "outbounds": [outbound(config)]
+  }))
+}
+
+fn outbound(config: &XrayConfig) -> Value {
+  match &config.outbound {
+    XrayOutbound::Vless { id, flow, stream } => {
+      let mut user = json!({ "id": id, "encryption": "none" });
+      if let Some(flow) = flow {
+        user["flow"] = json!(flow.as_str());
+      }
+      json!({
+        "tag": "proxy",
+        "protocol": "vless",
+        "settings": {
+          "vnext": [{ "address": config.address, "port": config.port, "users": [user] }]
+        },
+        "streamSettings": stream_settings(stream)
+      })
+    }
+    XrayOutbound::Vmess {
+      id,
+      security,
+      stream,
+    } => json!({
       "tag": "proxy",
-      "protocol": "vless",
+      "protocol": "vmess",
       "settings": {
         "vnext": [{
           "address": config.address,
           "port": config.port,
-          "users": [{
-            "id": config.id,
-            "encryption": "none",
-            "flow": config.flow.as_str()
-          }]
+          "users": [{ "id": id, "security": security.as_str() }]
         }]
       },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "fingerprint": config.reality.fingerprint.as_str(),
-          "serverName": config.reality.server_name,
-          "publicKey": config.reality.public_key,
-          "shortId": config.reality.short_id,
-          "spiderX": config.reality.spider_x
-        },
-        "sockopt": {
-          "tcpKeepAliveIdle": 30,
-          "tcpKeepAliveInterval": 15
-        }
+      "streamSettings": stream_settings(stream)
+    }),
+    XrayOutbound::Trojan { password, stream } => json!({
+      "tag": "proxy",
+      "protocol": "trojan",
+      "settings": {
+        "servers": [{ "address": config.address, "port": config.port, "password": password }]
+      },
+      "streamSettings": stream_settings(stream)
+    }),
+    XrayOutbound::Hysteria2 {
+      auth,
+      tls,
+      obfs_password,
+    } => {
+      // HTTP/3 is the only protocol a Hysteria2 server answers, and Xray-core
+      // offers h2 and http/1.1 unless told otherwise.
+      let mut tls_settings = tls_settings(tls);
+      tls_settings["alpn"] = json!(["h3"]);
+      let mut stream = json!({
+        "network": "hysteria",
+        "hysteriaSettings": { "version": 2, "auth": auth },
+        "security": "tls",
+        "tlsSettings": tls_settings
+      });
+      if let Some(password) = obfs_password {
+        stream["finalmask"] = json!({
+          "udp": [{ "type": "salamander", "settings": { "password": password } }]
+        });
       }
-    }]
-  }))
+      json!({
+        "tag": "proxy",
+        "protocol": "hysteria",
+        "settings": { "version": 2, "address": config.address, "port": config.port },
+        "streamSettings": stream
+      })
+    }
+  }
+}
+
+fn stream_settings(stream: &StreamSettings) -> Value {
+  let mut settings = json!({
+    "network": stream.transport.as_str(),
+    "security": stream.security.as_str(),
+    "sockopt": {
+      "tcpKeepAliveIdle": 30,
+      "tcpKeepAliveInterval": 15
+    }
+  });
+  match &stream.security {
+    Security::None => {}
+    Security::Tls(tls) => settings["tlsSettings"] = tls_settings(tls),
+    Security::Reality(reality) => {
+      settings["realitySettings"] = json!({
+        "show": false,
+        "fingerprint": reality.fingerprint.as_str(),
+        "serverName": reality.server_name,
+        "publicKey": reality.public_key,
+        "shortId": reality.short_id,
+        "spiderX": reality.spider_x
+      });
+    }
+  }
+  match &stream.transport {
+    Transport::Raw { http_header: None } => {}
+    Transport::Raw {
+      http_header: Some(header),
+    } => {
+      let mut request = json!({ "path": [header.path] });
+      if !header.hosts.is_empty() {
+        request["headers"] = json!({ "Host": header.hosts });
+      }
+      settings["tcpSettings"] = json!({ "header": { "type": "http", "request": request } });
+    }
+    Transport::WebSocket { host, path } => {
+      settings["wsSettings"] = path_and_host(path, host.as_deref());
+    }
+    Transport::HttpUpgrade { host, path } => {
+      settings["httpupgradeSettings"] = path_and_host(path, host.as_deref());
+    }
+    Transport::Xhttp { host, path, mode } => {
+      let mut xhttp = path_and_host(path, host.as_deref());
+      xhttp["mode"] = json!(mode.as_str());
+      settings["xhttpSettings"] = xhttp;
+    }
+    Transport::Grpc {
+      service_name,
+      authority,
+      mode,
+    } => {
+      let mut grpc = json!({
+        "serviceName": service_name,
+        "multiMode": *mode == GrpcMode::Multi
+      });
+      if let Some(authority) = authority {
+        grpc["authority"] = json!(authority);
+      }
+      settings["grpcSettings"] = grpc;
+    }
+  }
+  settings
+}
+
+fn path_and_host(path: &str, host: Option<&str>) -> Value {
+  let mut value = json!({ "path": path });
+  if let Some(host) = host {
+    value["host"] = json!(host);
+  }
+  value
+}
+
+fn tls_settings(tls: &TlsSettings) -> Value {
+  let mut value = json!({});
+  if let Some(server_name) = &tls.server_name {
+    value["serverName"] = json!(server_name);
+  }
+  if !tls.alpn.is_empty() {
+    value["alpn"] = json!(tls.alpn);
+  }
+  if let Some(fingerprint) = tls.fingerprint {
+    value["fingerprint"] = json!(fingerprint.as_str());
+  }
+  if !tls.pinned_peer_cert_sha256.is_empty() {
+    value["pinnedPeerCertSha256"] = json!(tls.pinned_peer_cert_sha256.join(","));
+  }
+  if !tls.verify_peer_cert_by_name.is_empty() {
+    value["verifyPeerCertByName"] = json!(tls.verify_peer_cert_by_name.join(","));
+  }
+  value
 }
 
 pub fn build_client_config_json(
-  config: &VlessRealityConfig,
+  config: &XrayConfig,
   runtime: &XrayClientRuntime,
 ) -> XrayResult<String> {
   serde_json::to_string_pretty(&build_client_config(config, runtime)?)
@@ -115,23 +246,24 @@ fn validate_socks_credential(field: &'static str, value: &str) -> XrayResult<()>
 mod tests {
   use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
-  use super::super::{RealityFingerprint, RealitySettings, VlessFlow};
+  use super::super::parse_share_link;
   use super::*;
 
-  fn valid_config() -> VlessRealityConfig {
-    VlessRealityConfig {
-      address: "vpn.example.com".to_string(),
-      port: 443,
-      id: "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4".to_string(),
-      flow: VlessFlow::Vision,
-      reality: RealitySettings {
-        server_name: "www.example.com".to_string(),
-        public_key: URL_SAFE_NO_PAD.encode([7_u8; 32]),
-        short_id: "0123456789abcdef".to_string(),
-        fingerprint: RealityFingerprint::Chrome,
-        spider_x: "/".to_string(),
-      },
-    }
+  const ID: &str = "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4";
+
+  fn valid_config() -> XrayConfig {
+    let key = URL_SAFE_NO_PAD.encode([7_u8; 32]);
+    parse_share_link(&format!(
+      "vless://{ID}@vpn.example.com:443?encryption=none&flow=xtls-rprx-vision&security=reality\
+&sni=www.example.com&fp=chrome&pbk={key}&sid=0123456789abcdef&spx=%2F&type=tcp&headerType=none"
+    ))
+    .unwrap()
+    .config
+  }
+
+  fn outbound_for(link: &str) -> Value {
+    let config = parse_share_link(link).unwrap().config;
+    build_client_config(&config, &runtime()).unwrap()["outbounds"][0].clone()
   }
 
   fn runtime() -> XrayClientRuntime {
@@ -197,6 +329,124 @@ mod tests {
   }
 
   #[test]
+  fn plain_vless_over_websocket_and_tls_has_no_flow() {
+    let outbound = outbound_for(&format!(
+      "vless://{ID}@203.0.113.7:443?encryption=none&security=tls&type=ws\
+&host=cdn.example.com&path=%2Fray%3Fed%3D2048&alpn=http%2F1.1&fp=firefox"
+    ));
+    let user = &outbound["settings"]["vnext"][0]["users"][0];
+    assert_eq!(user["encryption"], "none");
+    assert!(user.get("flow").is_none());
+    let stream = &outbound["streamSettings"];
+    assert_eq!(stream["network"], "ws");
+    assert_eq!(stream["wsSettings"]["path"], "/ray?ed=2048");
+    assert_eq!(stream["wsSettings"]["host"], "cdn.example.com");
+    assert_eq!(stream["security"], "tls");
+    // The Host header doubles as the server name when the link names none.
+    assert_eq!(stream["tlsSettings"]["serverName"], "cdn.example.com");
+    assert_eq!(stream["tlsSettings"]["alpn"], json!(["http/1.1"]));
+    assert_eq!(stream["tlsSettings"]["fingerprint"], "firefox");
+    assert!(stream["tlsSettings"].get("allowInsecure").is_none());
+  }
+
+  #[test]
+  fn plain_vless_without_security_sends_no_tls_settings() {
+    let outbound = outbound_for(&format!("vless://{ID}@a.example.com:8080?type=tcp"));
+    assert_eq!(outbound["streamSettings"]["security"], "none");
+    assert!(outbound["streamSettings"].get("tlsSettings").is_none());
+    assert!(outbound["streamSettings"].get("realitySettings").is_none());
+  }
+
+  #[test]
+  fn vmess_carries_its_cipher_and_grpc_service() {
+    let outbound = outbound_for(&format!(
+      "vmess://{ID}@a.example.com:443?encryption=chacha20-poly1305&security=tls\
+&type=grpc&serviceName=gun-svc&mode=multi&authority=grpc.example.com&sni=a.example.com"
+    ));
+    assert_eq!(outbound["protocol"], "vmess");
+    assert_eq!(
+      outbound["settings"]["vnext"][0]["users"][0]["security"],
+      "chacha20-poly1305"
+    );
+    let grpc = &outbound["streamSettings"]["grpcSettings"];
+    assert_eq!(grpc["serviceName"], "gun-svc");
+    assert_eq!(grpc["multiMode"], true);
+    assert_eq!(grpc["authority"], "grpc.example.com");
+  }
+
+  #[test]
+  fn trojan_pins_a_certificate_instead_of_skipping_the_check() {
+    let pin = "AB:".repeat(31) + "AB";
+    let outbound = outbound_for(&format!(
+      "trojan://p%40ss@a.example.com:443?sni=a.example.com&pcs={pin}&allowInsecure=1&type=tcp"
+    ));
+    assert_eq!(outbound["protocol"], "trojan");
+    assert_eq!(outbound["settings"]["servers"][0]["password"], "p@ss");
+    let tls = &outbound["streamSettings"]["tlsSettings"];
+    assert_eq!(tls["pinnedPeerCertSha256"], "ab".repeat(32));
+    assert!(tls.get("allowInsecure").is_none());
+  }
+
+  #[test]
+  fn raw_http_header_disguise_is_written_as_a_request() {
+    let outbound = outbound_for(&format!(
+      "vmess://{ID}@a.example.com:80?type=tcp&headerType=http&host=a.com,b.com&path=%2Findex"
+    ));
+    let header = &outbound["streamSettings"]["tcpSettings"]["header"];
+    assert_eq!(header["type"], "http");
+    assert_eq!(header["request"]["path"], json!(["/index"]));
+    assert_eq!(
+      header["request"]["headers"]["Host"],
+      json!(["a.com", "b.com"])
+    );
+  }
+
+  #[test]
+  fn xhttp_and_httpupgrade_keep_path_host_and_mode() {
+    let xhttp = outbound_for(&format!(
+      "vless://{ID}@a.example.com:443?security=tls&type=xhttp&path=%2Fx&host=h.example.com&mode=stream-one"
+    ));
+    assert_eq!(xhttp["streamSettings"]["network"], "xhttp");
+    assert_eq!(
+      xhttp["streamSettings"]["xhttpSettings"]["mode"],
+      "stream-one"
+    );
+    assert_eq!(xhttp["streamSettings"]["xhttpSettings"]["path"], "/x");
+    let upgrade = outbound_for(&format!(
+      "vless://{ID}@a.example.com:80?type=httpupgrade&path=%2Fu&host=h.example.com"
+    ));
+    assert_eq!(
+      upgrade["streamSettings"]["httpupgradeSettings"],
+      json!({ "path": "/u", "host": "h.example.com" })
+    );
+  }
+
+  #[test]
+  fn hysteria2_speaks_h3_over_quic_with_salamander() {
+    let pin = "cd".repeat(32);
+    let outbound = outbound_for(&format!(
+      "hysteria2://letmein@hy.example.com:8443/?obfs=salamander&obfs-password=salt&pinSHA256={pin}"
+    ));
+    assert_eq!(outbound["protocol"], "hysteria");
+    assert_eq!(outbound["settings"]["version"], 2);
+    assert_eq!(outbound["settings"]["address"], "hy.example.com");
+    assert_eq!(outbound["settings"]["port"], 8443);
+    let stream = &outbound["streamSettings"];
+    assert_eq!(stream["network"], "hysteria");
+    assert_eq!(stream["hysteriaSettings"]["version"], 2);
+    assert_eq!(stream["hysteriaSettings"]["auth"], "letmein");
+    assert_eq!(stream["security"], "tls");
+    assert_eq!(stream["tlsSettings"]["alpn"], json!(["h3"]));
+    assert_eq!(stream["tlsSettings"]["serverName"], "hy.example.com");
+    assert_eq!(
+      stream["finalmask"]["udp"][0],
+      json!({ "type": "salamander", "settings": { "password": "salt" } })
+    );
+    assert_eq!(stream["tlsSettings"]["pinnedPeerCertSha256"], pin);
+    assert!(stream.get("sockopt").is_none());
+  }
+
+  #[test]
   fn does_not_add_bypass_or_observability_surfaces() {
     let value = build_client_config(&valid_config(), &runtime()).unwrap();
     for absent in ["api", "dns", "policy", "routing", "stats"] {
@@ -243,12 +493,22 @@ mod tests {
   #[test]
   fn invalid_model_is_rejected_before_generation() {
     let mut config = valid_config();
-    config.reality.public_key = "secret-invalid-key".to_string();
+    let secret = "secret-invalid-key";
+    if let XrayOutbound::Vless {
+      stream: StreamSettings {
+        security: Security::Reality(reality),
+        ..
+      },
+      ..
+    } = &mut config.outbound
+    {
+      reality.public_key = secret.to_string();
+    }
     let error = build_client_config(&config, &runtime()).unwrap_err();
     assert!(matches!(
       error,
       XrayError::InvalidField { field: "pbk", .. }
     ));
-    assert!(!error.to_string().contains(&config.reality.public_key));
+    assert!(!error.to_string().contains(secret));
   }
 }

@@ -309,7 +309,7 @@ impl BrowserRunner {
 
       if upstream_proxy
         .as_ref()
-        .is_some_and(|proxy| proxy.proxy_type.eq_ignore_ascii_case("vless"))
+        .is_some_and(|proxy| crate::xray::is_xray_proxy_type(&proxy.proxy_type))
       {
         let vless_uri = upstream_proxy
           .as_ref()

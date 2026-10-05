@@ -18,8 +18,8 @@
 //! it did not check.
 //!
 //! Local proxies are not an exotic case. A local MITM proxy, an SSH tunnel, a
-//! locally-run SOCKS client and Donut's own VLESS support all present to the
-//! browser as `127.0.0.1:<port>`.
+//! locally-run SOCKS client and Donut's own Xray support (VLESS, VMess, Trojan,
+//! Hysteria2) all present to the browser as `127.0.0.1:<port>`.
 //!
 //! This module is the single answer, shared by every caller, and it FAILS
 //! CLOSED: anything it cannot parse is reported as unreachable. Refusing a
@@ -50,7 +50,8 @@ pub enum ExitReachability {
   /// needs a sidecar that is not available there. That is a permanent refusal
   /// wearing a transient one's clothes, and every nightly retry pays for it.
   UnsupportedKind {
-    /// The protocol, as the user would name it: "VLESS".
+    /// The protocol, as the user would name it: "VLESS", "VMess", "Trojan" or
+    /// "Hysteria2".
     kind: String,
     /// Which part of the config it came from: "proxy" or "VPN".
     source: &'static str,
@@ -229,43 +230,25 @@ fn normalize_host(raw: &str) -> String {
   host.trim().trim_end_matches('.').to_string()
 }
 
-/// The host a VLESS URI actually dials.
-///
-/// Load-bearing because of an asymmetry that is easy to get backwards: a VLESS
-/// proxy presents to the browser as `127.0.0.1:<port>` — Donut runs a local xray
-/// worker and points the browser at it — but the address that decides whether
-/// anyone else could use this config is the SERVER inside the URI. The local
-/// port is an implementation detail of this machine; the URI is the exit.
-pub fn vless_uri_host(uri: &str) -> Option<String> {
-  let rest = uri.trim().strip_prefix("vless://")?;
-  // Cut the fragment (`#label`) and query (`?type=...`) before looking for the
-  // authority — either may contain '@' or ':'.
-  let rest = rest.split('#').next()?;
-  let rest = rest.split('?').next()?;
-  // `uuid@host:port/...`
-  let authority = rest.split('/').next()?;
-  let host_port = authority
-    .rsplit_once('@')
-    .map(|(_, h)| h)
-    .unwrap_or(authority);
-  let host = normalize_host(host_port);
-  if host.is_empty() {
-    None
-  } else {
-    Some(host)
-  }
-}
-
 /// The exit host a stored proxy represents, as a remote host would have to dial
 /// it.
+///
+/// Load-bearing because of an asymmetry that is easy to get backwards: an Xray
+/// proxy presents to the browser as `127.0.0.1:<port>` — Donut runs a local xray
+/// worker and points the browser at it — but the address that decides whether
+/// anyone else could use this config is the SERVER inside the share link. The
+/// local port is an implementation detail of this machine; the link is the exit.
 pub fn proxy_exit_host(settings: &crate::browser::ProxySettings) -> Result<String, String> {
-  if settings.proxy_type.eq_ignore_ascii_case("vless") {
+  if crate::xray::is_xray_proxy_type(&settings.proxy_type) {
     let uri = settings
       .vless_uri
       .as_deref()
       .filter(|uri| !uri.trim().is_empty())
-      .ok_or_else(|| "VLESS proxy has no server URI".to_string())?;
-    return vless_uri_host(uri).ok_or_else(|| "VLESS server URI is malformed".to_string());
+      .ok_or_else(|| "Xray proxy has no share link".to_string())?;
+    return crate::xray::share_link_host(uri)
+      .map(|host| normalize_host(&host))
+      .filter(|host| !host.is_empty())
+      .ok_or_else(|| "Xray share link is malformed".to_string());
   }
 
   let host = normalize_host(&settings.host);
@@ -277,20 +260,26 @@ pub fn proxy_exit_host(settings: &crate::browser::ProxySettings) -> Result<Strin
 
 /// Whether a stored proxy speaks a protocol no remote host can dial.
 ///
-/// Reads the two facts that both mean VLESS, because either one alone is a real
-/// record: the picker writes `proxy_type = "vless"`, and a config pasted as a
-/// bare URI carries the protocol in `vless_uri` before the type is normalised.
-/// Taking only the first would let the second through to the host that refuses
-/// it.
+/// Reads the two facts that both mean Xray, because either one alone is a real
+/// record: the picker writes `proxy_type = "vless"` (or `vmess`, `trojan`,
+/// `hysteria2`), and a config pasted as a bare link carries the protocol in
+/// `vless_uri` before the type is normalised. Taking only the first would let
+/// the second through to the host that refuses it.
 fn unsupported_remote_kind(settings: &crate::browser::ProxySettings) -> Option<String> {
-  let has_uri = settings
+  if let Some(protocol) = crate::xray::XrayProtocol::from_scheme(&settings.proxy_type) {
+    return Some(protocol.display_name().to_string());
+  }
+  let uri = settings
     .vless_uri
     .as_deref()
-    .is_some_and(|uri| !uri.trim().is_empty());
-  if settings.proxy_type.eq_ignore_ascii_case("vless") || has_uri {
-    return Some("VLESS".to_string());
-  }
-  None
+    .filter(|uri| !uri.trim().is_empty())?;
+  // A link Donut cannot even name still needs the sidecar, so it is refused all
+  // the same.
+  Some(
+    crate::xray::XrayProtocol::from_share_link(uri)
+      .map_or("Xray", |protocol| protocol.display_name())
+      .to_string(),
+  )
 }
 
 /// Classify a stored proxy.
@@ -519,16 +508,37 @@ mod tests {
   }
 
   #[test]
-  fn vless_host_parsing_survives_query_and_fragment() {
-    assert_eq!(
-      vless_uri_host("vless://uuid@example.com:443?sni=a@b.com&x=1#my@label"),
-      Some("example.com".to_string())
-    );
-    assert_eq!(
-      vless_uri_host("vless://uuid@[2606:4700::1111]:443?type=ws"),
-      Some("2606:4700::1111".to_string())
-    );
-    assert_eq!(vless_uri_host("not-a-vless-uri"), None);
+  fn every_xray_protocol_is_refused_under_its_own_name() {
+    for (proxy_type, uri, kind) in [
+      ("vmess", "vmess://e30=", "VMess"),
+      ("trojan", "trojan://pw@tj.example.com:443", "Trojan"),
+      (
+        "hysteria2",
+        "hysteria2://pw@hy.example.com:443/",
+        "Hysteria2",
+      ),
+      // The type field disagrees: the link still names the protocol.
+      ("socks5", "trojan://pw@tj.example.com:443", "Trojan"),
+    ] {
+      let mut settings = proxy(proxy_type, "127.0.0.1");
+      settings.vless_uri = Some(uri.into());
+      assert_eq!(
+        classify_proxy(&settings),
+        ExitReachability::UnsupportedKind {
+          kind: kind.to_string(),
+          source: "proxy",
+        }
+      );
+    }
+  }
+
+  #[test]
+  fn an_xray_exit_host_is_the_server_inside_its_link() {
+    let mut settings = proxy("trojan", "127.0.0.1");
+    settings.vless_uri = Some("trojan://pw@TJ.example.com.:443?type=ws#x@y".into());
+    assert_eq!(proxy_exit_host(&settings), Ok("tj.example.com".to_string()));
+    settings.vless_uri = Some("trojan://".into());
+    assert!(proxy_exit_host(&settings).is_err());
   }
 
   #[test]

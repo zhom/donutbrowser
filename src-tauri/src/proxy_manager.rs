@@ -548,8 +548,11 @@ impl ProxyManager {
     }
   }
 
+  /// Xray-carried proxies keep their whole configuration in the share link
+  /// (`vless_uri`, named before VMess, Trojan and Hysteria2 joined). The link
+  /// decides the type, so a VMess link saved under "VLESS" is stored as VMess.
   fn normalize_proxy_settings(mut proxy_settings: ProxySettings) -> Result<ProxySettings, String> {
-    if !proxy_settings.proxy_type.eq_ignore_ascii_case("vless") {
+    if !crate::xray::is_xray_proxy_type(&proxy_settings.proxy_type) {
       proxy_settings.vless_uri = None;
       return Ok(proxy_settings);
     }
@@ -560,11 +563,11 @@ impl ProxyManager {
       .filter(|uri| !uri.is_empty())
       .ok_or_else(|| crate::backend_error("VLESS_CONFIG_INVALID"))?;
     let parsed =
-      crate::xray::parse_vless_uri(uri).map_err(|error| crate::vless_config_error(&error))?;
-    let canonical_uri = crate::xray::export_vless_uri(&parsed.config, parsed.name.as_deref())
+      crate::xray::parse_share_link(uri).map_err(|error| crate::vless_config_error(&error))?;
+    let canonical_uri = crate::xray::export_share_link(&parsed.config, parsed.name.as_deref())
       .map_err(|error| crate::vless_config_error(&error))?;
 
-    proxy_settings.proxy_type = "vless".to_string();
+    proxy_settings.proxy_type = parsed.config.protocol().proxy_type().to_string();
     proxy_settings.host = parsed.config.address;
     proxy_settings.port = parsed.config.port;
     proxy_settings.username = None;
@@ -1224,7 +1227,7 @@ impl ProxyManager {
   // a password containing `/`, `#`, `?` or `@` otherwise breaks the URL
   // authority and silently retargets the request at the wrong host.
   pub fn build_proxy_url(proxy_settings: &ProxySettings) -> String {
-    if proxy_settings.proxy_type.eq_ignore_ascii_case("vless") {
+    if crate::xray::is_xray_proxy_type(&proxy_settings.proxy_type) {
       return proxy_settings.vless_uri.clone().unwrap_or_default();
     }
 
@@ -1317,7 +1320,7 @@ impl ProxyManager {
     proxy_settings: &ProxySettings,
   ) -> Result<ProxyCheckResult, String> {
     let mut xray_worker_id = None;
-    let effective_proxy_settings = if proxy_settings.proxy_type.eq_ignore_ascii_case("vless") {
+    let effective_proxy_settings = if crate::xray::is_xray_proxy_type(&proxy_settings.proxy_type) {
       let uri = proxy_settings
         .vless_uri
         .as_deref()
@@ -1646,10 +1649,10 @@ impl ProxyManager {
 
   // Try to parse URL format: protocol://username:password@host:port
   fn try_parse_url_format(line: &str) -> Option<ProxyParseResult> {
-    if line.starts_with("vless://") {
-      return Some(match crate::xray::parse_vless_uri(line) {
+    if crate::xray::XrayProtocol::from_share_link(line).is_some() {
+      return Some(match crate::xray::parse_share_link(line) {
         Ok(parsed) => ProxyParseResult::Parsed(ParsedProxyLine {
-          proxy_type: "vless".to_string(),
+          proxy_type: parsed.config.protocol().proxy_type().to_string(),
           host: parsed.config.address,
           port: parsed.config.port,
           username: None,
@@ -1842,9 +1845,25 @@ impl ProxyManager {
     let mut skipped = 0;
     let mut errors = Vec::new();
     let prefix = name_prefix.unwrap_or_else(|| "Imported".to_string());
+    // Numbered from the first free name, not from 1: a second batch under the
+    // same prefix otherwise collided with every name of the first and was
+    // skipped whole as duplicates.
+    let mut taken: std::collections::HashSet<String> = self
+      .get_stored_proxies()
+      .into_iter()
+      .map(|proxy| proxy.name)
+      .collect();
+    let mut number = 0;
 
-    for (i, parsed) in parsed_proxies.into_iter().enumerate() {
-      let proxy_name = format!("{} Proxy {}", prefix, i + 1);
+    for parsed in parsed_proxies {
+      let proxy_name = loop {
+        number += 1;
+        let candidate = format!("{} Proxy {}", prefix, number);
+        if !taken.contains(&candidate) {
+          break candidate;
+        }
+      };
+      taken.insert(proxy_name.clone());
       let proxy_settings = ProxySettings {
         proxy_type: parsed.proxy_type,
         host: parsed.host,
@@ -3920,7 +3939,7 @@ mod tests {
     assert!(normalized.password.is_none());
     assert_eq!(normalized.vless_uri.as_deref(), Some(uri.as_str()));
 
-    let invalid = uri.replace("security=reality", "security=tls");
+    let invalid = uri.replace("type=tcp", "type=kcp");
     let error = ProxyManager::normalize_proxy_settings(ProxySettings {
       proxy_type: "vless".to_string(),
       host: "127.0.0.1".to_string(),
@@ -3932,6 +3951,79 @@ mod tests {
     .unwrap_err();
     assert!(error.contains("VLESS_CONFIG_INVALID"));
     assert!(!error.contains(&invalid));
+  }
+
+  #[test]
+  fn every_xray_share_link_is_stored_under_the_type_its_link_names() {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let id = "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4";
+    let vmess = serde_json::json!({
+      "v": "2", "ps": "VM", "add": "vm.example.com", "port": "443", "id": id, "aid": "0",
+      "scy": "auto", "net": "ws", "type": "none", "host": "vm.example.com", "path": "/vm",
+      "tls": "tls"
+    });
+    let cases = [
+      (
+        "vless",
+        format!("vless://{id}@a.example.com:8080?type=ws&path=%2F"),
+        "vless",
+        "a.example.com",
+        8080,
+      ),
+      // The link decides: a VMess link saved under the VLESS type is VMess.
+      (
+        "vless",
+        format!("vmess://{}", STANDARD.encode(vmess.to_string())),
+        "vmess",
+        "vm.example.com",
+        443,
+      ),
+      (
+        "trojan",
+        "trojan://pw@tj.example.com:443?sni=tj.example.com".to_string(),
+        "trojan",
+        "tj.example.com",
+        443,
+      ),
+      (
+        "HY2",
+        "hy2://pw@hy.example.com:8443".to_string(),
+        "hysteria2",
+        "hy.example.com",
+        8443,
+      ),
+    ];
+    for (picked_type, link, expected_type, host, port) in cases {
+      let settings = |uri: String| ProxySettings {
+        proxy_type: picked_type.to_string(),
+        host: String::new(),
+        port: 0,
+        username: Some("unused".to_string()),
+        password: None,
+        vless_uri: Some(uri),
+      };
+      let normalized = ProxyManager::normalize_proxy_settings(settings(link.clone())).unwrap();
+      assert_eq!(normalized.proxy_type, expected_type, "{link}");
+      assert_eq!(normalized.host, host);
+      assert_eq!(normalized.port, port);
+      assert!(normalized.username.is_none());
+
+      let canonical = normalized.vless_uri.clone().unwrap();
+      assert_eq!(
+        ProxyManager::build_proxy_url(&normalized),
+        canonical,
+        "an Xray proxy is exported as its link"
+      );
+      let again = ProxyManager::normalize_proxy_settings(settings(canonical.clone())).unwrap();
+      assert_eq!(again.vless_uri.as_deref(), Some(canonical.as_str()));
+
+      assert!(matches!(
+        ProxyManager::parse_txt_proxies(&canonical).as_slice(),
+        [ProxyParseResult::Parsed(proxy)]
+          if proxy.proxy_type == expected_type && proxy.host == host && proxy.port == port
+      ));
+    }
   }
 
   fn history_entry(timestamp: u64, ok: bool) -> ProxyCheckHistoryEntry {

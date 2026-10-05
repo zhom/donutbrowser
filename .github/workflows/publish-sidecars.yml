@@ -1,7 +1,9 @@
 name: Publish sidecars to R2
 
-# Publishes the `donut-proxy` sidecar to the bucket behind
-# https://download.wayfern.com, where remote hosts fetch it from.
+# Publishes the `donut-proxy` sidecar, and the pinned Xray-core binary it runs
+# for VLESS, VMess, Trojan and Hysteria2 proxies, to the bucket behind
+# https://download.wayfern.com, where remote hosts fetch them from. A host
+# installs both in one directory: donut-proxy finds `xray` beside itself.
 #
 # WHY THIS EXISTS SEPARATELY FROM release.yml
 # The desktop app ships donut-proxy INSIDE the bundle as a Tauri sidecar, so a
@@ -42,6 +44,7 @@ on:
       - "src-tauri/src/vpn_worker_storage.rs"
       - "src-tauri/src/xray_worker_runner.rs"
       - "src-tauri/src/xray/**"
+      - "src-tauri/download-xray.mjs"
       - "src-tauri/build.rs"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
@@ -74,10 +77,12 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             artifact: donut-proxy-aarch64-apple-darwin
+            xray_artifact: xray-aarch64-apple-darwin
           # Windows x86_64 remote host.
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: donut-proxy-x86_64-pc-windows-msvc.exe
+            xray_artifact: xray-x86_64-pc-windows-msvc.exe
           # Linux x86_64 remote host. Pinned to 22.04, not -latest: the
           # deployment target is glibc 2.35, and a binary linked on 24.04
           # (glibc 2.39) refuses to load there. The stage step proves the pin
@@ -85,6 +90,7 @@ jobs:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             artifact: donut-proxy-x86_64-unknown-linux-gnu
+            xray_artifact: xray-x86_64-unknown-linux-gnu
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -94,6 +100,11 @@ jobs:
           # makes every published binary report `nightly-<hash>` instead of a
           # version, which is what an operator reads to tell builds apart.
           fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 #v7.0.0
+        with:
+          node-version-file: .node-version
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
@@ -195,6 +206,38 @@ jobs:
           printf '%s  %s\n' "$digest" "${{ matrix.artifact }}" \
             > "$RUNNER_TEMP/sidecars/${{ matrix.artifact }}.sha256"
 
+      # The same pinned upstream build the desktop bundles, checked against the
+      # archive digest in download-xray.mjs, so a host runs exactly the Xray-core
+      # this donut-proxy writes its configuration for.
+      - name: Stage Xray-core and record its digest
+        id: stage_xray
+        shell: bash
+        run: |
+          set -euo pipefail
+          node src-tauri/download-xray.mjs --target ${{ matrix.target }}
+          src="src-tauri/binaries/xray-${{ matrix.target }}"
+          [ -f "$src.exe" ] && src="$src.exe"
+          dest="$RUNNER_TEMP/sidecars/${{ matrix.xray_artifact }}"
+          cp "$src" "$dest"
+          chmod +x "$dest"
+          cp src-tauri/binaries/xray-LICENSE.txt "$RUNNER_TEMP/sidecars/xray-LICENSE.txt"
+
+          version="$("$dest" version | head -n 1)"
+          case "$version" in
+            "Xray "*) ;;
+            *) echo "::error::unexpected xray version output: $version"; exit 1 ;;
+          esac
+
+          if command -v sha256sum >/dev/null; then
+            digest="$(sha256sum --binary < "$dest" | cut -d' ' -f1)"
+          else
+            digest="$(shasum -a 256 -b < "$dest" | cut -d' ' -f1)"
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          printf '%s  %s\n' "$digest" "${{ matrix.xray_artifact }}" \
+            > "$RUNNER_TEMP/sidecars/${{ matrix.xray_artifact }}.sha256"
+
       - name: Publish to R2
         shell: bash
         env:
@@ -212,6 +255,8 @@ jobs:
           WAYFERN_R2_BUCKET: ${{ secrets.WAYFERN_R2_BUCKET }}
           ARTIFACT: ${{ matrix.artifact }}
           DIGEST: ${{ steps.stage.outputs.digest }}
+          XRAY_ARTIFACT: ${{ matrix.xray_artifact }}
+          XRAY_DIGEST: ${{ steps.stage_xray.outputs.digest }}
         run: |
           set -euo pipefail
 
@@ -261,40 +306,56 @@ jobs:
           export AWS_REQUEST_CHECKSUM_CALCULATION="WHEN_REQUIRED"
           export AWS_RESPONSE_CHECKSUM_VALIDATION="WHEN_REQUIRED"
 
-          src="$RUNNER_TEMP/sidecars/$ARTIFACT"
+          publish() {
+            local artifact="$1" expected="$2"
+            local src="$RUNNER_TEMP/sidecars/$artifact"
 
-          # no-cache, not a long max-age: this key is deliberately overwritten in
-          # place, and a cached copy of the previous build would make a host
-          # fail its integrity check, which reads as a corrupt download rather
-          # than a stale cache.
-          aws s3 cp "$src" "s3://${bucket}/${ARTIFACT}" \
-            --endpoint-url "$endpoint" \
-            --content-type application/octet-stream \
-            --cache-control "no-cache, must-revalidate" \
-            --only-show-errors
-          aws s3 cp "$src.sha256" "s3://${bucket}/${ARTIFACT}.sha256" \
-            --endpoint-url "$endpoint" \
-            --content-type text/plain \
-            --cache-control "no-cache, must-revalidate" \
-            --only-show-errors
+            # no-cache, not a long max-age: this key is deliberately overwritten in
+            # place, and a cached copy of the previous build would make a host
+            # fail its integrity check, which reads as a corrupt download rather
+            # than a stale cache.
+            aws s3 cp "$src" "s3://${bucket}/${artifact}" \
+              --endpoint-url "$endpoint" \
+              --content-type application/octet-stream \
+              --cache-control "no-cache, must-revalidate" \
+              --only-show-errors
+            aws s3 cp "$src.sha256" "s3://${bucket}/${artifact}.sha256" \
+              --endpoint-url "$endpoint" \
+              --content-type text/plain \
+              --cache-control "no-cache, must-revalidate" \
+              --only-show-errors
 
-          # Read it back and compare. Without this, "published" is an assumption:
-          # a truncated upload or a write to the wrong bucket both look like
-          # success, and the failure would surface days later on a remote host
-          # as an unexplained checksum mismatch.
-          verify="$RUNNER_TEMP/verify-$ARTIFACT"
-          aws s3 cp "s3://${bucket}/${ARTIFACT}" "$verify" \
-            --endpoint-url "$endpoint" --only-show-errors
-          if command -v sha256sum >/dev/null; then
-            got="$(sha256sum --binary < "$verify" | cut -d' ' -f1)"
-          else
-            got="$(shasum -a 256 -b < "$verify" | cut -d' ' -f1)"
+            # Read it back and compare. Without this, "published" is an assumption:
+            # a truncated upload or a write to the wrong bucket both look like
+            # success, and the failure would surface days later on a remote host
+            # as an unexplained checksum mismatch.
+            local verify="$RUNNER_TEMP/verify-$artifact" got
+            aws s3 cp "s3://${bucket}/${artifact}" "$verify" \
+              --endpoint-url "$endpoint" --only-show-errors
+            if command -v sha256sum >/dev/null; then
+              got="$(sha256sum --binary < "$verify" | cut -d' ' -f1)"
+            else
+              got="$(shasum -a 256 -b < "$verify" | cut -d' ' -f1)"
+            fi
+            if [ "$got" != "$expected" ]; then
+              echo "::error::Round-trip mismatch for $artifact: uploaded $expected, bucket returned $got"
+              exit 1
+            fi
+            echo "Published and verified $artifact ($expected)"
+          }
+
+          publish "$ARTIFACT" "$DIGEST"
+          publish "$XRAY_ARTIFACT" "$XRAY_DIGEST"
+
+          # Xray-core is MPL-2.0. Every target carries the same text, so one job
+          # publishes it.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            aws s3 cp "$RUNNER_TEMP/sidecars/xray-LICENSE.txt" "s3://${bucket}/xray-LICENSE.txt" \
+              --endpoint-url "$endpoint" \
+              --content-type text/plain \
+              --cache-control "no-cache, must-revalidate" \
+              --only-show-errors
           fi
-          if [ "$got" != "$DIGEST" ]; then
-            echo "::error::Round-trip mismatch for $ARTIFACT: uploaded $DIGEST, bucket returned $got"
-            exit 1
-          fi
-          echo "Published and verified $ARTIFACT ($DIGEST)"
 
       - name: Summarise
         if: always() && steps.stage.outputs.digest != ''
@@ -303,6 +364,9 @@ jobs:
           ARTIFACT: ${{ matrix.artifact }}
           DIGEST: ${{ steps.stage.outputs.digest }}
           VERSION: ${{ steps.stage.outputs.version }}
+          XRAY_ARTIFACT: ${{ matrix.xray_artifact }}
+          XRAY_DIGEST: ${{ steps.stage_xray.outputs.digest }}
+          XRAY_VERSION: ${{ steps.stage_xray.outputs.version }}
         run: |
           {
             echo "### $ARTIFACT"
@@ -311,7 +375,15 @@ jobs:
             echo "- sha256: \`$DIGEST\`"
             echo "- url: https://download.wayfern.com/$ARTIFACT"
             echo ""
-            echo "The fleet bootstrap takes this digest as an argument, so copy it"
+            if [ -n "$XRAY_DIGEST" ]; then
+              echo "### $XRAY_ARTIFACT"
+              echo ""
+              echo "- version: \`$XRAY_VERSION\`"
+              echo "- sha256: \`$XRAY_DIGEST\`"
+              echo "- url: https://download.wayfern.com/$XRAY_ARTIFACT"
+              echo ""
+            fi
+            echo "The fleet bootstrap takes these digests as pins, so copy them"
             echo "from here rather than fetching the published \`.sha256\` — a hash"
             echo "served by the same bucket as the binary verifies transport only."
           } >> "$GITHUB_STEP_SUMMARY"

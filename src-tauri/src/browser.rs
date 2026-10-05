@@ -9,6 +9,8 @@ pub struct ProxySettings {
   pub port: u16,
   pub username: Option<String>,
   pub password: Option<String>,
+  /// The share link of a `vless`, `vmess`, `trojan` or `hysteria2` proxy. It
+  /// holds the whole server configuration; the name predates the other three.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub vless_uri: Option<String>,
 }

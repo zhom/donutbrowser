@@ -254,7 +254,7 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
         body: {
           proxy_settings: {
             ...createdVless.value.proxy_settings,
-            vless_uri: VLESS_URI.replace("security=reality", "security=tls"),
+            vless_uri: VLESS_URI.replace("type=tcp", "type=kcp"),
           },
         },
       },

@@ -286,7 +286,8 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   // as a warning, and `isFirstHopEncrypted`, the fail-closed guard, is
   // untouched.
   const notEncrypted = parsedProxies.filter(
-    (proxy) => !isFirstHopEncrypted(proxy.proxy_type, proxy.username),
+    (proxy) =>
+      !isFirstHopEncrypted(proxy.proxy_type, proxy.username, proxy.vless_uri),
   );
   const cipherUndecidedCount = notEncrypted.filter(
     isFirstHopCipherUndecided,
@@ -469,6 +470,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                             isFirstHopEncrypted(
                               proxy.proxy_type,
                               proxy.username,
+                              proxy.vless_uri,
                             )
                               ? "text-primary-text"
                               : "text-warning-text"

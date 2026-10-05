@@ -373,7 +373,7 @@ async fn test_xray_reality_chain_and_local_traffic_monitoring(
     return Ok(());
   };
 
-  let parsed = donutbrowser_lib::xray::parse_vless_uri(&vless_uri)?;
+  let parsed = donutbrowser_lib::xray::parse_share_link(&vless_uri)?;
   let endpoint_is_loopback = parsed.config.address == "localhost"
     || parsed
       .config
@@ -2085,5 +2085,266 @@ async fn worker_exits_when_its_config_is_deleted(
   );
 
   tracker.cleanup_all().await;
+  Ok(())
+}
+
+/// The Xray-core binary that `download-xray.mjs` placed in `src-tauri/binaries`,
+/// which is also the one `donut-proxy` finds from a test build.
+fn bundled_xray_binary() -> std::path::PathBuf {
+  let binaries = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+  std::fs::read_dir(&binaries)
+    .ok()
+    .into_iter()
+    .flatten()
+    .flatten()
+    .map(|entry| entry.path())
+    .find(|path| {
+      path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+          name.starts_with("xray-") && !name.contains("LICENSE") && !name.contains(".source")
+        })
+    })
+    .unwrap_or_else(|| {
+      panic!(
+        "no Xray-core binary in {}; run `node src-tauri/download-xray.mjs`",
+        binaries.display()
+      )
+    })
+}
+
+/// One HTTP GET through an authenticated SOCKS5 endpoint, returning the body.
+async fn get_through_authenticated_socks5(
+  socks_port: u16,
+  username: &str,
+  password: &str,
+  target_port: u16,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+  let mut stream = TcpStream::connect(("127.0.0.1", socks_port)).await?;
+  stream.write_all(&[5, 1, 2]).await?;
+  let mut method = [0_u8; 2];
+  stream.read_exact(&mut method).await?;
+  if method != [5, 2] {
+    return Err(format!("SOCKS5 endpoint chose method {method:?}, not password").into());
+  }
+  let mut auth = vec![1, username.len() as u8];
+  auth.extend_from_slice(username.as_bytes());
+  auth.push(password.len() as u8);
+  auth.extend_from_slice(password.as_bytes());
+  stream.write_all(&auth).await?;
+  let mut auth_reply = [0_u8; 2];
+  stream.read_exact(&mut auth_reply).await?;
+  if auth_reply != [1, 0] {
+    return Err("SOCKS5 endpoint rejected the credentials".into());
+  }
+  let mut connect = vec![5, 1, 0, 1, 127, 0, 0, 1];
+  connect.extend_from_slice(&target_port.to_be_bytes());
+  stream.write_all(&connect).await?;
+  let mut reply = [0_u8; 10];
+  stream.read_exact(&mut reply).await?;
+  if reply[1] != 0 {
+    return Err(format!("SOCKS5 CONNECT failed with reply {}", reply[1]).into());
+  }
+  stream
+    .write_all(
+      format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{target_port}\r\nConnection: close\r\n\r\n")
+        .as_bytes(),
+    )
+    .await?;
+  let mut response = Vec::new();
+  tokio::time::timeout(Duration::from_secs(15), stream.read_to_end(&mut response)).await??;
+  let body_start = response
+    .windows(4)
+    .position(|window| window == b"\r\n\r\n")
+    .ok_or("no HTTP response through the SOCKS5 endpoint")?
+    + 4;
+  Ok(response[body_start..].to_vec())
+}
+
+async fn port_refuses_connections(port: u16) -> bool {
+  for _ in 0..100 {
+    if TcpStream::connect(("127.0.0.1", port)).await.is_err() {
+      return true;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  false
+}
+
+/// `donut-proxy xray start|bind|stop` is what a remote host without the app
+/// drives, so its exit codes and output shape are a contract. This runs it
+/// against a real Xray-core VLESS server on loopback.
+#[tokio::test]
+#[serial]
+async fn test_xray_cli_contract() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let binary_path = setup_test().await?;
+  let xray = bundled_xray_binary();
+  let cache = tempfile::tempdir()?;
+  let (origin_port, _origin) = start_mock_http_server("XRAY-CLI-OK").await;
+
+  let server_port = {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    listener.local_addr()?.port()
+  };
+  let client_id = uuid::Uuid::new_v4().to_string();
+  let server_config = cache.path().join("server.json");
+  std::fs::write(
+    &server_config,
+    serde_json::json!({
+      "log": { "loglevel": "warning" },
+      "inbounds": [{
+        "listen": "127.0.0.1",
+        "port": server_port,
+        "protocol": "vless",
+        "settings": { "clients": [{ "id": client_id }], "decryption": "none" },
+        "streamSettings": { "network": "tcp" },
+      }],
+      "outbounds": [{ "protocol": "freedom" }],
+    })
+    .to_string(),
+  )?;
+  let mut server = std::process::Command::new(&xray)
+    .args(["run", "-c"])
+    .arg(&server_config)
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .spawn()?;
+  struct KillOnDrop(std::process::Child);
+  impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+      let _ = self.0.kill();
+      let _ = self.0.wait();
+    }
+  }
+  let mut server_ready = false;
+  for _ in 0..100 {
+    if TcpStream::connect(("127.0.0.1", server_port)).await.is_ok() {
+      server_ready = true;
+      break;
+    }
+    if server.try_wait()?.is_some() {
+      break;
+    }
+    sleep(Duration::from_millis(100)).await;
+  }
+  let _server = KillOnDrop(server);
+  assert!(server_ready, "the Xray-core test server did not listen");
+
+  let xray_cli = |args: &[&str], share_link: Option<&str>| {
+    let mut command = tokio::process::Command::new(&binary_path);
+    command
+      .arg("xray")
+      .args(args)
+      .env("DONUTBROWSER_CACHE_DIR", cache.path())
+      .env_remove("DONUT_PROXY_SHARE_LINK");
+    if let Some(link) = share_link {
+      command.env("DONUT_PROXY_SHARE_LINK", link);
+    }
+    command.output()
+  };
+  let owner = std::process::id().to_string();
+
+  let missing = xray_cli(&["start", "--owner-pid", &owner], None).await?;
+  assert_eq!(missing.status.code(), Some(2));
+  assert!(String::from_utf8_lossy(&missing.stderr).contains("DONUT_PROXY_SHARE_LINK"));
+
+  let malformed = xray_cli(
+    &["start", "--owner-pid", &owner],
+    Some("vless://not-a-uuid@127.0.0.1:1"),
+  )
+  .await?;
+  assert_eq!(malformed.status.code(), Some(1));
+  assert!(String::from_utf8_lossy(&malformed.stderr).contains("VLESS_CONFIG_INVALID"));
+
+  let link = format!("vless://{client_id}@127.0.0.1:{server_port}?type=tcp&security=none#cli");
+  let started = xray_cli(&["start", "--owner-pid", &owner], Some(&link)).await?;
+  assert!(
+    started.status.success(),
+    "xray start failed: {}",
+    String::from_utf8_lossy(&started.stderr)
+  );
+  let worker: Value = serde_json::from_slice(&started.stdout)?;
+  let id = worker["id"].as_str().ok_or("no id")?.to_string();
+  let local_port = worker["localPort"].as_u64().ok_or("no localPort")? as u16;
+  let username = worker["username"]
+    .as_str()
+    .ok_or("no username")?
+    .to_string();
+  let password = worker["password"]
+    .as_str()
+    .ok_or("no password")?
+    .to_string();
+  assert_eq!(
+    worker["localUrl"].as_str(),
+    Some(format!("socks5://127.0.0.1:{local_port}").as_str())
+  );
+  assert!(!username.is_empty() && !password.is_empty());
+  assert!(
+    !String::from_utf8_lossy(&started.stdout).contains(&client_id),
+    "the share link's secret must not be echoed"
+  );
+
+  let body =
+    get_through_authenticated_socks5(local_port, &username, &password, origin_port).await?;
+  assert_eq!(body, b"XRAY-CLI-OK");
+  assert!(
+    get_through_authenticated_socks5(local_port, &username, "wrong", origin_port)
+      .await
+      .is_err(),
+    "the worker accepted the wrong password"
+  );
+
+  // A rebound worker follows its new owner and exits with it.
+  #[cfg(unix)]
+  let mut new_owner = std::process::Command::new("sleep").arg("60").spawn()?;
+  #[cfg(windows)]
+  let mut new_owner = std::process::Command::new("ping")
+    .args(["-n", "60", "127.0.0.1"])
+    .stdout(std::process::Stdio::null())
+    .spawn()?;
+  let bound = xray_cli(
+    &["bind", "--id", &id, "--pid", &new_owner.id().to_string()],
+    None,
+  )
+  .await?;
+  assert!(bound.status.success());
+  assert_eq!(
+    serde_json::from_slice::<Value>(&bound.stdout)?["success"],
+    true
+  );
+  new_owner.kill()?;
+  new_owner.wait()?;
+  assert!(
+    port_refuses_connections(local_port).await,
+    "the worker outlived the owner it was bound to"
+  );
+
+  let restarted = xray_cli(&["start", "--owner-pid", &owner], Some(&link)).await?;
+  assert!(restarted.status.success());
+  let worker: Value = serde_json::from_slice(&restarted.stdout)?;
+  let id = worker["id"].as_str().ok_or("no id")?.to_string();
+  let local_port = worker["localPort"].as_u64().ok_or("no localPort")? as u16;
+  let stopped = xray_cli(&["stop", "--id", &id], None).await?;
+  assert!(stopped.status.success());
+  assert_eq!(
+    serde_json::from_slice::<Value>(&stopped.stdout)?["success"],
+    true
+  );
+  assert!(
+    port_refuses_connections(local_port).await,
+    "the worker survived stop"
+  );
+  let stopped_again = xray_cli(&["stop", "--id", &id], None).await?;
+  assert_eq!(
+    serde_json::from_slice::<Value>(&stopped_again.stdout)?["success"],
+    false
+  );
+  let bind_missing = xray_cli(&["bind", "--id", &id, "--pid", &owner], None).await?;
+  assert_eq!(
+    serde_json::from_slice::<Value>(&bind_missing.stdout)?["success"],
+    false
+  );
+
   Ok(())
 }

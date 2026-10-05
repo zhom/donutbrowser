@@ -2,7 +2,7 @@ use crate::proxy_runner::find_sidecar_executable;
 #[cfg(unix)]
 use crate::proxy_storage::is_process_running;
 use crate::proxy_storage::{process_identity_matches, resolve_process_start_time};
-use crate::xray::{build_client_config_json, parse_vless_uri, XrayClientRuntime};
+use crate::xray::{build_client_config_json, parse_share_link, XrayClientRuntime};
 use crate::xray_worker_storage::{
   create_xray_worker_log, delete_xray_worker_config, generate_xray_worker_id,
   get_xray_worker_config, get_xray_worker_config_from_path, list_xray_worker_configs,
@@ -163,12 +163,23 @@ pub async fn start_xray_worker(
   profile_id: Option<&str>,
   vless_uri: &str,
 ) -> Result<XrayWorkerConfig, Box<dyn std::error::Error>> {
+  start_xray_worker_for_owner(profile_id, vless_uri, std::process::id()).await
+}
+
+/// Starts a worker that lives until `owner_pid` exits, or until it is stopped
+/// or re-bound with `set_browser_pid`. The `donut-proxy xray start` command
+/// passes the pid of the process that called it, because its own pid is gone
+/// the moment it prints the result.
+pub async fn start_xray_worker_for_owner(
+  profile_id: Option<&str>,
+  vless_uri: &str,
+  owner_pid: u32,
+) -> Result<XrayWorkerConfig, Box<dyn std::error::Error>> {
   let _start_guard = XRAY_START_LOCK.lock().await;
-  parse_vless_uri(vless_uri)
+  parse_share_link(vless_uri)
     .map_err(|error| -> Box<dyn std::error::Error> { crate::vless_config_error(&error).into() })?;
   crate::proxy_runner::ensure_sidecar_version().await?;
   ensure_xray_binary()?;
-  let owner_pid = std::process::id();
   let owner_start_time =
     resolve_process_start_time(owner_pid).ok_or_else(|| structured_error("XRAY_START_FAILED"))?;
 
@@ -212,7 +223,7 @@ pub async fn start_xray_worker(
 
   let mut last_error = None;
   for attempt in 1..=3 {
-    match spawn_xray_worker(profile_id, vless_uri).await {
+    match spawn_xray_worker(profile_id, vless_uri, owner_pid, owner_start_time).await {
       Ok(worker) => return Ok(worker),
       Err(error) => {
         if attempt < 3 {
@@ -234,6 +245,8 @@ pub async fn start_xray_worker(
 async fn spawn_xray_worker(
   profile_id: Option<&str>,
   vless_uri: &str,
+  owner_pid: u32,
+  owner_start_time: u64,
 ) -> Result<XrayWorkerConfig, Box<dyn std::error::Error>> {
   let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
     .map_err(|error| structured_error_with_detail("XRAY_START_FAILED", error))?;
@@ -260,11 +273,8 @@ async fn spawn_xray_worker(
     username,
     password,
   );
-  let owner_pid = std::process::id();
   config.browser_pid = Some(owner_pid);
-  config.browser_pid_start_time = Some(
-    resolve_process_start_time(owner_pid).ok_or_else(|| structured_error("XRAY_START_FAILED"))?,
-  );
+  config.browser_pid_start_time = Some(owner_start_time);
   save_xray_worker_config(&config)
     .map_err(|error| structured_error_with_detail("XRAY_START_FAILED", error))?;
 
@@ -520,7 +530,7 @@ pub async fn run_xray_worker(config_path: &Path) -> Result<(), Box<dyn std::erro
   );
   save_xray_worker_config_to_path(&config, config_path)
     .map_err(|error| structured_error_with_detail("XRAY_START_FAILED", error))?;
-  let parsed = parse_vless_uri(&config.vless_uri)
+  let parsed = parse_share_link(&config.vless_uri)
     .map_err(|error| -> Box<dyn std::error::Error> { crate::vless_config_error(&error).into() })?;
   let runtime = XrayClientRuntime {
     listen_port: config.local_port,

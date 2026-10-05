@@ -34,7 +34,10 @@
  * `Url::scheme()`) must stay distinct, or the UI describes a wire that does not
  * exist.
  */
-const TYPE_ALIASES = new Map<string, string>([["shadowsocks", "ss"]]);
+const TYPE_ALIASES = new Map<string, string>([
+  ["shadowsocks", "ss"],
+  ["hy2", "hysteria2"],
+]);
 
 /**
  * The spelling the UI branches on, for a `proxy_type` that may carry any of

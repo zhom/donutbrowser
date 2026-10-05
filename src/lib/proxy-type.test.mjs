@@ -28,10 +28,22 @@ test("both Shadowsocks spellings answer as one type", () => {
 });
 
 test("every other type keeps its own identity", () => {
-  for (const type of ["http", "https", "httpstls", "socks4", "socks5", "vless"])
+  for (const type of [
+    "http",
+    "https",
+    "httpstls",
+    "socks4",
+    "socks5",
+    "vless",
+    "vmess",
+    "trojan",
+    "hysteria2",
+  ])
     assert.equal(canonicalProxyType(type), type);
   assert.equal(canonicalProxyType("HTTPSTLS"), "httpstls");
   assert.equal(canonicalProxyType("VLESS"), "vless");
+  // Hysteria clients export `hy2://`, and the backend stores it as hysteria2.
+  assert.equal(canonicalProxyType(" HY2 "), "hysteria2");
   // `socks` is not `socks5` to `Url::scheme()`, so folding it here would have
   // the UI describe a hop the Rust worker never dials.
   assert.equal(canonicalProxyType("socks"), "socks");
@@ -145,6 +157,27 @@ test("Shadowsocks is not filed under a heading that promises encryption", () => 
   );
 });
 
+test("no Xray type is filed under a heading that promises encryption", () => {
+  // Until the backend accepts a share link, the note under the Select says the
+  // link decides. Under "First hop encrypted" that note contradicts the heading,
+  // the same way an empty Shadowsocks cipher did.
+  const group = (name) =>
+    source.match(new RegExp(`const ${name} = \\[([^\\]]*)\\]`))?.[1];
+  const always = group("ALWAYS_ENCRYPTED_FIRST_HOP_TYPES");
+  const link = group("LINK_DEPENDENT_FIRST_HOP_TYPES");
+  assert.ok(always && link, "the link-dependent group must exist");
+  for (const type of ["vless", "vmess", "trojan", "hysteria2"]) {
+    assert.ok(
+      !always.includes(`"${type}"`),
+      `${type} is under the encrypted heading`,
+    );
+    assert.ok(
+      link.includes(`"${type}"`),
+      `${type} is missing from the link group`,
+    );
+  }
+});
+
 test("an empty cipher is described as undecided, and still fails closed", () => {
   assert.match(
     source,
@@ -177,8 +210,10 @@ test("an empty cipher is described as undecided, and still fails closed", () => 
     2,
     "cipherUndecided may only be declared and used to pick that one sentence",
   );
-  assert.ok(
-    stripped.includes("isFirstHopEncrypted(canonicalType, form.username)"),
+  // The third argument is the share link, which decides for the Xray types.
+  assert.match(
+    stripped,
+    /isFirstHopEncrypted\(\s*canonicalType,\s*form\.username,/,
     "the encryption answer must come from the same canonical type the field " +
       "labels use, so a padded stored type cannot make them disagree",
   );

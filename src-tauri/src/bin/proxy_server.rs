@@ -168,6 +168,41 @@ async fn main() {
         .subcommand(Command::new("list").about("List all proxy servers")),
     )
     .subcommand(
+      Command::new("xray")
+        .about("Manage Xray-core workers for share-link proxies (VLESS, VMess, Trojan, Hysteria2)")
+        .subcommand(
+          Command::new("start")
+            .about(
+              "Start a worker serving authenticated SOCKS5 on 127.0.0.1. The share link is \
+               read from DONUT_PROXY_SHARE_LINK, never from the command line",
+            )
+            .arg(
+              Arg::new("owner-pid")
+                .long("owner-pid")
+                .value_parser(clap::value_parser!(u32))
+                .required(true)
+                .help("The worker exits when this process exits"),
+            ),
+        )
+        .subcommand(
+          Command::new("bind")
+            .about("Make a worker exit with this process instead of its current owner")
+            .arg(Arg::new("id").long("id").required(true).help("Worker ID"))
+            .arg(
+              Arg::new("pid")
+                .long("pid")
+                .value_parser(clap::value_parser!(u32))
+                .required(true)
+                .help("New owner process ID"),
+            ),
+        )
+        .subcommand(
+          Command::new("stop")
+            .about("Stop a worker")
+            .arg(Arg::new("id").long("id").required(true).help("Worker ID")),
+        ),
+    )
+    .subcommand(
       Command::new("proxy-worker")
         .about("Run a proxy worker process (internal use)")
         .arg(
@@ -348,6 +383,95 @@ async fn main() {
       process::exit(0);
     } else {
       log::error!("Invalid action. Use 'start', 'stop', or 'list'");
+      process::exit(1);
+    }
+  } else if let Some(xray_matches) = matches.subcommand_matches("xray") {
+    if let Some(start_matches) = xray_matches.subcommand_matches("start") {
+      let owner_pid = *start_matches
+        .get_one::<u32>("owner-pid")
+        .expect("owner-pid is required");
+      let share_link = std::env::var("DONUT_PROXY_SHARE_LINK")
+        .ok()
+        .filter(|link| !link.trim().is_empty());
+      // The worker processes started below inherit this environment.
+      std::env::remove_var("DONUT_PROXY_SHARE_LINK");
+      let Some(share_link) = share_link else {
+        eprintln!("DONUT_PROXY_SHARE_LINK is not set");
+        process::exit(2);
+      };
+
+      // The detached worker would otherwise inherit the caller's stdout and
+      // stderr pipes, and a caller that reads to EOF would wait for the worker
+      // to exit. Same fix as `proxy start` (proxy_runner.rs).
+      #[cfg(windows)]
+      {
+        use std::os::windows::io::AsRawHandle;
+        use windows::Win32::Foundation::{SetHandleInformation, HANDLE, HANDLE_FLAGS};
+        const HANDLE_FLAG_INHERIT: u32 = 0x00000001;
+        for handle in [
+          std::io::stdout().as_raw_handle(),
+          std::io::stderr().as_raw_handle(),
+        ] {
+          if !handle.is_null() {
+            unsafe {
+              let _ = SetHandleInformation(HANDLE(handle), HANDLE_FLAG_INHERIT, HANDLE_FLAGS(0));
+            }
+          }
+        }
+      }
+
+      match donutbrowser_lib::xray_worker_runner::start_xray_worker_for_owner(
+        None,
+        share_link.trim(),
+        owner_pid,
+      )
+      .await
+      {
+        Ok(worker) => {
+          // Use println! here because this needs to go to stdout for parsing
+          println!(
+            "{}",
+            serde_json::json!({
+              "id": worker.id,
+              "localPort": worker.local_port,
+              "localUrl": format!("socks5://127.0.0.1:{}", worker.local_port),
+              "username": worker.username,
+              "password": worker.password,
+            })
+          );
+          process::exit(0);
+        }
+        Err(e) => {
+          eprintln!("Failed to start Xray-core worker: {e}");
+          process::exit(1);
+        }
+      }
+    } else if let Some(bind_matches) = xray_matches.subcommand_matches("bind") {
+      let id = bind_matches
+        .get_one::<String>("id")
+        .expect("id is required");
+      let pid = *bind_matches.get_one::<u32>("pid").expect("pid is required");
+      let success = donutbrowser_lib::xray_worker_runner::set_browser_pid(id, pid);
+      // Use println! here because this needs to go to stdout for parsing
+      println!("{}", serde_json::json!({ "success": success }));
+      process::exit(0);
+    } else if let Some(stop_matches) = xray_matches.subcommand_matches("stop") {
+      let id = stop_matches
+        .get_one::<String>("id")
+        .expect("id is required");
+      match donutbrowser_lib::xray_worker_runner::stop_xray_worker_now(id) {
+        Ok(success) => {
+          // Use println! here because this needs to go to stdout for parsing
+          println!("{}", serde_json::json!({ "success": success }));
+          process::exit(0);
+        }
+        Err(e) => {
+          eprintln!("Failed to stop Xray-core worker: {e}");
+          process::exit(1);
+        }
+      }
+    } else {
+      log::error!("Invalid action. Use 'start', 'bind', or 'stop'");
       process::exit(1);
     }
   } else if let Some(worker_matches) = matches.subcommand_matches("proxy-worker") {

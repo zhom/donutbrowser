@@ -916,6 +916,7 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
         browser: "wayfern",
         version: prepared.version,
         temporary: true,
+        tags: ["e2e-rest-tag"],
       },
     });
     assert.equal(
@@ -923,6 +924,14 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       200,
       JSON.stringify(temporary.value),
     );
+    // Tags given on create are stored, not only echoed: the handler once
+    // looked the new profile up by name where an id was needed, and every
+    // create with tags answered 500.
+    const storedTemporary = await request(
+      `${base}/v1/profiles/${temporary.value.profile.id}`,
+      { token: saved.api_token },
+    );
+    assert.deepEqual(storedTemporary.value.profile.tags, ["e2e-rest-tag"]);
     assert.equal(temporary.value.profile.temporary, true);
     assert.equal(
       temporary.value.profile.ephemeral,

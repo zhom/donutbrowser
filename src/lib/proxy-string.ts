@@ -34,7 +34,29 @@ const PROXY_SCHEMES = new Map<string, string>([
   ["ss", "ss"],
   ["shadowsocks", "ss"],
   ["vless", "vless"],
+  ["vmess", "vmess"],
+  ["trojan", "trojan"],
+  ["hysteria2", "hysteria2"],
+  ["hy2", "hysteria2"],
 ]);
+
+/**
+ * Types an Xray-core sidecar carries. Their whole configuration is the share
+ * link stored in `vless_uri`, a name from before VMess, Trojan and Hysteria2
+ * joined VLESS.
+ */
+const XRAY_PROXY_TYPES = new Set([
+  "vless",
+  "vmess",
+  "trojan",
+  "hysteria2",
+  "hy2",
+]);
+
+/** Whether a stored `proxy_type` is configured by a share link. */
+export function isXrayProxyType(proxyType: string): boolean {
+  return XRAY_PROXY_TYPES.has(normalizeProxyType(proxyType));
+}
 
 /**
  * Protocol identifiers, shortened where the raw stored type would not fit the
@@ -98,7 +120,6 @@ const ENCRYPTED_FIRST_HOP = new Set([
   // clear, the same class of wrong claim this feature exists to remove, only
   // inverted.
   "shadowsocks",
-  "vless",
 ]);
 
 /**
@@ -123,8 +144,10 @@ const NULL_CIPHERS = new Set(["none", "plain"]);
 export function isFirstHopEncrypted(
   proxyType: string,
   cipher?: string | null,
+  shareLink?: string | null,
 ): boolean {
   const type = normalizeProxyType(proxyType);
+  if (XRAY_PROXY_TYPES.has(type)) return isShareLinkEncrypted(shareLink ?? "");
   if (!ENCRYPTED_FIRST_HOP.has(type)) return false;
   if (type === "ss" || type === "shadowsocks") {
     // Fail closed. An absent cipher is not evidence of encryption, and the
@@ -135,6 +158,75 @@ export function isFirstHopEncrypted(
     return normalized.length > 0 && !NULL_CIPHERS.has(normalized);
   }
   return true;
+}
+
+const NULL_VMESS_CIPHERS = new Set(["none", "zero"]);
+
+/**
+ * Whether an Xray share link encrypts the hop to its server.
+ *
+ * The link decides, not the protocol: plain VLESS (`security=none`) carries
+ * its payload in the clear, and so does VMess with the `none` or `zero`
+ * cipher. Hysteria2 always runs over QUIC, which is TLS 1.3. A link this cannot
+ * read is reported as not encrypted, for the same fail-closed reason as the
+ * Shadowsocks cipher above.
+ */
+export function isShareLinkEncrypted(shareLink: string): boolean {
+  const link = shareLink.trim();
+  const separator = link.indexOf("://");
+  if (separator === -1) return false;
+  const scheme = link.slice(0, separator).toLowerCase();
+  const body = link.slice(separator + 3).split("#")[0] ?? "";
+  if (scheme === "hysteria2" || scheme === "hy2") return true;
+
+  if (scheme === "vmess" && !body.includes("@")) {
+    const json = decodeVmessJson(body);
+    if (!json) return false;
+    // Read as `uri.rs` reads it: values trimmed, and `encryption` taken as
+    // the cipher when `scy` is absent.
+    const field = (key: string) =>
+      String(json[key] ?? "")
+        .trim()
+        .toLowerCase();
+    const security = field("tls");
+    if (security === "tls" || security === "reality") return true;
+    const cipher = field("scy") || field("encryption") || "auto";
+    return !NULL_VMESS_CIPHERS.has(cipher);
+  }
+
+  // Everything after the FIRST `?` is the query. A WebSocket path such as
+  // `/ws?ed=2048` may carry a second one, and cutting there hid a later
+  // `security=none` and called a plaintext link encrypted.
+  const queryStart = body.indexOf("?");
+  const query = new URLSearchParams(
+    queryStart === -1 ? "" : body.slice(queryStart + 1),
+  );
+  const defaultSecurity = scheme === "trojan" ? "tls" : "none";
+  const security = (query.get("security") || defaultSecurity).toLowerCase();
+  if (security === "tls" || security === "reality") return true;
+  if (scheme === "vmess") {
+    const cipher = (query.get("encryption") || "auto").toLowerCase();
+    return !NULL_VMESS_CIPHERS.has(cipher);
+  }
+  return false;
+}
+
+/** v2rayN's `vmess://<base64 JSON>` body, or null when it is not one. */
+function decodeVmessJson(body: string): Record<string, unknown> | null {
+  try {
+    const base64 = decodeURIComponent(body)
+      .replace(/\s/g, "")
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    const json: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return json !== null && typeof json === "object" && !Array.isArray(json)
+      ? (json as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export const HOST_FIRST_FORMAT = "host:port:username:password";

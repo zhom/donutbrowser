@@ -532,7 +532,11 @@ export function ProxyManagementDialog({
           // Shadowsocks keeps its cipher in `username`, and the cipher is what
           // decides this hop.
           const cipher = row.original.proxy_settings.username;
-          const encrypted = isFirstHopEncrypted(proxyType, cipher);
+          const encrypted = isFirstHopEncrypted(
+            proxyType,
+            cipher,
+            row.original.proxy_settings.vless_uri,
+          );
           // A stored Shadowsocks proxy can carry no cipher at all -
           // `parse_txt_proxies` reads `ss://host:8388` as username None, and
           // `import_proxies_json` stores proxy_type and username verbatim, and

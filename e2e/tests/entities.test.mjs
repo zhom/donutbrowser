@@ -164,22 +164,42 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         [],
       );
 
-      // Donut accepts one VLESS shape (REALITY + XTLS Vision over TCP). The form
-      // uses this to tell the user WHICH part of their setup is unsupported
-      // instead of implying they mistyped, so the reason must survive the IPC hop.
+      // The form uses this to tell the user WHICH part of their setup is
+      // unsupported instead of implying they mistyped, so the reason must
+      // survive the IPC hop. A link Donut can use comes back as the type and
+      // endpoint the form shows, VMess included, which hides them in base64.
       const goodVless =
         "vless://6d6e21a1-4829-4d2b-bc7f-1b25707b61e4@example.com:443" +
         "?security=reality&flow=xtls-rprx-vision&encryption=none&type=tcp" +
         "&sni=a.com&pbk=mQB9jxUDHO7g49VaNXLEdcNQ_jLhTbLolUsMUNwb6W4&sid=00&fp=chrome";
-      assert.equal(
+      assert.deepEqual(
         await app.invoke("validate_vless_uri", { uri: goodVless }),
-        null,
+        { proxy_type: "vless", host: "example.com", port: 443 },
       );
+      const vmess = `vmess://${Buffer.from(
+        JSON.stringify({
+          add: "vm.example.com",
+          port: "8443",
+          id: "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4",
+          net: "ws",
+          path: "/vm",
+          tls: "tls",
+        }),
+      ).toString("base64")}`;
+      assert.deepEqual(await app.invoke("validate_vless_uri", { uri: vmess }), {
+        proxy_type: "vmess",
+        host: "vm.example.com",
+        port: 8443,
+      });
 
       for (const [uri, reason] of [
-        [goodVless.replace("security=reality", "security=tls"), "security"],
-        [goodVless.replace("type=tcp", "type=ws"), "transport"],
-        [goodVless.replace("flow=xtls-rprx-vision", "flow=none"), "flow"],
+        [goodVless.replace("security=reality", "security=xtls"), "security"],
+        [goodVless.replace("type=tcp", "type=kcp"), "transport"],
+        [
+          goodVless.replace("flow=xtls-rprx-vision", "flow=xtls-rprx-direct"),
+          "flow",
+        ],
+        ["hysteria2://pw@hy.example.com:443/?obfs=gost", "obfs"],
       ]) {
         // invokeError returns the command's error wrapped in a message, so match
         // rather than JSON.parse the whole string.
@@ -216,6 +236,19 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         }),
       });
       assert.equal(importResult.imported_count, 1);
+
+      // A second batch under the same prefix continues the numbering. It used
+      // to restart at 1, collide with every name of the first batch, and be
+      // skipped whole as duplicates.
+      const secondBatch = await app.invoke("import_proxies_from_parsed", {
+        parsedProxies: [
+          { ...parsedProxyFields, port: parsedProxyFields.port + 1 },
+        ],
+        namePrefix: "Parsed",
+      });
+      assert.equal(secondBatch.imported_count, 1);
+      assert.equal(secondBatch.skipped_count, 0);
+      assert.equal(secondBatch.proxies[0].name, "Parsed Proxy 2");
 
       const profile = await createProfile(app);
       assert.equal(profile.name, "Entity Profile");

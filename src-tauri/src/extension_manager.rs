@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use utoipa::ToSchema;
 
+use crate::app_dirs::is_plain_path_part;
 use crate::events;
 
 /// Where an extension's payload came from. `archive` is a user-supplied
@@ -636,7 +637,7 @@ impl ExtensionManager {
     source_kind: String,
   ) -> Result<Extension, Box<dyn std::error::Error>> {
     let browser_compatibility = determine_browser_compatibility(&file_type);
-    if browser_compatibility.is_empty() {
+    if browser_compatibility.is_empty() || !is_plain_path_part(&file_name) {
       return Err(err_code("EXTENSION_UNSUPPORTED_FILE_TYPE"));
     }
     let now = now_secs();
@@ -771,6 +772,9 @@ impl ExtensionManager {
   }
 
   pub fn get_extension(&self, id: &str) -> Result<Extension, Box<dyn std::error::Error>> {
+    if !is_plain_path_part(id) {
+      return Err(format!("Extension with id '{id}' not found").into());
+    }
     let metadata_path = self.get_metadata_path(id);
     if !metadata_path.exists() {
       return Err(format!("Extension with id '{id}' not found").into());
@@ -914,7 +918,7 @@ impl ExtensionManager {
     explicit_name_provided: bool,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let browser_compatibility = determine_browser_compatibility(&file_type);
-    if browser_compatibility.is_empty() {
+    if browser_compatibility.is_empty() || !is_plain_path_part(&file_name) {
       return Err(err_code("EXTENSION_UNSUPPORTED_FILE_TYPE"));
     }
 
@@ -1374,6 +1378,9 @@ impl ExtensionManager {
     &self,
     ext: &Extension,
   ) -> Result<(), Box<dyn std::error::Error>> {
+    if !is_plain_path_part(&ext.id) || !is_plain_path_part(&ext.file_name) {
+      return Err(format!("Extension '{}' has an unsafe id or file name", ext.id).into());
+    }
     let metadata_path = self.get_metadata_path(&ext.id);
     if let Some(parent) = metadata_path.parent() {
       fs::create_dir_all(parent)?;
@@ -1391,6 +1398,9 @@ impl ExtensionManager {
   }
 
   pub fn delete_extension_internal(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if !is_plain_path_part(id) {
+      return Err(format!("Extension with id '{id}' not found").into());
+    }
     let ext_dir = self.get_extension_dir(id);
     if ext_dir.exists() {
       fs::remove_dir_all(&ext_dir)?;
@@ -2363,6 +2373,56 @@ mod tests {
       Some("uBlock Origin Lite")
     );
     assert_eq!(restored.updated_at, ext.updated_at);
+  }
+
+  #[test]
+  fn ids_and_file_names_from_sync_or_rest_cannot_leave_the_extension_directory() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let mgr = ExtensionManager::new();
+    let ext = mgr
+      .add_extension(
+        "fallback".to_string(),
+        "ublock.zip".to_string(),
+        localized_extension_zip(),
+      )
+      .unwrap();
+    let canary = tmp.path().join("canary.txt");
+    std::fs::write(&canary, "still here").unwrap();
+
+    // What a crafted sync object would upsert.
+    for (id, file_name) in [
+      ("..", "ublock.zip"),
+      ("../..", "ublock.zip"),
+      (ext.id.as_str(), "../../../escaped.zip"),
+      (ext.id.as_str(), "/tmp/escaped.zip"),
+      (ext.id.as_str(), ".."),
+    ] {
+      let mut crafted = ext.clone();
+      crafted.id = id.to_string();
+      crafted.file_name = file_name.to_string();
+      assert!(
+        mgr.update_extension_internal(&crafted).is_err(),
+        "{id} / {file_name}"
+      );
+    }
+
+    // A remote tombstone for `..` must not reach the parent directory.
+    assert!(mgr.get_extension("..").is_err());
+    assert!(mgr.delete_extension_internal("..").is_err());
+    assert!(canary.exists());
+
+    // The REST and UI add paths refuse a file name with path parts too.
+    for file_name in ["../escaped.zip", "nested/ublock.zip"] {
+      assert!(mgr
+        .add_extension(
+          "x".to_string(),
+          file_name.to_string(),
+          localized_extension_zip()
+        )
+        .is_err());
+    }
+    assert!(!tmp.path().join("escaped.zip").exists());
   }
 
   #[test]

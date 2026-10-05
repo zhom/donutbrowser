@@ -58,7 +58,7 @@ donutbrowser/
 │   │   ├── recipes.rs               # Thin client for cloud recipes; storage and replay stay in the cloud
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
-│   │   ├── xray/                    # VLESS + XTLS Vision + REALITY config/URI support
+│   │   ├── xray/                    # Xray share links (VLESS, VMess, Trojan, Hysteria2): parse, export, client config
 │   │   ├── xray_worker_runner.rs    # Xray-core sidecar lifecycle
 │   │   ├── xray_worker_storage.rs   # Private Xray worker state and runtime files
 │   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management

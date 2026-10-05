@@ -472,7 +472,7 @@ test("VLESS Reality persists, imports, routes through Xray-core, records traffic
       await app.restart();
     }
 
-    const invalidUri = vlessUri.replace("security=reality", "security=tls");
+    const invalidUri = vlessUri.replace("type=tcp", "type=kcp");
     const invalidCreate = await app.invokeError("create_stored_proxy", {
       name: "Invalid VLESS",
       proxySettings: {

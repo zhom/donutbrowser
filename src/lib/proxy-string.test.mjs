@@ -4,12 +4,19 @@ import {
   CREDENTIALS_FIRST_FORMAT,
   HOST_FIRST_FORMAT,
   isFirstHopEncrypted,
+  isShareLinkEncrypted,
+  isXrayProxyType,
   pickParsedProxy,
   proxyProtocolToken,
   resolveAmbiguousProxyLine,
   splitProxyScheme,
 } from "./proxy-string.ts";
 import { canonicalProxyType } from "./proxy-type.ts";
+
+const ID = "6d6e21a1-4829-4d2b-bc7f-1b25707b61e4";
+const TLS_LINK = `vless://${ID}@a.example.com:443?security=tls&type=ws`;
+const vmess = (fields) =>
+  `vmess://${Buffer.from(JSON.stringify(fields)).toString("base64")}`;
 
 /**
  * The formats themselves are exercised in Rust
@@ -207,7 +214,7 @@ test("the TLS-wrapped scheme survives a paste", () => {
 test("only the types that actually encrypt the first hop say they do", () => {
   // `ss` is deliberately NOT in this list: its answer depends on the cipher,
   // and a type-only query carries no cipher, so it cannot claim encryption.
-  for (const encrypted of ["httpstls", "vless", "HTTPSTLS", "VLESS"]) {
+  for (const encrypted of ["httpstls", "HTTPSTLS"]) {
     assert.equal(isFirstHopEncrypted(encrypted), true, encrypted);
   }
   assert.equal(isFirstHopEncrypted("ss", "aes-256-gcm"), true);
@@ -241,8 +248,70 @@ test("only the types that actually encrypt the first hop say they do", () => {
   }
   // An unspecified cipher is not a claim of safety either.
   assert.equal(isFirstHopEncrypted("ss", null), false);
-  // Types whose encryption does not depend on a cipher are unaffected.
-  assert.equal(isFirstHopEncrypted("vless", null), true);
+  // An Xray type answers from its share link, never from a cipher.
+  assert.equal(isFirstHopEncrypted("vless", null, TLS_LINK), true);
+  assert.equal(isFirstHopEncrypted("vless", "aes-256-gcm"), false);
+});
+
+test("an Xray share link decides whether its first hop is encrypted", () => {
+  const cases = [
+    // Plain VLESS is the "isolation only" setup, and it is in the clear.
+    [`vless://${ID}@a.example.com:80?security=none&type=tcp`, false],
+    [`vless://${ID}@a.example.com:80?type=tcp`, false],
+    [TLS_LINK, true],
+    [`vless://${ID}@a.example.com:443?security=REALITY&pbk=k`, true],
+    // Trojan is TLS unless the link says otherwise.
+    ["trojan://pw@a.example.com:443?peer=a.example.com#x", true],
+    ["trojan://pw@a.example.com:80?security=none", false],
+    // VMess encrypts with its own cipher even without TLS, unless the cipher
+    // is one of the two that do not.
+    [vmess({ add: "a.example.com", port: "443", id: ID, tls: "tls" }), true],
+    [vmess({ add: "a.example.com", port: "80", id: ID, scy: "auto" }), true],
+    [vmess({ add: "a.example.com", port: "80", id: ID, scy: "none" }), false],
+    [vmess({ add: "a.example.com", port: "80", id: ID, scy: "zero" }), false],
+    [`vmess://${ID}@a.example.com:80?encryption=zero`, false],
+    [`vmess://${ID}@a.example.com:80?encryption=aes-128-gcm`, true],
+    // Hysteria2 is QUIC, which is always TLS 1.3.
+    ["hysteria2://pw@a.example.com:443/?sni=a.example.com", true],
+    ["HY2://pw@a.example.com", true],
+    // A second `?` inside a WebSocket path must not hide a later option.
+    [
+      "trojan://pw@a.example.com:80?type=ws&path=/ws?ed=2048&security=none",
+      false,
+    ],
+    [`vmess://${ID}@a.example.com:80?path=/v?ed=1&encryption=none`, false],
+    // VMess JSON values are trimmed, and `encryption` stands in for `scy`.
+    [vmess({ add: "a.example.com", port: "80", id: ID, scy: " none " }), false],
+    [
+      vmess({ add: "a.example.com", port: "80", id: ID, encryption: "none" }),
+      false,
+    ],
+    [vmess({ add: "a.example.com", port: "443", id: ID, tls: " TLS " }), true],
+    // Unreadable is not a claim of safety.
+    ["vmess://not-base64!", false],
+    ["vmess://bnVsbA==", false],
+    ["", false],
+    ["a.example.com:443", false],
+  ];
+  for (const [link, encrypted] of cases) {
+    assert.equal(isShareLinkEncrypted(link), encrypted, link);
+  }
+  assert.equal(isFirstHopEncrypted("trojan", null, cases[4][0]), true);
+  assert.equal(isFirstHopEncrypted("vless", null, ""), false);
+  assert.equal(isFirstHopEncrypted("hy2", null, cases[12][0]), true);
+});
+
+test("the Xray types are the ones configured by a share link", () => {
+  for (const type of ["vless", "VMess", " trojan ", "hysteria2", "hy2"]) {
+    assert.equal(isXrayProxyType(type), true, type);
+  }
+  for (const type of ["ss", "socks5", "http", "", "__proto__"]) {
+    assert.equal(isXrayProxyType(type), false, type);
+  }
+  assert.equal(
+    splitProxyScheme("hy2://pw@a.example.com").proxyType,
+    "hysteria2",
+  );
 });
 
 test("a padded stored type answers the same as an unpadded one", () => {
@@ -256,7 +325,7 @@ test("a padded stored type answers the same as an unpadded one", () => {
   assert.equal(isFirstHopEncrypted("ss ", "aes-256-gcm"), true);
   assert.equal(isFirstHopEncrypted(" shadowsocks", "aes-256-gcm"), true);
   assert.equal(isFirstHopEncrypted("\thttpstls\n"), true);
-  assert.equal(isFirstHopEncrypted(" VLESS "), true);
+  assert.equal(isFirstHopEncrypted(" VLESS ", null, TLS_LINK), true);
   // Padding does not buy encryption either: the cipher still decides, and the
   // types that never encrypt still never do.
   assert.equal(isFirstHopEncrypted(" ss ", ""), false);
@@ -282,6 +351,8 @@ test("the first-hop answer never disagrees with the canonical type", () => {
     " HTTPSTLS ",
     "vless",
     " VLess ",
+    "hy2",
+    " Hysteria2 ",
     "http",
     " HTTPS ",
     "socks5",

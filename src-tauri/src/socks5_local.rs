@@ -20,7 +20,8 @@
 //! unfiltered, unmetered side channel around the TCP filter.
 
 use crate::proxy_server::{
-  connect_to_target_via_upstream, tunnel_streams, BlocklistMatcher, BypassMatcher,
+  connect_to_target_via_upstream, redacted_upstream, tunnel_streams, BlocklistMatcher,
+  BypassMatcher,
 };
 use crate::traffic_stats::{get_traffic_tracker, LiveTrafficTracker};
 use async_socks5::{AddrKind, Auth, SocksDatagram};
@@ -303,6 +304,12 @@ async fn read_request(stream: &mut TcpStream) -> std::io::Result<Socks5Request> 
   })
 }
 
+/// The upstream as a log line may show it: the URL carries the proxy's
+/// username and password, and the worker log is a plain file in the temp dir.
+fn upstream_label(upstream_url: Option<&str>) -> String {
+  upstream_url.map_or_else(|| "DIRECT".to_string(), redacted_upstream)
+}
+
 /// Read a SOCKS5 address of the given type into a host string (an IP literal or
 /// a domain name; `connect_to_target_via_upstream` handles both).
 async fn read_addr(stream: &mut TcpStream, atyp: u8) -> std::io::Result<String> {
@@ -377,7 +384,7 @@ async fn handle_connect(
     "SOCKS5 CONNECT {}:{} (upstream={})",
     host,
     port,
-    upstream_url.as_deref().unwrap_or("DIRECT")
+    upstream_label(upstream_url.as_deref())
   );
 
   // Resolve to the target stream, logging and dropping the (non-Send) dial
@@ -436,7 +443,7 @@ async fn handle_udp_associate(
   if mode == UdpMode::Refuse {
     log::info!(
       "SOCKS5 UDP ASSOCIATE refused: upstream ({}) cannot carry UDP without leaking; Chromium will use proxied TCP",
-      upstream_url.as_deref().unwrap_or("DIRECT")
+      upstream_label(upstream_url.as_deref())
     );
     let _ = send_reply(&mut control, REP_COMMAND_NOT_SUPPORTED, unspecified()).await;
     return;
