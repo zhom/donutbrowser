@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # `auto` lets Copilot pick; see issue-compliance.yml.
+  # `auto` lets Copilot pick; see issue-validation.yml.
   COPILOT_MODEL: auto
 
 jobs:

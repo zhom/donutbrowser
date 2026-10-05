@@ -1,7 +1,4 @@
-use base64::{
-  engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
-  Engine as _,
-};
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use serde_json::json;
 
 use super::*;
