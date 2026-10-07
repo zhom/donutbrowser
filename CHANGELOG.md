@@ -1,6 +1,34 @@
 # Changelog
 
 
+## v0.32.0 (2026-10-07)
+
+### Features
+
+- support vmess, trojan, and hysteria2
+
+### Refactoring
+
+- rework wayfern auth
+- cleanup
+- cleanup
+- adapt recipes to remote mcp
+
+### Maintenance
+
+- chore: version bump
+- chore: ci
+- ci(deps): bump anomalyco/opencode/github (#639)
+- chore: update flake.nix for v0.31.3 [skip ci] (#638)
+
+### Other
+
+- style: more consistent style across pages
+- deps(deps): bump the frontend-dependencies group with 8 updates
+- deps(rust)(deps): bump the rust-dependencies group across 1 directory with 57 updates
+- deps(deps): bump the frontend-dependencies group with 9 updates (#640)
+
+
 ## v0.31.3 (2026-10-03)
 
 ### Features
