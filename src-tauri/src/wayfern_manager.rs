@@ -2345,10 +2345,11 @@ impl WayfernManager {
     profile: &BrowserProfile,
     config: &WayfernConfig,
   ) -> Result<GeneratedFingerprint, Box<dyn std::error::Error + Send + Sync>> {
+    let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
     let session = HeadlessWayfern::start(
       self,
       profile,
-      None,
+      wayfern_token.as_deref(),
       &format!("generation for {}", profile.name),
     )
     .await?;
@@ -2358,7 +2359,6 @@ impl WayfernManager {
     let os = config.os.as_deref().unwrap_or(&host_os);
 
     // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
-    let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
     let mut generate_params = json!({ "operatingSystem": os });
     if let Some(ref token) = wayfern_token {
       generate_params
