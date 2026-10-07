@@ -18,6 +18,7 @@ const buttonVariants = cva(
           "border border-input bg-background hover:bg-accent hover:text-accent-foreground dark:bg-input/30",
         secondary: "bg-secondary text-secondary-foreground hover:shadow-sm",
         ghost: "hover:bg-accent hover:text-accent-foreground",
+        soft: "bg-foreground/6 text-foreground hover:bg-foreground/10",
       },
       size: {
         default: "h-10 px-4 py-2 has-[>svg]:px-3",
@@ -41,6 +42,7 @@ const rippleVariants = cva("pointer-events-none absolute size-5 rounded-full", {
       outline: "bg-input",
       secondary: "bg-secondary",
       ghost: "bg-accent",
+      soft: "bg-foreground/20",
     },
   },
   defaultVariants: {

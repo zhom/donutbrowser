@@ -3,18 +3,12 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuCheck, LuCopy } from "react-icons/lu";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { showSuccessToast } from "@/lib/toast-utils";
 
 interface CopyToClipboardProps {
   text: string;
-  variant?:
-    | "default"
-    | "destructive"
-    | "outline"
-    | "secondary"
-    | "ghost"
-    | "link";
+  variant?: ButtonProps["variant"];
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
   successMessage?: string;

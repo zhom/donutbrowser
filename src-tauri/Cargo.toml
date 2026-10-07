@@ -152,7 +152,8 @@ core-foundation = "0.10"
 # profile import, so its cookies and passwords can be re-encrypted for Wayfern.
 security-framework = "3"
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }
+objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication", "NSView", "NSResponder", "NSButton", "NSControl", "NSGraphics"] }
+objc2-foundation = { version = "0.3.2", features = ["NSGeometry"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.56"

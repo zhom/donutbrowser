@@ -1,10 +1,9 @@
 //! The remote-control bridge: one outbound socket that lets Donut cloud drive
 //! this installation's MCP tools.
 //!
-//! The local MCP server in [`crate::mcp_server`] answers on loopback, which is
-//! only reachable by an agent running on this machine. Remote control inverts
-//! the reach without inverting the trust: nothing dials in to the desktop. The
-//! app dials OUT to `wss://api.donutbrowser.com/api/mcp-bridge`, proves who it
+//! The tool engine lives in [`crate::mcp_server`]. Remote control reaches it
+//! without inverting the trust: nothing dials in to the desktop. The app dials
+//! OUT to `wss://api.donutbrowser.com/api/mcp-bridge`, proves who it
 //! is with the same cloud access token every other cloud call uses, and then
 //! answers JSON-RPC that arrives down that socket.
 //!
@@ -37,9 +36,8 @@
 //!
 //! The statuses are [`McpOutcome`]'s variants PLUS the two this transport
 //! produces on its own, `busy` when the in-flight cap is spent, and
-//! `tooLarge` when an answer exceeds the frame budget. Each status corresponds
-//! to the HTTP status a local MCP client would have seen, so a caller needs no
-//! special case for the remote transport.
+//! `tooLarge` when an answer exceeds the frame budget. The relay turns each
+//! status into the HTTP status a streamable HTTP MCP client expects.
 //!
 //! Liveness is protocol-level: the server PINGs, we PONG, and silence past
 //! [`IDLE_TIMEOUT`] is treated as a dead socket. No JSON heartbeat is injected
@@ -918,11 +916,7 @@ fn dispatch(
       let tx = tx.clone();
       tokio::spawn(async move {
         let outcome = McpServer::instance()
-          .handle_message(
-            crate::mcp_server::McpOrigin::Bridge,
-            session_id.as_deref(),
-            &payload,
-          )
+          .handle_message(session_id.as_deref(), &payload)
           .await;
         drop(permit);
         let _ = tx.send(encode(&result_frame(&cid, outcome))).await;
@@ -2042,8 +2036,8 @@ mod tests {
     let _ = pump(stream, Arc::new(AtomicBool::new(false))).await;
     let results = server.await.expect("the fake relay must finish");
 
-    // The relay renders this as 404, exactly as the loopback server does, so an
-    // agent's session handling needs no special case for the remote transport.
+    // The relay renders this as 404, the streamable HTTP answer to an unknown
+    // session, so an agent's own session handling works unchanged.
     assert_eq!(results[0]["status"], "unknownSession");
   }
 
@@ -2283,10 +2277,8 @@ mod tests {
   }
 
   #[test]
-  fn the_bridge_and_the_loopback_listener_accept_the_same_body_size() {
+  fn the_bridge_accepts_the_engine_body_size() {
     // The frame budget must match the limit the remote endpoint accepts.
-    // Changing this number without changing that one makes the remote
-    // transport silently stricter than the local one.
     assert_eq!(McpServer::MAX_MESSAGE_BYTES, 1024 * 1024);
   }
 

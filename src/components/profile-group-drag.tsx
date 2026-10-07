@@ -519,7 +519,7 @@ export function ProfileGroupDragHandle({
       disabled={disabled || drag.saving}
       aria-busy={drag.saving && drag.movingIds.has(profile.id)}
       className={cn(
-        "grid size-6 shrink-0 touch-none place-items-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-40",
+        "row-reveal grid h-6 w-4 shrink-0 touch-none place-items-center rounded-md text-muted-foreground hover:bg-foreground/6 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed",
         !disabled && "cursor-grab active:cursor-grabbing",
       )}
       onPointerDown={(event) => {

@@ -16,17 +16,12 @@ export function fxExportLine(key: string | null | undefined): string | null {
 
 export type AgentCategory = "desktop-app" | "cli" | "editor" | "editor-ext";
 
-/** The two places a client can be pointed at; the `target` of `add_mcp_to_agent`. */
-export type McpEndpoint = "local" | "remote";
-
 export interface McpAgentInfo {
   id: string;
   display_name: string;
   category: AgentCategory;
   connected: boolean;
   detected: boolean;
-  /** Which Donut endpoint the agent's existing entry points at, when connected. */
-  endpoint?: McpEndpoint | null;
 }
 
 export interface McpRemoteStatus {
@@ -63,19 +58,4 @@ export function credentialPrefixOf(
   credential: Pick<McpRemoteCredential, "tokenPrefix" | "token_prefix"> | null,
 ): string | null {
   return credential?.tokenPrefix ?? credential?.token_prefix ?? null;
-}
-
-/** Mirror of `mcp_migration::McpMigrationOffer`. */
-export interface McpMigrationOffer {
-  eligible: boolean;
-  due: boolean;
-  local_server_enabled: boolean;
-  local_clients: string[];
-}
-
-/** Clients whose Donut entry still points at the removed local server. */
-export function localMcpClients(agents: McpAgentInfo[]): McpAgentInfo[] {
-  return agents.filter(
-    (agent) => agent.connected && agent.endpoint === "local",
-  );
 }

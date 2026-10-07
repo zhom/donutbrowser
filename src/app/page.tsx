@@ -27,7 +27,6 @@ import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
-import { McpMigrationDialog } from "@/components/mcp-migration-dialog";
 import { ONBOARDING_TOUR } from "@/components/onboarding-provider";
 import { PaidWelcomeDialog } from "@/components/paid-welcome-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
@@ -54,6 +53,7 @@ import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
 import { SynchronizerPanel } from "@/components/synchronizer-panel";
+import { TableFilterControls } from "@/components/table-controls";
 import { ThankYouDialog } from "@/components/thank-you-dialog";
 import { TipsDialog } from "@/components/tips-dialog";
 import { TrashPage } from "@/components/trash-page";
@@ -68,10 +68,10 @@ import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import { useKonamiCode } from "@/hooks/use-konami-code";
-import { useMcpMigrationOffer } from "@/hooks/use-mcp-migration-offer";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
+import { useProfileTableFilters } from "@/hooks/use-profile-table-filters";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useSyncSessions } from "@/hooks/use-sync-session";
 import { useTips } from "@/hooks/use-tips";
@@ -91,11 +91,7 @@ import {
   ONBOARDING_TOUR_FINISHED_EVENT,
   setOnboardingActive,
 } from "@/lib/onboarding-signal";
-import {
-  matchesProfile,
-  type ProfileSearchContext,
-  parseProfileSearch,
-} from "@/lib/profile-search";
+import { type ProfileSearchContext } from "@/lib/profile-search";
 import {
   matchesGroupDigit,
   matchesShortcut,
@@ -429,25 +425,13 @@ export default function Home() {
     !termsLoading &&
     termsAccepted === true &&
     !commercialTrialModalOpen;
-  // The remote MCP move and the automatic tip never open on the same launch:
-  // the move holds the tip back until it has decided, and an automatic tip
-  // that opened first keeps the move for another launch.
-  const [autoTipOpened, setAutoTipOpened] = useState(false);
-  const mcpMigration = useMcpMigrationOffer({
-    ready: settledLaunch && !autoTipOpened,
-    accountId: cloudUser?.id ?? null,
-  });
   const tipsFlow = useTips({
     cloudUser,
     loggedInAt: cloudLoggedInAt,
-    ready: settledLaunch && !mcpMigration.open,
-    autoTipHeld: mcpMigration.holdsLaunch,
+    ready: settledLaunch,
     usage: tipUsage,
   });
   const { openTips, closeTips } = tipsFlow;
-  useEffect(() => {
-    if (tipsFlow.dialog.open && tipsFlow.dialog.auto) setAutoTipOpened(true);
-  }, [tipsFlow.dialog.open, tipsFlow.dialog.auto]);
 
   const [currentPage, setCurrentPage] = useState<AppPage>("profiles");
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
@@ -459,7 +443,7 @@ export default function Home() {
   const [extensionManagementInitialTab, setExtensionManagementInitialTab] =
     useState<"extensions" | "groups">("extensions");
   const [integrationsInitialTab, setIntegrationsInitialTab] = useState<
-    "api" | "mcp" | "remote"
+    "api" | "remote"
   >("api");
   const [cookieBotDialogOpen, setCookieBotDialogOpen] = useState(false);
   const [cookieBotInitialTab, setCookieBotInitialTab] =
@@ -760,16 +744,14 @@ export default function Home() {
           break;
         }
         case "goIntegrations": {
-          // Mod+I: cycle the tabs when already on integrations, in the order
-          // the dialog lists them. The Remote MCP tab only exists for a user
-          // entitled to remote control, so everyone else flips api and mcp.
+          // Mod+I: flip the tabs when already on integrations. The Remote MCP
+          // tab only exists for a user entitled to remote control, so everyone
+          // else stays on the API tab.
           if (currentPage === "integrations") {
             setIntegrationsInitialTab((cur) =>
-              cur === "api"
-                ? "mcp"
-                : cur === "mcp" && canUseRemoteControl(cloudUser)
-                  ? "remote"
-                  : "api",
+              cur === "api" && canUseRemoteControl(cloudUser)
+                ? "remote"
+                : "api",
             );
           } else {
             handleRailNavigate("integrations");
@@ -2123,7 +2105,6 @@ export default function Home() {
     let unlistenCompleted: (() => void) | undefined;
     let unlistenWayfernBlocked: (() => void) | undefined;
     let unlistenGenerationLimit: (() => void) | undefined;
-    let unlistenMcpLocalDeprecated: (() => void) | undefined;
 
     void (async () => {
       unlistenRequired = await listen(
@@ -2209,19 +2190,6 @@ export default function Home() {
         });
       });
 
-      // Local MCP is removed in favour of remote MCP. Something tried to reach
-      // the removed local server (a client still pointing at the old port, or
-      // an in-app attempt): tell the user plainly, once, where to go instead.
-      unlistenMcpLocalDeprecated = await listen("mcp-local-deprecated", () => {
-        showToast({
-          id: "mcp-local-deprecated",
-          type: "error",
-          title: t("mcpLocalDeprecated.title"),
-          description: t("mcpLocalDeprecated.description"),
-          duration: 15000,
-        });
-      });
-
       // If the effect was torn down mid-setup, the cleanup below already ran
       // before these handles existed — unlisten them now so nothing leaks.
       if (disposed) {
@@ -2231,7 +2199,6 @@ export default function Home() {
         unlistenCompleted?.();
         unlistenWayfernBlocked?.();
         unlistenGenerationLimit?.();
-        unlistenMcpLocalDeprecated?.();
       }
     })();
 
@@ -2243,7 +2210,6 @@ export default function Home() {
       unlistenCompleted?.();
       unlistenWayfernBlocked?.();
       unlistenGenerationLimit?.();
-      unlistenMcpLocalDeprecated?.();
     };
   }, [t]);
 
@@ -2295,24 +2261,28 @@ export default function Home() {
     [groupsData, storedProxies, vpnConfigs, extensionGroups, runningProfiles],
   );
 
-  // Filter data by selected group and search query. The two are independent
-  // controls and both apply: the rail narrows to a group, the query narrows
-  // within whatever the rail left.
-  const filteredProfiles = useMemo(() => {
-    // "__all__" is a virtual filter that shows every profile (including
-    // ungrouped ones). Any other value is a real group id; ungrouped profiles
-    // only show through "All".
-    const inGroup =
+  const clearTableSelection = useCallback(() => setSelectedProfiles([]), []);
+  const profilesInGroup = useMemo(
+    () =>
       !selectedGroupId || selectedGroupId === "__all__"
         ? profiles
-        : profiles.filter((profile) => profile.group_id === selectedGroupId);
-
-    const parsed = parseProfileSearch(searchQuery);
-    if (parsed.isEmpty) return inGroup;
-    return inGroup.filter((profile) =>
-      matchesProfile(profile, parsed, searchContext),
-    );
-  }, [profiles, selectedGroupId, searchQuery, searchContext]);
+        : profiles.filter((profile) => profile.group_id === selectedGroupId),
+    [profiles, selectedGroupId],
+  );
+  const profileFilters = useProfileTableFilters(
+    profilesInGroup,
+    searchQuery,
+    searchContext,
+    clearTableSelection,
+  );
+  const changeProfileSearch = (query: string) => {
+    setSelectedProfiles([]);
+    setSearchQuery(query);
+  };
+  const clearProfileFilters = () => {
+    profileFilters.reset();
+    setSearchQuery("");
+  };
 
   // Update loading states
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
@@ -2334,7 +2304,7 @@ export default function Home() {
         <HomeHeader
           onCreateProfileDialogOpen={setCreateProfileDialogOpen}
           searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
+          onSearchQueryChange={changeProfileSearch}
           groups={groupsData}
           totalProfiles={profiles.length}
           selectedGroupId={selectedGroupId}
@@ -2354,7 +2324,10 @@ export default function Home() {
           />
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {currentPage === "profiles" && (
-              <div className="flex min-h-0 flex-1 flex-col px-3 pt-2.5">
+              <div
+                data-table-id="profiles"
+                className="flex min-h-0 flex-1 flex-col px-3 pt-2.5"
+              >
                 <SynchronizerPanel
                   sessions={syncSessions}
                   onSessionChanged={applySession}
@@ -2362,7 +2335,19 @@ export default function Home() {
                 <ProfilesDataTable
                   isLoading={isLoading && profiles.length === 0}
                   showOnboardingEmptyState={profiles.length === 0}
-                  profiles={filteredProfiles}
+                  profiles={profileFilters.rows}
+                  filterControls={
+                    <TableFilterControls
+                      {...profileFilters}
+                      query={searchQuery}
+                      onQueryChange={changeProfileSearch}
+                      showSearch={false}
+                      count={profileFilters.rows.length}
+                      total={profilesInGroup.length}
+                      onReset={clearProfileFilters}
+                    />
+                  }
+                  onClearFilters={clearProfileFilters}
                   allProfiles={profiles}
                   infoDialogProfile={profileInfoDialog}
                   infoOpenMethod={profileInfoOpenMethod}
@@ -2686,12 +2671,6 @@ export default function Home() {
           onOpenTip={(id) => {
             tipsFlow.dismissPaidWelcome();
             openTips(id);
-          }}
-        />
-        <McpMigrationDialog
-          open={mcpMigration.open}
-          onOpenChange={(open) => {
-            if (!open) mcpMigration.close();
           }}
         />
 

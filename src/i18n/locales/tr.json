@@ -505,7 +505,13 @@
       "description": "Diskteki profil verilerini şifreler. Başlatmak için gereklidir."
     },
     "downloadingSubtitle": "İndiriliyor…",
-    "browsersDownloading": "Tarayıcılar hâlâ indiriliyor. Bir indirme tamamlandığında profil oluşturma kullanılabilir olacak."
+    "browsersDownloading": "Tarayıcılar hâlâ indiriliyor. Bir indirme tamamlandığında profil oluşturma kullanılabilir olacak.",
+    "advancedOptions": "Gelişmiş seçenekler",
+    "hourlyLimit": {
+      "reached": "Planınız saatte {{limit}} yeni profile izin verir. Bir sonrakini yaklaşık {{minutes}} dk sonra oluşturabilirsiniz.",
+      "warningTitle": "Profilleri çok hızlı oluşturuyorsunuz",
+      "warning": "Lütfen biraz bekleyin. Bir saatte çok fazla profil oluşturmak, 24 saat veya daha uzun süren geçici bir engele yol açar; bu süre boyunca yeni kimlik oluşturamazsınız. Daha yüksek bir saatlik sınıra ihtiyacınız varsa, Donut'u ücretli bir planla desteklemeyi düşünün."
+    }
   },
   "deleteDialog": {
     "title": "Profili Sil",
@@ -833,8 +839,6 @@
   "integrations": {
     "title": "Entegrasyonlar",
     "mcp": {
-      "url": "MCP Sunucu URL'si",
-      "urlCopied": "URL kopyalandı",
       "clientsLabel": "İstemciler",
       "add": "Ekle",
       "addedToClient": "{{name}} istemcisine eklendi",
@@ -845,15 +849,9 @@
         "cli": "Komut satırı",
         "editor": "Editör",
         "editorExt": "Editör uzantısı"
-      },
-      "switchToLocal": "Geçiş yap",
-      "switchedToLocal": "{{name}} artık yerel MCP sunucusunu kullanıyor",
-      "deprecatedBannerTitle": "Yerel MCP kaldırılıyor",
-      "deprecatedBannerBody": "Yerel MCP sunucusu artık çalışmıyor. Bunun yerine uzak MCP kullanın; yalnızca bu makineden değil, her yerden bağlanabilirsiniz.",
-      "deprecatedCta": "Uzak MCP'yi kur"
+      }
     },
     "tabApi": "Yerel API",
-    "tabMcp": "MCP (Yapay Zekâ Asistanları)",
     "apiEnableLabel": "Yerel API Sunucusunu Etkinleştir",
     "apiEnableDescription": "Profillerin, grupların ve proxy'lerin REST API üzerinden yönetilmesine izin verin.",
     "apiPortLabel": "Bağlantı Noktası",
@@ -868,12 +866,7 @@
     "apiToggleFailed": "API sunucusu açılıp kapatılamadı",
     "apiStartFailed": "API sunucusu başlatılamadı",
     "tokenCopied": "Jeton kopyalandı",
-    "mcpEnableLabel": "MCP Sunucusunu Etkinleştir (Model Context Protocol)",
-    "mcpEnableDescription": "Claude Desktop gibi yapay zekâ asistanlarının tarayıcıları kontrol etmesine izin verin.",
     "mcpAcceptTermsFirst": "(Önce Ayarlar'dan Wayfern koşullarını kabul edin)",
-    "mcpStarted": "MCP sunucusu {{port}} bağlantı noktasında başlatıldı",
-    "mcpStopped": "MCP sunucusu durduruldu",
-    "mcpToggleFailed": "MCP sunucusu açılıp kapatılamadı",
     "openSettings": "Entegrasyon Ayarlarını Aç",
     "apiRunningOn": "Çalıştığı adres",
     "apiExampleRequest": "Örnek istek",
@@ -902,8 +895,6 @@
       "credentialCreated": "Kimlik bilgisi oluşturuldu",
       "credentialRotateFailed": "Kimlik bilgisi döndürülemedi",
       "credentialClientsFailed": "Kimlik bilgisi kaydedildi ancak şu istemciler güncellenemedi: {{clients}}. Yeniden denemek için tekrar döndürün.",
-      "switchToRemote": "Geçiş yap",
-      "switchedClient": "{{name}} artık Uzak MCP kullanıyor",
       "fxHint": "fx kimlik bilgisini DONUT_MCP_TOKEN'dan okur. fx'i başlatan kabukta dışa aktarın.",
       "fxExportCopied": "Dışa aktarma satırı kopyalandı"
     }
@@ -2216,10 +2207,6 @@
     "updatePreparationFailed": "Donut Browser arka plandaki bir ağ işlemini güvenli şekilde durduramadı. Bilgisayarınızı yeniden başlatıp güncellemeyi tekrar deneyin.",
     "wayfernTermsRequired": "Wayfern'ü kullanmak için Wayfern Hüküm ve Koşullarını kabul edin.",
     "apiPortUnavailable": "API sunucusu kullanılabilir bir bağlantı noktası bulamadı.",
-    "mcpServerAlreadyRunning": "MCP sunucusu zaten çalışıyor.",
-    "mcpServerNotRunning": "MCP sunucusu çalışmıyor.",
-    "mcpPortUnavailable": "MCP sunucusu kullanılabilir bir bağlantı noktası bulamadı.",
-    "mcpConfigurationUnavailable": "MCP sunucusu yapılandırması kullanılamıyor. Sunucuyu yeniden başlatıp tekrar deneyin.",
     "mcpAgentUnknown": "Bu MCP istemcisi desteklenmiyor.",
     "mcpAgentInstallFailed": "Donut Browser MCP istemcisine eklenemedi: {{detail}}",
     "mcpAgentRemoveFailed": "Donut Browser MCP istemcisinden kaldırılamadı: {{detail}}",
@@ -2297,7 +2284,7 @@
     "wayfernPlanCheckUnavailable": "Planınız şu anda kontrol edilemedi. Kısa süre sonra yeniden deneyin.",
     "wayfernCustomFingerprintRequiresPlan": "Planınız özel parmak izlerini içermiyor.",
     "wayfernGenerationUnavailable": "Şu anda parmak izi oluşturulamadı. Daha sonra tekrar deneyin.",
-    "profileGenerationLimitReached": "Son bir saatte 100 profil oluşturdunuz; bu, Pro planının sınırıdır. Yenisini oluşturmadan önce yaklaşık {{minutes}} dakika bekleyin.",
+    "profileGenerationLimitReached": "Son bir saatte {{limit}} profil oluşturdunuz; bu, planınızın sınırıdır. Yenisini oluşturmadan önce yaklaşık {{minutes}} dakika bekleyin.",
     "wayfernBrowserBusy": "Tarayıcı bir parmak izi uygulamakla meşguldü. Tekrar deneyin.",
     "wayfernBrowserExited": "Tarayıcı başlatılırken kapandı. {{detail}}",
     "profileExportFailed": "Bu profil dışa aktarılamadı. {{detail}}",
@@ -2330,7 +2317,6 @@
     "remoteSessionNotDrivable": "Bu uzak oturum henüz yönetilmeye hazır değil. Etkin duruma gelmesini bekleyin.",
     "remotePlatformUnsupported": "Uzak oturumlar yalnızca macOS, Windows veya Linux sunucularında çalışır. Bu profilin platformu {{platform}}.",
     "remoteProfileNotSynced": "Bu profil buluta yüklenmeyi henüz tamamlamadı. İlk eşitlemenin bitmesini bekleyip tekrar deneyin.",
-    "mcpLocalRemoved": "Donut'un yerel MCP sunucusu kaldırıldı. MCP artık uzaktan çalışıyor ve ücretli bir plan gerektiriyor.",
     "trashEntryNotFound": "Bu profil artık çöp kutusunda değil.",
     "trashRestoreConflict": "Aynı kimliğe sahip bir profil zaten var, bu nedenle bu profil geri yüklenemez.",
     "recipesNotEntitled": "Tarifler, Pro veya daha üst bir plan gerektirir.",
@@ -2372,7 +2358,10 @@
     "wayfernLaunchArgReserved": "{{argument}} argümanını Donut yönetir. Bu argümanı kaldırın.",
     "wayfernLaunchArgNotAllowed": "{{argument}} desteklenen bir başlatma argümanı değil. Kaldırın.",
     "wayfernLaunchArgValueInvalid": "{{argument}} için girilen değer desteklenmiyor.",
-    "wayfernLaunchArgsLimit": "En fazla {{count}} başlatma argümanı kullanın; her biri en fazla {{length}} karakter olsun."
+    "wayfernLaunchArgsLimit": "En fazla {{count}} başlatma argümanı kullanın; her biri en fazla {{length}} karakter olsun.",
+    "tablePreferencesInvalid": "Bu tablo ayarları geçersiz.",
+    "tablePreferencesLoadFailed": "Tablo ayarları yüklenemedi. Tekrar deneyin.",
+    "tablePreferencesSaveFailed": "Tablo ayarları kaydedilemedi. Tekrar deneyin."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2605,7 +2594,7 @@
   },
   "profileGenerationLimit": {
     "title": "Saatlik profil sınırına ulaşıldı",
-    "description": "Pro planınız saatte 100 yeni profile izin verir. Hesabınız engellenmesin diye oluşturma, yeni saat dilimine kadar duraklatıldı."
+    "description": "Planınızın yeni profiller için saatlik sınırına ulaşıldı. Saat ilerledikçe oluşturma yeniden açılır; hesabınız engellenmez."
   },
   "wayfernConfigDialog": {
     "titleView": "Parmak İzi Ayarlarını Görüntüle - {{name}} ({{browser}})",
@@ -3053,40 +3042,6 @@
     "device": "Cihaz",
     "site": "Site"
   },
-  "mcpLocalDeprecated": {
-    "title": "Yerel MCP kaldırıldı",
-    "description": "Donut artık her yerden bağlanabileceğiniz uzak MCP kullanıyor. Uzak MCP sekmesinden kurun ve yapay zeka istemcilerinizi oraya yönlendirin."
-  },
-  "mcpMigration": {
-    "title": "Uzak MCP'ye geç",
-    "doneTitle": "Uzak MCP'ye taşındı",
-    "body": "Yerel MCP sunucusu kaldırıldı. Uzak MCP, yapay zeka istemcilerinizi Donut bulutu üzerinden bu tarayıcıya bağlar; böylece Donut açık olduğu sürece her yerden çalışmaya devam ederler.",
-    "changes": "Donut bu istemcileri özel bir kimlik bilgisiyle uzak uç noktaya yönlendirir. Ayarlarında başka hiçbir şey değişmez.",
-    "changesNone": "Bu bilgisayarda yerel sunucuyu kullanan yapay zeka istemcisi yok. Donut uzak MCP'yi açar ve kendiniz kuracağınız istemciler için bir kimlik bilgisi oluşturur.",
-    "start": "Uzak MCP'ye geç",
-    "notNow": "Şimdi değil",
-    "done": "Bitti",
-    "stepBridge": "Uzak MCP",
-    "stepClients": "İstemciler",
-    "bridgeWorking": "Açılıyor",
-    "bridgeOn": "Açık",
-    "credentialWorking": "Oluşturuluyor",
-    "clientsProgress": "{{total}} istemciden {{moved}} tanesi taşındı",
-    "clientsNone": "Taşınacak istemci yok",
-    "clientMoving": "Taşınıyor",
-    "clientMoved": "Taşındı",
-    "clientFailed": "Değişmedi",
-    "summary_one": "{{count}} istemci artık uzak MCP kullanıyor.",
-    "summary_other": "{{count}} istemci artık uzak MCP kullanıyor.",
-    "failed_one": "{{count}} istemci değiştirilemedi. Yeniden deneyin veya aşağıdaki bilgilerle elle kurun.",
-    "failed_other": "{{count}} istemci değiştirilemedi. Yeniden deneyin veya aşağıdaki bilgilerle elle kurun.",
-    "manual": "Diğer istemciler için bu uç noktayı kullanın ve kimlik bilgisini bearer belirteci olarak girin.",
-    "credentialCopied": "Kimlik bilgisi kopyalandı",
-    "localServer": "Yerel sunucu artık eski istemcilere yalnızca taşındığını bildiriyor. Kapatabilirsiniz.",
-    "localServerOff": "Yerel sunucuyu kapat",
-    "localServerIsOff": "Yerel sunucu kapalı",
-    "localServerOffFailed": "Yerel sunucu kapatılamadı"
-  },
   "appFeedback": {
     "saveFailed": "Ayarlar kaydedilemedi",
     "searchSettings": "Ayarlarda ara…",
@@ -3141,8 +3096,6 @@
     "authorized": "Kimlik bilgisi kabul edildi",
     "confirmed": "Evet",
     "unavailable": "Hayır",
-    "configuredLocal": "Yerel MCP için yapılandırıldı",
-    "configuredRemote": "Uzak MCP için yapılandırıldı",
     "apiProbeScope": "Çalışan yerel API kayıtlı kimlik bilgisiyle kontrol edilir. Profil başlatılmaz.",
     "remoteProbeScope": "Kayıtlı MCP kimlik bilgisi kontrol edilir. Uzaktan kontrol için bağlı bir cihaz ve uygun plan da gerekir; yapılandırılmış istemci etkin oturum anlamına gelmez."
   },
@@ -3567,5 +3520,40 @@
     "body": "Planınız bunların kilidini açtı. Her ipucu birini çalışırken gösterir.",
     "cta": "Göster",
     "later": "Sonra"
+  },
+  "tables": {
+    "search": "Satırlarda ara",
+    "filters": "Filtreler",
+    "findFilter": "Filtre bul…",
+    "noOptions": "Eşleşen seçenek yok.",
+    "removeFilter": "Filtreyi kaldır: {{filter}}",
+    "clearFilters": "Filtreleri temizle",
+    "results": "{{total}} satırdan {{count}} tanesi",
+    "sortSummary": "{{column}}: {{direction}}",
+    "descending": "Azalan",
+    "ascending": "Artan",
+    "sort": "Sırala",
+    "sortColumn": "Sıralama sütunu",
+    "moveSortUp": "Sıralamayı yukarı taşı",
+    "removeSort": "Sıralamayı kaldır",
+    "addSort": "Sıralama ekle",
+    "clearSort": "Sıralamayı temizle",
+    "view": "Görünüm",
+    "columns": "Sütunlar",
+    "rowHeight": "Satır yüksekliği",
+    "compact": "Sıkışık",
+    "comfortable": "Rahat",
+    "resetView": "Görünümü sıfırla",
+    "resizeColumn": "{{column}} sütununu yeniden boyutlandır",
+    "noResults": "Bu filtrelerle eşleşen satır yok.",
+    "moreActions": "Diğer işlemler",
+    "dataTable": "Veri tablosu",
+    "enabled": "Etkin",
+    "disabled": "Devre dışı",
+    "running": "Çalışıyor",
+    "stopped": "Durduruldu",
+    "noTags": "Etiket yok",
+    "noProxy": "Proxy yok",
+    "encrypted": "Şifreli"
   }
 }

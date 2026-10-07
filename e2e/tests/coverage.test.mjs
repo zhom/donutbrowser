@@ -29,7 +29,7 @@ function commandHasExecutableEvidence(source, command) {
   // helper and silently lose the evidence, which is exactly what happened when
   // `assertContract` replaced eight `assert.ok(await invokeContract(...))` calls
   //, the assertions got stronger and the gate went red. `assertCommandErrorCode`
-  // joined the list when the local-MCP tests moved to asserting refusal codes.
+  // joined the list when tests moved to asserting refusal codes.
   return new RegExp(
     `(?:invoke|invokeError)\\(\\s*["']${name}["']` +
       `|(?:invokeContract|assertContract|assertCommandErrorCode)\\(\\s*\\w+\\s*,\\s*["']${name}["']`,

@@ -4,7 +4,7 @@ These tests exercise the actual Tauri application through the published
 [`tauri-wd`](https://crates.io/crates/tauri-wd) native test driver. They do
 not replace Rust or React unit tests; they
 cover the process boundaries those tests cannot: WKWebView/WebView2/WebKitGTK UI, Tauri invokes,
-REST and MCP servers, two-device sync, S3 payload encryption, Wayfern, CDP, and child-process
+the REST server, two-device sync, S3 payload encryption, Wayfern, CDP, and child-process
 cleanup.
 
 ## Local setup
@@ -77,7 +77,7 @@ runner redirects:
 - `TMPDIR`, `TMP`, and `TEMP`;
 - the Tauri WebView store (incognito for WKWebView, whose persistent data-directory API is not
   honored);
-- all REST, MCP, WebDriver, fixture, S3, and sync-server ports;
+- all REST, WebDriver, fixture, S3, and sync-server ports;
 - each sync test to a new S3 bucket (served by `rclone serve s3`) and random token.
 
 The E2E feature suppresses automatic updater/download traffic, but explicit browser tests still

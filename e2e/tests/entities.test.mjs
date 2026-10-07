@@ -1833,3 +1833,44 @@ test("Pro launch arguments persist, clone, validate, and update the edit time", 
     { extraEnv: { WAYFERN_TEST_TOKEN: "e2e-local-launch-args" } },
   );
 });
+
+test("the hourly profile allowance counts from a window that survives a restart", async () => {
+  await withApp("entities-generation-allowance", async (app) => {
+    // Signed out is the free plan: warned past its allowance, never refused,
+    // and with no profiles yet the allowance is eight an hour.
+    assert.deepEqual(await app.invoke("get_profile_creation_allowance"), {
+      enforcement: "soft",
+      per_hour: 8,
+      used: 0,
+      retry_after_secs: null,
+    });
+
+    const now = Math.floor(Date.now() / 1000);
+    await app.close();
+    await writeFile(
+      path.join(app.dataRoot, "data", "settings", "profile_generations.json"),
+      JSON.stringify({
+        generations: {
+          local: [
+            now - 4_000,
+            ...Array.from({ length: 8 }, (_, i) => now - 600 + i),
+          ],
+          // Another account's generations and ones older than an hour do
+          // not count against this device's signed-out allowance.
+          "someone-else": [now - 60],
+        },
+      }),
+    );
+    await app.start();
+
+    const full = await app.invoke("get_profile_creation_allowance");
+    assert.equal(full.enforcement, "soft");
+    assert.equal(full.per_hour, 8);
+    assert.equal(full.used, 8);
+    // The oldest of the eight leaves the window about 50 minutes from now.
+    assert.ok(
+      full.retry_after_secs > 2_900 && full.retry_after_secs <= 3_000,
+      `retry_after_secs ${full.retry_after_secs}`,
+    );
+  });
+});

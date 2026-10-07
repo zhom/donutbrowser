@@ -169,8 +169,8 @@ export function WindowDragArea() {
     return null;
   }
 
-  // macOS: nothing to render here. The transparent native titlebar (set via
-  // `set_transparent_titlebar(true)` in src-tauri/src/lib.rs) lets the OS
+  // macOS: nothing to render here. The transparent native titlebar (the
+  // Overlay title bar style set in src-tauri/src/lib.rs) lets the OS
   // handle dragging directly, and the sys-bar inside `home-header.tsx`
   // declares its own `data-tauri-drag-region` overlay for the WebView area.
   // The previous full-width fixed z-[999999] button was stealing every

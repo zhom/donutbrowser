@@ -5,6 +5,9 @@ import type { TFunction } from "i18next";
  * Keep this list in sync with the codes used in `src-tauri/src/profile/password.rs`.
  */
 export type BackendErrorCode =
+  | "TABLE_PREFERENCES_INVALID"
+  | "TABLE_PREFERENCES_LOAD_FAILED"
+  | "TABLE_PREFERENCES_SAVE_FAILED"
   | "INCORRECT_PASSWORD"
   | "LOCKED_OUT"
   | "PROFILE_NOT_FOUND"
@@ -92,12 +95,6 @@ export type BackendErrorCode =
   | "DNS_RULES_EXPORT_FAILED"
   | "WAYFERN_TERMS_REQUIRED"
   | "API_PORT_UNAVAILABLE"
-  | "MCP_SERVER_ALREADY_RUNNING"
-  | "MCP_SERVER_NOT_RUNNING"
-  | "MCP_PORT_UNAVAILABLE"
-  | "MCP_CONFIGURATION_UNAVAILABLE"
-  // Local MCP has been removed in favor of remote MCP.
-  | "MCP_LOCAL_REMOVED"
   | "MCP_AGENT_UNKNOWN"
   | "MCP_AGENT_INSTALL_FAILED"
   | "MCP_AGENT_REMOVE_FAILED"
@@ -306,6 +303,12 @@ export function translateBackendError(t: TFunction, err: unknown): string {
     return err instanceof Error ? err.message : String(err);
   }
   switch (parsed.code) {
+    case "TABLE_PREFERENCES_INVALID":
+      return t("backendErrors.tablePreferencesInvalid");
+    case "TABLE_PREFERENCES_LOAD_FAILED":
+      return t("backendErrors.tablePreferencesLoadFailed");
+    case "TABLE_PREFERENCES_SAVE_FAILED":
+      return t("backendErrors.tablePreferencesSaveFailed");
     case "INCORRECT_PASSWORD":
       return t("backendErrors.incorrectPassword");
     case "LOCKED_OUT": {
@@ -527,14 +530,6 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.wayfernTermsRequired");
     case "API_PORT_UNAVAILABLE":
       return t("backendErrors.apiPortUnavailable");
-    case "MCP_SERVER_ALREADY_RUNNING":
-      return t("backendErrors.mcpServerAlreadyRunning");
-    case "MCP_SERVER_NOT_RUNNING":
-      return t("backendErrors.mcpServerNotRunning");
-    case "MCP_PORT_UNAVAILABLE":
-      return t("backendErrors.mcpPortUnavailable");
-    case "MCP_CONFIGURATION_UNAVAILABLE":
-      return t("backendErrors.mcpConfigurationUnavailable");
     case "MCP_REMOTE_REQUIRES_SIGN_IN":
       return t("backendErrors.mcpRemoteRequiresSignIn");
     case "MCP_REMOTE_UNAUTHORIZED":
@@ -551,8 +546,6 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.mcpRemoteKeyLimit");
     case "MCP_REMOTE_KEY_UNAVAILABLE":
       return t("backendErrors.mcpRemoteKeyUnavailable");
-    case "MCP_LOCAL_REMOVED":
-      return t("backendErrors.mcpLocalRemoved");
     case "MCP_AGENT_UNKNOWN":
       return t("backendErrors.mcpAgentUnknown");
     case "MCP_AGENT_INSTALL_FAILED":
@@ -790,6 +783,7 @@ export function translateBackendError(t: TFunction, err: unknown): string {
         10,
       );
       return t("backendErrors.profileGenerationLimitReached", {
+        limit: parsed.params?.limit ?? "",
         minutes: Number.isFinite(seconds)
           ? Math.max(1, Math.ceil(seconds / 60))
           : 60,

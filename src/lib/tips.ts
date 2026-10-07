@@ -72,7 +72,6 @@ export interface FeatureUsage {
   cookieBotEnrolled: boolean;
   syncServerConfigured: boolean;
   apiEnabled?: boolean;
-  mcpEnabled?: boolean;
   remoteControlEnabled?: boolean;
   /** The user turned the pre-launch fingerprint gate off, so they know it. */
   fingerprintGateChanged?: boolean;
@@ -179,7 +178,7 @@ export const TIPS: readonly TipDefinition[] = [
   {
     id: "localApi",
     action: { kind: "page", page: "integrations" },
-    inUse: (usage) => usage.apiEnabled === true || usage.mcpEnabled === true,
+    inUse: (usage) => usage.apiEnabled === true,
   },
   { id: "importProfiles", action: { kind: "page", page: "import" } },
   {
@@ -209,7 +208,7 @@ export const TIPS: readonly TipDefinition[] = [
     id: "automation",
     action: { kind: "page", page: "integrations" },
     requires: "browserAutomation",
-    inUse: (usage) => usage.apiEnabled === true || usage.mcpEnabled === true,
+    inUse: (usage) => usage.apiEnabled === true,
   },
   {
     id: "agent",

@@ -19,6 +19,9 @@ overrides:
   # Fixes the brace-expansion advisories for every major still in the tree;
   # patches/brace-expansion@5.0.12.patch keeps the older CommonJS imports working.
   brace-expansion@<5.0.12: 5.0.12
+  # js-yaml 3 pulls sprintf-js through argparse 1; no sprintf-js release fixes
+  # GHSA-hp3w-g68c-fv3c. load-nyc-config only calls load(), which js-yaml 4 keeps.
+  '@istanbuljs/load-nyc-config>js-yaml': ^4.3.2
 
 allowBuilds:
   '@nestjs/core': true

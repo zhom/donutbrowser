@@ -1,20 +1,9 @@
-use axum::{
-  body::Body,
-  extract::State,
-  http::{header, Request, StatusCode},
-  middleware::Next,
-  response::{IntoResponse, Response},
-  routing::get,
-  Json, Router,
-};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::AppHandle;
-use tokio::net::TcpListener;
 use tokio::sync::Mutex as AsyncMutex;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -26,13 +15,11 @@ use crate::group_manager::GROUP_MANAGER;
 use crate::log_redaction::ShortId;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::settings_manager::SettingsManager;
 use crate::wayfern_cdp::{
   self, vellum, Engine, Extraction, ExtractionRequest, LocatorCandidate, LocatorDescription,
   LocatorResolution, PerceptionFrame, PerceptionNode, PerceptionPage, PerceptionRequest,
   PerceptionStats, PickedElement, ResolveOptions, ViewportTarget, WayfernError, WayfernSession,
 };
-use crate::wayfern_terms::WayfernTermsManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,8 +202,6 @@ fn explain_engine_refusal(mut error: McpError, device_refusal: Option<String>) -
   error
 }
 
-const DEFAULT_MCP_PORT: u16 = 51080;
-
 /// The proxy types the proxy tools accept. The last four are Xray share links
 /// passed in `vless_uri`.
 const MCP_PROXY_TYPES: [&str; 9] = [
@@ -230,20 +215,6 @@ const MCP_PROXY_TYPES: [&str; 9] = [
   "trojan",
   "hysteria2",
 ];
-
-/// The event the desktop turns into the "local MCP is being removed" dialog.
-///
-/// Emitted by the loopback tombstone (below) when anything still tries to reach
-/// the removed local server, and by the enable/install commands when the user
-/// asks for local MCP in the app.
-pub const LOCAL_MCP_DEPRECATED_EVENT: &str = "mcp-local-deprecated";
-
-/// Unix-seconds of the last deprecation event, so a client retry loop hitting
-/// the dead port cannot pop the dialog on every attempt.
-static LAST_LOCAL_DEPRECATION_EMIT: AtomicU64 = AtomicU64::new(0);
-
-/// Seconds between deprecation dialogs, however many requests arrive.
-const LOCAL_DEPRECATION_THROTTLE_SECS: u64 = 30;
 
 /// How long a keystroke waits for its acknowledgement before moving on.
 ///
@@ -284,26 +255,15 @@ const MAX_SESSIONS: usize = 512;
 
 struct McpServerInner {
   app_handle: Option<AppHandle>,
-  token: Option<String>,
-  shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
   sessions: HashMap<String, McpSession>,
-}
-
-#[derive(Clone)]
-struct McpHttpState {
-  server: &'static McpServer,
-  token: String,
 }
 
 /// What answering one JSON-RPC message produced, in transport-neutral terms.
 ///
-/// The engine has two front doors, the loopback HTTP listener and the cloud
-/// bridge in [`crate::mcp_remote`], and neither may own a rule the other
-/// needs. Session validation, the notification path and the automation limiter
-/// used to live inside the axum handler, which meant a second transport either
-/// duplicated them or silently skipped them. They live in
-/// [`McpServer::handle_message`] now, and each transport only translates this
-/// enum into whatever "no such session" means on its own wire.
+/// Session validation, the notification path and the automation limiter live
+/// in [`McpServer::handle_message`], and the cloud bridge in
+/// [`crate::mcp_remote`] only translates this enum into whatever "no such
+/// session" means on its own wire.
 pub(crate) enum McpOutcome {
   /// A JSON-RPC response to send back. `new_session_id` is set only by
   /// `initialize`, and is the id the caller must echo on later messages.
@@ -323,57 +283,29 @@ pub(crate) enum McpOutcome {
 
 pub struct McpServer {
   inner: Arc<AsyncMutex<McpServerInner>>,
-  is_running: AtomicBool,
-  /// Whether the tool engine can answer at all, which is a different question
-  /// from whether the loopback listener is bound.
-  ///
-  /// Remote control is usable without opening a local port, and turning the
-  /// local server off must not sever a live bridge, so the engine's readiness
-  /// tracks the app handle it needs, not the HTTP transport it no longer
-  /// exclusively serves.
+  /// Whether the tool engine can answer at all: set once it holds the app
+  /// handle every tool needs.
   engine_ready: AtomicBool,
-  port: AtomicU16,
 }
 
-/// Which transport a message arrived on.
-///
-/// The two are the same engine and almost the same trust, but not quite: a
-/// LOOPBACK caller is already on the machine, while a BRIDGE caller reached it
-/// from the internet with an account credential. Tools that take a local
-/// filesystem PATH are meaningful only to someone standing on the machine -
-/// and `add_extension` reads that path and stores the bytes, which the sync
-/// engine then uploads. Left open, that is an arbitrary local-file read with
-/// the same shape as the `file://` hole the URL allowlist closed.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum McpOrigin {
-  /// The 127.0.0.1 listener: the caller is already on this machine.
-  Loopback,
-  /// Relayed from the cloud bridge.
-  Bridge,
-}
-
-/// Who is asking: the transport that carried the message, and the MCP session
-/// it belongs to.
-///
-/// The two travel together because either one alone identifies a caller wrongly.
-/// Origin decides what a caller is ALLOWED to do (a local-path tool is
-/// meaningless to a remote caller); the session decides whose page state a
-/// caller is looking at, and two callers routinely share one transport.
+/// Who is asking: the MCP session a message belongs to, which decides whose
+/// page state a caller is looking at. Every caller reached this machine over
+/// the cloud bridge with an account credential, so tools that read the local
+/// filesystem or export stored secrets are refused to all of them.
 #[derive(Clone, Copy)]
 pub(crate) struct McpCaller<'a> {
-  origin: McpOrigin,
   /// The session id echoed back by the caller, when it opened one at all.
   session: Option<&'a str>,
 }
 
-/// The longest a single `type_text` call may plan to spend typing, on the
-/// loopback transport.
+/// The longest a single `type_text` call may plan to spend typing, over the
+/// local REST API.
 ///
 /// Five minutes is far past any real form field (roughly 2,000 words at the
 /// default rate) and far short of the hours an unbounded string can reach.
 pub(crate) const MAX_TYPING_SECONDS: f64 = 300.0;
 
-/// The same bound over the bridge.
+/// The same bound over MCP.
 ///
 /// A call over the bridge is answered with a timeout if it runs too long, so a
 /// plan that would type for longer than that is not slow, it is a guaranteed
@@ -381,14 +313,6 @@ pub(crate) const MAX_TYPING_SECONDS: f64 = 300.0;
 /// five minutes. Sitting under that budget leaves room for the focus step, the
 /// round trips and the answer itself.
 const MAX_BRIDGE_TYPING_SECONDS: f64 = 80.0;
-
-/// The typing budget for a caller on the given transport.
-fn max_typing_seconds(origin: McpOrigin) -> f64 {
-  match origin {
-    McpOrigin::Loopback => MAX_TYPING_SECONDS,
-    McpOrigin::Bridge => MAX_BRIDGE_TYPING_SECONDS,
-  }
-}
 
 /// The longest text `type_text` will even PLAN, checked before planning starts.
 ///
@@ -464,29 +388,24 @@ fn plan_typing(
 
 /// The page-global slot one SESSION caches its interactive-element snapshot in.
 ///
-/// Keyed by transport AND by MCP session. One slot per origin was not enough:
-/// the website console and an agent both arrive over the BRIDGE, as do two runs
-/// of the same agent, so one caller's `get_interactive_elements` overwrote the
-/// array another had just built and that caller's next `click_by_index(3)`
-/// resolved against the wrong array, a wrong click on somebody's real browser,
-/// reported as a successful one. Sessions are what tell two callers on one
-/// transport apart, so the slot is keyed by both.
+/// Keyed by MCP session. One shared slot was not enough: the website console
+/// and an agent both arrive over the bridge, as do two runs of the same agent,
+/// so one caller's `get_interactive_elements` overwrote the array another had
+/// just built and that caller's next `click_by_index(3)` resolved against the
+/// wrong array, a wrong click on somebody's real browser, reported as a
+/// successful one. Sessions are what tell two callers apart.
 ///
 /// The session is not an `Option` here on purpose. A caller that never ran
 /// `initialize` used to fall back to the literal `"anon"`, which is a SHARED
-/// slot by another name: two such callers on one transport still overwrote each
-/// other's array and still clicked each other's elements. Taking a `&str` means
+/// slot by another name: two such callers still overwrote each other's array
+/// and still clicked each other's elements. Taking a `&str` means
 /// no caller can reach a slot without a session at all -
 /// [`require_indexed_session`] is the only way to get one, and it refuses.
 ///
 /// A quoted JS string literal, because it is substituted into `window[...]`.
-fn interactive_cache_slot(origin: McpOrigin, session: &str) -> String {
-  let transport = match origin {
-    McpOrigin::Loopback => "local",
-    McpOrigin::Bridge => "bridge",
-  };
+fn interactive_cache_slot(session: &str) -> String {
   format!(
-    "'__donut_interactive_{transport}_{}'",
+    "'__donut_interactive_bridge_{}'",
     cache_key_for_session(session)
   )
 }
@@ -596,10 +515,9 @@ fn redact_proxy_secrets(proxy: &mut serde_json::Value) {
 /// Reject a URL the browser should never be told to open on a customer's behalf.
 ///
 /// `Page.navigate` will happily load `file:///Users/…/.ssh/id_rsa`, and
-/// `get_page_content` will then hand the bytes straight back to the caller. On
-/// the loopback transport that is merely a local tool reading local files; over
-/// the CLOUD BRIDGE it is an arbitrary local-file read reachable from the
-/// internet by anyone holding an account credential, which is not "control
+/// `get_page_content` will then hand the bytes straight back to the caller.
+/// Over the CLOUD BRIDGE that is an arbitrary local-file read reachable from
+/// the internet by anyone holding an account credential, which is not "control
 /// your browser", and is exactly the machine this module exists to protect.
 ///
 /// Allowed: the schemes a browser is actually asked to browse. `about:blank`
@@ -628,40 +546,20 @@ fn validate_navigable_url(url: &str) -> Result<(), McpError> {
 
 // --- Agent surface: perception, locators, extraction, picker, humanized input --
 
-/// The longest `pick_element` waits for a click on the loopback transport.
+/// The longest `pick_element` waits for a click over the local REST API.
 pub(crate) const MAX_PICK_TIMEOUT_MS: u64 = 300_000;
 
 /// How long `pick_element` waits when the caller does not say.
 pub(crate) const DEFAULT_PICK_TIMEOUT_MS: u64 = 60_000;
 
-/// The same bound over the bridge.
+/// The same bound over MCP.
 ///
 /// A call over the bridge is answered with a timeout if it runs too long, so a
 /// wait that would outlive it is not patience, it is a guaranteed failure that
 /// still holds one of the eight process-wide permits. Same margin as typing.
+/// The browser's own two-minute ceiling on `extract_structured` is cut to the
+/// same budget for the same reason.
 const MAX_BRIDGE_PICK_TIMEOUT_MS: u64 = 80_000;
-
-/// The picker budget for a caller on the given transport.
-fn max_pick_timeout_ms(origin: McpOrigin) -> u64 {
-  match origin {
-    McpOrigin::Loopback => MAX_PICK_TIMEOUT_MS,
-    McpOrigin::Bridge => MAX_BRIDGE_PICK_TIMEOUT_MS,
-  }
-}
-
-/// The longest `extract_structured` may let the browser page through rows.
-///
-/// The browser's own ceiling is two minutes; over the bridge that is longer
-/// than a call is allowed to run, so the same margin as typing applies.
-const MAX_EXTRACTION_BUDGET_MS: u64 = 120_000;
-
-/// The extraction budget for a caller on the given transport.
-fn max_extraction_budget_ms(origin: McpOrigin) -> u64 {
-  match origin {
-    McpOrigin::Loopback => MAX_EXTRACTION_BUDGET_MS,
-    McpOrigin::Bridge => MAX_BRIDGE_PICK_TIMEOUT_MS,
-  }
-}
 
 /// How long the browser's own typing rhythm is budgeted per character.
 ///
@@ -2160,13 +2058,9 @@ impl McpServer {
     Self {
       inner: Arc::new(AsyncMutex::new(McpServerInner {
         app_handle: None,
-        token: None,
-        shutdown_tx: None,
         sessions: HashMap::new(),
       })),
-      is_running: AtomicBool::new(false),
       engine_ready: AtomicBool::new(false),
-      port: AtomicU16::new(0),
     }
   }
 
@@ -2174,15 +2068,7 @@ impl McpServer {
     &MCP_SERVER
   }
 
-  pub fn is_running(&self) -> bool {
-    self.is_running.load(Ordering::SeqCst)
-  }
-
   /// Hand the engine the app handle every tool needs, once, at startup.
-  ///
-  /// Called unconditionally rather than from `start`, because the bridge can be
-  /// the only transport in play and it must not have to boot a loopback
-  /// listener it does not use to get one.
   pub async fn attach_app_handle(&self, app_handle: AppHandle) {
     let mut inner = self.inner.lock().await;
     if inner.app_handle.is_none() {
@@ -2209,14 +2095,6 @@ impl McpServer {
     self.engine_ready.store(true, Ordering::SeqCst);
   }
 
-  /// Let a test reach `stop()`, which early-returns unless the listener is up.
-  /// Only the flag is set: no socket is bound, so nothing here can make a test
-  /// pass that production would fail.
-  #[cfg(test)]
-  pub(crate) fn mark_running_for_tests(&self) {
-    self.is_running.store(true, Ordering::SeqCst);
-  }
-
   /// Gate an MCP tool on a capability the caller already resolved (e.g.
   /// `CLOUD_AUTH.can_use_browser_automation().await`). Logs the rejected gate
   /// with enough state for support to diagnose, without leaking secrets.
@@ -2239,266 +2117,13 @@ impl McpServer {
     Ok(())
   }
 
-  pub fn get_port(&self) -> Option<u16> {
-    let port = self.port.load(Ordering::SeqCst);
-    if port > 0 {
-      Some(port)
-    } else {
-      None
-    }
-  }
-
-  pub async fn start(&self, app_handle: AppHandle) -> Result<u16, String> {
-    if !WayfernTermsManager::instance().is_terms_accepted() {
-      return Err(crate::backend_error("WAYFERN_TERMS_REQUIRED"));
-    }
-
-    if self.is_running() {
-      return Err(crate::backend_error("MCP_SERVER_ALREADY_RUNNING"));
-    }
-
-    let settings_manager = SettingsManager::instance();
-    let settings = settings_manager
-      .load_settings()
-      .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?;
-
-    // Get or generate token
-    let existing_token = settings_manager
-      .get_mcp_token(&app_handle)
-      .await
-      .ok()
-      .flatten();
-
-    let (token, _token_is_new) = match existing_token {
-      Some(t) => (t, false),
-      None => (
-        settings_manager
-          .generate_mcp_token(&app_handle)
-          .await
-          .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?,
-        true,
-      ),
-    };
-
-    // Determine port (use saved port, or try default, or random)
-    let preferred_port = settings.mcp_port.unwrap_or(DEFAULT_MCP_PORT);
-    let listener = self.bind_to_available_port(preferred_port).await?;
-    let actual_port = listener
-      .local_addr()
-      .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
-      .port();
-
-    // Save port if it changed
-    let port_changed = settings.mcp_port != Some(actual_port);
-    if port_changed {
-      let mut new_settings = settings;
-      new_settings.mcp_port = Some(actual_port);
-      settings_manager
-        .save_settings(&new_settings)
-        .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?;
-    }
-
-    let installer_handle = app_handle.clone();
-
-    // Store state
-    let mut inner = self.inner.lock().await;
-    inner.app_handle = Some(app_handle);
-    inner.token = Some(token.clone());
-
-    // Create shutdown channel
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    inner.shutdown_tx = Some(shutdown_tx);
-
-    self.port.store(actual_port, Ordering::SeqCst);
-    self.is_running.store(true, Ordering::SeqCst);
-    self.engine_ready.store(true, Ordering::SeqCst);
-
-    // Start HTTP server in background
-    let http_state = McpHttpState {
-      server: McpServer::instance(),
-      token,
-    };
-    tokio::spawn(Self::run_http_server(listener, http_state, shutdown_rx));
-    drop(inner);
-
-    log::info!("[mcp] Server started on port {}", actual_port);
-
-    // Local MCP is removed: the listener above is a tombstone, so there is
-    // nothing to (re)install into a client here. Clients that still point at
-    // the old local endpoint are moved to remote MCP from the app's move
-    // dialog (see `crate::mcp_migration`), not on any bind.
-    let _ = installer_handle;
-    Ok(actual_port)
-  }
-
-  async fn bind_to_available_port(&self, preferred: u16) -> Result<TcpListener, String> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], preferred));
-    if let Ok(listener) = TcpListener::bind(addr).await {
-      return Ok(listener);
-    }
-
-    for _ in 0..10 {
-      let port = 51000 + (rand::random::<u16>() % 1000);
-      let addr = SocketAddr::from(([127, 0, 0, 1], port));
-      if let Ok(listener) = TcpListener::bind(addr).await {
-        return Ok(listener);
-      }
-    }
-
-    Err(crate::backend_error("MCP_PORT_UNAVAILABLE"))
-  }
-
-  /// Serve the loopback port as a TOMBSTONE.
-  ///
-  /// Local MCP has been removed in favour of remote MCP, which a user can reach
-  /// from anywhere. The old port is still bound for legacy installs so a client
-  /// that still points at it gets a clear, actionable answer — a 410 with a
-  /// message, and a desktop dialog — instead of a silent connection refusal.
-  /// Nothing here touches the tool engine; the engine now serves the remote
-  /// bridge only (see [`crate::mcp_remote`]).
-  ///
-  /// TODO(local-mcp-removal): once enough releases have passed that no client
-  /// still points at the local port, delete this tombstone, the enable/install
-  /// paths that reach it, and the loopback engine handlers below entirely.
-  async fn run_http_server(
-    listener: TcpListener,
-    _state: McpHttpState,
-    shutdown_rx: tokio::sync::oneshot::Receiver<()>,
-  ) {
-    let app: Router = Router::new()
-      .route("/health", get(Self::handle_health))
-      .fallback(Self::handle_local_deprecated);
-
-    let port = listener.local_addr().map(|addr| addr.port()).unwrap_or(0);
-    let server = async move {
-      log::info!(
-        "[mcp] Local MCP is removed; the loopback tombstone is listening on http://127.0.0.1:{}/mcp",
-        port
-      );
-      if let Err(e) = axum::serve(listener, app).await {
-        log::error!("[mcp] Tombstone server error: {}", e);
-      }
-    };
-
-    tokio::select! {
-      _ = server => {},
-      _ = shutdown_rx => {
-        log::info!("[mcp] Tombstone server shutting down");
-      },
-    }
-  }
-
-  /// Answer any request to the removed local server, and raise the dialog once.
-  async fn handle_local_deprecated() -> Response {
-    Self::note_local_mcp_attempt();
-    let body = serde_json::json!({
-      "jsonrpc": "2.0",
-      "id": serde_json::Value::Null,
-      "error": {
-        // -32001: the reserved server-error range. The message is written for a
-        // human reading their MCP client's error, not just a machine.
-        "code": -32001,
-        "message": "Donut's local MCP server has been removed. Connect Donut over remote MCP                     from Settings > Integrations, then reach it from anywhere.",
-      }
-    });
-    (StatusCode::GONE, Json(body)).into_response()
-  }
-
-  /// Record that something tried to use the removed local server, and emit the
-  /// dialog event at most once per throttle window.
-  ///
-  /// Public so the enable/install commands can raise the same dialog when the
-  /// user asks for local MCP from inside the app.
-  pub fn note_local_mcp_attempt() {
-    let now = std::time::SystemTime::now()
-      .duration_since(std::time::UNIX_EPOCH)
-      .map(|d| d.as_secs())
-      .unwrap_or(0);
-    let last = LAST_LOCAL_DEPRECATION_EMIT.load(Ordering::Relaxed);
-    if now.saturating_sub(last) < LOCAL_DEPRECATION_THROTTLE_SECS {
-      return;
-    }
-    // Compare-and-set so concurrent hits emit once, not once each.
-    if LAST_LOCAL_DEPRECATION_EMIT
-      .compare_exchange(last, now, Ordering::SeqCst, Ordering::Relaxed)
-      .is_err()
-    {
-      return;
-    }
-    let _ = crate::events::emit_empty(LOCAL_MCP_DEPRECATED_EVENT);
-  }
-
-  // TODO(local-mcp-removal): dead once the loopback served a tombstone; kept
-  // beside it so the whole local transport is deleted in one change.
-  #[allow(dead_code)]
-  async fn auth_middleware(
-    State(state): State<McpHttpState>,
-    req: Request<Body>,
-    next: Next,
-  ) -> Result<Response, StatusCode> {
-    let path = req.uri().path();
-
-    if path == "/health" {
-      return Ok(next.run(req).await);
-    }
-
-    // Check token from URL path: /mcp/{token}
-    let path_token = path
-      .strip_prefix("/mcp/")
-      .filter(|t| !t.is_empty() && !t.contains('/'));
-
-    // Check token from Authorization header
-    let header_token = req
-      .headers()
-      .get(header::AUTHORIZATION)
-      .and_then(|h| h.to_str().ok())
-      .and_then(|h| h.strip_prefix("Bearer "));
-
-    // Constant-time comparison to avoid leaking the token prefix via timing.
-    use subtle::ConstantTimeEq;
-    let expected = state.token.as_bytes();
-    let ct_eq = |t: Option<&str>| {
-      t.is_some_and(|t| {
-        let b = t.as_bytes();
-        b.len() == expected.len() && b.ct_eq(expected).into()
-      })
-    };
-    let valid = ct_eq(path_token) || ct_eq(header_token);
-
-    if !valid {
-      return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    Ok(next.run(req).await)
-  }
-
-  async fn handle_health() -> impl IntoResponse {
-    Json(serde_json::json!({
-      "status": "ok",
-      "server": SERVER_NAME,
-      "version": SERVER_VERSION,
-      "protocolVersion": PROTOCOL_VERSION,
-    }))
-  }
-
-  // TODO(local-mcp-removal): dead once the loopback served a tombstone; kept
-  // beside it so the whole local transport is deleted in one change.
-  #[allow(dead_code)]
-  async fn handle_mcp_get() -> impl IntoResponse {
-    // We don't support server-initiated SSE streams
-    StatusCode::METHOD_NOT_ALLOWED
-  }
-
-  /// Largest JSON-RPC payload any transport will parse.
-  ///
-  /// Shared rather than per-transport on purpose: a body the loopback listener
-  /// refuses must not become one the bridge accepts.
+  /// Largest JSON-RPC payload the engine will parse.
   pub(crate) const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 
   /// The longest a session teardown will spend deleting page globals.
   ///
   /// Best effort and time-boxed on purpose. `end_session` is awaited by the
-  /// HTTP DELETE handler, and a browser that has stopped answering can hold a
+  /// bridge's session teardown, and a browser that has stopped answering can hold a
   /// single CDP call open for a minute, so an unbounded cleanup turns "forget
   /// my session" into a hang. Losing a delete costs nothing worth waiting for:
   /// a browser that cannot answer has no page left to leak, and the page-side
@@ -2606,19 +2231,11 @@ impl McpServer {
     }
   }
 
-  /// Answer one JSON-RPC message, whatever carried it here.
+  /// Answer one JSON-RPC message.
   ///
   /// This is the whole protocol: parse, route `initialize`, absorb
   /// notifications, validate the session, meter the automation tools, dispatch.
-  /// Every transport calls exactly this, so none of them can drift away from
-  /// the others on a rule that matters (the session check and the rate limiter
-  /// were both HTTP-only before the bridge existed).
-  pub(crate) async fn handle_message(
-    &self,
-    origin: McpOrigin,
-    session_id: Option<&str>,
-    body: &[u8],
-  ) -> McpOutcome {
+  pub(crate) async fn handle_message(&self, session_id: Option<&str>, body: &[u8]) -> McpOutcome {
     if body.len() > Self::MAX_MESSAGE_BYTES {
       return McpOutcome::BadRequest;
     }
@@ -2701,7 +2318,6 @@ impl McpServer {
     let response = self
       .handle_request(
         McpCaller {
-          origin,
           session: session_id,
         },
         request,
@@ -2710,75 +2326,6 @@ impl McpServer {
     McpOutcome::Body {
       body: serde_json::to_value(response).unwrap_or_else(|_| serde_json::json!({})),
       new_session_id: None,
-    }
-  }
-
-  // TODO(local-mcp-removal): dead once the loopback served a tombstone; kept
-  // beside it so the whole local transport is deleted in one change.
-  #[allow(dead_code)]
-  async fn handle_mcp_delete(
-    State(state): State<McpHttpState>,
-    req: Request<Body>,
-  ) -> impl IntoResponse {
-    let session_id = req
-      .headers()
-      .get("mcp-session-id")
-      .and_then(|h| h.to_str().ok())
-      .map(|s| s.to_string());
-
-    if let Some(sid) = session_id {
-      state.server.end_session(&sid).await;
-    }
-
-    StatusCode::OK
-  }
-
-  // TODO(local-mcp-removal): dead once the loopback served a tombstone; kept
-  // beside it so the whole local transport is deleted in one change.
-  #[allow(dead_code)]
-  async fn handle_mcp_post(State(state): State<McpHttpState>, req: Request<Body>) -> Response {
-    let session_id = req
-      .headers()
-      .get("mcp-session-id")
-      .and_then(|h| h.to_str().ok())
-      .map(|s| s.to_string());
-
-    let body_bytes = match axum::body::to_bytes(req.into_body(), Self::MAX_MESSAGE_BYTES).await {
-      Ok(b) => b,
-      Err(_) => {
-        return (StatusCode::BAD_REQUEST, "Invalid request body").into_response();
-      }
-    };
-
-    match state
-      .server
-      .handle_message(McpOrigin::Loopback, session_id.as_deref(), &body_bytes)
-      .await
-    {
-      McpOutcome::Body {
-        body,
-        new_session_id,
-      } => {
-        let encoded = serde_json::to_vec(&body).unwrap_or_else(|_| b"{}".to_vec());
-        let mut builder = Response::builder()
-          .status(StatusCode::OK)
-          .header(header::CONTENT_TYPE, "application/json");
-        if let Some(sid) = new_session_id {
-          builder = builder.header("mcp-session-id", sid);
-        }
-        builder
-          .body(Body::from(encoded))
-          .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-      }
-      McpOutcome::Accepted => StatusCode::ACCEPTED.into_response(),
-      McpOutcome::UnknownSession => StatusCode::NOT_FOUND.into_response(),
-      McpOutcome::BadRequest => (StatusCode::BAD_REQUEST, "Invalid JSON").into_response(),
-      McpOutcome::RateLimited { retry_after_secs } => (
-        StatusCode::TOO_MANY_REQUESTS,
-        [(header::RETRY_AFTER, retry_after_secs.to_string())],
-        "automation request rate limit exceeded",
-      )
-        .into_response(),
     }
   }
 
@@ -2856,40 +2403,6 @@ impl McpServer {
         | "run_profile_remote"
         | "stop_remote_session"
     )
-  }
-
-  pub async fn stop(&self) -> Result<(), String> {
-    if !self.is_running() {
-      return Err(crate::backend_error("MCP_SERVER_NOT_RUNNING"));
-    }
-
-    let mut inner = self.inner.lock().await;
-    // The bearer token is loopback-only, so it goes with the listener.
-    inner.token = None;
-    // The session map is NOT cleared, for the same reason the app handle below
-    // survives: it is shared with the cloud bridge, and clearing it here made
-    // turning the local switch off answer 404 MCP_SESSION_NOT_FOUND to a remote
-    // caller that had nothing to do with the loopback transport. The website
-    // re-initializes on a 404 and self-heals, but the official MCP TypeScript
-    // SDK does not, it throws on any non-ok POST, so a third-party agent took
-    // a hard mid-run error from an unrelated toggle. A session holds only
-    // `initialized: bool`; `end_session` is the eviction path.
-
-    // Send shutdown signal
-    if let Some(tx) = inner.shutdown_tx.take() {
-      let _ = tx.send(());
-    }
-
-    self.port.store(0, Ordering::SeqCst);
-    self.is_running.store(false, Ordering::SeqCst);
-
-    // The app handle and `engine_ready` deliberately survive. Closing the
-    // loopback listener is a statement about one transport; the cloud bridge
-    // may still be carrying tool calls, and dropping the handle here would
-    // break it with "MCP server not properly initialized" on the next call.
-
-    log::info!("[mcp] Server stopped");
-    Ok(())
   }
 
   pub fn get_tools(&self) -> Vec<McpTool> {
@@ -4838,11 +4351,9 @@ impl McpServer {
     // Refused here, at the one place every tool call passes, rather than in
     // each handler: a new path-taking tool added later inherits the rule
     // instead of having to remember it.
-    if caller.origin == McpOrigin::Bridge
-      && (LOCAL_PATH_TOOLS.contains(&tool_name) || SECRET_EXPORT_TOOLS.contains(&tool_name))
-    {
+    if LOCAL_PATH_TOOLS.contains(&tool_name) || SECRET_EXPORT_TOOLS.contains(&tool_name) {
       log::warn!(
-        "[mcp] Refused '{tool_name}' over the bridge: it takes a local filesystem path or exports stored secrets"
+        "[mcp] Refused '{tool_name}': it takes a local filesystem path or exports stored secrets"
       );
       return Err(McpError {
         code: -32000,
@@ -4961,7 +4472,7 @@ impl McpServer {
       "update_profile" => self.handle_update_profile(arguments).await,
       "delete_profile" => self.handle_delete_profile(arguments).await,
       "list_tags" => self.handle_list_tags().await,
-      "list_proxies" => self.handle_list_proxies(caller).await,
+      "list_proxies" => self.handle_list_proxies().await,
       "get_profile_status" => self.handle_get_profile_status(arguments).await,
       // Group management
       "list_groups" => self.handle_list_groups().await,
@@ -4972,7 +4483,7 @@ impl McpServer {
       "assign_profiles_to_group" => self.handle_assign_profiles_to_group(arguments).await,
       "distribute_proxies" => self.handle_distribute_proxies(arguments).await,
       // Full proxy management
-      "get_proxy" => self.handle_get_proxy(caller, arguments).await,
+      "get_proxy" => self.handle_get_proxy(arguments).await,
       "create_proxy" => self.handle_create_proxy(arguments).await,
       "update_proxy" => self.handle_update_proxy(arguments).await,
       "delete_proxy" => self.handle_delete_proxy(arguments).await,
@@ -5078,7 +4589,7 @@ impl McpServer {
           CLOUD_AUTH.can_use_browser_automation().await,
         )
         .await?;
-        self.handle_type_text(caller, arguments).await
+        self.handle_type_text(arguments).await
       }
       "get_page_content" => {
         Self::require_capability(
@@ -5155,7 +4666,7 @@ impl McpServer {
           CLOUD_AUTH.can_use_browser_automation().await,
         )
         .await?;
-        self.handle_type_locator(caller, arguments).await
+        self.handle_type_locator(arguments).await
       }
       "extract_structured" => {
         Self::require_capability(
@@ -5163,7 +4674,7 @@ impl McpServer {
           CLOUD_AUTH.can_use_browser_automation().await,
         )
         .await?;
-        self.handle_extract_structured(caller, arguments).await
+        self.handle_extract_structured(arguments).await
       }
       "pick_element" => {
         Self::require_capability(
@@ -5171,7 +4682,7 @@ impl McpServer {
           CLOUD_AUTH.can_use_browser_automation().await,
         )
         .await?;
-        self.handle_pick_element(caller, arguments).await
+        self.handle_pick_element(arguments).await
       }
       // Leasing a host is the most expensive thing this server can do, so it
       // is gated exactly like the local launch it replaces.
@@ -6040,20 +5551,15 @@ impl McpServer {
     }))
   }
 
-  async fn handle_list_proxies(
-    &self,
-    caller: McpCaller<'_>,
-  ) -> Result<serde_json::Value, McpError> {
+  async fn handle_list_proxies(&self) -> Result<serde_json::Value, McpError> {
     let mut proxies =
       serde_json::to_value(PROXY_MANAGER.get_stored_proxies()).map_err(|e| McpError {
         code: -32000,
         message: format!("Failed to serialize proxies: {e}"),
         data: None,
       })?;
-    if caller.origin == McpOrigin::Bridge {
-      for proxy in proxies.as_array_mut().into_iter().flatten() {
-        redact_proxy_secrets(proxy);
-      }
+    for proxy in proxies.as_array_mut().into_iter().flatten() {
+      redact_proxy_secrets(proxy);
     }
 
     Ok(serde_json::json!({
@@ -6512,7 +6018,6 @@ impl McpServer {
   // Full proxy management handlers
   async fn handle_get_proxy(
     &self,
-    caller: McpCaller<'_>,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
     let proxy_id = arguments
@@ -6539,9 +6044,7 @@ impl McpServer {
       message: format!("Failed to serialize proxy: {e}"),
       data: None,
     })?;
-    if caller.origin == McpOrigin::Bridge {
-      redact_proxy_secrets(&mut proxy);
-    }
+    redact_proxy_secrets(&mut proxy);
 
     Ok(serde_json::json!({
       "content": [{
@@ -8535,7 +8038,6 @@ impl McpServer {
 
   async fn handle_type_text(
     &self,
-    caller: McpCaller<'_>,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
     let profile_id = arguments
@@ -8591,13 +8093,10 @@ impl McpServer {
     let plan = if instant || humanized {
       None
     } else {
-      Some(plan_typing(text, wpm, max_typing_seconds(caller.origin))?)
+      Some(plan_typing(text, wpm, MAX_BRIDGE_TYPING_SECONDS)?)
     };
     let inscribe_timeout = if humanized {
-      Some(vellum_typing_budget(
-        text,
-        max_typing_seconds(caller.origin),
-      )?)
+      Some(vellum_typing_budget(text, MAX_BRIDGE_TYPING_SECONDS)?)
     } else {
       None
     };
@@ -8869,7 +8368,7 @@ impl McpServer {
     // client's next `click_by_index(3)` clicked whatever happened to be third
     // in the OTHER caller's snapshot, a wrong click reported as a successful
     // one, which is the worst shape a failure can take on somebody's browser.
-    let slot = interactive_cache_slot(caller.origin, session);
+    let slot = interactive_cache_slot(session);
     let js = INTERACTIVE_ELEMENTS_JS
       .replace("__MAX_CHARS__", &max_chars.to_string())
       .replace("__CACHE__", &slot)
@@ -8946,7 +8445,7 @@ impl McpServer {
     // Refused before anything else runs: an index names a position in an array
     // a PREVIOUS call left on the page, and without a session there is no
     // answer to whose array that is, only a shared slot to guess against.
-    let cache = interactive_cache_slot(caller.origin, require_indexed_session(caller)?);
+    let cache = interactive_cache_slot(require_indexed_session(caller)?);
     let profile_id = arguments
       .get("profile_id")
       .and_then(|v| v.as_str())
@@ -9034,7 +8533,7 @@ impl McpServer {
     // Same refusal as click_by_index, and for the same reason: typing into
     // whatever happens to sit at index 3 of somebody else's snapshot is a
     // wrong action reported as a successful one.
-    let cache = interactive_cache_slot(caller.origin, require_indexed_session(caller)?);
+    let cache = interactive_cache_slot(require_indexed_session(caller)?);
     let profile_id = arguments
       .get("profile_id")
       .and_then(|v| v.as_str())
@@ -9085,13 +8584,10 @@ impl McpServer {
     let plan = if instant || humanized {
       None
     } else {
-      Some(plan_typing(text, wpm, max_typing_seconds(caller.origin))?)
+      Some(plan_typing(text, wpm, MAX_BRIDGE_TYPING_SECONDS)?)
     };
     let inscribe_timeout = if humanized {
-      Some(vellum_typing_budget(
-        text,
-        max_typing_seconds(caller.origin),
-      )?)
+      Some(vellum_typing_budget(text, MAX_BRIDGE_TYPING_SECONDS)?)
     } else {
       None
     };
@@ -9257,13 +8753,12 @@ impl McpServer {
 
   async fn handle_type_locator(
     &self,
-    caller: McpCaller<'_>,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
     let profile_id = Self::require_str(arguments, "profile_id")?;
     let request: AgentTypeRequest = Self::agent_arguments(arguments)?;
     let ctx = self.agent_context(profile_id).await?;
-    let typed = agent_type_locator(&ctx, &request, max_typing_seconds(caller.origin))
+    let typed = agent_type_locator(&ctx, &request, MAX_BRIDGE_TYPING_SECONDS)
       .await
       .map_err(AgentError::into_mcp)?;
     Self::json_content(&typed)
@@ -9271,7 +8766,6 @@ impl McpServer {
 
   async fn handle_extract_structured(
     &self,
-    caller: McpCaller<'_>,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
     let profile_id = Self::require_str(arguments, "profile_id")?;
@@ -9281,7 +8775,7 @@ impl McpServer {
       request
         .time_budget_ms
         .unwrap_or(8_000)
-        .min(max_extraction_budget_ms(caller.origin)),
+        .min(MAX_BRIDGE_PICK_TIMEOUT_MS),
     );
     let ctx = self.agent_context(profile_id).await?;
     let extraction = agent_extract(&ctx, &request)
@@ -9527,7 +9021,6 @@ impl McpServer {
 
   async fn handle_pick_element(
     &self,
-    caller: McpCaller<'_>,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
     let profile_id = Self::require_str(arguments, "profile_id")?;
@@ -9537,7 +9030,7 @@ impl McpServer {
     let timeout_ms = request
       .timeout_ms
       .unwrap_or(DEFAULT_PICK_TIMEOUT_MS)
-      .clamp(1_000, max_pick_timeout_ms(caller.origin));
+      .clamp(1_000, MAX_BRIDGE_PICK_TIMEOUT_MS);
     let ctx = self.agent_context(profile_id).await?;
     let picked = agent_pick_element(&ctx, timeout_ms)
       .await
@@ -10173,41 +9666,6 @@ mod tests {
     );
   }
 
-  #[tokio::test]
-  async fn the_local_tombstone_answers_gone_with_a_removal_message() {
-    // Local MCP is removed; anything that still reaches the loopback port must
-    // get a clear 410 with an actionable message, not the tool engine.
-    let response = McpServer::handle_local_deprecated().await;
-    assert_eq!(response.status(), StatusCode::GONE);
-    let bytes = axum::body::to_bytes(response.into_body(), 64 * 1024)
-      .await
-      .expect("tombstone body");
-    let body: serde_json::Value = serde_json::from_slice(&bytes).expect("json body");
-    assert_eq!(body["error"]["code"], -32001);
-    let message = body["error"]["message"].as_str().unwrap_or_default();
-    assert!(
-      message.contains("removed") && message.to_lowercase().contains("remote"),
-      "the removal message must name the removal and point at remote MCP: {message}"
-    );
-  }
-
-  #[test]
-  fn the_deprecation_dialog_is_throttled_to_one_per_window() {
-    // A client retry loop hitting the dead port must not pop the dialog on
-    // every attempt: the first attempt in a window advances the clock, the
-    // next one inside it is a no-op.
-    LAST_LOCAL_DEPRECATION_EMIT.store(0, Ordering::SeqCst);
-    McpServer::note_local_mcp_attempt();
-    let first = LAST_LOCAL_DEPRECATION_EMIT.load(Ordering::SeqCst);
-    assert!(first > 0, "the first attempt records a timestamp");
-    McpServer::note_local_mcp_attempt();
-    let second = LAST_LOCAL_DEPRECATION_EMIT.load(Ordering::SeqCst);
-    assert_eq!(
-      first, second,
-      "a second attempt inside the window does not re-emit"
-    );
-  }
-
   #[test]
   fn test_mcp_tools_count() {
     let server = McpServer::new();
@@ -10487,11 +9945,11 @@ mod tests {
 
   #[tokio::test]
   async fn a_body_past_the_shared_cap_is_refused_by_the_engine_itself() {
-    // MAX_MESSAGE_BYTES is documented as one number for every transport, and it
-    // must match what the cloud endpoint accepts. Nothing exercised the
-    // check: deleting it left every test green, so the loopback listener and
-    // the bridge could quietly drift apart again, which is exactly the defect
-    // that made `import_profile_cookies` work locally and 413 remotely.
+    // MAX_MESSAGE_BYTES must match what the cloud endpoint accepts. Nothing
+    // exercised the
+    // check: deleting it left every test green, so the engine and the cloud
+    // endpoint could quietly drift apart, which is exactly the defect that
+    // once made `import_profile_cookies` 413 remotely.
     let server = McpServer::instance();
     server.mark_engine_ready_for_tests();
 
@@ -10509,9 +9967,7 @@ mod tests {
       "the fixture must be parseable, or the cap is not what rejects it"
     );
     assert!(matches!(
-      server
-        .handle_message(McpOrigin::Loopback, None, oversized.as_bytes())
-        .await,
+      server.handle_message(None, oversized.as_bytes()).await,
       McpOutcome::BadRequest
     ));
 
@@ -10520,7 +9976,7 @@ mod tests {
     let ok = br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
     assert!(ok.len() < McpServer::MAX_MESSAGE_BYTES);
     assert!(matches!(
-      server.handle_message(McpOrigin::Loopback, None, ok).await,
+      server.handle_message(None, ok).await,
       McpOutcome::Body { .. }
     ));
   }
@@ -10814,9 +10270,7 @@ mod tests {
     server.mark_engine_ready_for_tests();
 
     let init = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}"#;
-    let McpOutcome::Body { body, .. } =
-      server.handle_message(McpOrigin::Loopback, None, init).await
-    else {
+    let McpOutcome::Body { body, .. } = server.handle_message(None, init).await else {
       panic!("initialize must answer");
     };
     assert_eq!(
@@ -10826,9 +10280,7 @@ mod tests {
 
     // And a client that names nothing still gets a usable answer.
     let bare = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
-    let McpOutcome::Body { body, .. } =
-      server.handle_message(McpOrigin::Loopback, None, bare).await
-    else {
+    let McpOutcome::Body { body, .. } = server.handle_message(None, bare).await else {
       panic!("initialize must answer");
     };
     assert_eq!(body["result"]["protocolVersion"], PROTOCOL_VERSION);
@@ -10972,35 +10424,23 @@ mod tests {
     // `get_interactive_elements` stashes live element references on the page and
     // hands back indices; `click_by_index` resolves an index against that stash.
     // It used to be ONE `window.__donut_interactive` array for the whole page,
-    // and then one per TRANSPORT, which is still shared, because the website
-    // console and an agent both arrive over the bridge, as do two runs of the
-    // same agent. Session A lists elements, B lists them, A's
+    // which is shared, because the website console and an agent both arrive
+    // over the bridge, as do two runs of the same agent. Session A lists
+    // elements, B lists them, A's
     // `click_by_index(3)` resolves against B's array and clicks the wrong
     // thing while reporting success, on somebody's real browser.
-    fn slot(origin: McpOrigin, session: &str) -> String {
-      interactive_cache_slot(origin, session)
-    }
+    let slot = interactive_cache_slot;
 
-    let a = slot(McpOrigin::Bridge, "11111111-2222-3333-4444-555555555555");
-    let b = slot(McpOrigin::Bridge, "66666666-7777-8888-9999-000000000000");
-    assert_ne!(
-      a, b,
-      "two sessions on ONE transport must not share a slot, this is the \
-       collision that origin-only keying could not see"
-    );
+    let a = slot("11111111-2222-3333-4444-555555555555");
+    let b = slot("66666666-7777-8888-9999-000000000000");
+    assert_ne!(a, b, "two sessions must not share a slot");
 
     // Stable for one session, or an agent's own second call would lose the
     // array its first call built.
     assert_eq!(
       a,
-      slot(McpOrigin::Bridge, "11111111-2222-3333-4444-555555555555"),
+      slot("11111111-2222-3333-4444-555555555555"),
       "the same session must resolve to the same slot every time"
-    );
-
-    // The transport still separates callers that share a session id.
-    assert_ne!(
-      a,
-      slot(McpOrigin::Loopback, "11111111-2222-3333-4444-555555555555")
     );
 
     // DISTINCTNESS, which the previous key only claimed. Truncating at 64
@@ -11009,13 +10449,13 @@ mod tests {
     // wrong click the key exists to prevent.
     let shared_prefix = "s".repeat(64);
     assert_ne!(
-      slot(McpOrigin::Bridge, &format!("{shared_prefix}-one")),
-      slot(McpOrigin::Bridge, &format!("{shared_prefix}-two")),
+      slot(&format!("{shared_prefix}-one")),
+      slot(&format!("{shared_prefix}-two")),
       "two ids agreeing on a 64-character prefix must not share a slot"
     );
     assert_ne!(
-      slot(McpOrigin::Bridge, "abc-def"),
-      slot(McpOrigin::Bridge, "abc_def"),
+      slot("abc-def"),
+      slot("abc_def"),
       "ids differing only in a character the old key erased must not share a slot"
     );
 
@@ -11026,10 +10466,10 @@ mod tests {
     let overlong = "z".repeat(5_000);
     for candidate in [
       a,
-      slot(McpOrigin::Bridge, "'; window.x = 1; //"),
-      slot(McpOrigin::Loopback, "../../etc\\passwd"),
-      slot(McpOrigin::Bridge, ""),
-      slot(McpOrigin::Bridge, overlong.as_str()),
+      slot("'; window.x = 1; //"),
+      slot("../../etc\\passwd"),
+      slot(""),
+      slot(overlong.as_str()),
     ] {
       assert!(
         candidate.starts_with('\'') && candidate.ends_with('\''),
@@ -11083,12 +10523,8 @@ mod tests {
     // refusal has to come FIRST, before argument parsing and before anything
     // touches the page.
     let server = McpServer::new();
-    let sessionless = McpCaller {
-      origin: McpOrigin::Bridge,
-      session: None,
-    };
+    let sessionless = McpCaller { session: None };
     let with_session = McpCaller {
-      origin: McpOrigin::Bridge,
       session: Some("11111111-2222-3333-4444-555555555555"),
     };
     // Deliberately complete arguments: the refusal must be about the missing
@@ -11151,13 +10587,11 @@ mod tests {
     server.mark_engine_ready_for_tests();
 
     let init = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
-    let McpOutcome::Body { new_session_id, .. } =
-      server.handle_message(McpOrigin::Bridge, None, init).await
-    else {
+    let McpOutcome::Body { new_session_id, .. } = server.handle_message(None, init).await else {
       panic!("initialize must mint a session");
     };
     let session = new_session_id.expect("session id");
-    let slot = interactive_cache_slot(McpOrigin::Bridge, &session);
+    let slot = interactive_cache_slot(&session);
 
     server
       .remember_cached_page(&session, "profile-a", &slot)
@@ -11251,7 +10685,7 @@ mod tests {
   #[tokio::test]
   async fn the_session_the_transport_validated_is_the_one_the_cache_keys_on() {
     // The slot is only per-session if the session actually REACHES the cache.
-    // `handle_message` is the one place both transports hand a session id in,
+    // `handle_message` is the one place the bridge hands a session id in,
     // so the wiring from there down to the three cache sites is asserted here:
     // without it `interactive_cache_slot` could be perfectly correct and every
     // caller would still be handed a slot chosen from nothing.
@@ -11261,7 +10695,7 @@ mod tests {
 
     let flattened: String = production.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-      flattened.contains("McpCaller { origin, session: session_id"),
+      flattened.contains("McpCaller { session: session_id"),
       "handle_message must pass the caller's session on to the dispatcher, or \
        every caller is refused the index tools it is entitled to"
     );
@@ -11293,9 +10727,7 @@ mod tests {
 
     let mut ids = Vec::new();
     for _ in 0..2 {
-      let McpOutcome::Body { new_session_id, .. } =
-        server.handle_message(McpOrigin::Bridge, None, init).await
-      else {
+      let McpOutcome::Body { new_session_id, .. } = server.handle_message(None, init).await else {
         panic!("initialize must answer");
       };
       ids.push(new_session_id.expect("initialize must mint a session id"));
@@ -11305,8 +10737,8 @@ mod tests {
       "two initializes on one transport must be two different sessions"
     );
     assert_ne!(
-      interactive_cache_slot(McpOrigin::Bridge, &ids[0]),
-      interactive_cache_slot(McpOrigin::Bridge, &ids[1]),
+      interactive_cache_slot(&ids[0]),
+      interactive_cache_slot(&ids[1]),
       "two live sessions on one transport must not resolve to one slot"
     );
 
@@ -11316,9 +10748,7 @@ mod tests {
     for id in &ids {
       assert!(
         matches!(
-          server
-            .handle_message(McpOrigin::Bridge, Some(id.as_str()), ping)
-            .await,
+          server.handle_message(Some(id.as_str()), ping).await,
           McpOutcome::Body { .. }
         ),
         "a freshly minted session must be usable"
@@ -11428,7 +10858,7 @@ mod tests {
       let body = &rest[..rest.find("\n  async fn ").unwrap_or(rest.len())];
 
       let plan = body
-        .find("plan_typing(text, wpm, max_typing_seconds(caller.origin))?")
+        .find("plan_typing(text, wpm, MAX_BRIDGE_TYPING_SECONDS)?")
         .unwrap_or_else(|| panic!("{handler} must plan through the bounded builder"));
       assert_eq!(
         body.matches("plan_typing(").count(),
@@ -11473,27 +10903,25 @@ mod tests {
       // And the refusal really is a refusal: `?` on the plan, not a swallowed
       // error that lets the handler carry on and clear the field anyway.
       assert!(
-        body.contains("Some(plan_typing(text, wpm, max_typing_seconds(caller.origin))?)"),
+        body.contains("Some(plan_typing(text, wpm, MAX_BRIDGE_TYPING_SECONDS)?)"),
         "{handler} must propagate the refusal rather than absorb it"
       );
     }
   }
 
   #[test]
-  fn a_bridge_caller_may_type_for_less_than_the_relay_will_wait() {
+  fn an_mcp_caller_may_type_for_less_than_the_relay_will_wait() {
     // A call over the bridge is answered with a timeout if it runs too long, so
     // a plan that would type for longer is a guaranteed failure that still holds
-    // a process-wide permit for its whole duration. Loopback keeps the five
-    // minutes: nothing upstream times it out.
-    assert_eq!(max_typing_seconds(McpOrigin::Loopback), 300.0);
-    assert_eq!(max_typing_seconds(McpOrigin::Bridge), 80.0);
-    assert!(
-      max_typing_seconds(McpOrigin::Bridge) < 90.0,
-      "the bridge budget must stay under the relay's 90 s call budget"
-    );
+    // a process-wide permit for its whole duration. The local REST API keeps
+    // the five minutes: nothing upstream times it out.
+    assert_eq!(MAX_TYPING_SECONDS, 300.0);
+    assert_eq!(MAX_BRIDGE_TYPING_SECONDS, 80.0);
+    // The MCP budget must stay under the relay's 90 s call budget.
+    const { assert!(MAX_BRIDGE_TYPING_SECONDS < 90.0) };
 
-    // Exercised, not merely asserted: the same text is refused over the
-    // bridge and accepted over loopback. Each plan is built afresh with its
+    // Exercised, not merely asserted: the same text is refused over MCP and
+    // accepted over REST. Each plan is built afresh with its
     // own randomness, so the fixture sits far from both bounds: 1,200
     // characters at 200 wpm plan to roughly 160 seconds, and the session rate
     // is sampled with a standard deviation of 10 wpm (five percent here; at
@@ -11501,21 +10929,21 @@ mod tests {
     // not typed at the floor). Fatigue makes the plan superlinear, so the
     // count is not to be scaled by eye.
     let text = "a".repeat(1_200);
-    let over_loopback = plan_typing(&text, Some(200.0), max_typing_seconds(McpOrigin::Loopback))
-      .expect("about 160 seconds is inside the loopback budget");
-    let planned = over_loopback.last().map_or(0.0, |event| event.time);
+    let over_rest = plan_typing(&text, Some(200.0), MAX_TYPING_SECONDS)
+      .expect("about 160 seconds is inside the REST budget");
+    let planned = over_rest.last().map_or(0.0, |event| event.time);
     assert!(
       planned > 110.0 && planned < 250.0,
       "the fixture must sit well clear of both budgets, planned {planned}s"
     );
 
-    let over_bridge = plan_typing(&text, Some(200.0), max_typing_seconds(McpOrigin::Bridge))
-      .expect_err("the same text must be refused over the bridge");
+    let over_bridge = plan_typing(&text, Some(200.0), MAX_BRIDGE_TYPING_SECONDS)
+      .expect_err("the same text must be refused over MCP");
     let body: serde_json::Value = serde_json::from_str(&over_bridge.message).unwrap();
     assert_eq!(body["code"], "TYPING_TOO_LONG");
     assert_eq!(
       body["params"]["limit"], "80",
-      "the refusal must name the budget that applied, not the loopback one"
+      "the refusal must name the budget that applied, not the REST one"
     );
   }
 
@@ -11569,12 +10997,10 @@ mod tests {
   }
 
   #[test]
-  fn the_proxy_readers_redact_for_the_bridge_and_only_for_the_bridge() {
+  fn the_proxy_readers_always_redact() {
     // `handle_list_proxies` and `handle_get_proxy` serialize a `StoredProxy`
-    // whole. Both must route a BRIDGE caller through the redaction and leave
-    // a loopback caller's answer untouched: the local agent is on the machine
-    // that stores the password, and truncating its view would break the
-    // existing export/import round trip over loopback.
+    // whole, and every MCP caller holds an account credential rather than this
+    // machine, so both must route their answer through the redaction.
     let production = include_str!("mcp_server.rs")
       .split_once("\n#[cfg(test)]")
       .map_or("", |(code, _)| code);
@@ -11584,30 +11010,16 @@ mod tests {
         .nth(1)
         .unwrap_or_else(|| panic!("{handler} must exist"));
       let body = &rest[..rest.find("\n  async fn ").unwrap_or(rest.len())];
-      assert!(
-        body.contains("caller: McpCaller<'_>"),
-        "{handler} must know who is asking"
-      );
-      let gate = body
-        .find("if caller.origin == McpOrigin::Bridge")
-        .unwrap_or_else(|| panic!("{handler} must gate the redaction on the bridge origin"));
-      let redact = body
-        .find("redact_proxy_secrets(")
-        .unwrap_or_else(|| panic!("{handler} must redact"));
-      assert!(
-        gate < redact,
-        "{handler} must redact inside the bridge gate"
-      );
       assert_eq!(
         body.matches("redact_proxy_secrets(").count(),
         1,
-        "{handler} must redact in exactly one place, under the gate"
+        "{handler} must redact in exactly one place"
       );
     }
   }
 
   #[tokio::test]
-  async fn exporting_proxies_is_refused_over_the_bridge_before_the_arguments_are_read() {
+  async fn exporting_proxies_is_refused_before_the_arguments_are_read() {
     // The export exists to write every password and VLESS URI out in full,
     // which is what the redaction above withholds from a remote caller. The
     // refusal sits at the gate, so a well-formed export and a malformed one
@@ -11619,10 +11031,7 @@ mod tests {
       let call = format!(
         r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"export_proxies","arguments":{arguments}}}}}"#
       );
-      let McpOutcome::Body { body, .. } = server
-        .handle_message(McpOrigin::Bridge, None, call.as_bytes())
-        .await
-      else {
+      let McpOutcome::Body { body, .. } = server.handle_message(None, call.as_bytes()).await else {
         panic!("expected an answer");
       };
       assert!(
@@ -11630,25 +11039,9 @@ mod tests {
           .as_str()
           .unwrap_or_default()
           .contains("TOOL_IS_LOCAL_ONLY"),
-        "export_proxies must be refused over the bridge: {body}"
+        "export_proxies must be refused: {body}"
       );
     }
-
-    // Over loopback it is not refused for that reason. With no format it
-    // fails on its own terms, which proves the gate did not fire.
-    let probe = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"export_proxies","arguments":{}}}"#;
-    let McpOutcome::Body { body, .. } = server
-      .handle_message(McpOrigin::Loopback, None, probe.as_bytes())
-      .await
-    else {
-      panic!("expected an answer");
-    };
-    let local = body["error"]["message"].as_str().unwrap_or_default();
-    assert!(
-      !local.contains("TOOL_IS_LOCAL_ONLY"),
-      "a caller on this machine may still export: {body}"
-    );
-    assert!(local.contains("Missing format"), "{body}");
 
     // And the list is pinned: only the export is refused by name, and it is.
     assert_eq!(SECRET_EXPORT_TOOLS, &["export_proxies"]);
@@ -11760,23 +11153,6 @@ mod tests {
     );
   }
 
-  #[test]
-  fn the_bridge_declares_itself_as_the_bridge() {
-    // The whole property rests on the transport telling the truth about where
-    // a message came from. Nothing else in the tree asserts this wiring, so a
-    // one-word edit in mcp_remote.rs would silently reopen every local-path
-    // tool to the internet.
-    let remote = include_str!("mcp_remote.rs");
-    assert!(
-      remote.contains("McpOrigin::Bridge"),
-      "the bridge must declare its own origin when handing a message to the engine"
-    );
-    assert!(
-      !remote.contains("McpOrigin::Loopback"),
-      "the bridge must never claim to be a caller standing on this machine"
-    );
-  }
-
   #[tokio::test]
   async fn a_tool_that_reads_this_machine_is_refused_over_the_bridge() {
     // `add_extension` takes a caller-supplied path, `fs::read`s it, stores the
@@ -11795,31 +11171,13 @@ mod tests {
         r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{tool}","arguments":{{"path":"/etc/passwd","folder":"/etc"}}}}}}"#
       );
 
-      let McpOutcome::Body { body, .. } = server
-        .handle_message(McpOrigin::Bridge, None, call.as_bytes())
-        .await
-      else {
+      let McpOutcome::Body { body, .. } = server.handle_message(None, call.as_bytes()).await else {
         panic!("expected an answer for {tool}");
       };
       let message = body["error"]["message"].as_str().unwrap_or_default();
       assert!(
         message.contains("TOOL_IS_LOCAL_ONLY"),
         "{tool} must be refused over the bridge with a translatable code: {body}"
-      );
-
-      // And the SAME call over loopback is not refused for that reason: the
-      // caller is already on the machine. It may fail for its own reasons -
-      // the path does not exist, but never with this code.
-      let McpOutcome::Body { body, .. } = server
-        .handle_message(McpOrigin::Loopback, None, call.as_bytes())
-        .await
-      else {
-        panic!("expected an answer for {tool}");
-      };
-      let local = body["error"]["message"].as_str().unwrap_or_default();
-      assert!(
-        !local.contains("TOOL_IS_LOCAL_ONLY"),
-        "{tool} must still be available to a caller on this machine: {body}"
       );
     }
   }
@@ -11850,10 +11208,7 @@ mod tests {
     })
     .to_string();
 
-    let McpOutcome::Body { body, .. } = server
-      .handle_message(McpOrigin::Bridge, None, call.as_bytes())
-      .await
-    else {
+    let McpOutcome::Body { body, .. } = server.handle_message(None, call.as_bytes()).await else {
       panic!("expected an answer");
     };
     assert!(
@@ -11874,10 +11229,7 @@ mod tests {
       "params": { "name": "import_browser_profiles", "arguments": {} }
     })
     .to_string();
-    let McpOutcome::Body { body, .. } = server
-      .handle_message(McpOrigin::Bridge, None, probe.as_bytes())
-      .await
-    else {
+    let McpOutcome::Body { body, .. } = server.handle_message(None, probe.as_bytes()).await else {
       panic!("expected an answer");
     };
     assert!(
@@ -11887,12 +11239,6 @@ mod tests {
         .contains("TOOL_IS_LOCAL_ONLY"),
       "the gate must sit ahead of argument parsing: {body}"
     );
-  }
-
-  #[test]
-  fn test_mcp_server_initial_state() {
-    let server = McpServer::new();
-    assert!(!server.is_running());
   }
 
   #[tokio::test]
@@ -11907,9 +11253,7 @@ mod tests {
     let init = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
     let mut first = None;
     for i in 0..(MAX_SESSIONS + 8) {
-      let McpOutcome::Body { new_session_id, .. } =
-        server.handle_message(McpOrigin::Loopback, None, init).await
-      else {
+      let McpOutcome::Body { new_session_id, .. } = server.handle_message(None, init).await else {
         panic!("initialize must mint a session");
       };
       if i == 0 {
@@ -11926,11 +11270,7 @@ mod tests {
     let ping = br#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#;
     assert!(matches!(
       server
-        .handle_message(
-          McpOrigin::Loopback,
-          Some(&first.expect("first session")),
-          ping
-        )
+        .handle_message(Some(&first.expect("first session")), ping)
         .await,
       McpOutcome::UnknownSession
     ));
@@ -11949,9 +11289,7 @@ mod tests {
     let init = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
     let ping = br#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#;
 
-    let McpOutcome::Body { new_session_id, .. } =
-      server.handle_message(McpOrigin::Loopback, None, init).await
-    else {
+    let McpOutcome::Body { new_session_id, .. } = server.handle_message(None, init).await else {
       panic!("initialize must mint a session");
     };
     let agent = new_session_id.expect("session id");
@@ -11959,17 +11297,13 @@ mod tests {
     // Fill the map, keeping the agent's session in active use throughout.
     let mut newest = None;
     for i in 0..(MAX_SESSIONS + 16) {
-      if let McpOutcome::Body { new_session_id, .. } =
-        server.handle_message(McpOrigin::Loopback, None, init).await
-      {
+      if let McpOutcome::Body { new_session_id, .. } = server.handle_message(None, init).await {
         newest = new_session_id;
       }
       if i % 4 == 0 {
         assert!(
           matches!(
-            server
-              .handle_message(McpOrigin::Loopback, Some(&agent), ping)
-              .await,
+            server.handle_message(Some(&agent), ping).await,
             McpOutcome::Body { .. }
           ),
           "the busy session must survive: it is the one being used"
@@ -11983,9 +11317,7 @@ mod tests {
     );
     assert!(
       matches!(
-        server
-          .handle_message(McpOrigin::Loopback, Some(&agent), ping)
-          .await,
+        server.handle_message(Some(&agent), ping).await,
         McpOutcome::Body { .. }
       ),
       "the session in continuous use must outlive the idle ones"
@@ -11998,76 +11330,12 @@ mod tests {
     assert!(
       matches!(
         server
-          .handle_message(
-            McpOrigin::Loopback,
-            Some(&newest.expect("a newest session")),
-            ping
-          )
+          .handle_message(Some(&newest.expect("a newest session")), ping)
           .await,
         McpOutcome::Body { .. }
       ),
       "a freshly minted session must not be the one evicted"
     );
-  }
-
-  #[tokio::test]
-  async fn closing_the_local_listener_keeps_sessions_the_bridge_is_using() {
-    // One engine serves two transports. `stop()` is a statement about the
-    // loopback listener only, the cloud bridge may be mid-conversation, but
-    // it used to clear the shared session map, so turning the local switch off
-    // answered 404 MCP_SESSION_NOT_FOUND to a remote caller that had nothing to
-    // do with the local one. The website re-initializes on a 404 and self-heals;
-    // the official MCP TypeScript SDK throws on any non-ok POST, so a
-    // third-party agent took a hard mid-run error from an unrelated toggle.
-    let server = McpServer::new();
-    server.mark_engine_ready_for_tests();
-
-    let init = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
-    let McpOutcome::Body { new_session_id, .. } =
-      server.handle_message(McpOrigin::Loopback, None, init).await
-    else {
-      panic!("initialize must mint a session");
-    };
-    let session = new_session_id.expect("initialize must return a session id");
-
-    server.mark_running_for_tests();
-    server
-      .stop()
-      .await
-      .expect("stop should succeed once running");
-
-    // The session must still be usable over the bridge. Destructured rather
-    // than matched on the variant alone: `Body` is ALSO what an engine-not-
-    // ready error comes back as, so a bare `matches!` would still pass if
-    // stop() had torn down the engine, pinning only half of what it promises.
-    let ping = br#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#;
-    let McpOutcome::Body { body, .. } = server
-      .handle_message(McpOrigin::Loopback, Some(&session), ping)
-      .await
-    else {
-      panic!("stopping the loopback listener must not invalidate a bridge session");
-    };
-    assert!(
-      body.get("error").is_none(),
-      "stop() must leave the engine able to answer, not just the session id valid: {body}"
-    );
-    assert!(
-      body.get("result").is_some(),
-      "expected a real answer: {body}"
-    );
-
-    // And an id that was never minted is still rejected, so the check above is
-    // not passing merely because session validation stopped happening.
-    assert!(matches!(
-      server
-        .handle_message(
-          McpOrigin::Loopback,
-          Some("00000000-0000-4000-8000-000000000000"),
-          ping
-        )
-        .await,
-      McpOutcome::UnknownSession
-    ));
   }
 
   #[tokio::test]
@@ -12527,18 +11795,12 @@ mod tests {
   }
 
   #[test]
-  fn the_picker_waits_less_over_the_bridge_than_the_relay_does() {
-    assert_eq!(max_pick_timeout_ms(McpOrigin::Loopback), 300_000);
-    assert_eq!(max_pick_timeout_ms(McpOrigin::Bridge), 80_000);
-    assert!(
-      max_pick_timeout_ms(McpOrigin::Bridge) < 90_000,
-      "a wait that outlives the relay's 90 s call budget is a guaranteed failure"
-    );
-    assert!(DEFAULT_PICK_TIMEOUT_MS <= max_pick_timeout_ms(McpOrigin::Bridge));
-    // Extraction pages through rows for up to two minutes on loopback and
-    // is held to the same bridge margin as typing and the picker.
-    assert_eq!(max_extraction_budget_ms(McpOrigin::Loopback), 120_000);
-    assert!(max_extraction_budget_ms(McpOrigin::Bridge) < 90_000);
+  fn the_picker_waits_less_over_mcp_than_the_relay_does() {
+    assert_eq!(MAX_PICK_TIMEOUT_MS, 300_000);
+    assert_eq!(MAX_BRIDGE_PICK_TIMEOUT_MS, 80_000);
+    // A wait that outlives the relay's 90 s call budget is a guaranteed failure.
+    const { assert!(MAX_BRIDGE_PICK_TIMEOUT_MS < 90_000) };
+    const { assert!(DEFAULT_PICK_TIMEOUT_MS <= MAX_BRIDGE_PICK_TIMEOUT_MS) };
   }
 
   #[test]
@@ -12591,8 +11853,8 @@ mod tests {
         .find("vellum_typing_budget(")
         .unwrap_or_else(|| panic!("{handler} must budget Vellum typing"));
       assert!(
-        body.matches("max_typing_seconds(caller.origin)").count() >= 2,
-        "{handler} must budget both engines on the caller's transport"
+        body.matches("MAX_BRIDGE_TYPING_SECONDS").count() >= 2,
+        "{handler} must budget both engines on the MCP budget"
       );
       let focus = body.find("let focus_js").unwrap();
       assert!(
@@ -12673,10 +11935,7 @@ mod tests {
       "params": { "name": "perceive_page", "arguments": { "profile_id": "00000000-0000-0000-0000-000000000000" } }
     })
     .to_string();
-    let McpOutcome::Body { body, .. } = server
-      .handle_message(McpOrigin::Bridge, None, call.as_bytes())
-      .await
-    else {
+    let McpOutcome::Body { body, .. } = server.handle_message(None, call.as_bytes()).await else {
       panic!("expected an answer");
     };
     let message = body["error"]["message"].as_str().unwrap_or_default();
@@ -12737,7 +11996,7 @@ mod tests {
       async move {
         let bytes = body.to_string();
         match server
-          .handle_message(McpOrigin::Bridge, session.as_deref(), bytes.as_bytes())
+          .handle_message(session.as_deref(), bytes.as_bytes())
           .await
         {
           McpOutcome::Body {

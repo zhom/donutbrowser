@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
@@ -15,6 +16,124 @@ impl Default for TableSortingSettings {
       direction: "asc".to_string(),
     }
   }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct TableSort {
+  pub id: String,
+  pub desc: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TableDensity {
+  #[default]
+  Compact,
+  Comfortable,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(default)]
+pub struct TablePreferences {
+  pub visibility: BTreeMap<String, bool>,
+  pub sizing: BTreeMap<String, f64>,
+  pub sorting: Vec<TableSort>,
+  pub density: TableDensity,
+}
+
+impl Default for TablePreferences {
+  fn default() -> Self {
+    Self {
+      visibility: BTreeMap::new(),
+      sizing: BTreeMap::new(),
+      sorting: vec![TableSort {
+        id: "name".into(),
+        desc: false,
+      }],
+      density: TableDensity::Compact,
+    }
+  }
+}
+
+fn table_preferences_valid(table_id: &str, preferences: &TablePreferences) -> bool {
+  let valid_id = |id: &str| {
+    !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+  };
+  let mut sort_ids = HashSet::new();
+  matches!(
+    table_id,
+    "profiles" | "proxies" | "vpns" | "extensions" | "extensionGroups" | "groups"
+  ) && preferences.visibility.len() <= 64
+    && preferences.sizing.len() <= 64
+    && preferences.sorting.len() <= 16
+    && preferences.visibility.keys().all(|id| valid_id(id))
+    && preferences
+      .sizing
+      .iter()
+      .all(|(id, width)| valid_id(id) && width.is_finite() && (28.0..=1600.0).contains(width))
+    && preferences
+      .sorting
+      .iter()
+      .all(|sort| valid_id(&sort.id) && sort_ids.insert(&sort.id))
+}
+
+#[tauri::command]
+pub fn get_table_preferences(table_id: String) -> Result<TablePreferences, String> {
+  let default = TablePreferences::default();
+  if !table_preferences_valid(&table_id, &default) {
+    return Err(serde_json::json!({"code": "TABLE_PREFERENCES_INVALID"}).to_string());
+  }
+  let manager = SettingsManager::instance();
+  let path = manager
+    .get_settings_dir()
+    .join(format!("table_{table_id}.json"));
+  let load = || -> Result<TablePreferences, Box<dyn std::error::Error>> {
+    if path.exists() {
+      let preferences = serde_json::from_slice::<TablePreferences>(&fs::read(path)?)?;
+      if !table_preferences_valid(&table_id, &preferences) {
+        return Err("Invalid saved table preferences".into());
+      }
+      return Ok(preferences);
+    }
+    let mut preferences = default;
+    if table_id == "profiles" {
+      let legacy = manager.load_table_sorting()?;
+      preferences.sorting = vec![TableSort {
+        id: legacy.column,
+        desc: legacy.direction == "desc",
+      }];
+    }
+    Ok(preferences)
+  };
+  load().map_err(|error| {
+    log::warn!("Cannot load table preferences: {error}");
+    serde_json::json!({"code": "TABLE_PREFERENCES_LOAD_FAILED"}).to_string()
+  })
+}
+
+#[tauri::command]
+pub fn save_table_preferences(
+  table_id: String,
+  preferences: TablePreferences,
+) -> Result<(), String> {
+  if !table_preferences_valid(&table_id, &preferences) {
+    return Err(serde_json::json!({"code": "TABLE_PREFERENCES_INVALID"}).to_string());
+  }
+  static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+  let persist = || -> Result<(), Box<dyn std::error::Error>> {
+    let _guard = WRITE_LOCK
+      .lock()
+      .map_err(|_| "Table preferences lock failed")?;
+    let directory = SettingsManager::instance().get_settings_dir();
+    create_dir_all(&directory)?;
+    let json = serde_json::to_vec_pretty(&preferences)?;
+    write_whole(&directory.join(format!("table_{table_id}.json")), &json)?;
+    Ok(())
+  };
+  persist().map_err(|error| {
+    log::warn!("Cannot save table preferences: {error}");
+    serde_json::json!({"code": "TABLE_PREFERENCES_SAVE_FAILED"}).to_string()
+  })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -37,12 +156,6 @@ pub struct AppSettings {
   pub first_launch_timestamp: Option<u64>, // Unix epoch seconds when app was first launched
   #[serde(default)]
   pub commercial_trial_acknowledged: bool, // Has user dismissed the trial expiration modal
-  #[serde(default)]
-  pub mcp_enabled: bool, // Enable MCP (Model Context Protocol) server
-  #[serde(default)]
-  pub mcp_port: Option<u16>, // Port for MCP server (default 51080)
-  #[serde(default)]
-  pub mcp_token: Option<String>, // Displayed token for user to copy (not persisted, loaded from encrypted file)
   /// Let Donut cloud drive this installation's MCP tools over an outbound
   /// bridge, so an agent on the website can control this browser.
   ///
@@ -55,7 +168,7 @@ pub struct AppSettings {
   /// The durable `dmk_` credential agents present to the remote MCP endpoint.
   ///
   /// Plaintext, kept in an encrypted file with the same posture as
-  /// `mcp_token`: loaded into the struct for a frontend settings read (the fx
+  /// `api_token`: loaded into the struct for a frontend settings read (the fx
   /// client cannot take the credential from its config file, so the page
   /// offers the export line), and stripped by `save_settings` so the settings
   /// JSON never carries it. Absent from the wire when there is none, so a
@@ -111,10 +224,6 @@ pub struct AppSettings {
   /// A change from free to paid is what earns the paid-plan welcome.
   #[serde(default)]
   pub cloud_plan_memory: std::collections::HashMap<String, String>,
-  /// Cloud user ids that have been offered the move from local MCP to remote
-  /// MCP, so the move dialog opens by itself at most once per account.
-  #[serde(default)]
-  pub mcp_migration_offered_for: Vec<String>,
   /// Refuse every launch that would reach the internet without a proxy or
   /// VPN: a profile with no route, and one whose proxy or VPN is gone.
   #[serde(default)]
@@ -180,9 +289,6 @@ impl Default for AppSettings {
       sync_server_url: None,
       first_launch_timestamp: None,
       commercial_trial_acknowledged: false,
-      mcp_enabled: false,
-      mcp_port: None,
-      mcp_token: None,
       mcp_remote_enabled: false,
       mcp_remote_key: None,
       mcp_remote_key_id: None,
@@ -199,7 +305,6 @@ impl Default for AppSettings {
       tips_next_auto_show_at: None,
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
-      mcp_migration_offered_for: Vec::new(),
       require_route_for_launch: false,
       trash_retention_days: DEFAULT_TRASH_RETENTION_DAYS,
       record_traffic_domains: true,
@@ -377,10 +482,6 @@ impl SettingsManager {
     self.get_settings_dir().join("api_token.dat")
   }
 
-  fn mcp_token_file(&self) -> PathBuf {
-    self.get_settings_dir().join("mcp_token.dat")
-  }
-
   fn sync_token_file(&self) -> PathBuf {
     self.get_settings_dir().join("sync_token.dat")
   }
@@ -420,37 +521,6 @@ impl SettingsManager {
     Self::remove_secret_file(&self.api_token_file())
   }
 
-  pub async fn generate_mcp_token(
-    &self,
-    app_handle: &tauri::AppHandle,
-  ) -> Result<String, Box<dyn std::error::Error>> {
-    let token = Self::random_token();
-    self.store_mcp_token(app_handle, &token).await?;
-    Ok(token)
-  }
-
-  pub async fn store_mcp_token(
-    &self,
-    _app_handle: &tauri::AppHandle,
-    token: &str,
-  ) -> Result<(), Box<dyn std::error::Error>> {
-    Self::encrypt_to_file(&self.mcp_token_file(), b"DBMCP", token)
-  }
-
-  pub async fn get_mcp_token(
-    &self,
-    _app_handle: &tauri::AppHandle,
-  ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    Self::decrypt_from_file(&self.mcp_token_file(), b"DBMCP")
-  }
-
-  pub async fn remove_mcp_token(
-    &self,
-    _app_handle: &tauri::AppHandle,
-  ) -> Result<(), Box<dyn std::error::Error>> {
-    Self::remove_secret_file(&self.mcp_token_file())
-  }
-
   pub async fn store_sync_token(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -479,7 +549,7 @@ impl SettingsManager {
   ///
   /// The plaintext is deliberately NOT part of the settings JSON:
   /// `save_settings` strips it, and `get_app_settings` is the one reader that
-  /// loads it back for the frontend, the way the local display tokens are.
+  /// loads it back for the frontend, the way the API token is.
   pub fn store_mcp_remote_key(
     &self,
     key: &str,
@@ -550,12 +620,7 @@ pub async fn get_app_settings(app_handle: tauri::AppHandle) -> Result<AppSetting
     .await
     .map_err(|e| format!("Failed to load API token: {e}"))?;
 
-  settings.mcp_token = manager
-    .get_mcp_token(&app_handle)
-    .await
-    .map_err(|e| format!("Failed to load MCP token: {e}"))?;
-
-  // Same posture as the local tokens: shown so the fx export line can be
+  // Same posture as the API token: shown so the fx export line can be
   // copied, never persisted (see `SettingsManager::save_settings`).
   settings.mcp_remote_key = manager
     .get_mcp_remote_key()
@@ -609,53 +674,6 @@ pub async fn save_app_settings(
     settings.api_token = None;
   }
 
-  // Handle MCP token
-  if settings.mcp_enabled {
-    if let Some(ref token) = settings.mcp_token {
-      manager
-        .store_mcp_token(&app_handle, token)
-        .await
-        .map_err(|e| format!("Failed to store MCP token: {e}"))?;
-    } else {
-      // Check if a token already exists on disk before generating a new one
-      let existing = manager.get_mcp_token(&app_handle).await.ok().flatten();
-      if let Some(t) = existing {
-        settings.mcp_token = Some(t);
-      } else {
-        let token = manager
-          .generate_mcp_token(&app_handle)
-          .await
-          .map_err(|e| format!("Failed to generate MCP token: {e}"))?;
-        settings.mcp_token = Some(token);
-        // A running local server now answers on a URL the installed clients
-        // do not know, so they are rewritten. With the server off there is no
-        // URL to write yet; `McpServer::start` does this when it comes up.
-        if crate::mcp_server::McpServer::instance()
-          .get_port()
-          .is_some()
-        {
-          let failed =
-            crate::reinstall_mcp_agents(&app_handle, crate::mcp_integrations::McpEndpoint::Local)
-              .await;
-          if !failed.is_empty() {
-            log::warn!(
-              "[settings] Could not refresh the clients pointing at the local server: {}",
-              failed.join(", ")
-            );
-          }
-        }
-      }
-    }
-  }
-
-  if !settings.mcp_enabled {
-    manager
-      .remove_mcp_token(&app_handle)
-      .await
-      .map_err(|e| format!("Failed to remove MCP token: {e}"))?;
-    settings.mcp_token = None;
-  }
-
   // Preserve the fields the frontend does not own. Read directly from the
   // file to avoid load_settings' save-on-load behavior.
   //
@@ -674,7 +692,6 @@ pub async fn save_app_settings(
       settings.window_resize_warning_dismissed = current.window_resize_warning_dismissed;
       settings.mcp_remote_enabled = current.mcp_remote_enabled;
       settings.mcp_remote_key_id = current.mcp_remote_key_id;
-      settings.mcp_migration_offered_for = current.mcp_migration_offered_for;
     }
   } else {
     settings.mcp_remote_enabled = false;
@@ -683,7 +700,6 @@ pub async fn save_app_settings(
 
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
-  persist_settings.mcp_token = None;
 
   log::info!(
     "[settings] Saving settings: theme={}, custom_theme_keys={}",
@@ -1385,9 +1401,6 @@ mod tests {
       sync_server_url: None,
       first_launch_timestamp: None,
       commercial_trial_acknowledged: false,
-      mcp_enabled: false,
-      mcp_port: None,
-      mcp_token: None,
       mcp_remote_enabled: false,
       mcp_remote_key: None,
       mcp_remote_key_id: None,
@@ -1404,7 +1417,6 @@ mod tests {
       tips_next_auto_show_at: None,
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
-      mcp_migration_offered_for: Vec::new(),
       require_route_for_launch: true,
       trash_retention_days: 7,
       record_traffic_domains: false,

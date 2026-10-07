@@ -19,8 +19,8 @@ rename-desktop-file: Donut.desktop
 rename-icon: donutbrowser
 
 finish-args:
-  # Proxies, VPNs, sync and Wayfern downloads. The local API, the MCP server and
-  # the per-profile proxy workers listen on loopback ports.
+  # Proxies, VPNs, sync and Wayfern downloads. The local API and the per-profile
+  # proxy workers listen on loopback ports.
   - --share=network
   # X11 shared memory, for the app and for Wayfern under XWayland.
   - --share=ipc

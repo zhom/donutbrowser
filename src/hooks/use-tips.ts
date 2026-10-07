@@ -41,7 +41,6 @@ export interface TipUsageSource {
 /** The settings fields the relevance checks read. */
 interface UsageSettings {
   api_enabled?: boolean;
-  mcp_enabled?: boolean;
   mcp_remote_enabled?: boolean;
   fingerprint_gate_disabled?: boolean;
 }
@@ -126,7 +125,6 @@ async function loadFeatureUsage(
     cookieBotEnrolled: source.cookieBotEnrolled,
     syncServerConfigured: source.syncServerConfigured,
     apiEnabled: settings?.api_enabled,
-    mcpEnabled: settings?.mcp_enabled,
     remoteControlEnabled: settings?.mcp_remote_enabled,
     fingerprintGateChanged: settings?.fingerprint_gate_disabled,
     proxyChecked,
@@ -158,11 +156,6 @@ interface UseTipsOptions {
    * first-run session, terms accepted, nothing else blocking.
    */
   ready: boolean;
-  /**
-   * Another launch dialog has this launch (the remote MCP move), or has not
-   * decided yet. The automatic tip waits, and skips the launch it loses.
-   */
-  autoTipHeld?: boolean;
   /** Read when the automatic tip is chosen, to skip features already in use. */
   usage: TipUsageSource;
 }
@@ -177,7 +170,6 @@ export function useTips({
   cloudUser,
   loggedInAt,
   ready,
-  autoTipHeld = false,
   usage,
 }: UseTipsOptions) {
   const [state, setState] = useState<TipsState | null>(null);
@@ -278,7 +270,7 @@ export function useTips({
   const autoHandledRef = useRef(false);
   useEffect(() => {
     if (!ready || !usage.loaded || !state || autoHandledRef.current) return;
-    if (autoTipHeld || !state.auto_due || dialog.open) return;
+    if (!state.auto_due || dialog.open) return;
     if (paidWelcome && paidWelcome.status !== "done") return;
     const unseen = tips.filter((tip) => !state.seen.includes(tip.id));
     if (unseen.length === 0) return;
@@ -303,7 +295,6 @@ export function useTips({
     };
   }, [
     ready,
-    autoTipHeld,
     usage.loaded,
     state,
     dialog.open,

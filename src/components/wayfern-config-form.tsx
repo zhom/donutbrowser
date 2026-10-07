@@ -53,7 +53,7 @@ function SessionRestoreOption({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+    <div className="space-y-3 rounded-lg bg-foreground/4 p-4">
       <div className="flex items-center gap-x-2">
         <Checkbox
           id="restore-session"
@@ -484,7 +484,7 @@ export function WayfernConfigForm({
       </div>
 
       {/* Randomize Fingerprint Option */}
-      <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+      <div className="space-y-3 rounded-lg bg-foreground/4 p-4">
         <div className="flex items-center gap-x-2">
           <Checkbox
             id="randomize-fingerprint"
@@ -1598,7 +1598,7 @@ export function WayfernConfigForm({
             </div>
 
             {/* Randomize Fingerprint Option */}
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+            <div className="space-y-3 rounded-lg bg-foreground/4 p-4">
               <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"

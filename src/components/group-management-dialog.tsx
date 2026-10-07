@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  flexRender,
-  type RowSelectionState,
-  type SortingState,
-} from "@tanstack/react-table";
+import { type RowSelectionState } from "@tanstack/react-table";
 import {
   type LegacyColumnDef as ColumnDef,
   getCoreRowModel,
@@ -18,8 +14,6 @@ import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import {
   LuBookmark,
-  LuChevronDown,
-  LuChevronUp,
   LuFolder,
   LuPencil,
   LuRefreshCw,
@@ -35,7 +29,13 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { DeleteGroupDialog } from "@/components/delete-group-dialog";
 import { EditGroupDialog } from "@/components/edit-group-dialog";
 import { GroupBookmarksDialog } from "@/components/group-bookmarks-dialog";
+import {
+  configureEntityColumns,
+  ManagedDataTable,
+  useEntityTableTools,
+} from "@/components/managed-data-table";
 import { ProfileUsageButton } from "@/components/profile-usage-button";
+import { SortableColumnHeader } from "@/components/table-controls";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,15 +47,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -64,7 +55,6 @@ import {
 import { useProfileReferences } from "@/hooks/use-profile-references";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import { cn } from "@/lib/utils";
 import type { GroupWithCount, ProfileGroup } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -160,9 +150,6 @@ export function GroupManagementDialog({
   );
 
   // Table state
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "name", desc: false },
-  ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   // Listen for group sync status events
@@ -335,20 +322,10 @@ export function GroupManagementDialog({
         enableSorting: true,
         sortingFn: "alphanumeric",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              column.toggleSorting(column.getIsSorted() === "asc");
-            }}
-            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
-          >
-            {t("common.labels.name")}
-            {column.getIsSorted() === "asc" ? (
-              <LuChevronUp className="ml-2 size-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <LuChevronDown className="ml-2 size-4" />
-            ) : null}
-          </Button>
+          <SortableColumnHeader
+            column={column}
+            label={t("common.labels.name")}
+          />
         ),
         cell: ({ row }) => {
           const group = row.original;
@@ -516,11 +493,19 @@ export function GroupManagementDialog({
     ],
   );
 
+  const tableTools = useEntityTableTools("groups", groups, setRowSelection);
   const table = useReactTable({
-    data: groups,
-    columns,
-    state: { sorting, rowSelection },
-    onSortingChange: setSorting,
+    data: tableTools.filters.rows,
+    columns: useMemo(() => configureEntityColumns(columns), [columns]),
+    state: {
+      sorting: tableTools.view.preferences.sorting,
+      rowSelection,
+      columnVisibility: tableTools.visibility,
+      columnSizing: tableTools.view.preferences.sizing,
+    },
+    onSortingChange: tableTools.view.setSorting,
+    onColumnSizingChange: tableTools.view.setSizing,
+    columnResizeMode: "onChange",
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -653,89 +638,12 @@ export function GroupManagementDialog({
             )}
 
             {/* Groups list */}
-            {isLoading ? (
-              <div className="mt-4 text-sm text-muted-foreground">
-                {t("common.buttons.loading")}
-              </div>
-            ) : groups.length === 0 ? (
-              <div className="mt-4 text-sm text-muted-foreground">
-                {t("groups.noGroupsDescription")}
-              </div>
-            ) : (
-              <FadingScrollArea
-                className={cn(
-                  "mt-4 min-h-0 flex-1",
-                  selectedGroupsForBulk.length > 0 && "pb-16",
-                )}
-                style={
-                  {
-                    "--scroll-fade-top-offset": "32px",
-                  } as React.CSSProperties
-                }
-              >
-                <Table
-                  className="w-full table-fixed"
-                  containerClassName="overflow-visible"
-                >
-                  <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-0">
-                    {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id} className="border-0!">
-                        {headerGroup.headers.map((header) => (
-                          <TableHead
-                            key={header.id}
-                            style={{
-                              width:
-                                header.column.id === "name"
-                                  ? undefined
-                                  : `${header.column.getSize()}px`,
-                            }}
-                            className={cn(
-                              header.column.id === "name" && "max-w-0",
-                            )}
-                          >
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext(),
-                                )}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        data-state={row.getIsSelected() && "selected"}
-                        className="border-0! hover:bg-muted"
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell
-                            key={cell.id}
-                            style={{
-                              width:
-                                cell.column.id === "name"
-                                  ? undefined
-                                  : `${cell.column.getSize()}px`,
-                            }}
-                            className={cn(
-                              cell.column.id === "name" && "max-w-0",
-                            )}
-                          >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </FadingScrollArea>
-            )}
+            <ManagedDataTable
+              table={table}
+              tools={tableTools}
+              loading={isLoading}
+              emptyText={t("groups.noGroupsDescription")}
+            />
           </div>
 
           {!subPage && (
@@ -756,16 +664,14 @@ export function GroupManagementDialog({
             onClick={() => {
               void handleBulkToggleSync();
             }}
-            size="icon"
           >
             <LuRefreshCw />
           </DataTableActionBarAction>
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}
             onClick={() => setBulkDeleteOpen(true)}
-            size="icon"
             variant="destructive"
-            className="border-destructive bg-destructive hover:bg-destructive"
+            className="bg-destructive/12 text-destructive-text hover:bg-destructive/20"
           >
             <LuTrash2 />
           </DataTableActionBarAction>

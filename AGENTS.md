@@ -32,8 +32,10 @@ donutbrowser/
 ├── src/                              # Next.js frontend
 │   ├── app/                          # App router (page.tsx, layout.tsx)
 │   ├── components/                   # 50+ React components (dialogs, tables, UI)
+│   │   ├── table-controls.tsx         # Shared filters, sort rules, column controls, and row selection
+│   │   ├── managed-data-table.tsx     # Shared management table and keyboard navigation
 │   │   └── tips/                     # Feature tips: SVG scene primitives and one looping scene per tip
-│   ├── hooks/                        # Event-driven React hooks
+│   ├── hooks/                        # Event-driven React hooks, table preferences, filtering, and keyboard controls
 │   ├── i18n/locales/                 # Translations (de, en, es, fr, ja, ko, pt, ru, tr, vi, zh)
 │   ├── generated/                    # Build-generated third-party license inventory
 │   ├── lib/                          # Utilities (themes, toast, browser-utils)
@@ -49,10 +51,9 @@ donutbrowser/
 │   │   ├── proxy_server.rs          # Local proxy binary (donut-proxy)
 │   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
-│   │   ├── mcp_server.rs            # MCP protocol server (tool engine + local loopback listener)
+│   │   ├── mcp_server.rs            # MCP tool engine, served over the remote bridge
 │   │   ├── mcp_remote.rs            # Remote MCP bridge: outbound websocket to Donut cloud (Enterprise remote control)
-│   │   ├── mcp_integrations.rs      # 20-client MCP installer: local URL or remote endpoint with bearer, format-preserving JSONC/TOML edits
-│   │   ├── mcp_migration.rs         # Local-to-remote MCP move: once-per-account offer, local server switch-off, removal notice
+│   │   ├── mcp_integrations.rs      # 20-client MCP installer: remote endpoint with bearer, format-preserving JSONC/TOML edits
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── agent_console.rs         # The person's side of connected MCP agents: activity, questions, notes, take-over, pause
 │   │   ├── recipes.rs               # Thin client for cloud recipes; storage and replay stay in the cloud
@@ -301,7 +302,7 @@ and are mapped in `scene-for.tsx`; the dialog is
   not in use (`pickAutoTip`). Each tip's `inUse` reads a `FeatureUsage`
   snapshot: profile fields, groups, extension groups, team, Cookie Bot
   enrolments and the sync server come from data `page.tsx` has loaded; API,
-  MCP, remote control, fingerprint gate, proxy check history, default
+  remote control, fingerprint gate, proxy check history, default
   browser, trash and agent runs are read by `use-tips.ts` through existing
   commands, and only for the tips still in the running. An unknown fact
   never hides a tip. The command palette and import tips have no signal.
@@ -366,6 +367,8 @@ The command palette (Mod+K) is built on the shadcn `Command` primitive with a to
   - `chart-1` through `chart-5`: data visualization
 - Use these as Tailwind classes: `bg-success`, `text-destructive`, `border-warning`, etc.
 - For lighter variants use opacity: `bg-destructive/10`, `bg-success/10`, `border-warning/50`
+- Quiet, borderless fills (soft buttons, fields, chips, hover and selected rows) are tints of the theme's own `foreground` (`bg-foreground/5`) or `primary` (`bg-primary/10`), never `muted`, `accent` or `secondary`: several custom themes make those loud (Tokyo Night's accent is purple, its secondary cyan). Reach for the `soft`/`subtle` Button, `soft` Badge, `soft`/`bare` Input and `soft` SelectTrigger variants, or wrap a form section in `SoftFields` (`ui/field-variant.tsx`).
+- Data tables use `.data-table` (globals.css) with `DATA_TABLE_CLASSES` and `SortableColumnHeader` from `table-controls.tsx`: no row rules, one tinted header strip, rounded row highlight. Secondary row controls take `row-reveal` to appear on row hover or focus.
 
 ## App data directory naming
 

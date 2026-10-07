@@ -10,7 +10,7 @@
     "prebuild": "pnpm licenses:generate",
     "build": "next build",
     "start": "next start",
-    "test": "pnpm test:themes && pnpm test:tips && pnpm test:window-decorations && pnpm test:cookie-bot-limits && pnpm test:cookie-bot-outcomes && pnpm test:recipes && pnpm test:agent-console && pnpm test:backend-errors && pnpm test:i18n-parity && pnpm test:proxy-string && pnpm test:proxy-type && pnpm test:proxy-first-hop-claims && pnpm test:profile-search && pnpm test:licenses && pnpm test:xray-packaging && pnpm test:rust:unit && pnpm test:sync-e2e",
+    "test": "pnpm test:themes && pnpm test:tips && pnpm test:window-decorations && pnpm test:cookie-bot-limits && pnpm test:cookie-bot-outcomes && pnpm test:recipes && pnpm test:agent-console && pnpm test:backend-errors && pnpm test:i18n-parity && pnpm test:proxy-string && pnpm test:proxy-type && pnpm test:proxy-first-hop-claims && pnpm test:profile-search && pnpm test:table-tools && pnpm test:licenses && pnpm test:xray-packaging && pnpm test:rust:unit && pnpm test:sync-e2e",
     "test:themes": "node --test src/lib/themes.test.mjs",
     "test:tips": "node --test src/lib/tips.test.mjs",
     "test:window-decorations": "node --test src/lib/window-decorations.test.mjs",
@@ -56,7 +56,8 @@
     "copy-proxy-binary": "node src-tauri/copy-proxy-binary.mjs",
     "copy-proxy-binary:release": "node src-tauri/copy-proxy-binary.mjs --release",
     "pretauri:dev": "pnpm copy-proxy-binary",
-    "precargo": "pnpm copy-proxy-binary"
+    "precargo": "pnpm copy-proxy-binary",
+    "test:table-tools": "node --test src/lib/table-tools.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.11",

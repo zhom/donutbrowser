@@ -1,13 +1,11 @@
 //! MCP client installer: writes the Donut Browser server entry into the global
 //! config of twenty AI clients and reads it back for the Integrations page.
 //!
-//! Two endpoints exist. The local loopback server carries its token in the
-//! URL; the remote endpoint under `CLOUD_API_URL` needs a bearer credential
-//! and is only offered to accounts with remote control. `McpTarget` holds
-//! either, and `server_entry` decides per client where the credential goes:
-//! most clients
-//! take a `headers` map, Codex calls it `http_headers`, and fx refuses a
-//! literal header and reads the token from `DONUT_MCP_TOKEN` instead.
+//! The endpoint lives under `CLOUD_API_URL`, needs a bearer credential and is
+//! only offered to accounts with remote control. `server_entry` decides per
+//! client where the credential goes: most clients take a `headers` map, Codex
+//! calls it `http_headers`, and fx refuses a literal header and reads the
+//! token from `DONUT_MCP_TOKEN` instead.
 //!
 //! Every write edits the user's file in place. JSON goes through a concrete
 //! syntax tree so comments, key order, indentation and trailing commas survive
@@ -40,51 +38,24 @@ pub fn remote_mcp_url() -> String {
   format!("{}{REMOTE_MCP_PATH}", crate::cloud_auth::CLOUD_API_URL)
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum McpEndpoint {
-  Remote,
-  Local,
-}
-
-impl McpEndpoint {
-  pub fn parse(target: &str) -> Option<Self> {
-    match target {
-      "remote" => Some(Self::Remote),
-      "local" => Some(Self::Local),
-      _ => None,
-    }
-  }
-}
-
-/// What gets written into a client: the URL and, for the remote endpoint,
-/// the bearer credential. The local server authenticates through the token
-/// in its URL, so it carries no bearer.
+/// What gets written into a client: the endpoint URL and its bearer
+/// credential.
 #[derive(Debug, Clone)]
 pub struct McpTarget {
   pub url: String,
-  pub bearer: Option<String>,
+  pub bearer: String,
 }
 
 impl McpTarget {
   pub fn remote(key: String) -> Self {
     Self {
       url: remote_mcp_url(),
-      bearer: Some(key),
+      bearer: key,
     }
   }
 
-  // TODO(local-mcp-removal): local MCP is removed; nothing in production builds
-  // a local target any more (only tests still exercise the shape). Delete this
-  // together with the loopback tombstone and the `Local` endpoint variant once
-  // the deprecation period ends.
-  #[allow(dead_code)]
-  pub fn local(url: String) -> Self {
-    Self { url, bearer: None }
-  }
-
-  fn authorization(&self) -> Option<String> {
-    self.bearer.as_ref().map(|key| format!("Bearer {key}"))
+  pub fn authorization(&self) -> String {
+    format!("Bearer {}", self.bearer)
   }
 }
 
@@ -114,23 +85,16 @@ struct AgentSpec {
   format: ConfigFormat,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AgentStatus {
-  pub connected: bool,
-  pub endpoint: Option<McpEndpoint>,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct McpAgentInfo {
   pub id: String,
   pub display_name: String,
   pub category: AgentCategory,
+  /// True when the client's config has an entry pointing at the endpoint.
   pub connected: bool,
   /// True when the client itself appears to be installed (its config
   /// directory exists), whether or not Donut is configured in it.
   pub detected: bool,
-  /// Which Donut endpoint the client's entry points at, when connected.
-  pub endpoint: Option<McpEndpoint>,
   /// Set for clients that read the bearer from an environment variable
   /// instead of the config file, so the UI can tell the user to export it.
   pub token_env: Option<String>,
@@ -560,9 +524,7 @@ type Entry = Vec<(&'static str, serde_json::Value)>;
 fn server_entry(agent_id: &str, target: &McpTarget) -> Entry {
   use serde_json::json;
   let url = json!(target.url);
-  let headers = target
-    .authorization()
-    .map(|value| json!({ "Authorization": value }));
+  let headers = json!({ "Authorization": target.authorization() });
   let mut entry: Entry = match agent_id {
     "antigravity" | "windsurf" => vec![("serverUrl", url)],
     "cursor" | "kiro-cli" | "grok-build" => vec![("url", url)],
@@ -603,24 +565,9 @@ fn server_entry(agent_id: &str, target: &McpTarget) -> Entry {
     _ => vec![("type", json!("http")), ("url", url)],
   };
   match agent_id {
-    "codex" => {
-      if let Some(headers) = headers {
-        entry.push(("http_headers", headers));
-      }
-    }
-    "fx" => {
-      if target.bearer.is_some() {
-        entry.push(("bearer_token_env", json!(FX_TOKEN_ENV)));
-      }
-    }
-    // Zed and Goose document the header map as part of the shape, so it is
-    // written even when there is nothing to put in it.
-    "zed" | "goose" => entry.push(("headers", headers.unwrap_or_else(|| json!({})))),
-    _ => {
-      if let Some(headers) = headers {
-        entry.push(("headers", headers));
-      }
-    }
+    "codex" => entry.push(("http_headers", headers)),
+    "fx" => entry.push(("bearer_token_env", json!(FX_TOKEN_ENV))),
+    _ => entry.push(("headers", headers)),
   }
   if agent_id == "goose" {
     entry.push(("enabled", json!(true)));
@@ -629,38 +576,24 @@ fn server_entry(agent_id: &str, target: &McpTarget) -> Entry {
   entry
 }
 
-/// Which Donut endpoint a URL points at, if any. The remote URL is matched
-/// exactly (a trailing slash tolerated); the loopback form is any plain-http
-/// `127.0.0.1` or `localhost` origin whose path starts with `/mcp`.
-pub fn endpoint_of_url(url: &str) -> Option<McpEndpoint> {
-  let url = url.trim();
-  if url.trim_end_matches('/') == remote_mcp_url().trim_end_matches('/') {
-    return Some(McpEndpoint::Remote);
-  }
-  let rest = url.strip_prefix("http://")?;
-  let (authority, path) = match rest.find('/') {
-    Some(index) => rest.split_at(index),
-    None => (rest, ""),
-  };
-  let host = authority.split(':').next().unwrap_or("");
-  let loopback = host == "127.0.0.1" || host == "localhost";
-  let mcp_path = path == "/mcp" || path.starts_with("/mcp/");
-  (loopback && mcp_path).then_some(McpEndpoint::Local)
+/// Whether a URL is Donut's endpoint, a trailing slash tolerated.
+pub fn is_remote_url(url: &str) -> bool {
+  url.trim().trim_end_matches('/') == remote_mcp_url().trim_end_matches('/')
 }
 
-fn endpoint_of_entry(value: &serde_json::Value) -> Option<McpEndpoint> {
-  ["url", "uri", "serverUrl"].iter().find_map(|key| {
+fn points_at_remote(value: &serde_json::Value) -> bool {
+  ["url", "uri", "serverUrl"].iter().any(|key| {
     value
       .get(key)
       .and_then(|v| v.as_str())
-      .and_then(endpoint_of_url)
+      .is_some_and(is_remote_url)
   })
 }
 
-/// Ours by name, or ours by URL under any name: what detection counts as
-/// connected is exactly what removal deletes.
+/// Ours by name, or ours by URL under any name, so a renamed entry is removed
+/// along with the one we wrote.
 fn is_donut_entry(name: &str, value: &serde_json::Value) -> bool {
-  name == SERVER_NAME || endpoint_of_entry(value).is_some()
+  name == SERVER_NAME || points_at_remote(value)
 }
 
 fn json_to_cst(value: &serde_json::Value) -> CstInputValue {
@@ -1025,7 +958,7 @@ fn install_in(env: &AgentEnv, agent_id: &str, target: &McpTarget) -> Result<(), 
   if was_empty && !text.ends_with('\n') {
     text.push('\n');
   }
-  write_text(&path, &text, target.bearer.is_some())?;
+  write_text(&path, &text, true)?;
   if agent_id == "fx" {
     restrict_to_owner(&path)?;
   }
@@ -1054,26 +987,25 @@ fn uninstall_in(env: &AgentEnv, agent_id: &str) -> Result<(), String> {
   write_text(&path, &document.to_text()?, false)
 }
 
-/// The endpoint a client's config points at. The entry named `donut-browser`
-/// decides when it is ours; otherwise any entry with a Donut URL counts, so a
-/// renamed entry still reads as connected (and `uninstall_in` removes it).
-fn status_in(env: &AgentEnv, agent_id: &str) -> Option<McpEndpoint> {
-  let spec = spec_for(agent_id)?;
-  let path = config_path(env, agent_id)?;
+/// Whether any entry in a client's config points at the endpoint, so a
+/// renamed entry still reads as connected. An entry under our name that points
+/// anywhere else (an old local server) does not: adding replaces it.
+fn connected_in(env: &AgentEnv, agent_id: &str) -> bool {
+  let Some(spec) = spec_for(agent_id) else {
+    return false;
+  };
+  let Some(path) = config_path(env, agent_id) else {
+    return false;
+  };
   if !path.exists() {
-    return None;
+    return false;
   }
-  let (document, _) = read_document(&path, spec.format).ok()?;
-  let entries = document.entries(spec.config_key);
-  entries
-    .iter()
-    .find(|(name, _)| name == SERVER_NAME)
-    .and_then(|(_, value)| endpoint_of_entry(value))
-    .or_else(|| {
-      entries
-        .iter()
-        .find_map(|(_, value)| endpoint_of_entry(value))
-    })
+  read_document(&path, spec.format).is_ok_and(|(document, _)| {
+    document
+      .entries(spec.config_key)
+      .iter()
+      .any(|(_, value)| points_at_remote(value))
+  })
 }
 
 fn process_env() -> Result<AgentEnv, String> {
@@ -1088,43 +1020,36 @@ pub fn uninstall_generic(agent_id: &str) -> Result<(), String> {
   uninstall_in(&process_env()?, agent_id)
 }
 
-/// Ids of the file-based clients whose entry points at `endpoint`. Claude
-/// Desktop is not included: its bundle is inspected by lib.rs.
-pub fn agents_on_endpoint(endpoint: McpEndpoint) -> Vec<String> {
+/// Ids of the connected file-based clients. Claude Desktop is not included:
+/// its bundle is inspected by lib.rs.
+pub fn connected_agents() -> Vec<String> {
   let Some(env) = AgentEnv::from_process() else {
     return Vec::new();
   };
   AGENT_SPECS
     .iter()
     .filter(|spec| spec.id != "claude-desktop")
-    .filter(|spec| status_in(&env, spec.id) == Some(endpoint))
+    .filter(|spec| connected_in(&env, spec.id))
     .map(|spec| spec.id.to_string())
     .collect()
 }
 
-pub fn list_agents_with_status(overrides: &[(&str, AgentStatus)]) -> Vec<McpAgentInfo> {
+pub fn list_agents_with_status(overrides: &[(&str, bool)]) -> Vec<McpAgentInfo> {
   let env = AgentEnv::from_process();
   AGENT_SPECS
     .iter()
     .map(|spec| {
-      let status = overrides
+      let connected = overrides
         .iter()
         .find(|(id, _)| *id == spec.id)
-        .map(|(_, status)| *status)
-        .unwrap_or_else(|| {
-          let endpoint = env.as_ref().and_then(|env| status_in(env, spec.id));
-          AgentStatus {
-            connected: endpoint.is_some(),
-            endpoint,
-          }
-        });
+        .map(|(_, connected)| *connected)
+        .unwrap_or_else(|| env.as_ref().is_some_and(|env| connected_in(env, spec.id)));
       McpAgentInfo {
         id: spec.id.to_string(),
         display_name: spec.display_name.to_string(),
         category: spec.category,
-        connected: status.connected,
+        connected,
         detected: env.as_ref().is_some_and(|env| detected(env, spec.id)),
-        endpoint: status.endpoint,
         token_env: token_env_for(spec.id),
       }
     })
@@ -1147,7 +1072,6 @@ mod tests {
   use serde_json::json;
 
   const KEY: &str = "dmk_test_credential";
-  const LOCAL_URL: &str = "http://127.0.0.1:51080/mcp/abc123";
 
   fn test_env(root: &Path, platform: Platform) -> AgentEnv {
     AgentEnv {
@@ -1164,10 +1088,6 @@ mod tests {
 
   fn remote() -> McpTarget {
     McpTarget::remote(KEY.to_string())
-  }
-
-  fn local() -> McpTarget {
-    McpTarget::local(LOCAL_URL.to_string())
   }
 
   fn read(path: &Path) -> String {
@@ -1525,11 +1445,7 @@ mod tests {
     for (agent_id, shape) in expected {
       install_in(&env, agent_id, &remote()).unwrap();
       assert_eq!(entry_of(&env, agent_id), shape, "{agent_id}");
-      assert_eq!(
-        status_in(&env, agent_id),
-        Some(McpEndpoint::Remote),
-        "{agent_id}"
-      );
+      assert!(connected_in(&env, agent_id), "{agent_id}");
     }
     let fx_text = read(&config_path(&env, "fx").unwrap());
     assert!(
@@ -1558,7 +1474,7 @@ mod tests {
       "entry must use the file's four-space indent: {text}"
     );
     assert!(text.ends_with("}\n"));
-    assert_eq!(status_in(&env, "zed"), Some(McpEndpoint::Remote));
+    assert!(connected_in(&env, "zed"));
 
     uninstall_in(&env, "zed").unwrap();
     let text = read(&path);
@@ -1566,7 +1482,7 @@ mod tests {
     assert!(text.contains("/* keep me */"));
     assert!(!text.contains("donut-browser"));
     assert!(text.contains("\"other\": { \"command\": \"x\", }"));
-    assert_eq!(status_in(&env, "zed"), None);
+    assert!(!connected_in(&env, "zed"));
   }
 
   #[test]
@@ -1663,7 +1579,7 @@ mod tests {
     let uri = text.find("uri:").unwrap();
     let timeout = text.find("timeout: 300").unwrap();
     assert!(name < uri && uri < timeout, "{text}");
-    assert_eq!(status_in(&env, "goose"), Some(McpEndpoint::Remote));
+    assert!(connected_in(&env, "goose"));
 
     uninstall_in(&env, "goose").unwrap();
     let text = read(&path);
@@ -1690,7 +1606,7 @@ mod tests {
       let error = uninstall_in(&env, agent_id).unwrap_err();
       assert!(error.contains("left untouched"), "{agent_id}: {error}");
       assert_eq!(read(&path), broken, "{agent_id} was rewritten on remove");
-      assert_eq!(status_in(&env, agent_id), None);
+      assert!(!connected_in(&env, agent_id));
     }
   }
 
@@ -1714,7 +1630,7 @@ mod tests {
     let path = config_path(&env, "cursor").unwrap();
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(&path, "").unwrap();
-    install_in(&env, "cursor", &local()).unwrap();
+    install_in(&env, "cursor", &remote()).unwrap();
     let text = read(&path);
     assert!(
       text.starts_with("{\n  \"mcpServers\": {\n    \"donut-browser\": {"),
@@ -1724,14 +1640,14 @@ mod tests {
 
     assert!(!config_path(&env, "vscode").unwrap().exists());
     install_in(&env, "vscode", &remote()).unwrap();
-    assert_eq!(status_in(&env, "vscode"), Some(McpEndpoint::Remote));
+    assert!(connected_in(&env, "vscode"));
     let text = read(&config_path(&env, "vscode").unwrap());
     assert!(text.ends_with("\n"));
     assert!(fs::read_to_string(config_path(&env, "codex").unwrap()).is_err());
     install_in(&env, "codex", &remote()).unwrap();
-    assert_eq!(status_in(&env, "codex"), Some(McpEndpoint::Remote));
+    assert!(connected_in(&env, "codex"));
     install_in(&env, "goose", &remote()).unwrap();
-    assert_eq!(status_in(&env, "goose"), Some(McpEndpoint::Remote));
+    assert!(connected_in(&env, "goose"));
   }
 
   #[test]
@@ -1745,18 +1661,13 @@ mod tests {
       "{\"mcpServers\": {\"donut-browser\": {\"url\": \"http://127.0.0.1:1/mcp/old\", \"disabled\": true, \"env\": {\"X\": \"1\"}}}}",
     )
     .unwrap();
-    assert_eq!(status_in(&env, "cursor"), Some(McpEndpoint::Local));
+    assert!(!connected_in(&env, "cursor"));
     install_in(&env, "cursor", &remote()).unwrap();
     let entry = entry_of(&env, "cursor");
     assert!(entry.get("disabled").is_none());
     assert!(entry.get("env").is_none());
     assert_eq!(entry["url"], json!(remote_mcp_url()));
-    assert_eq!(status_in(&env, "cursor"), Some(McpEndpoint::Remote));
-
-    install_in(&env, "cursor", &local()).unwrap();
-    let entry = entry_of(&env, "cursor");
-    assert!(entry.get("headers").is_none());
-    assert_eq!(status_in(&env, "cursor"), Some(McpEndpoint::Local));
+    assert!(connected_in(&env, "cursor"));
   }
 
   #[test]
@@ -1773,9 +1684,9 @@ mod tests {
       ),
     )
     .unwrap();
-    assert_eq!(status_in(&env, "cursor"), Some(McpEndpoint::Remote));
+    assert!(connected_in(&env, "cursor"));
     uninstall_in(&env, "cursor").unwrap();
-    assert_eq!(status_in(&env, "cursor"), None);
+    assert!(!connected_in(&env, "cursor"));
     let text = read(&path);
     assert!(text.contains("\"github\""));
     assert!(!text.contains("\"donut\""));
@@ -1790,38 +1701,15 @@ mod tests {
   }
 
   #[test]
-  fn endpoint_of_url_recognises_both_endpoints_only() {
-    assert_eq!(
-      endpoint_of_url(&remote_mcp_url()),
-      Some(McpEndpoint::Remote)
-    );
-    assert_eq!(
-      endpoint_of_url(&format!("{}/", remote_mcp_url())),
-      Some(McpEndpoint::Remote)
-    );
-    assert_eq!(
-      endpoint_of_url("http://127.0.0.1:51080/mcp/tok"),
-      Some(McpEndpoint::Local)
-    );
-    assert_eq!(
-      endpoint_of_url("http://localhost:51080/mcp/tok"),
-      Some(McpEndpoint::Local)
-    );
-    assert_eq!(
-      endpoint_of_url("http://localhost:51080/mcp"),
-      Some(McpEndpoint::Local)
-    );
-    assert_eq!(endpoint_of_url("http://127.0.0.1:51080/mcpx"), None);
-    assert_eq!(endpoint_of_url("http://127.0.0.1:51080/api"), None);
-    assert_eq!(endpoint_of_url("https://api.githubcopilot.com/mcp/"), None);
-    assert_eq!(endpoint_of_url("http://evil.example/mcp/tok"), None);
-    assert_eq!(
-      endpoint_of_url("https://api.donutbrowser.com/api/mcp-bridge"),
-      None
-    );
-    assert_eq!(McpEndpoint::parse("remote"), Some(McpEndpoint::Remote));
-    assert_eq!(McpEndpoint::parse("local"), Some(McpEndpoint::Local));
-    assert_eq!(McpEndpoint::parse("cloud"), None);
+  fn only_the_remote_url_is_ours() {
+    assert!(is_remote_url(&remote_mcp_url()));
+    assert!(is_remote_url(&format!("{}/", remote_mcp_url())));
+    assert!(!is_remote_url("http://127.0.0.1:51080/mcp/tok"));
+    assert!(!is_remote_url("http://localhost:51080/mcp"));
+    assert!(!is_remote_url("https://api.githubcopilot.com/mcp/"));
+    assert!(!is_remote_url(
+      "https://api.donutbrowser.com/api/mcp-bridge"
+    ));
   }
 
   #[test]
@@ -1867,25 +1755,6 @@ mod tests {
     assert_eq!(
       fs::metadata(&path).unwrap().permissions().mode() & 0o777,
       0o600
-    );
-  }
-
-  #[cfg(unix)]
-  #[test]
-  fn a_first_time_local_config_keeps_the_default_mode() {
-    use std::os::unix::fs::PermissionsExt;
-    let dir = tempfile::tempdir().unwrap();
-    let env = test_env(dir.path(), Platform::Linux);
-    // Whatever this process's umask makes of an ordinary new file: the local
-    // entry carries no secret, so it is not tightened beyond that.
-    let probe = dir.path().join("probe");
-    fs::write(&probe, "").unwrap();
-    let default_mode = fs::metadata(&probe).unwrap().permissions().mode() & 0o777;
-    install_in(&env, "cursor", &local()).unwrap();
-    let path = config_path(&env, "cursor").unwrap();
-    assert_eq!(
-      fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-      default_mode
     );
   }
 

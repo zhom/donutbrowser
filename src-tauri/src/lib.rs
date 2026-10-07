@@ -121,7 +121,6 @@ mod cookie_manager;
 mod cookie_paste;
 pub mod events;
 mod mcp_integrations;
-mod mcp_migration;
 mod mcp_remote;
 mod mcp_server;
 mod tag_manager;
@@ -172,10 +171,10 @@ use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
   complete_onboarding, dismiss_window_resize_warning, get_app_settings, get_onboarding_completed,
-  get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
-  get_tips_state, get_window_resize_warning_dismissed, mark_tip_seen, observe_cloud_plan,
-  open_log_directory, read_log_files, save_app_settings, save_sync_settings,
-  save_table_sorting_settings, set_tips_auto_show,
+  get_sync_settings, get_system_info, get_system_language, get_table_preferences,
+  get_table_sorting_settings, get_tips_state, get_window_resize_warning_dismissed, mark_tip_seen,
+  observe_cloud_plan, open_log_directory, read_log_files, save_app_settings, save_sync_settings,
+  save_table_preferences, save_table_sorting_settings, set_tips_auto_show,
 };
 
 use sync::{
@@ -235,52 +234,63 @@ use browser_version_manager::get_browser_release_types;
 
 use api_server::{get_api_server_status, start_api_server, stop_api_server};
 
-// Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
-  #[cfg(target_os = "macos")]
-  fn set_transparent_titlebar(&self, transparent: bool) -> Result<(), String>;
   #[cfg(target_os = "macos")]
   fn disable_native_fullscreen(&self) -> Result<(), String>;
 }
 
+/// Height of the header the frontend draws across the top of the window.
+#[cfg(target_os = "macos")]
+const HEADER_HEIGHT: f64 = 44.0;
+
+/// The `y` that `traffic_light_position` needs to centre the traffic lights in
+/// the header.
+///
+/// wry and tao cut the titlebar container down to one button plus `y`, and the
+/// buttons keep their distance from the container's bottom edge. That distance
+/// changes between macOS releases (9pt on macOS 26), so it is measured on a
+/// window with the main window's style that is never shown.
+#[cfg(target_os = "macos")]
+fn traffic_light_offset() -> Option<f64> {
+  use objc2::MainThreadMarker;
+  use objc2_app_kit::{
+    NSBackingStoreType, NSWindow, NSWindowButton, NSWindowStyleMask, NSWindowTitleVisibility,
+  };
+  use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+  let mtm = MainThreadMarker::new()?;
+  let style = NSWindowStyleMask::Titled
+    | NSWindowStyleMask::Closable
+    | NSWindowStyleMask::Miniaturizable
+    | NSWindowStyleMask::Resizable
+    | NSWindowStyleMask::FullSizeContentView;
+  let window = unsafe {
+    NSWindow::initWithContentRect_styleMask_backing_defer(
+      mtm.alloc(),
+      NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(880.0, 500.0)),
+      style,
+      NSBackingStoreType::Buffered,
+      true,
+    )
+  };
+  unsafe { window.setReleasedWhenClosed(false) };
+  window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+  window.setTitlebarAppearsTransparent(true);
+
+  let close = window.standardWindowButton(NSWindowButton::CloseButton)?;
+  // The button's own titlebar view, then the container wry and tao resize.
+  let titlebar = unsafe { close.superview() }?;
+  let container = unsafe { titlebar.superview() }?;
+  let button = titlebar.convertRect_toView(close.frame(), Some(&container));
+  let bottom = if container.isFlipped() {
+    container.frame().size.height - button.origin.y - button.size.height
+  } else {
+    button.origin.y
+  };
+  Some((HEADER_HEIGHT - button.size.height) / 2.0 + bottom)
+}
+
 impl<R: Runtime> WindowExt for WebviewWindow<R> {
-  #[cfg(target_os = "macos")]
-  fn set_transparent_titlebar(&self, transparent: bool) -> Result<(), String> {
-    use objc2::rc::Retained;
-    use objc2_app_kit::{NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
-
-    unsafe {
-      let ns_window: Retained<NSWindow> =
-        Retained::retain(self.ns_window().unwrap().cast()).unwrap();
-
-      if transparent {
-        // Hide the title text
-        ns_window.setTitleVisibility(NSWindowTitleVisibility(1)); // NSWindowTitleHidden
-
-        // Make titlebar transparent
-        ns_window.setTitlebarAppearsTransparent(true);
-
-        // Set full size content view
-        let current_mask = ns_window.styleMask();
-        let new_mask = NSWindowStyleMask(current_mask.0 | (1 << 15)); // NSFullSizeContentViewWindowMask
-        ns_window.setStyleMask(new_mask);
-      } else {
-        // Show the title text
-        ns_window.setTitleVisibility(NSWindowTitleVisibility(0)); // NSWindowTitleVisible
-
-        // Make titlebar opaque
-        ns_window.setTitlebarAppearsTransparent(false);
-
-        // Remove full size content view
-        let current_mask = ns_window.styleMask();
-        let new_mask = NSWindowStyleMask(current_mask.0 & !(1 << 15));
-        ns_window.setStyleMask(new_mask);
-      }
-    }
-
-    Ok(())
-  }
-
   #[cfg(target_os = "macos")]
   fn disable_native_fullscreen(&self) -> Result<(), String> {
     use objc2::rc::Retained;
@@ -645,22 +655,6 @@ fn has_acknowledged_trial_expiration(app_handle: tauri::AppHandle) -> Result<boo
   commercial_license::CommercialLicenseManager::instance().has_acknowledged(&app_handle)
 }
 
-#[tauri::command]
-async fn start_mcp_server(_app_handle: tauri::AppHandle) -> Result<u16, String> {
-  // Local MCP is removed in favour of remote MCP. Enabling it from the app is
-  // an "attempt to use it": raise the dialog and refuse. The frontend catches
-  // MCP_LOCAL_REMOVED and shows the removal panel. The loopback tombstone that
-  // answers stray external clients is bound at startup for legacy installs, not
-  // here.
-  mcp_server::McpServer::note_local_mcp_attempt();
-  Err(backend_error("MCP_LOCAL_REMOVED"))
-}
-
-#[tauri::command]
-async fn stop_mcp_server() -> Result<(), String> {
-  mcp_server::McpServer::instance().stop().await
-}
-
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum IntegrationTarget {
@@ -766,42 +760,10 @@ async fn check_integration_connection(
   Ok(diagnostic)
 }
 
-#[tauri::command]
-fn get_mcp_server_status() -> bool {
-  mcp_server::McpServer::instance().is_running()
-}
-
-#[derive(serde::Serialize)]
-struct McpConfig {
-  port: u16,
-  token: String,
-}
-
-#[tauri::command]
-async fn get_mcp_config(app_handle: tauri::AppHandle) -> Result<Option<McpConfig>, String> {
-  let mcp_server = mcp_server::McpServer::instance();
-  if !mcp_server.is_running() {
-    return Ok(None);
-  }
-
-  let port = mcp_server
-    .get_port()
-    .ok_or_else(|| backend_error("MCP_CONFIGURATION_UNAVAILABLE"))?;
-
-  let settings_manager = settings_manager::SettingsManager::instance();
-  let token = settings_manager
-    .get_mcp_token(&app_handle)
-    .await
-    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?
-    .ok_or_else(|| backend_error("MCP_CONFIGURATION_UNAVAILABLE"))?;
-
-  Ok(Some(McpConfig { port, token }))
-}
-
 /// Open the remote-control bridge to Donut cloud.
 ///
-/// Gated on being signed in and on the Wayfern terms, the same two things the
-/// local MCP server needs. Everything else, whether the plan includes remote
+/// Gated on being signed in and on the Wayfern terms. Everything else, whether
+/// the plan includes remote
 /// control, and whether another instance already holds the slot, is the
 /// relay's answer to give, so the app asks rather than guessing from a cached
 /// entitlement that may be a refresh cycle out of date.
@@ -943,9 +905,7 @@ async fn get_mcp_remote_credential() -> Result<McpRemoteCredential, String> {
 /// when the server refuses the mint and one of the live keys is ours, ours is
 /// retired first and the mint tried once more.
 #[tauri::command]
-async fn rotate_mcp_remote_credential(
-  app_handle: tauri::AppHandle,
-) -> Result<McpRemoteCredentialRotation, String> {
+async fn rotate_mcp_remote_credential() -> Result<McpRemoteCredentialRotation, String> {
   if !cloud_auth::CLOUD_AUTH.is_logged_in().await {
     return Err(backend_error("MCP_REMOTE_REQUIRES_SIGN_IN"));
   }
@@ -991,8 +951,7 @@ async fn rotate_mcp_remote_credential(
   // by now, so a client that could not be rewritten is named rather than
   // turned into an error: an Err here reads as "mint again" to the UI, and a
   // second mint would retire the key just installed everywhere else.
-  let failed_clients =
-    reinstall_mcp_agents(&app_handle, mcp_integrations::McpEndpoint::Remote).await;
+  let failed_clients = reinstall_mcp_agents();
 
   Ok(McpRemoteCredentialRotation {
     token_prefix: mcp_key_display_prefix(&grant.key),
@@ -1163,9 +1122,9 @@ fn is_mcp_in_claude_desktop_internal() -> bool {
   claude_desktop_extension_dir().is_some_and(|dir| dir.join("manifest.json").exists())
 }
 
-/// Which endpoint the installed bridge talks to, read back from the URL
-/// literal baked into its script.
-fn claude_desktop_endpoint() -> Option<mcp_integrations::McpEndpoint> {
+/// The URL the installed bridge talks to, read back from the literal baked
+/// into its script.
+fn claude_desktop_bridge_url() -> Option<String> {
   let script = std::fs::read_to_string(
     claude_desktop_extension_dir()?
       .join("server")
@@ -1174,15 +1133,14 @@ fn claude_desktop_endpoint() -> Option<mcp_integrations::McpEndpoint> {
   .ok()?;
   let start = script.find(BRIDGE_URL_MARKER)? + BRIDGE_URL_MARKER.len();
   let literal = script[start..].lines().next()?.trim_end_matches(';');
-  let url: String = serde_json::from_str(literal).ok()?;
-  mcp_integrations::endpoint_of_url(&url)
+  serde_json::from_str(literal).ok()
 }
 
-fn claude_desktop_status() -> mcp_integrations::AgentStatus {
-  mcp_integrations::AgentStatus {
-    connected: is_mcp_in_claude_desktop_internal(),
-    endpoint: claude_desktop_endpoint(),
-  }
+/// Installed and talking to the endpoint: a bundle left over from the old
+/// local server reads as not connected, and adding replaces it.
+fn claude_desktop_connected() -> bool {
+  is_mcp_in_claude_desktop_internal()
+    && claude_desktop_bridge_url().is_some_and(|url| mcp_integrations::is_remote_url(&url))
 }
 
 fn add_mcp_to_claude_desktop_internal(target: &mcp_integrations::McpTarget) -> Result<(), String> {
@@ -1221,11 +1179,8 @@ fn add_mcp_to_claude_desktop_internal(target: &mcp_integrations::McpTarget) -> R
   // the credential are quoted through serde_json rather than by hand.
   let url_literal =
     serde_json::to_string(&target.url).map_err(|e| format!("Failed to quote the URL: {e}"))?;
-  let authorization_literal = match &target.bearer {
-    Some(key) => serde_json::to_string(&format!("Bearer {key}"))
-      .map_err(|e| format!("Failed to quote the credential: {e}"))?,
-    None => "null".to_string(),
-  };
+  let authorization_literal = serde_json::to_string(&target.authorization())
+    .map_err(|e| format!("Failed to quote the credential: {e}"))?;
   let bridge_js = CLAUDE_DESKTOP_BRIDGE_JS
     .replace("__MCP_URL__", &url_literal)
     .replace("__AUTHORIZATION__", &authorization_literal);
@@ -1318,33 +1273,18 @@ fn update_claude_extensions_registry(
   Ok(())
 }
 
-/// The one place an endpoint becomes what gets written into a client. The
-/// remote endpoint needs the stored credential; minting one is the credential
-/// commands' job, so a missing key is reported rather than created here.
-async fn mcp_target_for(
-  app_handle: &tauri::AppHandle,
-  endpoint: mcp_integrations::McpEndpoint,
-) -> Result<mcp_integrations::McpTarget, String> {
-  match endpoint {
-    mcp_integrations::McpEndpoint::Local => {
-      // Local MCP is removed: never write a local endpoint into a client again.
-      // Callers that reach here (an install/switch to local, or a stale
-      // reinstall) get the removal error and the dialog.
-      let _ = app_handle;
-      mcp_server::McpServer::note_local_mcp_attempt();
-      Err(backend_error("MCP_LOCAL_REMOVED"))
-    }
-    mcp_integrations::McpEndpoint::Remote => {
-      let stored = settings_manager::SettingsManager::instance()
-        .get_mcp_remote_key()
-        .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?;
-      let key = stored
-        .map(|stored| stored.key)
-        .filter(|key| !key.is_empty())
-        .ok_or_else(|| backend_error("MCP_REMOTE_KEY_MISSING"))?;
-      Ok(mcp_integrations::McpTarget::remote(key))
-    }
-  }
+/// What gets written into a client: the endpoint and the stored credential.
+/// Minting one is the credential commands' job, so a missing key is reported
+/// rather than created here.
+fn mcp_target() -> Result<mcp_integrations::McpTarget, String> {
+  let stored = settings_manager::SettingsManager::instance()
+    .get_mcp_remote_key()
+    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?;
+  let key = stored
+    .map(|stored| stored.key)
+    .filter(|key| !key.is_empty())
+    .ok_or_else(|| backend_error("MCP_REMOTE_KEY_MISSING"))?;
+  Ok(mcp_integrations::McpTarget::remote(key))
 }
 
 fn install_mcp_agent(agent_id: &str, target: &mcp_integrations::McpTarget) -> Result<(), String> {
@@ -1359,49 +1299,36 @@ fn install_mcp_agent(agent_id: &str, target: &mcp_integrations::McpTarget) -> Re
 async fn list_mcp_agents() -> Result<Vec<mcp_integrations::McpAgentInfo>, String> {
   Ok(mcp_integrations::list_agents_with_status(&[(
     "claude-desktop",
-    claude_desktop_status(),
+    claude_desktop_connected(),
   )]))
 }
 
 #[tauri::command]
-async fn add_mcp_to_agent(
-  app_handle: tauri::AppHandle,
-  agent_id: String,
-  target: String,
-) -> Result<(), String> {
+async fn add_mcp_to_agent(agent_id: String) -> Result<(), String> {
   if !mcp_integrations::agent_exists(&agent_id) {
     return Err(backend_error("MCP_AGENT_UNKNOWN"));
   }
-  // Only the app's own UI sends this string, so a value it does not know is a
-  // bug on our side rather than user input to explain.
-  let endpoint = mcp_integrations::McpEndpoint::parse(&target).ok_or_else(|| {
-    backend_error_with_detail("INTERNAL_ERROR", format!("unknown MCP target: {target}"))
-  })?;
-  let target = mcp_target_for(&app_handle, endpoint).await?;
-  install_mcp_agent(&agent_id, &target)
+  install_mcp_agent(&agent_id, &mcp_target()?)
     .map_err(|e| backend_error_with_detail("MCP_AGENT_INSTALL_FAILED", e))
 }
 
-/// Ids of every client whose Donut entry points at `endpoint`, Claude Desktop
-/// included (its bundle is inspected here, not by `mcp_integrations`).
-fn mcp_clients_on(endpoint: mcp_integrations::McpEndpoint) -> Vec<String> {
-  let mut agents = mcp_integrations::agents_on_endpoint(endpoint);
-  if claude_desktop_status().endpoint == Some(endpoint) {
+/// Ids of every connected client, Claude Desktop included (its bundle is
+/// inspected here, not by `mcp_integrations`).
+fn connected_mcp_clients() -> Vec<String> {
+  let mut agents = mcp_integrations::connected_agents();
+  if claude_desktop_connected() {
     agents.push("claude-desktop".to_string());
   }
   agents
 }
 
-/// Re-run the install for every client whose entry points at `endpoint`, so a
-/// rotated credential or a moved local port and token do not leave them
-/// talking to a dead target. Every client is attempted; the ids of the ones
-/// that could not be rewritten come back, each already logged with its reason.
-pub async fn reinstall_mcp_agents(
-  app_handle: &tauri::AppHandle,
-  endpoint: mcp_integrations::McpEndpoint,
-) -> Vec<String> {
-  let agents = mcp_clients_on(endpoint);
-  let target = match mcp_target_for(app_handle, endpoint).await {
+/// Re-run the install for every connected client, so a rotated credential
+/// does not leave them talking with a dead one. Every client is attempted; the
+/// ids of the ones that could not be rewritten come back, each already logged
+/// with its reason.
+fn reinstall_mcp_agents() -> Vec<String> {
+  let agents = connected_mcp_clients();
+  let target = match mcp_target() {
     Ok(target) => target,
     Err(e) => {
       log::warn!("Could not resolve the MCP target, so no client was refreshed: {e}");
@@ -2558,8 +2485,20 @@ pub fn run_with_builder(
       };
 
       // The app draws its own titlebar. macOS keeps the native one and makes
-      // it transparent (below); Windows and Linux drop decorations entirely and
-      // render their own controls.
+      // it transparent; Windows and Linux drop decorations entirely and render
+      // their own controls.
+      //
+      // The traffic lights sit 15pt in from the left and are centred in the
+      // header. Left at the default they ride high, and on macOS 26 they also
+      // run past the space the header leaves for them.
+      #[cfg(target_os = "macos")]
+      let win_builder = win_builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(tauri::LogicalPosition::new(
+          15.0,
+          traffic_light_offset().unwrap_or(24.0),
+        ));
       #[cfg(target_os = "windows")]
       let win_builder = win_builder.decorations(false);
 
@@ -2643,17 +2582,11 @@ pub fn run_with_builder(
       }
       window_decorations::init(app.handle());
 
-      // Set transparent titlebar for macOS
+      // Green title-bar button maximizes (zoom) the window rather than
+      // entering immersive native fullscreen.
       #[cfg(target_os = "macos")]
-      {
-        if let Err(e) = window.set_transparent_titlebar(true) {
-          log::warn!("Failed to set transparent titlebar: {e}");
-        }
-        // Green title-bar button maximizes (zoom) the window rather than
-        // entering immersive native fullscreen.
-        if let Err(e) = window.disable_native_fullscreen() {
-          log::warn!("Failed to disable native fullscreen: {e}");
-        }
+      if let Err(e) = window.disable_native_fullscreen() {
+        log::warn!("Failed to disable native fullscreen: {e}");
       }
 
       // Set up deep link handler
@@ -2740,51 +2673,22 @@ pub fn run_with_builder(
         });
       }
 
-      // Auto-start MCP server if it was previously enabled. Always log the
-      // decision so customer logs reveal whether MCP is actually running —
-      // "automation features don't work" is otherwise indistinguishable from
-      // "MCP server isn't enabled" without this line.
+      // Always log the remote-control decision so customer logs reveal
+      // whether this browser can be driven over MCP: "automation features
+      // don't work" is otherwise indistinguishable from "remote control is off".
       {
-        let mcp_handle = app.handle().clone();
         let bridge_handle = app.handle().clone();
         let engine_handle = app.handle().clone();
 
-        // The tool engine gets its app handle unconditionally, because remote
-        // control is a transport of its own: a user who drives this browser
-        // from the website should not have to open a loopback port to do it.
         tauri::async_runtime::spawn(async move {
           mcp_server::McpServer::instance()
             .attach_app_handle(engine_handle)
             .await;
         });
 
-        // Local MCP is removed. An account that can use remote MCP is offered
-        // the move in the app; everyone else still on it is told it is gone.
-        tauri::async_runtime::spawn(async move {
-          mcp_migration::announce_local_mcp_removal().await;
-        });
-
         let settings_mgr = settings_manager::SettingsManager::instance();
         match settings_mgr.load_settings() {
           Ok(settings) => {
-            if settings.mcp_enabled {
-              // Local MCP is removed, but a legacy install may still have the
-              // flag on and external clients still pointing at the old port.
-              // Bind the loopback TOMBSTONE so those clients get a clear removal
-              // message and the dialog, instead of a silent connection refusal.
-              log::info!("Local MCP was enabled on a previous version; binding the loopback tombstone for legacy clients");
-              tauri::async_runtime::spawn(async move {
-                match mcp_server::McpServer::instance().start(mcp_handle).await {
-                  Ok(port) => log::info!("Local MCP tombstone listening on port {port}"),
-                  Err(e) => log::warn!("Could not bind the local MCP tombstone: {e}"),
-                }
-              });
-            } else {
-              log::info!(
-                "Local MCP is removed and was not enabled; not binding the tombstone. Remote MCP is available from Settings → Integrations."
-              );
-            }
-
             if settings.mcp_remote_enabled {
               // One helper, shared with the sign-in path and the ten-minute
               // reconnect tick, so "when may the bridge open" has exactly one
@@ -3419,6 +3323,8 @@ pub fn run_with_builder(
       save_app_settings,
       read_log_files,
       open_log_directory,
+      get_table_preferences,
+      save_table_preferences,
       get_table_sorting_settings,
       save_table_sorting_settings,
       get_system_language,
@@ -3550,10 +3456,6 @@ pub fn run_with_builder(
       get_commercial_trial_status,
       acknowledge_trial_expiration,
       has_acknowledged_trial_expiration,
-      start_mcp_server,
-      stop_mcp_server,
-      get_mcp_server_status,
-      get_mcp_config,
       list_mcp_agents,
       add_mcp_to_agent,
       remove_mcp_from_agent,
@@ -3564,9 +3466,7 @@ pub fn run_with_builder(
       get_mcp_remote_credential,
       rotate_mcp_remote_credential,
       forget_mcp_remote_credential,
-      mcp_migration::get_mcp_migration_offer,
-      mcp_migration::mark_mcp_migration_offered,
-      mcp_migration::turn_off_local_mcp_server,
+      profile_generation_limiter::get_profile_creation_allowance,
       // VPN commands
       import_vpn_config,
       list_vpn_configs,

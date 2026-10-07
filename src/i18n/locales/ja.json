@@ -505,7 +505,13 @@
       "description": "ディスク上のプロファイルデータを暗号化します。起動に必要です。"
     },
     "downloadingSubtitle": "ダウンロード中…",
-    "browsersDownloading": "ブラウザをダウンロード中です。ダウンロードが完了するとプロファイルを作成できます。"
+    "browsersDownloading": "ブラウザをダウンロード中です。ダウンロードが完了するとプロファイルを作成できます。",
+    "advancedOptions": "詳細オプション",
+    "hourlyLimit": {
+      "reached": "ご利用プランでは1時間に{{limit}}件まで新規プロファイルを作成できます。次は約{{minutes}}分後に作成できます。",
+      "warningTitle": "プロファイルの作成ペースが速すぎます",
+      "warning": "少し時間をおいてください。1時間に多くのプロファイルを作成しすぎると、24時間以上の一時的なブロックがかかり、その間は新しいアイデンティティを生成できません。1時間あたりの上限を引き上げたい場合は、有料プランで Donut を支援することをご検討ください。"
+    }
   },
   "deleteDialog": {
     "title": "プロファイルを削除",
@@ -833,8 +839,6 @@
   "integrations": {
     "title": "統合",
     "mcp": {
-      "url": "MCPサーバーURL",
-      "urlCopied": "URLをコピーしました",
       "clientsLabel": "クライアント",
       "add": "追加",
       "addedToClient": "{{name}} に追加しました",
@@ -845,15 +849,9 @@
         "cli": "CLI",
         "editor": "エディタ",
         "editorExt": "エディタ拡張"
-      },
-      "switchToLocal": "切り替え",
-      "switchedToLocal": "{{name}} はローカル MCP サーバーを使用するようになりました",
-      "deprecatedBannerTitle": "ローカル MCP は削除されます",
-      "deprecatedBannerBody": "ローカル MCP サーバーは動作しなくなりました。代わりにリモート MCP を使用してください。このマシンだけでなく、どこからでも接続できます。",
-      "deprecatedCta": "リモート MCP を設定"
+      }
     },
     "tabApi": "ローカル API",
-    "tabMcp": "MCP (AI アシスタント)",
     "apiEnableLabel": "ローカル API サーバーを有効にする",
     "apiEnableDescription": "REST API でプロファイル、グループ、プロキシを管理できます。",
     "apiPortLabel": "ポート",
@@ -868,12 +866,7 @@
     "apiToggleFailed": "API サーバーの切り替えに失敗しました",
     "apiStartFailed": "API サーバーの起動に失敗しました",
     "tokenCopied": "トークンをコピーしました",
-    "mcpEnableLabel": "MCP サーバーを有効にする (Model Context Protocol)",
-    "mcpEnableDescription": "Claude Desktop などの AI アシスタントがブラウザを制御できます。",
     "mcpAcceptTermsFirst": "(設定で先に Wayfern の規約に同意してください)",
-    "mcpStarted": "MCP サーバーをポート {{port}} で起動しました",
-    "mcpStopped": "MCP サーバーを停止しました",
-    "mcpToggleFailed": "MCP サーバーの切り替えに失敗しました",
     "openSettings": "統合設定を開く",
     "apiRunningOn": "実行中",
     "apiExampleRequest": "リクエスト例",
@@ -902,8 +895,6 @@
       "credentialCreated": "資格情報を作成しました",
       "credentialRotateFailed": "資格情報をローテーションできませんでした",
       "credentialClientsFailed": "資格情報は保存されましたが、次のクライアントを更新できませんでした: {{clients}}。再試行するにはもう一度ローテーションしてください。",
-      "switchToRemote": "切り替え",
-      "switchedClient": "{{name}} はリモート MCP を使用するようになりました",
       "fxHint": "fx は DONUT_MCP_TOKEN から資格情報を読み取ります。fx を起動するシェルでエクスポートしてください。",
       "fxExportCopied": "エクスポート行をコピーしました"
     }
@@ -2216,10 +2207,6 @@
     "updatePreparationFailed": "バックグラウンドのネットワークプロセスを安全に停止できませんでした。コンピューターを再起動してから、もう一度アップデートしてください。",
     "wayfernTermsRequired": "Wayfernを使用するには、Wayfernの利用規約に同意してください。",
     "apiPortUnavailable": "APIサーバーで利用可能なポートが見つかりませんでした。",
-    "mcpServerAlreadyRunning": "MCPサーバーはすでに実行中です。",
-    "mcpServerNotRunning": "MCPサーバーは実行されていません。",
-    "mcpPortUnavailable": "MCPサーバーで利用可能なポートが見つかりませんでした。",
-    "mcpConfigurationUnavailable": "MCPサーバーの設定を取得できません。サーバーを再起動して、もう一度お試しください。",
     "mcpAgentUnknown": "このMCPクライアントはサポートされていません。",
     "mcpAgentInstallFailed": "MCPクライアントにDonut Browserを追加できませんでした：{{detail}}",
     "mcpAgentRemoveFailed": "MCPクライアントからDonut Browserを削除できませんでした：{{detail}}",
@@ -2297,7 +2284,7 @@
     "wayfernPlanCheckUnavailable": "現在、ご利用のプランを確認できません。しばらくしてからもう一度お試しください。",
     "wayfernCustomFingerprintRequiresPlan": "ご利用のプランにはカスタムフィンガープリントが含まれていません。",
     "wayfernGenerationUnavailable": "現在、フィンガープリントを作成できません。しばらくしてから再度お試しください。",
-    "profileGenerationLimitReached": "過去1時間に100件のプロファイルを作成しました。これはProプランの上限です。次の作成まで約{{minutes}}分お待ちください。",
+    "profileGenerationLimitReached": "過去1時間に{{limit}}件のプロファイルを作成しました。これはご利用プランの上限です。次の作成まで約{{minutes}}分お待ちください。",
     "wayfernBrowserBusy": "ブラウザーがフィンガープリントを適用中でした。もう一度お試しください。",
     "wayfernBrowserExited": "ブラウザーが起動中に終了しました。{{detail}}",
     "profileExportFailed": "このプロファイルを書き出せませんでした。{{detail}}",
@@ -2330,7 +2317,6 @@
     "remoteSessionNotDrivable": "このリモートセッションはまだ操作できる状態ではありません。ライブになるまでお待ちください。",
     "remotePlatformUnsupported": "リモートセッションは macOS、Windows、Linux のホストでのみ実行できます。このプロファイルのプラットフォームは {{platform}} です。",
     "remoteProfileNotSynced": "このプロファイルはクラウド同期へのアップロードがまだ完了していません。最初の同期が完了してから、もう一度お試しください。",
-    "mcpLocalRemoved": "Donut のローカル MCP サーバーは削除されました。MCP は現在リモートで動作し、有料プランが必要です。",
     "trashEntryNotFound": "このプロファイルはもうゴミ箱にありません。",
     "trashRestoreConflict": "同じIDのプロファイルがすでに存在するため、復元できません。",
     "recipesNotEntitled": "レシピには Pro プラン以上が必要です。",
@@ -2372,7 +2358,10 @@
     "wayfernLaunchArgReserved": "{{argument}} は Donut が管理します。この引数を削除してください。",
     "wayfernLaunchArgNotAllowed": "{{argument}} は対応していない起動引数です。削除してください。",
     "wayfernLaunchArgValueInvalid": "{{argument}} の値には対応していません。",
-    "wayfernLaunchArgsLimit": "起動引数は {{count}} 個まで、1 つあたり {{length}} 文字までにしてください。"
+    "wayfernLaunchArgsLimit": "起動引数は {{count}} 個まで、1 つあたり {{length}} 文字までにしてください。",
+    "tablePreferencesInvalid": "テーブル設定が無効です。",
+    "tablePreferencesLoadFailed": "テーブル設定を読み込めませんでした。再試行してください。",
+    "tablePreferencesSaveFailed": "テーブル設定を保存できませんでした。再試行してください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2605,7 +2594,7 @@
   },
   "profileGenerationLimit": {
     "title": "1時間あたりのプロファイル上限に達しました",
-    "description": "Proプランでは1時間に100件の新規プロファイルを作成できます。アカウントがブロックされないよう、次の時間枠まで作成を一時停止します。"
+    "description": "ご利用プランの1時間あたりの新規プロファイル上限に達しました。時間が経過すると作成を再開できます。アカウントはブロックされていません。"
   },
   "wayfernConfigDialog": {
     "titleView": "フィンガープリント設定を表示 - {{name}} ({{browser}})",
@@ -3053,40 +3042,6 @@
     "device": "デバイス",
     "site": "サイト"
   },
-  "mcpLocalDeprecated": {
-    "title": "ローカル MCP は削除されました",
-    "description": "Donut は今後、どこからでも接続できるリモート MCP を使用します。「リモート MCP」タブで設定し、AI クライアントをそちらに向けてください。"
-  },
-  "mcpMigration": {
-    "title": "リモート MCP に移行",
-    "doneTitle": "リモート MCP に移行しました",
-    "body": "ローカル MCP サーバーは廃止されました。リモート MCP は Donut クラウド経由で AI クライアントをこのブラウザーに接続するため、Donut を開いている間はどこからでも使えます。",
-    "changes": "Donut はこれらのクライアントを、専用の資格情報とともにリモートエンドポイントに向けます。その他の設定は変わりません。",
-    "changesNone": "このコンピューターでローカルサーバーを使っている AI クライアントはありません。Donut はリモート MCP をオンにし、手動で設定するクライアント用の資格情報を作成します。",
-    "start": "リモート MCP に移行",
-    "notNow": "今はしない",
-    "done": "完了",
-    "stepBridge": "リモート MCP",
-    "stepClients": "クライアント",
-    "bridgeWorking": "オンにしています",
-    "bridgeOn": "オン",
-    "credentialWorking": "作成中",
-    "clientsProgress": "{{total}} 件中 {{moved}} 件を移行",
-    "clientsNone": "移行対象なし",
-    "clientMoving": "移行中",
-    "clientMoved": "移行済み",
-    "clientFailed": "未変更",
-    "summary_one": "{{count}} 件のクライアントがリモート MCP を使用しています。",
-    "summary_other": "{{count}} 件のクライアントがリモート MCP を使用しています。",
-    "failed_one": "{{count}} 件のクライアントを変更できませんでした。再試行するか、下の情報で手動設定してください。",
-    "failed_other": "{{count}} 件のクライアントを変更できませんでした。再試行するか、下の情報で手動設定してください。",
-    "manual": "その他のクライアントでは、このエンドポイントを使い、資格情報をベアラートークンとして設定してください。",
-    "credentialCopied": "資格情報をコピーしました",
-    "localServer": "ローカルサーバーは、移行したことを古いクライアントに伝えるだけです。オフにできます。",
-    "localServerOff": "ローカルサーバーをオフにする",
-    "localServerIsOff": "ローカルサーバーはオフです",
-    "localServerOffFailed": "ローカルサーバーをオフにできませんでした"
-  },
   "appFeedback": {
     "saveFailed": "設定を保存できませんでした",
     "searchSettings": "設定を検索…",
@@ -3141,8 +3096,6 @@
     "authorized": "認証情報を受理",
     "confirmed": "はい",
     "unavailable": "いいえ",
-    "configuredLocal": "ローカル MCP 用に設定済み",
-    "configuredRemote": "リモート MCP 用に設定済み",
     "apiProbeScope": "保存された認証情報で実行中のローカル API を確認します。プロファイルは起動しません。",
     "remoteProbeScope": "保存された MCP 認証情報を確認します。リモート操作には接続済みデバイスと対応プランも必要です。クライアントの設定は稼働中のセッションを意味しません。"
   },
@@ -3567,5 +3520,40 @@
     "body": "プランで次の機能が使えるようになりました。各ヒントで実際の動きを確認できます。",
     "cta": "見てみる",
     "later": "あとで"
+  },
+  "tables": {
+    "search": "行を検索",
+    "filters": "フィルター",
+    "findFilter": "フィルターを検索…",
+    "noOptions": "一致する選択肢がありません。",
+    "removeFilter": "フィルターを削除: {{filter}}",
+    "clearFilters": "フィルターをクリア",
+    "results": "{{total}} 行中 {{count}} 行",
+    "sortSummary": "{{column}}: {{direction}}",
+    "descending": "降順",
+    "ascending": "昇順",
+    "sort": "並べ替え",
+    "sortColumn": "並べ替える列",
+    "moveSortUp": "並べ替え条件を上に移動",
+    "removeSort": "並べ替え条件を削除",
+    "addSort": "並べ替え条件を追加",
+    "clearSort": "並べ替えをクリア",
+    "view": "表示",
+    "columns": "列",
+    "rowHeight": "行の高さ",
+    "compact": "コンパクト",
+    "comfortable": "ゆったり",
+    "resetView": "表示をリセット",
+    "resizeColumn": "{{column}} 列の幅を変更",
+    "noResults": "フィルターに一致する行がありません。",
+    "moreActions": "その他の操作",
+    "dataTable": "データテーブル",
+    "enabled": "有効",
+    "disabled": "無効",
+    "running": "実行中",
+    "stopped": "停止中",
+    "noTags": "タグなし",
+    "noProxy": "プロキシなし",
+    "encrypted": "暗号化"
   }
 }

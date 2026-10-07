@@ -10,6 +10,7 @@ import {
   CRX_EXTENSION_NAME,
   CRX_EXTENSION_VERSION,
   extensionZipBase64,
+  wireGuardFixture,
   writeUnpackedExtension,
 } from "../lib/fixtures.mjs";
 
@@ -44,6 +45,860 @@ const THEME_VARIABLES = [
 
 const DRACULA_THEME = THEMES.find((theme) => theme.id === "dracula").colors;
 const AYU_LIGHT_THEME = THEMES.find((theme) => theme.id === "ayu-light").colors;
+
+async function tableRows(app, tableId) {
+  return app.execute(
+    `return [...document.querySelectorAll('[data-table-id="' + arguments[0] + '"] tr[data-table-row]')].map(row => row.dataset.tableRow);`,
+    [tableId],
+  );
+}
+
+async function tableShiftClick(app, selector) {
+  // tauri-wd 0.2.1 omits modifiers from pointer events. Send the click with
+  // Shift through the native WebView; the real checkbox handler selects rows.
+  await app.execute(
+    `const target = document.querySelector(arguments[0]);
+     target.focus();
+     target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true }));`,
+    [selector],
+  );
+}
+
+async function openProfileCreation(app) {
+  await app.clickText("New", { roles: ["button"] });
+  await app.waitForText(en.createProfile.title);
+  await app.waitFor(
+    () =>
+      app.execute(`return Boolean(document.querySelector('#profile-name'));`),
+    { description: "profile name field" },
+  );
+}
+
+async function submitProfileCreation(app, name) {
+  await app.clickTextIn('[role="dialog"]', en.common.buttons.create, {
+    roles: ["button"],
+  });
+  await app.waitFor(
+    () => app.execute(`return !document.querySelector('#profile-name');`),
+    { description: `created profile ${name}` },
+  );
+  return (await app.invoke("list_browser_profiles")).find(
+    (profile) => profile.name === name,
+  );
+}
+
+test("profile creation stays compact and saves basic, protected, and ephemeral profiles", async () => {
+  await withApp(
+    "ui-profile-creation",
+    async (app) => {
+      // The UI suite has no browser binary or live network routes. Record
+      // the chosen route, then create locally with a fixed device. The real
+      // backend still saves the options and encrypts the profile. The network
+      // suite covers creation with a real browser and working proxy.
+      await stubCommand(app, "is_geoip_database_available", true);
+      await app.execute(`
+        const originalFetch = window.fetch;
+        window.__donutProfileRequests = [];
+        window.fetch = function(input, init) {
+          const url = typeof input === 'string' ? input : input?.url ?? '';
+          if (url.endsWith('/create_browser_profile_new')) {
+            const payload = JSON.parse(init.body);
+            window.__donutProfileRequests.push(structuredClone(payload));
+            payload.proxyId = null;
+            payload.vpnId = null;
+            payload.wayfernConfig = { ...payload.wayfernConfig, fingerprint: '{}' };
+            return originalFetch.call(window, input, { ...init, body: JSON.stringify(payload) });
+          }
+          return originalFetch.apply(window, arguments);
+        };
+      `);
+      await app.session.command("POST", "/window/rect", {
+        width: 1280,
+        height: 900,
+      });
+      await openProfileCreation(app);
+      await app.fillSelector("#profile-name", "Simple profile");
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return [...document.querySelectorAll('[role="dialog"] button')].some(button => button.textContent.trim() === arguments[0] && !button.disabled);`,
+            [en.common.buttons.create],
+          ),
+        { description: "creation is available" },
+      );
+      const basic = await app.execute(`
+      const dialog = document.querySelector('#profile-name').closest('[role="dialog"]');
+      const rect = dialog.getBoundingClientRect();
+      return {
+        width: rect.width, height: rect.height,
+        text: dialog.innerText,
+        tabs: dialog.querySelectorAll('[role="tab"]').length,
+        fields: [...dialog.querySelectorAll('input:not([type="hidden"])')].map(input => input.id),
+        advancedVisible: Boolean(dialog.querySelector('#launch-hook-url')),
+        checkboxes: [...dialog.querySelectorAll('[role="checkbox"]')].map(input => input.id),
+      };
+    `);
+      assert.ok(
+        basic.width <= 512 && basic.height < 450,
+        JSON.stringify(basic),
+      );
+      assert.equal(basic.tabs, 0);
+      assert.deepEqual(basic.fields, ["profile-name"]);
+      assert.deepEqual(basic.checkboxes, ["enable-password", "ephemeral"]);
+      assert.equal(basic.advancedVisible, false);
+      assert.ok(!basic.text.includes(en.profiles.ephemeralDescription));
+      assert.ok(
+        !basic.text.includes(en.createProfile.passwordProtect.description),
+      );
+      const chrome = await app.execute(`
+      const dialog = document.querySelector('#profile-name').closest('[role="dialog"]');
+      const border = (node) => getComputedStyle(node).borderTopWidth;
+      return {
+        name: border(document.querySelector('#profile-name')),
+        options: [...dialog.querySelectorAll('#profile-proxy, [role="checkbox"]')].map(border),
+        proxyName: document.querySelector('#profile-proxy').getAttribute('aria-labelledby')
+          .split(' ').map((id) => document.getElementById(id)?.textContent.trim()),
+      };
+    `);
+      assert.equal(chrome.name, "0px", "the name field has no box");
+      assert.deepEqual(chrome.options, ["0px", "0px", "0px"]);
+      assert.deepEqual(chrome.proxyName, [
+        en.createProfile.proxy.title,
+        en.createProfile.proxy.noProxy,
+      ]);
+      await app.capture("profile-create-compact-wide");
+      // Adding a route is part of the route list, and stays there when the
+      // search finds nothing.
+      await app.clickSelector("#profile-proxy");
+      await app.fillSelector("[cmdk-input]", "no such route");
+      await app.waitForText(en.createProfile.proxy.notFound);
+      await app.clickText(en.createProfile.proxy.addProxy, {
+        roles: ["option"],
+      });
+      await app.waitFor(
+        () =>
+          app.execute(`return Boolean(document.querySelector('#proxy-name'));`),
+        { description: "proxy form from the route list" },
+      );
+      await app.pressShortcut({ key: "Escape" });
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return !document.querySelector('#proxy-name') && document.querySelector('#profile-name')?.value === arguments[0];`,
+            ["Simple profile"],
+          ),
+        { description: "creation dialog kept after the proxy form closes" },
+      );
+      await app.clickSelector("#profile-proxy");
+      await app.clickText(en.common.labels.none, { roles: ["option"] });
+      const simple = await submitProfileCreation(app, "Simple profile");
+      assert.ok(simple);
+      assert.equal(simple.ephemeral, false);
+      assert.equal(simple.password_protected, false);
+      assert.equal(simple.proxy_id, null);
+      assert.equal(simple.vpn_id, null);
+      assert.ok(simple.wayfern_config.screen_max_width > 0);
+      assert.ok(simple.wayfern_config.screen_max_height > 0);
+
+      const proxy = await app.invoke("create_stored_proxy", {
+        name: "Creation proxy",
+        proxySettings: {
+          proxy_type: "http",
+          host: "127.0.0.1",
+          port: 9,
+          username: null,
+          password: null,
+        },
+      });
+      const vpn = await app.invoke("create_vpn_config_manual", {
+        name: "Creation VPN",
+        vpnType: "WireGuard",
+        configData: wireGuardFixture(),
+      });
+      await app.invoke("plugin:event|emit", {
+        event: "vpn-configs-changed",
+        payload: null,
+      });
+      const extensions = await app.invoke("create_extension_group", {
+        name: "Creation extensions",
+      });
+      await openProfileCreation(app);
+      await app.fillSelector("#profile-name", "Protected profile");
+      await app.clickSelector("#profile-proxy");
+      await app.fillSelector("[cmdk-input]", "Creation proxy");
+      await app.clickText(proxy.name, { roles: ["option"] });
+      await app.clickSelector("#enable-password");
+      await app.fillSelector("#profile-password", "short");
+      await app.clickTextIn('[role="dialog"]', en.common.buttons.create, {
+        roles: ["button"],
+      });
+      await app.waitForText(
+        en.profilePassword.errors.tooShort.replace("{{min}}", "8"),
+      );
+      await app.fillSelector("#profile-password", "creation test password");
+      await app.fillSelector("#profile-password-confirm", "different password");
+      await app.clickTextIn('[role="dialog"]', en.common.buttons.create, {
+        roles: ["button"],
+      });
+      await app.waitForText(en.profilePassword.errors.mismatch);
+      await app.fillSelector(
+        "#profile-password-confirm",
+        "creation test password",
+      );
+      await app.clickText(en.createProfile.advancedOptions, {
+        roles: ["button"],
+      });
+      await app.fillSelector(
+        "#launch-hook-url",
+        "https://example.com/hooks/created",
+      );
+      await chooseSelectOption(
+        app,
+        "#profile-dns-blocklist",
+        en.dnsBlocklist.normal,
+      );
+      await chooseSelectOption(
+        app,
+        "#profile-extension-group",
+        `${extensions.name} (0)`,
+      );
+      await app.clickSelector("#restore-session");
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-name').closest('[role="dialog"]').querySelectorAll('[role="tab"]').length;`,
+        ),
+        0,
+      );
+      await app.execute(
+        `document.querySelector('[data-slot="profile-create-fields"]').scrollTop = 0;`,
+      );
+      await app.capture("profile-create-advanced-wide");
+      await app.clickText(en.createProfile.advancedOptions, {
+        roles: ["button"],
+      });
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-name').value;`,
+        ),
+        "Protected profile",
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-password').value;`,
+        ),
+        "creation test password",
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-proxy').textContent.trim();`,
+        ),
+        proxy.name,
+      );
+      await app.clickText(en.createProfile.advancedOptions, {
+        roles: ["button"],
+      });
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#launch-hook-url').value;`,
+        ),
+        "https://example.com/hooks/created",
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#restore-session').getAttribute('aria-checked');`,
+        ),
+        "false",
+      );
+      await app.clickText(en.createProfile.advancedOptions, {
+        roles: ["button"],
+      });
+      await app.session.command("POST", "/window/rect", {
+        width: 480,
+        height: 700,
+      });
+      await app.capture("profile-create-password-narrow");
+      const fit = await app.execute(`
+      const dialog = document.querySelector('#profile-name').closest('[role="dialog"]');
+      const rect = dialog.getBoundingClientRect();
+      const footer = dialog.querySelector('[data-slot="dialog-footer"]').getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight &&
+        dialog.scrollWidth <= dialog.clientWidth && footer.bottom <= rect.bottom;
+    `);
+      assert.equal(fit, true);
+      const protectedProfile = await submitProfileCreation(
+        app,
+        "Protected profile",
+      );
+      assert.ok(protectedProfile);
+      assert.equal(protectedProfile.password_protected, true);
+      assert.equal(protectedProfile.ephemeral, false);
+      const protectedRequest = await app.execute(
+        `return window.__donutProfileRequests.at(-1);`,
+      );
+      assert.equal(protectedRequest.proxyId, proxy.id);
+      assert.equal(protectedRequest.vpnId, undefined);
+      assert.equal(protectedProfile.dns_blocklist, "normal");
+      assert.equal(
+        protectedProfile.launch_hook,
+        "https://example.com/hooks/created",
+      );
+      assert.equal(protectedProfile.extension_group_id, extensions.id);
+      assert.equal(protectedProfile.wayfern_config.restore_session, false);
+      await app.invoke("verify_profile_password", {
+        profileId: protectedProfile.id,
+        password: "creation test password",
+      });
+
+      await openProfileCreation(app);
+      await app.fillSelector("#profile-name", "Ephemeral profile");
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#enable-password').getAttribute('aria-checked');`,
+        ),
+        "false",
+      );
+      await app.capture("profile-create-compact-narrow");
+      await app.clickText(en.createProfile.advancedOptions, {
+        roles: ["button"],
+      });
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#launch-hook-url').value;`,
+        ),
+        "",
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-dns-blocklist').textContent.trim();`,
+        ),
+        en.dnsBlocklist.none,
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-extension-group').textContent.trim();`,
+        ),
+        en.profileInfo.values.none,
+      );
+      await app.capture("profile-create-advanced-narrow");
+      await app.clickText(en.createProfile.advancedOptions, {
+        roles: ["button"],
+      });
+      await app.clickSelector("#profile-proxy");
+      await app.fillSelector("[cmdk-input]", "Creation VPN");
+      await app.clickText(vpn.name, { exact: false, roles: ["option"] });
+      await app.clickSelector("#enable-password");
+      await app.fillSelector("#profile-password", "discarded password");
+      await app.clickSelector("#ephemeral");
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#enable-password').getAttribute('aria-checked');`,
+        ),
+        "false",
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-password') === null;`,
+        ),
+        true,
+      );
+      await app.clickSelector("#enable-password");
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#ephemeral').getAttribute('aria-checked');`,
+        ),
+        "false",
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-password').value;`,
+        ),
+        "",
+      );
+      await app.clickSelector("#ephemeral");
+      const ephemeral = await submitProfileCreation(app, "Ephemeral profile");
+      assert.ok(ephemeral);
+      assert.equal(ephemeral.ephemeral, true);
+      assert.equal(ephemeral.password_protected, false);
+      const ephemeralRequest = await app.execute(
+        `return window.__donutProfileRequests.at(-1);`,
+      );
+      assert.equal(ephemeralRequest.proxyId, undefined);
+      assert.equal(ephemeralRequest.vpnId, vpn.id);
+      assert.equal(ephemeral.launch_hook, null);
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
+test("profile table filters, range selection, view settings, and keyboard edits work together", async () => {
+  await withApp(
+    "ui-table-controls",
+    async (app) => {
+      await app.session.command("POST", "/window/rect", {
+        width: 1480,
+        height: 900,
+      });
+      const profiles = [];
+      for (let i = 0; i < 32; i++)
+        profiles.push(
+          await createUiProfile(app, `Table ${String(i + 1).padStart(2, "0")}`),
+        );
+      for (const profile of profiles.slice(0, 2))
+        await app.invoke("update_profile_tags", {
+          profileId: profile.id,
+          tags: ["table-work"],
+        });
+      await app.waitFor(
+        async () => (await tableRows(app, "profiles")).length >= 4,
+        { description: "profile table rows" },
+      );
+      const chrome = await app.execute(
+        `
+        const root = document.querySelector('[data-table-id="profiles"]');
+        const border = (node) => getComputedStyle(node).borderTopWidth;
+        const filters = [...root.querySelectorAll('[data-slot="table-filters"] button')]
+          .find((button) => button.textContent.trim() === arguments[0]);
+        return {
+          controls: [
+            filters,
+            root.querySelector('[data-slot="table-sort-trigger"]'),
+            root.querySelector('[data-slot="table-view-trigger"]'),
+          ].map(border),
+          rowRules: [...root.querySelectorAll('tr[data-table-row] > td')]
+            .filter((cell) => parseFloat(getComputedStyle(cell).borderBottomWidth) > 0).length,
+        };
+      `,
+        [en.tables.filters],
+      );
+      assert.deepEqual(chrome.controls, ["0px", "0px", "0px"]);
+      assert.equal(chrome.rowRules, 0, "rows are not divided by rules");
+      const row = (index) => `tr[data-table-row="${profiles[index].id}"]`;
+      await app.clickSelector(`${row(0)} [role="checkbox"]`);
+      await tableShiftClick(app, `${row(3)} [role="checkbox"]`);
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelectorAll('tr[data-table-row][aria-selected="true"]').length === 4;`,
+          ),
+        { description: "Shift-click selects four rows" },
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('[data-table-id="profiles"] thead [role="checkbox"]').getAttribute('data-state');`,
+        ),
+        "indeterminate",
+      );
+      assert.match(
+        await app.execute(
+          `return document.querySelector('[data-slot="table-action-bar"]').textContent;`,
+        ),
+        /4/,
+      );
+      const searchSelector = `input[placeholder="${en.header.searchPlaceholder}"]`;
+      await app.fillSelector(searchSelector, "Table 02");
+      await app.waitFor(
+        async () =>
+          JSON.stringify(await tableRows(app, "profiles")) ===
+          JSON.stringify([profiles[1].id]),
+        { description: "profile text search" },
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-slot="table-action-bar"]'));`,
+        ),
+        false,
+        "search clears all action targets",
+      );
+      await app.clickSelector(`[aria-label="${en.header.clearSearch}"]`);
+      await app.clickTextIn(
+        '[data-table-id="profiles"] [data-slot="table-filters"]',
+        en.tables.filters,
+        { roles: ["button"] },
+      );
+      await app.clickSelector(
+        `[cmdk-item][data-value="${en.profileTable.tagsHeader} table-work"]`,
+      );
+      await app.pressShortcut({ key: "Escape" });
+      await app.waitFor(
+        async () => (await tableRows(app, "profiles")).length === 2,
+        { description: "visible tag filter" },
+      );
+      assert.match(
+        await app.execute(
+          `return document.querySelector('[data-slot="table-result-count"]').textContent;`,
+        ),
+        /2.*32/,
+      );
+      await app.clickTextIn(
+        '[data-table-id="profiles"] [data-slot="table-filters"]',
+        en.tables.clearFilters,
+        { roles: ["button"] },
+      );
+
+      await app.clickSelector(
+        '[data-table-id="profiles"] [data-slot="table-sort-trigger"]',
+      );
+      await app.clickText(en.tables.addSort, { roles: ["button"] });
+      await app.clickSelector(
+        `[data-sort-index="1"] button[aria-label="${en.tables.moveSortUp}"]`,
+      );
+      await app.pressShortcut({ key: "Escape" });
+      await app.waitFor(
+        async () =>
+          (await app.invoke("get_table_preferences", { tableId: "profiles" }))
+            .sorting[0].id === "created_at",
+        { description: "ordered sort rules saved" },
+      );
+      assert.match(
+        await app.execute(
+          `return document.querySelector('[data-slot="table-sort-trigger"]').textContent;`,
+        ),
+        new RegExp(en.search.fields.created),
+      );
+
+      await app.clickSelector(
+        '[data-table-id="profiles"] [data-slot="table-view-trigger"]',
+      );
+      await app.clickSelector("#table-visible-profiles-note");
+      await app.clickSelector(`[aria-label="${en.tables.rowHeight}"]`);
+      await app.clickText(en.tables.comfortable, { roles: ["option"] });
+      await app.pressShortcut({ key: "Escape" });
+      await app.waitFor(
+        async () =>
+          (await app.invoke("get_table_preferences", { tableId: "profiles" }))
+            .density === "comfortable",
+        { description: "comfortable rows saved" },
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-table-column="note"]'));`,
+        ),
+        false,
+      );
+      assert.equal(
+        await app.execute(
+          `return Math.round(document.querySelector('tr[data-table-row]').getBoundingClientRect().height);`,
+        ),
+        48,
+      );
+      const resizeName = `[data-table-id="profiles"] [role="separator"][aria-label="${en.tables.resizeColumn.replace("{{column}}", en.common.labels.name)}"]`;
+      const columnWidth = () =>
+        app.execute(
+          `return document.querySelector(arguments[0]).parentElement.getBoundingClientRect().width;`,
+          [resizeName],
+        );
+      const initialWidth = await columnWidth();
+      await app.execute(`document.querySelector(arguments[0]).focus();`, [
+        resizeName,
+      ]);
+      await app.pressShortcut({ key: "\uE014" });
+      await app.waitFor(
+        async () =>
+          (await app.invoke("get_table_preferences", { tableId: "profiles" }))
+            .sizing.name > 48,
+        { description: "keyboard column resize saved" },
+      );
+      const saved = await app.invoke("get_table_preferences", {
+        tableId: "profiles",
+      });
+      assert.ok(Math.abs((await columnWidth()) - initialWidth - 16) < 2);
+      assert.ok(Math.abs((await columnWidth()) - saved.sizing.name) < 2);
+      await app.capture("table-controls-wide");
+      await app.restart();
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('tr[data-table-row]')?.getBoundingClientRect().height === 48;`,
+          ),
+        { description: "saved view restored after restart" },
+      );
+      assert.deepEqual(
+        await app.invoke("get_table_preferences", { tableId: "profiles" }),
+        saved,
+      );
+      assert.ok(Math.abs((await columnWidth()) - saved.sizing.name) < 2);
+
+      await app.clickSelector(
+        '[data-table-id="profiles"] [data-slot="table-view-trigger"]',
+      );
+      await app.clickText(en.tables.resetView, { roles: ["button"] });
+      await app.pressShortcut({ key: "Escape" });
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('tr[data-table-row]')?.getBoundingClientRect().height === 36;`,
+          ),
+        { description: "default view restored" },
+      );
+      await app.session.command("POST", "/window/rect", {
+        width: 1280,
+        height: 500,
+      });
+      await app.waitFor(
+        () =>
+          app.execute(`return !document.querySelector(arguments[0]);`, [
+            row(24),
+          ]),
+        { description: "keyboard target starts outside the rendered rows" },
+      );
+      await app.execute(`document.querySelector(arguments[0]).focus();`, [
+        `${row(0)} [data-table-column="name"]`,
+      ]);
+      for (let i = 0; i < 24; i++) {
+        await app.pressShortcut({ key: "\uE015" });
+        await app.waitFor(
+          () =>
+            app.execute(
+              `return document.activeElement?.closest('tr')?.dataset.tableRow === arguments[0];`,
+              [profiles[i + 1].id],
+            ),
+          { description: `keyboard row ${i + 2}` },
+        );
+      }
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.activeElement?.closest('tr')?.dataset.tableRow === arguments[0];`,
+            [profiles[24].id],
+          ),
+        { description: "keyboard crosses the virtual row boundary" },
+      );
+      await app.pressShortcut({ key: "\uE032" });
+      await app.fillSelector(`${row(24)} input`, "Table renamed by keyboard");
+      await app.pressShortcut({ key: "\uE006" });
+      await app.waitFor(
+        async () =>
+          (await app.invoke("list_browser_profiles")).find(
+            (profile) => profile.id === profiles[24].id,
+          )?.name === "Table renamed by keyboard",
+        { description: "F2 edit saved through the backend" },
+      );
+      await app.session.command("POST", "/window/rect", {
+        width: 640,
+        height: 600,
+      });
+      await app.capture("table-controls-narrow");
+      assert.equal(
+        await app.execute(
+          `return document.documentElement.scrollWidth <= innerWidth;`,
+        ),
+        true,
+        "controls do not widen the window",
+      );
+      await app.clickSelector(
+        '[data-table-id="profiles"] thead [role="checkbox"]',
+      );
+      await app.waitFor(
+        () =>
+          app.execute(
+            `
+            const scroll = document.querySelector('[data-table-id="profiles"] .scroll-fade');
+            scroll.scrollTop = scroll.scrollHeight;
+            const rows = [...scroll.querySelectorAll('tr[data-table-row]')];
+            const bar = document.querySelector('[data-slot="table-action-bar"]');
+            return rows.at(-1)?.dataset.tableRow === arguments[0] &&
+              rows.at(-1).getBoundingClientRect().bottom <= bar?.getBoundingClientRect().top - 4;
+          `,
+            [profiles[24].id],
+          ),
+        { description: "last row clears the wrapped bulk action bar" },
+      );
+      await app.capture("table-controls-narrow-selection");
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
+test("management tables share search, filters, selection, and saved views", async () => {
+  await withApp("ui-management-tables", async (app) => {
+    const proxies = [];
+    for (const [name, protocol] of [
+      ["Table proxy Alpha", "http"],
+      ["Table proxy Beta", "socks5"],
+      ["Table proxy Gamma", "http"],
+    ])
+      proxies.push(
+        await app.invoke("create_stored_proxy", {
+          name,
+          proxySettings: {
+            proxy_type: protocol,
+            host: "127.0.0.1",
+            port: 9,
+            username: null,
+            password: null,
+          },
+        }),
+      );
+    await app.invoke("create_profile_group", { name: "Table group Alpha" });
+    await app.invoke("create_profile_group", { name: "Table group Beta" });
+    await app.pressShortcut({
+      key: "n",
+      ...(process.platform === "darwin" ? { meta: true } : { ctrl: true }),
+    });
+    await app.waitFor(
+      async () => (await tableRows(app, "proxies")).length === 3,
+      { description: "proxy table" },
+    );
+    const proxyRowHeight = () =>
+      app.execute(
+        `return document.querySelector('[data-table-id="proxies"] tr[data-table-row]')?.getBoundingClientRect().height;`,
+      );
+    await app.clickSelector(
+      `[data-table-id="proxies"] tr[data-table-row="${proxies[0].id}"] [role="checkbox"]`,
+    );
+    await tableShiftClick(
+      app,
+      `[data-table-id="proxies"] tr[data-table-row="${proxies[2].id}"] [role="checkbox"]`,
+    );
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelectorAll('[data-table-id="proxies"] tr[aria-selected="true"]').length === 3;`,
+        ),
+      { description: "management range selection" },
+    );
+    await app.fillSelector(
+      `[data-table-id="proxies"] input[aria-label="${en.tables.search}"]`,
+      "Beta",
+    );
+    await app.waitFor(
+      async () => (await tableRows(app, "proxies")).length === 1,
+      { description: "proxy search" },
+    );
+    assert.equal(
+      await app.execute(
+        `return Boolean(document.querySelector('[data-slot="table-action-bar"]'));`,
+      ),
+      false,
+    );
+    await app.fillSelector(
+      `[data-table-id="proxies"] input[aria-label="${en.tables.search}"]`,
+      "no such row",
+    );
+    await app.waitForText(en.tables.noResults);
+    await app.clickTextIn(
+      '[data-table-id="proxies"] tbody',
+      en.tables.clearFilters,
+      { roles: ["button"] },
+    );
+    assert.equal((await tableRows(app, "proxies")).length, 3);
+    await app.clickTextIn(
+      '[data-table-id="proxies"] [data-slot="table-filters"]',
+      en.tables.filters,
+      { roles: ["button"] },
+    );
+    await app.clickSelector(
+      `[cmdk-item][data-value="${en.proxies.management.protocolCol} HTTP"]`,
+    );
+    await app.pressShortcut({ key: "Escape" });
+    await app.waitFor(
+      async () => (await tableRows(app, "proxies")).length === 2,
+      { description: "proxy protocol facet" },
+    );
+    await app.clickSelector(
+      '[data-table-id="proxies"] [data-slot="table-view-trigger"]',
+    );
+    await app.clickSelector("#table-visible-proxies-hostPort");
+    await app.pressShortcut({ key: "Escape" });
+    await app.waitFor(
+      async () =>
+        (await app.invoke("get_table_preferences", { tableId: "proxies" }))
+          .visibility.hostPort === false,
+      { description: "management columns saved" },
+    );
+    assert.equal(await proxyRowHeight(), 36);
+    await app.clickSelector(
+      '[data-table-id="proxies"] [data-slot="table-view-trigger"]',
+    );
+    await app.clickSelector(`[aria-label="${en.tables.rowHeight}"]`);
+    await app.clickText(en.tables.comfortable, { roles: ["option"] });
+    await app.pressShortcut({ key: "Escape" });
+    await app.waitFor(async () => (await proxyRowHeight()) === 48, {
+      description: "management row height changes",
+    });
+    await app.capture("management-table-controls");
+    await app.clickSelector(`[aria-label="${en.rail.groups}"]`);
+    await app.waitFor(
+      async () => (await tableRows(app, "groups")).length === 2,
+      { description: "group table" },
+    );
+    await app.fillSelector(
+      `[data-table-id="groups"] input[aria-label="${en.tables.search}"]`,
+      "Beta",
+    );
+    await app.waitFor(
+      async () => (await tableRows(app, "groups")).length === 1,
+      { description: "group search" },
+    );
+    await app.invoke("create_vpn_config_manual", {
+      name: "Table VPN Alpha",
+      vpnType: "WireGuard",
+      configData: wireGuardFixture(),
+    });
+    await app.invoke("create_vpn_config_manual", {
+      name: "Table VPN Beta",
+      vpnType: "WireGuard",
+      configData: wireGuardFixture(),
+    });
+    await app.clickSelector(`[aria-label="${en.rail.network}"]`);
+    await app.clickText(en.proxies.management.tabVpns, {
+      roles: ["tab"],
+      exact: false,
+    });
+    await app.waitFor(async () => (await tableRows(app, "vpns")).length === 2, {
+      description: "VPN table",
+    });
+    await app.fillSelector(
+      `[data-table-id="vpns"] input[aria-label="${en.tables.search}"]`,
+      "Beta",
+    );
+    await app.waitFor(async () => (await tableRows(app, "vpns")).length === 1, {
+      description: "VPN search",
+    });
+    await app.invoke("add_extension", {
+      name: "Table extension",
+      fileName: "fixture.zip",
+      fileData: [...Buffer.from(extensionZipBase64(), "base64")],
+    });
+    await app.invoke("create_extension_group", {
+      name: "Table extension group Alpha",
+    });
+    await app.invoke("create_extension_group", {
+      name: "Table extension group Beta",
+    });
+    await app.clickSelector(`[aria-label="${en.rail.extensions}"]`);
+    await app.waitFor(
+      async () => (await tableRows(app, "extensions")).length === 1,
+      { description: "extension table" },
+    );
+    await app.fillSelector(
+      `[data-table-id="extensions"] input[aria-label="${en.tables.search}"]`,
+      "no such extension",
+    );
+    await app.waitForText(en.tables.noResults);
+    await app.clickTextIn(
+      '[data-table-id="extensions"] tbody',
+      en.tables.clearFilters,
+      { roles: ["button"] },
+    );
+    await app.clickText(en.extensions.groupsTab, {
+      roles: ["tab"],
+      exact: false,
+    });
+    await app.waitFor(
+      async () => (await tableRows(app, "extensionGroups")).length === 2,
+      { description: "extension group table" },
+    );
+    await app.fillSelector(
+      `[data-table-id="extensionGroups"] input[aria-label="${en.tables.search}"]`,
+      "Beta",
+    );
+    await app.waitFor(
+      async () => (await tableRows(app, "extensionGroups")).length === 1,
+      { description: "extension group search" },
+    );
+  });
+});
 
 async function dismissSurface(app) {
   await app.pressShortcut({ key: "Escape" });
@@ -197,8 +1052,37 @@ function assertContrast(foreground, background, minimum, description) {
 }
 
 async function chooseSelectOption(app, triggerSelector, option) {
-  await app.clickSelector(triggerSelector);
-  await app.clickText(option, { roles: ["option"] });
+  await app.waitFor(
+    () =>
+      app.execute(
+        `const trigger = document.querySelector(arguments[0]);
+         if (!trigger || trigger.matches(":disabled")) return false;
+         trigger.focus();
+         return document.activeElement === trigger;`,
+        [triggerSelector],
+      ),
+    { description: `enabled select ${triggerSelector}` },
+  );
+  await app.pressShortcut({ key: "\uE007" });
+  await app.waitFor(
+    () =>
+      app.execute(
+        `const option = [...document.querySelectorAll('[role="option"]')].find(node => node.textContent.trim() === arguments[0]);
+         option?.focus();
+         return option && document.activeElement === option;`,
+        [option],
+      ),
+    { description: `select option ${option}` },
+  );
+  await app.pressShortcut({ key: "\uE007" });
+  await app.waitFor(
+    () =>
+      app.execute(
+        `return document.querySelector(arguments[0])?.textContent.includes(arguments[1]);`,
+        [triggerSelector, option],
+      ),
+    { description: `selected value ${option}` },
+  );
 }
 
 async function saveSettings(app) {
@@ -322,25 +1206,151 @@ async function dragBackgroundColorPicker(app) {
   );
 }
 
-test("the integrations page ships the Local API and MCP tabs and never names remote control for a regular desktop", async () => {
+async function paintedColors(app, probes) {
+  return app.execute(
+    `
+      // Computed tints come back as color-mix() results with alpha. Paint
+      // them over the page on a 1px canvas to read the colour a person sees.
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      const sentinel = "#010203";
+      const flatten = (layers) => {
+        context.clearRect(0, 0, 1, 1);
+        for (const layer of layers) {
+          context.fillStyle = sentinel;
+          context.fillStyle = layer;
+          if (context.fillStyle === sentinel) return null;
+          context.fillRect(0, 0, 1, 1);
+        }
+        const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+        return "rgb(" + r + ", " + g + ", " + b + ")";
+      };
+      const page = getComputedStyle(document.body).backgroundColor;
+      const result = { page: flatten([page]) };
+      for (const [name, [selector, text]] of Object.entries(arguments[0])) {
+        const node = [...document.querySelectorAll(selector)].find(
+          (candidate) => !text || candidate.textContent.trim() === text,
+        );
+        if (!node) {
+          result[name] = null;
+          continue;
+        }
+        const style = getComputedStyle(node);
+        result[name] = {
+          fill: flatten([page, style.backgroundColor]),
+          text: flatten([page, style.backgroundColor, style.color]),
+        };
+      }
+      return result;
+    `,
+    [probes],
+  );
+}
+
+function assertQuietTint(painted, page, maximum, description) {
+  assert.ok(painted, `${description} is missing`);
+  const ratio = Color(painted.fill).contrast(Color(page));
+  assert.ok(
+    ratio >= 1.03 && ratio <= maximum,
+    `${description} tint is ${ratio.toFixed(2)}:1 against the page; expected 1.03 to ${maximum}`,
+  );
+  assertContrast(painted.text, painted.fill, 4.5, `${description} text`);
+}
+
+test("soft table and creation surfaces stay quiet and readable in every theme", async () => {
+  await withApp(
+    "ui-soft-surfaces",
+    async (app) => {
+      await app.session.command("POST", "/window/rect", {
+        width: 1280,
+        height: 860,
+      });
+      const tagged = await createUiProfile(app, "Theme Alpha");
+      await createUiProfile(app, "Theme Beta");
+      await app.invoke("update_profile_tags", {
+        profileId: tagged.id,
+        tags: ["theme-tag"],
+      });
+      await app.waitFor(
+        async () => (await tableRows(app, "profiles")).length === 2,
+        { description: "theme table rows" },
+      );
+      await app.clickSelector(
+        `tr[data-table-row="${tagged.id}"] [role="checkbox"]`,
+      );
+      const table = '[data-table-id="profiles"]';
+      const captured = new Set(["dracula", "tokyo-night", "ayu-light"]);
+      for (const theme of THEMES) {
+        await applyThemeForContrastAudit(app, theme);
+        const colors = await paintedColors(app, {
+          header: [`${table} thead th`, en.profileTable.tagsHeader],
+          selected: [
+            `${table} tr[data-state="selected"] > td[data-table-column="name"]`,
+          ],
+          button: [`${table} [data-slot="table-view-trigger"]`],
+          tag: [`${table} tbody [data-slot="badge"]`, "theme-tag"],
+        });
+        assert.ok(colors.page, `${theme.id} page colour`);
+        assertQuietTint(colors.header, colors.page, 1.35, `${theme.id} header`);
+        assertQuietTint(
+          colors.selected,
+          colors.page,
+          1.6,
+          `${theme.id} selected row`,
+        );
+        assertQuietTint(colors.button, colors.page, 1.35, `${theme.id} button`);
+        assertQuietTint(colors.tag, colors.page, 1.4, `${theme.id} tag`);
+        if (captured.has(theme.id)) await app.capture(`table-${theme.id}`);
+      }
+
+      await openProfileCreation(app);
+      await app.fillSelector("#profile-name", "Theme profile");
+      await app.clickSelector("#enable-password");
+      await app.fillSelector("#profile-password", "theme password");
+      for (const theme of THEMES) {
+        await applyThemeForContrastAudit(app, theme);
+        const colors = await paintedColors(app, {
+          off: ["#ephemeral"],
+          on: ["#enable-password"],
+          name: ['label[for="profile-name"]'],
+          password: ["#profile-password"],
+        });
+        assertQuietTint(colors.off, colors.page, 1.35, `${theme.id} option`);
+        assertQuietTint(
+          colors.on,
+          colors.page,
+          1.6,
+          `${theme.id} chosen option`,
+        );
+        assertQuietTint(colors.name, colors.page, 1.35, `${theme.id} name`);
+        assertQuietTint(
+          colors.password,
+          colors.page,
+          1.35,
+          `${theme.id} password field`,
+        );
+        if (captured.has(theme.id)) await app.capture(`creation-${theme.id}`);
+      }
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+test("the integrations page ships only the Local API tab and never names remote control for a regular desktop", async () => {
   await withApp("ui-integrations", async (app) => {
     const modifier =
       process.platform === "darwin" ? { meta: true } : { ctrl: true };
     await app.clickSelector('[aria-label="Integrations"]');
-    await app.waitForText(en.integrations.tabMcp);
+    await app.waitForText(en.integrations.tabApi);
 
-    // Exactly the two tabs v0.30.0 shipped, in its order. Remote control is
-    // an Enterprise feature that a desktop without the entitlement is never
-    // told about, and this session is signed out, so a third tab here means
-    // the gate opened for everyone.
+    // Local MCP is gone, and remote control is an Enterprise feature that a
+    // desktop without the entitlement is never told about. This session is
+    // signed out, so a second tab here means the gate opened for everyone.
     const tabs = async () =>
       app.execute(
         `return [...document.querySelectorAll('[role="tab"]')].map((node) => node.textContent.trim());`,
       );
-    assert.deepEqual(await tabs(), [
-      en.integrations.tabApi,
-      en.integrations.tabMcp,
-    ]);
+    assert.deepEqual(await tabs(), [en.integrations.tabApi]);
     // The whole document, not just the painted text: a hidden trigger or an
     // unmounted-looking panel is still a mention.
     const html = await app.html();
@@ -361,88 +1371,17 @@ test("the integrations page ships the Local API and MCP tabs and never names rem
       "opening the page must not open the bridge",
     );
 
-    // Mod+I flips between the two tabs there are, and never lands on a tab
-    // that is not offered.
+    // Mod+I flips to Remote MCP only for an entitled account, so here it
+    // never lands on a tab that is not offered.
     const activeTab = async () =>
       app.execute(
         `return document.querySelector('[role="tab"][data-state="active"]')?.textContent.trim() ?? null;`,
       );
     assert.equal(await activeTab(), en.integrations.tabApi);
     await app.pressShortcut({ key: "i", ...modifier });
-    await app.waitFor(
-      async () => (await activeTab()) === en.integrations.tabMcp,
-      { description: "Mod+I to move to the MCP tab" },
-    );
-    await app.pressShortcut({ key: "i", ...modifier });
-    await app.waitFor(
-      async () => (await activeTab()) === en.integrations.tabApi,
-      { description: "Mod+I to move back to the Local API tab" },
-    );
-    assert.deepEqual(await tabs(), [
-      en.integrations.tabApi,
-      en.integrations.tabMcp,
-    ]);
-
-    await app.clickText(en.integrations.tabMcp, { roles: ["tab"] });
-    await app.waitForText(en.integrations.mcpEnableLabel);
-    // Section labels are set in CSS uppercase, which innerText applies, so
-    // they are read from the label nodes rather than from the body text.
-    const labelShown = (label) =>
-      app.execute(
-        `return [...document.querySelectorAll("label")].some((node) => node.textContent.trim() === arguments[0]);`,
-        [label],
-      );
-    // Local MCP is removed: the tab shows a deprecation banner, the local
-    // client installer is gone, and enabling it starts no server.
-    assert.ok(
-      (await app.bodyText()).includes(
-        en.integrations.mcp.deprecatedBannerTitle,
-      ),
-      "the MCP tab must show the local-MCP removal banner",
-    );
-    assert.equal(
-      await labelShown(en.integrations.mcp.clientsLabel),
-      false,
-      "the local client installer is gone with the local server",
-    );
-    assert.equal(await app.invoke("get_mcp_server_status"), false);
-
-    // Attempting to enable local MCP raises the removal dialog and starts
-    // nothing. Only the MCP tab's content is mounted, so this is its switch.
-    await app.clickSelector('[role="switch"]');
-    const removalDialogVisible = () =>
-      app.execute(
-        `return [...document.querySelectorAll('[role="dialog"]')].some(node => node.textContent.includes(arguments[0]));`,
-        [en.mcpLocalDeprecated.title],
-      );
-    await app.waitFor(removalDialogVisible, {
-      description: "the local MCP removal dialog to open",
-    });
-    assert.equal(
-      await app.invoke("get_mcp_server_status"),
-      false,
-      "enabling local MCP must not start a server",
-    );
-    assert.equal(
-      await labelShown(en.integrations.mcp.clientsLabel),
-      false,
-      "no local client installer appears after a refused enable",
-    );
-    // The refusal must leave the switch off: a regression that flips it on
-    // visually while starting nothing would otherwise pass.
-    assert.equal(
-      await app.execute(
-        `return document.querySelector('[role="switch"]').getAttribute("aria-checked");`,
-      ),
-      "false",
-      "a refused enable must leave the local MCP switch off",
-    );
-    // The command also emits a toast with the same title. Observe the dialog
-    // itself so a toast cannot stand in for modal opening or dismissal.
-    await app.pressShortcut({ key: "Escape" });
-    await app.waitFor(async () => !(await removalDialogVisible()), {
-      description: "the local MCP removal dialog to close",
-    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(await activeTab(), en.integrations.tabApi);
+    assert.deepEqual(await tabs(), [en.integrations.tabApi]);
 
     await dismissSurface(app);
   });
@@ -1981,9 +2920,10 @@ test("the distribute-proxies dialog opens from the action bar, counts the pairin
       await app.waitForText("Fleet Three");
 
       await app.clickSelector(`[aria-label="${en.common.aria.selectAll}"]`);
-      await app.clickSelector(
-        `[aria-label="${en.profiles.actionBar.distributeProxies}"]`,
-      );
+      await app.clickText(en.tables.moreActions, { roles: ["button"] });
+      await app.clickText(en.profiles.actionBar.distributeProxies, {
+        roles: ["menuitem"],
+      });
       await app.waitForText(en.proxyDistribution.title);
 
       // Two proxies for three profiles: the dialog has to say so up front, and
@@ -2942,379 +3882,6 @@ test("a freshly paid account is welcomed once and walked to its plan tips", asyn
   });
 });
 
-const MCP_MIGRATION = '[data-slot="mcp-migration"]';
-
-/**
- * Fails `add_mcp_to_agent` for the listed agent ids with the given backend
- * error, the way the Rust command rejects, and answers the rest with success.
- * Installed on top of `stubCommand`, so `restoreStubs` removes it too.
- */
-async function stubAgentInstall(app, failures) {
-  await app.execute(
-    `window.__donutInstallFailures = arguments[0];
-     if (!window.__donutInstallStubbed) {
-       window.__donutInstallStubbed = true;
-       const next = window.fetch;
-       window.fetch = function (input, init) {
-         const url = String(
-           typeof input === "string" ? input : (input && input.url) || "",
-         );
-         if (!url.endsWith("/add_mcp_to_agent")) {
-           return next.apply(window, arguments);
-         }
-         const payload = JSON.parse((init && init.body) || "null");
-         window.__donutStubbedCalls = window.__donutStubbedCalls ?? [];
-         window.__donutStubbedCalls.push({ command: "add_mcp_to_agent", payload });
-         const error = window.__donutInstallFailures[payload && payload.agentId];
-         return Promise.resolve(
-           new Response(JSON.stringify(error ?? null), {
-             status: 200,
-             headers: {
-               "content-type": "application/json",
-               "Tauri-Response": error ? "error" : "ok",
-             },
-           }),
-         );
-       };
-     }`,
-    [failures],
-  );
-}
-
-const migrationShown = (app) =>
-  app.execute(`return Boolean(document.querySelector(arguments[0]));`, [
-    MCP_MIGRATION,
-  ]);
-
-const migrationFlowState = (app) =>
-  app.execute(
-    `return document.querySelector(arguments[0] + ' [data-slot="operation-flow"]')?.dataset.state ?? null;`,
-    [MCP_MIGRATION],
-  );
-
-const migrationClientStates = (app) =>
-  app.execute(
-    `return Object.fromEntries([...document.querySelectorAll('[data-slot="mcp-migration-client"]')].map((node) => [node.dataset.agentId, node.dataset.state]));`,
-  );
-
-test("local MCP on a desktop that cannot use remote MCP is never offered the move", async () => {
-  await withApp(
-    "ui-mcp-migration-not-entitled",
-    async (app) => {
-      await app.waitForText("No profiles yet");
-      // A client still pointing at the removed loopback server, next to the
-      // legacy flag: local MCP is in use. Nobody is signed in.
-      const cursorConfig = path.join(app.root, "home", ".cursor", "mcp.json");
-      await mkdir(path.dirname(cursorConfig), { recursive: true });
-      await writeFile(
-        cursorConfig,
-        `${JSON.stringify({
-          mcpServers: {
-            "donut-browser": { url: "http://127.0.0.1:51080/mcp/e2e-token" },
-          },
-        })}\n`,
-      );
-      assert.deepEqual(await app.invoke("get_mcp_migration_offer"), {
-        eligible: false,
-        due: false,
-        local_server_enabled: true,
-        local_clients: ["cursor"],
-      });
-      // Without an account there is nobody to remember the offer for.
-      assert.match(
-        await app.invokeError("mark_mcp_migration_offered"),
-        /"code":"MCP_REMOTE_REQUIRES_SIGN_IN"/,
-      );
-      assert.deepEqual(
-        (await app.invoke("get_app_settings")).mcp_migration_offered_for,
-        [],
-      );
-
-      // Well past the moment a due offer opens, and nothing did.
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
-      assert.equal(await migrationShown(app), false);
-
-      // The MCP tab keeps its plain removal banner: no move, no plan pitch.
-      await app.clickSelector('[aria-label="Integrations"]');
-      await app.waitForText(en.integrations.tabMcp);
-      await app.clickText(en.integrations.tabMcp, { roles: ["tab"] });
-      await app.waitForText(en.integrations.mcp.deprecatedBannerTitle);
-      assert.equal(
-        await app.execute(
-          `return Boolean(document.querySelector('[data-slot="mcp-migration-open"]'));`,
-        ),
-        false,
-        "the move is offered only to an account that can use remote MCP",
-      );
-      assert.ok(
-        await app.visibleTextIncludes(en.integrations.mcp.deprecatedCta),
-      );
-      await dismissSurface(app);
-
-      // Turning the local server off needs no account, clears the flag the
-      // next launch reads, and is safe to repeat.
-      await app.invoke("turn_off_local_mcp_server");
-      assert.equal((await app.invoke("get_app_settings")).mcp_enabled, false);
-      assert.equal(await app.invoke("get_mcp_server_status"), false);
-      await app.invoke("turn_off_local_mcp_server");
-      const offer = await app.invoke("get_mcp_migration_offer");
-      assert.equal(offer.local_server_enabled, false);
-      assert.deepEqual(offer.local_clients, ["cursor"]);
-    },
-    { settings: { mcp_enabled: true } },
-  );
-});
-
-test("an account that can use remote MCP is offered the move once, and it runs client by client with a retry", async () => {
-  await withApp("ui-mcp-migration", async (app) => {
-    await app.waitForText("No profiles yet");
-    const settings = await app.invoke("get_app_settings");
-    try {
-      // The cloud answers and the client rewrites are stubbed at the IPC
-      // layer: the harness has no account and must not touch real clients.
-      // Everything the dialog decides and shows runs for real.
-      await stubCommand(app, "get_mcp_migration_offer", {
-        eligible: true,
-        due: true,
-        local_server_enabled: true,
-        local_clients: ["cursor", "fx"],
-      });
-      await stubCommand(app, "mark_mcp_migration_offered", null);
-      await stubCommand(app, "list_mcp_agents", [
-        {
-          id: "cursor",
-          display_name: "Cursor",
-          category: "editor",
-          connected: true,
-          detected: true,
-          endpoint: "local",
-          token_env: null,
-        },
-        {
-          id: "fx",
-          display_name: "fx",
-          category: "cli",
-          connected: true,
-          detected: true,
-          endpoint: "local",
-          token_env: "DONUT_MCP_TOKEN",
-        },
-        {
-          id: "zed",
-          display_name: "Zed",
-          category: "editor",
-          connected: false,
-          detected: true,
-          endpoint: null,
-          token_env: null,
-        },
-      ]);
-      await stubCommand(app, "get_app_settings", {
-        ...settings,
-        mcp_enabled: true,
-        mcp_remote_key: "dmk_e2e0123456789abcdef",
-      });
-      const bridge = {
-        enabled: false,
-        connected: false,
-        instanceId: "ui-mcp-migration",
-        lastError: null,
-      };
-      await stubCommand(app, "get_mcp_remote_status", bridge);
-      await stubCommand(app, "start_mcp_remote_bridge", {
-        ...bridge,
-        enabled: true,
-      });
-      await stubCommand(app, "get_mcp_remote_credential", {
-        present: false,
-        token_prefix: null,
-      });
-      await stubCommand(app, "rotate_mcp_remote_credential", {
-        token_prefix: "dmk_e2e01234",
-        failed_clients: [],
-      });
-      await stubCommand(app, "turn_off_local_mcp_server", null);
-      await stubCommand(app, "get_remote_control_entitlement", true);
-      // Signed in two days ago, so this is not a fresh paid sign-in and the
-      // paid welcome stays out of the way.
-      await stubCommand(app, "cloud_get_user", {
-        logged_in_at: new Date(
-          Date.now() - 2 * 24 * 60 * 60 * 1000,
-        ).toISOString(),
-        user: {
-          id: "ui-mcp-migration",
-          email: "remote@example.test",
-          plan: "pro",
-          planPeriod: "monthly",
-          subscriptionStatus: "active",
-          profileLimit: 50,
-          cloudProfilesUsed: 0,
-          proxyBandwidthLimitMb: 0,
-          proxyBandwidthUsedMb: 0,
-          proxyBandwidthExtraMb: 0,
-          isPrimaryDevice: true,
-        },
-      });
-      await stubAgentInstall(app, {
-        cursor: JSON.stringify({
-          code: "MCP_AGENT_INSTALL_FAILED",
-          params: { detail: "the config file is read-only" },
-        }),
-      });
-
-      // Signing in settles the account; the offer opens by itself.
-      await app.invoke("plugin:event|emit", {
-        event: "cloud-auth-changed",
-        payload: null,
-      });
-      await app.waitFor(() => migrationShown(app), {
-        description: "the remote MCP move offer",
-      });
-      assert.deepEqual(
-        await app.waitFor(
-          async () => {
-            const states = await migrationClientStates(app);
-            return Object.keys(states).length > 0 ? states : null;
-          },
-          { description: "the clients on the local server" },
-        ),
-        { cursor: "waiting", fx: "waiting" },
-        "only the clients on the local server are listed",
-      );
-      assert.ok(await app.visibleTextIncludes(en.mcpMigration.title));
-      assert.ok(await app.visibleTextIncludes(en.mcpMigration.changes));
-      await app.capture("mcp-migration-offer");
-
-      await app.clickSelector('[data-slot="mcp-migration-start"]');
-      await app.waitFor(
-        async () => (await migrationFlowState(app)) === "failed",
-        { description: "the move to finish with one client failed" },
-      );
-      assert.deepEqual(await migrationClientStates(app), {
-        cursor: "failed",
-        fx: "moved",
-      });
-      assert.ok(
-        await app.visibleTextIncludes(
-          en.backendErrors.mcpAgentInstallFailed.replace(
-            "{{detail}}",
-            "the config file is read-only",
-          ),
-        ),
-        "the failure is the translated backend error, per client",
-      );
-      assert.ok(await app.visibleTextIncludes(en.integrations.remote.fxHint));
-      assert.ok(
-        await app.visibleTextIncludes(
-          en.mcpMigration.failed_one.replace("{{count}}", "1"),
-        ),
-      );
-      assert.ok(
-        await app.visibleTextIncludes("https://api.donutbrowser.com/api/mcp"),
-        "the endpoint is shown for clients set up by hand",
-      );
-      assert.equal(
-        await app.execute(
-          `return Boolean(document.querySelector('[data-slot="mcp-migration-local-off"]'));`,
-        ),
-        false,
-        "the local server is not offered for switch-off while a client still uses it",
-      );
-      await app.capture("mcp-migration-partial");
-
-      // Retry moves only what is left.
-      await stubAgentInstall(app, {});
-      await app.clickSelector('[data-slot="mcp-migration-start"]');
-      await app.waitFor(
-        async () => (await migrationFlowState(app)) === "done",
-        { description: "the retried move to finish" },
-      );
-      assert.deepEqual(await migrationClientStates(app), {
-        cursor: "moved",
-        fx: "moved",
-      });
-      assert.ok(await app.visibleTextIncludes(en.mcpMigration.doneTitle));
-      assert.ok(
-        await app.visibleTextIncludes(
-          en.mcpMigration.summary_other.replace("{{count}}", "2"),
-        ),
-      );
-
-      await app.clickSelector('[data-slot="mcp-migration-local-off"]');
-      await app.waitForText(en.mcpMigration.localServerIsOff);
-      await app.capture("mcp-migration-done");
-
-      const calls = await app.execute(
-        `return (window.__donutStubbedCalls ?? []).map((call) => ({ command: call.command, payload: call.payload }));`,
-      );
-      const called = (command) =>
-        calls.filter((call) => call.command === command);
-      assert.equal(called("mark_mcp_migration_offered").length, 1);
-      assert.equal(called("start_mcp_remote_bridge").length, 1);
-      assert.equal(
-        called("rotate_mcp_remote_credential").length,
-        1,
-        "the retry must not mint a second credential",
-      );
-      assert.deepEqual(
-        called("add_mcp_to_agent").map((call) => call.payload),
-        [
-          { agentId: "cursor", target: "remote" },
-          { agentId: "fx", target: "remote" },
-          { agentId: "cursor", target: "remote" },
-        ],
-      );
-      assert.equal(called("turn_off_local_mcp_server").length, 1);
-
-      await app.clickSelector('[data-slot="mcp-migration-done"]');
-      await app.waitFor(async () => !(await migrationShown(app)), {
-        description: "the move dialog closed",
-      });
-
-      // Once: the same account settling again does not reopen it.
-      await app.invoke("plugin:event|emit", {
-        event: "cloud-auth-changed",
-        payload: null,
-      });
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
-      assert.equal(await migrationShown(app), false);
-
-      // The MCP tab offers the same move by hand.
-      await app.clickSelector('[aria-label="Integrations"]');
-      await app.waitForText(en.integrations.tabMcp);
-      await app.clickText(en.integrations.tabMcp, { roles: ["tab"] });
-      await app.clickSelector('[data-slot="mcp-migration-open"]');
-      assert.deepEqual(
-        await app.waitFor(
-          async () => {
-            const states = await migrationClientStates(app);
-            return Object.keys(states).length > 0 ? states : null;
-          },
-          { description: "the move opened from the MCP tab" },
-        ),
-        { cursor: "waiting", fx: "waiting" },
-        "every opening starts fresh",
-      );
-      await app.clickSelector('[data-slot="mcp-migration-dismiss"]');
-      await app.waitFor(async () => !(await migrationShown(app)), {
-        description: "the move dialog dismissed",
-      });
-      assert.equal(
-        await app.execute(
-          `return (window.__donutStubbedCalls ?? []).filter((call) => call.command === "mark_mcp_migration_offered").length;`,
-        ),
-        1,
-        "opening it by hand is not the once-per-account offer",
-      );
-      await dismissSurface(app);
-    } finally {
-      await restoreStubs(app);
-      await app.execute(`delete window.__donutInstallStubbed;
-        delete window.__donutInstallFailures;`);
-    }
-  });
-});
-
 test("Pro users can edit and save launch arguments in each profile", async () => {
   await withApp(
     "ui-launch-args",
@@ -3429,5 +3996,93 @@ test("Pro users can edit and save launch arguments in each profile", async () =>
       }
     },
     { extraEnv: { WAYFERN_TEST_TOKEN: "e2e-local-launch-args" } },
+  );
+});
+
+test("the create dialog warns a free user who creates quickly and holds a capped plan at its hourly limit", async () => {
+  await withApp(
+    "ui-profile-hourly-limit",
+    async (app) => {
+      const createDisabled = () =>
+        app.execute(
+          `const dialog = document.querySelector('[role="dialog"]');
+         const button = [...(dialog?.querySelectorAll('button') ?? [])]
+           .find((node) => node.textContent.trim() === arguments[0]);
+         return button ? button.disabled : null;`,
+          [en.common.buttons.create],
+        );
+
+      // Free: past the allowance the dialog warns, and Create still works.
+      await stubCommand(app, "get_profile_creation_allowance", {
+        enforcement: "soft",
+        per_hour: 8,
+        used: 8,
+        retry_after_secs: 1_200,
+      });
+      await openProfileCreation(app);
+      await app.waitForText(en.createProfile.hourlyLimit.warningTitle);
+      await app.waitForText(en.createProfile.hourlyLimit.warning);
+      await app.fillSelector("#profile-name", "Quick profile");
+      assert.equal(await createDisabled(), false);
+      await app.clickTextIn('[role="dialog"]', en.common.buttons.cancel, {
+        roles: ["button"],
+      });
+      await app.waitFor(
+        () => app.execute(`return !document.querySelector('#profile-name');`),
+        { description: "create dialog closed" },
+      );
+
+      // Solo at its cap: Create is disabled and its tooltip says why and when.
+      await stubCommand(app, "get_profile_creation_allowance", {
+        enforcement: "hard",
+        per_hour: 10,
+        used: 10,
+        retry_after_secs: 1_200,
+      });
+      await openProfileCreation(app);
+      await app.fillSelector("#profile-name", "Capped profile");
+      await app.waitFor(async () => (await createDisabled()) === true, {
+        description: "Create disabled at the hourly cap",
+      });
+      assert.equal(
+        await app.execute(
+          `return document.body.innerText.includes(arguments[0]);`,
+          [en.createProfile.hourlyLimit.warningTitle],
+        ),
+        false,
+        "a capped plan is refused, not warned",
+      );
+
+      const target = await app.execute(
+        `const rect = document.querySelector('[data-slot="hourly-limit"]').getBoundingClientRect();
+       return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };`,
+      );
+      try {
+        await app.session.command("POST", "/actions", {
+          actions: [
+            {
+              type: "pointer",
+              id: "hourly-limit-pointer",
+              actions: [
+                {
+                  type: "pointerMove",
+                  x: target.x,
+                  y: target.y,
+                  origin: "viewport",
+                },
+              ],
+            },
+          ],
+        });
+      } finally {
+        await app.session.command("DELETE", "/actions");
+      }
+      await app.waitForText(
+        en.createProfile.hourlyLimit.reached
+          .replace("{{limit}}", "10")
+          .replace("{{minutes}}", "20"),
+      );
+    },
+    { seedDownloadedBrowser: true },
   );
 });

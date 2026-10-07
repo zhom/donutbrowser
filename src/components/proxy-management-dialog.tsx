@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  flexRender,
-  type RowSelectionState,
-  type SortingState,
-} from "@tanstack/react-table";
+import { type RowSelectionState } from "@tanstack/react-table";
 import {
   type LegacyColumnDef as ColumnDef,
   getCoreRowModel,
@@ -17,8 +13,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import {
-  LuChevronDown,
-  LuChevronUp,
   LuDownload,
   LuPencil,
   LuRefreshCw,
@@ -32,10 +26,16 @@ import {
   DataTableActionBarSelection,
 } from "@/components/data-table-action-bar";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import {
+  configureEntityColumns,
+  ManagedDataTable,
+  useEntityTableTools,
+} from "@/components/managed-data-table";
 import { ProfileUsageButton } from "@/components/profile-usage-button";
 import { ProxyExportDialog } from "@/components/proxy-export-dialog";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { ProxyImportDialog } from "@/components/proxy-import-dialog";
+import { SortableColumnHeader } from "@/components/table-controls";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -54,15 +54,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -187,14 +178,8 @@ export function ProxyManagementDialog({
   >({});
 
   // Table state
-  const [proxiesSorting, setProxiesSorting] = useState<SortingState>([
-    { id: "name", desc: false },
-  ]);
   const [proxiesRowSelection, setProxiesRowSelection] =
     useState<RowSelectionState>({});
-  const [vpnsSorting, setVpnsSorting] = useState<SortingState>([
-    { id: "name", desc: false },
-  ]);
   const [vpnsRowSelection, setVpnsRowSelection] = useState<RowSelectionState>(
     {},
   );
@@ -501,20 +486,10 @@ export function ProxyManagementDialog({
         enableSorting: true,
         sortingFn: "alphanumeric",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              column.toggleSorting(column.getIsSorted() === "asc");
-            }}
-            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
-          >
-            {t("common.labels.name")}
-            {column.getIsSorted() === "asc" ? (
-              <LuChevronUp className="ml-2 size-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <LuChevronDown className="ml-2 size-4" />
-            ) : null}
-          </Button>
+          <SortableColumnHeader
+            column={column}
+            label={t("common.labels.name")}
+          />
         ),
         cell: ({ row }) => (
           <span className="block truncate font-medium">
@@ -747,14 +722,26 @@ export function ProxyManagementDialog({
     ],
   );
 
+  const proxiesTableTools = useEntityTableTools(
+    "proxies",
+    storedProxies,
+    setProxiesRowSelection,
+  );
   const proxiesTable = useReactTable({
-    data: storedProxies,
-    columns: proxyColumns,
+    data: proxiesTableTools.filters.rows,
+    columns: useMemo(
+      () => configureEntityColumns(proxyColumns),
+      [proxyColumns],
+    ),
     state: {
-      sorting: proxiesSorting,
+      sorting: proxiesTableTools.view.preferences.sorting,
+      columnVisibility: proxiesTableTools.visibility,
+      columnSizing: proxiesTableTools.view.preferences.sizing,
       rowSelection: proxiesRowSelection,
     },
-    onSortingChange: setProxiesSorting,
+    onSortingChange: proxiesTableTools.view.setSorting,
+    onColumnSizingChange: proxiesTableTools.view.setSizing,
+    columnResizeMode: "onChange",
     onRowSelectionChange: setProxiesRowSelection,
     enableRowSelection: (row) => !proxyInUse[row.original.id],
     getCoreRowModel: getCoreRowModel(),
@@ -799,20 +786,10 @@ export function ProxyManagementDialog({
         enableSorting: true,
         sortingFn: "alphanumeric",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              column.toggleSorting(column.getIsSorted() === "asc");
-            }}
-            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
-          >
-            {t("common.labels.name")}
-            {column.getIsSorted() === "asc" ? (
-              <LuChevronUp className="ml-2 size-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <LuChevronDown className="ml-2 size-4" />
-            ) : null}
-          </Button>
+          <SortableColumnHeader
+            column={column}
+            label={t("common.labels.name")}
+          />
         ),
         cell: ({ row }) => {
           return (
@@ -827,7 +804,7 @@ export function ProxyManagementDialog({
         size: 96,
         enableSorting: false,
         header: () => t("common.labels.type"),
-        cell: () => <Badge variant="outline">WG</Badge>,
+        cell: () => <Badge variant="soft">WG</Badge>,
       },
       {
         id: "usage",
@@ -982,14 +959,23 @@ export function ProxyManagementDialog({
     ],
   );
 
+  const vpnsTableTools = useEntityTableTools(
+    "vpns",
+    vpnConfigs,
+    setVpnsRowSelection,
+  );
   const vpnsTable = useReactTable({
-    data: vpnConfigs,
-    columns: vpnColumns,
+    data: vpnsTableTools.filters.rows,
+    columns: useMemo(() => configureEntityColumns(vpnColumns), [vpnColumns]),
     state: {
-      sorting: vpnsSorting,
+      sorting: vpnsTableTools.view.preferences.sorting,
+      columnVisibility: vpnsTableTools.visibility,
+      columnSizing: vpnsTableTools.view.preferences.sizing,
       rowSelection: vpnsRowSelection,
     },
-    onSortingChange: setVpnsSorting,
+    onSortingChange: vpnsTableTools.view.setSorting,
+    onColumnSizingChange: vpnsTableTools.view.setSizing,
+    columnResizeMode: "onChange",
     onRowSelectionChange: setVpnsRowSelection,
     enableRowSelection: (row) => !vpnInUse[row.original.id],
     getCoreRowModel: getCoreRowModel(),
@@ -1192,7 +1178,7 @@ export function ProxyManagementDialog({
                         <TooltipTrigger asChild>
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             onClick={() => {
                               setShowImportDialog(true);
                             }}
@@ -1213,7 +1199,7 @@ export function ProxyManagementDialog({
                         <TooltipTrigger asChild>
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             onClick={() => {
                               setShowExportDialog(true);
                             }}
@@ -1257,7 +1243,7 @@ export function ProxyManagementDialog({
                         <TooltipTrigger asChild>
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             onClick={() => {
                               setShowVpnImportDialog(true);
                             }}
@@ -1302,109 +1288,12 @@ export function ProxyManagementDialog({
                 className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
                 <div className="flex min-h-0 flex-1 flex-col gap-4">
-                  {isLoading ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("proxies.management.loading")}
-                    </div>
-                  ) : storedProxies.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("proxies.management.noneCreated")}
-                    </div>
-                  ) : (
-                    <FadingScrollArea
-                      className={cn(
-                        "min-h-0 flex-1",
-                        selectedProxies.length > 0 && "pb-16",
-                      )}
-                      style={
-                        {
-                          "--scroll-fade-top-offset": "32px",
-                        } as React.CSSProperties
-                      }
-                    >
-                      <Table
-                        className="w-full table-fixed"
-                        containerClassName="overflow-visible"
-                      >
-                        <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-0">
-                          {proxiesTable.getHeaderGroups().map((headerGroup) => (
-                            <TableRow
-                              key={headerGroup.id}
-                              className="border-0!"
-                            >
-                              {headerGroup.headers.map((header) => (
-                                <TableHead
-                                  key={header.id}
-                                  style={{
-                                    width:
-                                      header.column.id === "name" ||
-                                      header.column.id === "hostPort"
-                                        ? undefined
-                                        : `${header.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    // name and hostPort emit no width, so
-                                    // fixed layout splits the remaining
-                                    // space evenly between them (hostPort
-                                    // hides below @2xl, leaving name all
-                                    // of it).
-                                    header.column.id === "name" && "max-w-0",
-                                    header.column.id === "hostPort" &&
-                                      "hidden max-w-0 @2xl:table-cell",
-                                    (header.column.id === "protocol" ||
-                                      header.column.id === "type") &&
-                                      "hidden @2xl:table-cell",
-                                  )}
-                                >
-                                  {header.isPlaceholder
-                                    ? null
-                                    : flexRender(
-                                        header.column.columnDef.header,
-                                        header.getContext(),
-                                      )}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableHeader>
-                        <TableBody>
-                          {proxiesTable.getRowModel().rows.map((row) => (
-                            <TableRow
-                              key={row.id}
-                              data-state={row.getIsSelected() && "selected"}
-                              className="border-0! hover:bg-muted"
-                            >
-                              {row.getVisibleCells().map((cell) => (
-                                <TableCell
-                                  key={cell.id}
-                                  style={{
-                                    width:
-                                      cell.column.id === "name" ||
-                                      cell.column.id === "hostPort"
-                                        ? undefined
-                                        : `${cell.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    cell.column.id === "name" && "max-w-0",
-                                    cell.column.id === "hostPort" &&
-                                      "hidden max-w-0 @2xl:table-cell",
-                                    (cell.column.id === "protocol" ||
-                                      cell.column.id === "type") &&
-                                      "hidden @2xl:table-cell",
-                                  )}
-                                >
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext(),
-                                  )}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </FadingScrollArea>
-                  )}
+                  <ManagedDataTable
+                    table={proxiesTable}
+                    tools={proxiesTableTools}
+                    loading={isLoading}
+                    emptyText={t("proxies.management.noneCreated")}
+                  />
                 </div>
               </AnimatedTabsContent>
 
@@ -1413,109 +1302,12 @@ export function ProxyManagementDialog({
                 className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
                 <div className="flex min-h-0 flex-1 flex-col gap-4">
-                  {isLoadingVpns ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("vpns.management.loading")}
-                    </div>
-                  ) : vpnConfigs.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("vpns.management.noneCreated")}
-                    </div>
-                  ) : (
-                    <FadingScrollArea
-                      className={cn(
-                        "min-h-0 flex-1",
-                        selectedVpns.length > 0 && "pb-16",
-                      )}
-                      style={
-                        {
-                          "--scroll-fade-top-offset": "32px",
-                        } as React.CSSProperties
-                      }
-                    >
-                      <Table
-                        className="w-full table-fixed"
-                        containerClassName="overflow-visible"
-                      >
-                        <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-0">
-                          {vpnsTable.getHeaderGroups().map((headerGroup) => (
-                            <TableRow
-                              key={headerGroup.id}
-                              className="border-0!"
-                            >
-                              {headerGroup.headers.map((header) => (
-                                <TableHead
-                                  key={header.id}
-                                  style={{
-                                    width:
-                                      header.column.id === "name" ||
-                                      header.column.id === "hostPort"
-                                        ? undefined
-                                        : `${header.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    // name and hostPort emit no width, so
-                                    // fixed layout splits the remaining
-                                    // space evenly between them (hostPort
-                                    // hides below @2xl, leaving name all
-                                    // of it).
-                                    header.column.id === "name" && "max-w-0",
-                                    header.column.id === "hostPort" &&
-                                      "hidden max-w-0 @2xl:table-cell",
-                                    (header.column.id === "protocol" ||
-                                      header.column.id === "type") &&
-                                      "hidden @2xl:table-cell",
-                                  )}
-                                >
-                                  {header.isPlaceholder
-                                    ? null
-                                    : flexRender(
-                                        header.column.columnDef.header,
-                                        header.getContext(),
-                                      )}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableHeader>
-                        <TableBody>
-                          {vpnsTable.getRowModel().rows.map((row) => (
-                            <TableRow
-                              key={row.id}
-                              data-state={row.getIsSelected() && "selected"}
-                              className="border-0! hover:bg-muted"
-                            >
-                              {row.getVisibleCells().map((cell) => (
-                                <TableCell
-                                  key={cell.id}
-                                  style={{
-                                    width:
-                                      cell.column.id === "name" ||
-                                      cell.column.id === "hostPort"
-                                        ? undefined
-                                        : `${cell.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    cell.column.id === "name" && "max-w-0",
-                                    cell.column.id === "hostPort" &&
-                                      "hidden max-w-0 @2xl:table-cell",
-                                    (cell.column.id === "protocol" ||
-                                      cell.column.id === "type") &&
-                                      "hidden @2xl:table-cell",
-                                  )}
-                                >
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext(),
-                                  )}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </FadingScrollArea>
-                  )}
+                  <ManagedDataTable
+                    table={vpnsTable}
+                    tools={vpnsTableTools}
+                    loading={isLoadingVpns}
+                    emptyText={t("vpns.management.noneCreated")}
+                  />
                 </div>
               </AnimatedTabsContent>
             </AnimatedTabs>
@@ -1591,7 +1383,6 @@ export function ProxyManagementDialog({
           <DataTableActionBarAction
             tooltip={t("syncTooltips.bulkToggle")}
             onClick={() => void handleBulkToggleProxiesSync()}
-            size="icon"
           >
             <LuRefreshCw />
           </DataTableActionBarAction>
@@ -1608,9 +1399,8 @@ export function ProxyManagementDialog({
               }
               setShowBulkDeleteProxiesDialog(true);
             }}
-            size="icon"
             variant="destructive"
-            className="border-destructive bg-destructive hover:bg-destructive"
+            className="bg-destructive/12 text-destructive-text hover:bg-destructive/20"
           >
             <LuTrash2 />
           </DataTableActionBarAction>
@@ -1622,7 +1412,6 @@ export function ProxyManagementDialog({
           <DataTableActionBarAction
             tooltip={t("syncTooltips.bulkToggle")}
             onClick={() => void handleBulkToggleVpnsSync()}
-            size="icon"
           >
             <LuRefreshCw />
           </DataTableActionBarAction>
@@ -1639,9 +1428,8 @@ export function ProxyManagementDialog({
               }
               setShowBulkDeleteVpnsDialog(true);
             }}
-            size="icon"
             variant="destructive"
-            className="border-destructive bg-destructive hover:bg-destructive"
+            className="bg-destructive/12 text-destructive-text hover:bg-destructive/20"
           >
             <LuTrash2 />
           </DataTableActionBarAction>

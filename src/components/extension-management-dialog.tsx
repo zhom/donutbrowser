@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  flexRender,
-  type RowSelectionState,
-  type SortingState,
-} from "@tanstack/react-table";
+import { type RowSelectionState } from "@tanstack/react-table";
 import {
   type LegacyColumnDef as ColumnDef,
   getCoreRowModel,
@@ -19,8 +15,6 @@ import { useTranslation } from "react-i18next";
 import { FaChrome } from "react-icons/fa";
 import { GoPlus } from "react-icons/go";
 import {
-  LuChevronDown,
-  LuChevronUp,
   LuExternalLink,
   LuFolderOpen,
   LuGlobe,
@@ -37,7 +31,13 @@ import {
   DataTableActionBarAction,
   DataTableActionBarSelection,
 } from "@/components/data-table-action-bar";
+import {
+  configureEntityColumns,
+  ManagedDataTable,
+  useEntityTableTools,
+} from "@/components/managed-data-table";
 import { ProfileUsageButton } from "@/components/profile-usage-button";
+import { SortableColumnHeader } from "@/components/table-controls";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -56,7 +56,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProBadge } from "@/components/ui/pro-badge";
@@ -69,14 +68,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -84,7 +75,6 @@ import {
 import { useProfileReferences } from "@/hooks/use-profile-references";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import { cn } from "@/lib/utils";
 import type { Extension, ExtensionGroup, FetchedExtension } from "@/types";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { RippleButton } from "./ui/ripple";
@@ -210,9 +200,7 @@ export function ExtensionManagementDialog({
   const [bulkGroupDeleteOpen, setBulkGroupDeleteOpen] = useState(false);
 
   // Table state
-  const [extSorting, setExtSorting] = useState<SortingState>([]);
   const [extRowSelection, setExtRowSelection] = useState<RowSelectionState>({});
-  const [groupSorting, setGroupSorting] = useState<SortingState>([]);
   const [groupRowSelection, setGroupRowSelection] = useState<RowSelectionState>(
     {},
   );
@@ -931,20 +919,10 @@ export function ExtensionManagementDialog({
         enableSorting: true,
         sortingFn: "alphanumeric",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              column.toggleSorting(column.getIsSorted() === "asc");
-            }}
-            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
-          >
-            {t("common.labels.name")}
-            {column.getIsSorted() === "asc" ? (
-              <LuChevronUp className="ml-2 size-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <LuChevronDown className="ml-2 size-4" />
-            ) : null}
-          </Button>
+          <SortableColumnHeader
+            column={column}
+            label={t("common.labels.name")}
+          />
         ),
         cell: ({ row }) => (
           <button
@@ -1114,11 +1092,26 @@ export function ExtensionManagementDialog({
     ],
   );
 
+  const extTableTools = useEntityTableTools(
+    "extensions",
+    extensions,
+    setExtRowSelection,
+  );
   const extTable = useReactTable({
-    data: extensions,
-    columns: extensionColumns,
-    state: { sorting: extSorting, rowSelection: extRowSelection },
-    onSortingChange: setExtSorting,
+    data: extTableTools.filters.rows,
+    columns: useMemo(
+      () => configureEntityColumns(extensionColumns),
+      [extensionColumns],
+    ),
+    state: {
+      sorting: extTableTools.view.preferences.sorting,
+      columnVisibility: extTableTools.visibility,
+      columnSizing: extTableTools.view.preferences.sizing,
+      rowSelection: extRowSelection,
+    },
+    onSortingChange: extTableTools.view.setSorting,
+    onColumnSizingChange: extTableTools.view.setSizing,
+    columnResizeMode: "onChange",
     onRowSelectionChange: setExtRowSelection,
     enableRowSelection: () => !limitedMode,
     getSortedRowModel: getSortedRowModel(),
@@ -1159,20 +1152,10 @@ export function ExtensionManagementDialog({
         enableSorting: true,
         sortingFn: "alphanumeric",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              column.toggleSorting(column.getIsSorted() === "asc");
-            }}
-            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
-          >
-            {t("common.labels.name")}
-            {column.getIsSorted() === "asc" ? (
-              <LuChevronUp className="ml-2 size-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <LuChevronDown className="ml-2 size-4" />
-            ) : null}
-          </Button>
+          <SortableColumnHeader
+            column={column}
+            label={t("common.labels.name")}
+          />
         ),
         cell: ({ row }) => (
           <button
@@ -1216,7 +1199,7 @@ export function ExtensionManagementDialog({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Badge
-                      variant="secondary"
+                      variant="soft"
                       className="h-5 shrink-0 px-1.5 text-xs"
                     >
                       +{overflowCount}
@@ -1367,11 +1350,26 @@ export function ExtensionManagementDialog({
     ],
   );
 
+  const groupTableTools = useEntityTableTools(
+    "extensionGroups",
+    extensionGroups,
+    setGroupRowSelection,
+  );
   const groupTable = useReactTable({
-    data: extensionGroups,
-    columns: groupColumns,
-    state: { sorting: groupSorting, rowSelection: groupRowSelection },
-    onSortingChange: setGroupSorting,
+    data: groupTableTools.filters.rows,
+    columns: useMemo(
+      () => configureEntityColumns(groupColumns),
+      [groupColumns],
+    ),
+    state: {
+      sorting: groupTableTools.view.preferences.sorting,
+      columnVisibility: groupTableTools.visibility,
+      columnSizing: groupTableTools.view.preferences.sizing,
+      rowSelection: groupRowSelection,
+    },
+    onSortingChange: groupTableTools.view.setSorting,
+    onColumnSizingChange: groupTableTools.view.setSizing,
+    columnResizeMode: "onChange",
     onRowSelectionChange: setGroupRowSelection,
     enableRowSelection: () => !limitedMode,
     getSortedRowModel: getSortedRowModel(),
@@ -1446,7 +1444,7 @@ export function ExtensionManagementDialog({
                         <TooltipTrigger asChild>
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             disabled={limitedMode}
                             onClick={() =>
                               document.getElementById("ext-file-input")?.click()
@@ -1467,7 +1465,7 @@ export function ExtensionManagementDialog({
                         <TooltipTrigger asChild>
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             disabled={limitedMode}
                             onClick={() => void handleLoadUnpacked()}
                             aria-label={t("extensions.loadUnpacked")}
@@ -1486,7 +1484,7 @@ export function ExtensionManagementDialog({
                         <TooltipTrigger asChild>
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             disabled={limitedMode}
                             onClick={() => {
                               setShowUrlForm((open) => !open);
@@ -1681,92 +1679,12 @@ export function ExtensionManagementDialog({
                   )}
 
                   {/* Extensions list */}
-                  {isLoading ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("common.buttons.loading")}
-                    </div>
-                  ) : extensions.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("extensions.empty")}
-                    </div>
-                  ) : (
-                    <FadingScrollArea
-                      className={cn(
-                        "min-h-0 flex-1",
-                        selectedExtensions.length > 0 && "pb-16",
-                      )}
-                      style={
-                        {
-                          "--scroll-fade-top-offset": "32px",
-                        } as React.CSSProperties
-                      }
-                    >
-                      <Table
-                        className="w-full table-fixed"
-                        containerClassName="overflow-visible"
-                      >
-                        <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-0">
-                          {extTable.getHeaderGroups().map((headerGroup) => (
-                            <TableRow
-                              key={headerGroup.id}
-                              className="border-0!"
-                            >
-                              {headerGroup.headers.map((header) => (
-                                <TableHead
-                                  key={header.id}
-                                  style={{
-                                    width:
-                                      header.column.id === "name"
-                                        ? undefined
-                                        : `${header.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    header.column.id === "name" && "max-w-0",
-                                  )}
-                                >
-                                  {header.isPlaceholder
-                                    ? null
-                                    : flexRender(
-                                        header.column.columnDef.header,
-                                        header.getContext(),
-                                      )}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableHeader>
-                        <TableBody>
-                          {extTable.getRowModel().rows.map((row) => (
-                            <TableRow
-                              key={row.id}
-                              data-state={row.getIsSelected() && "selected"}
-                              className="border-0! hover:bg-muted"
-                            >
-                              {row.getVisibleCells().map((cell) => (
-                                <TableCell
-                                  key={cell.id}
-                                  style={{
-                                    width:
-                                      cell.column.id === "name"
-                                        ? undefined
-                                        : `${cell.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    cell.column.id === "name" && "max-w-0",
-                                  )}
-                                >
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext(),
-                                  )}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </FadingScrollArea>
-                  )}
+                  <ManagedDataTable
+                    table={extTable}
+                    tools={extTableTools}
+                    loading={isLoading}
+                    emptyText={t("extensions.empty")}
+                  />
                 </div>
               </AnimatedTabsContent>
 
@@ -1810,88 +1728,12 @@ export function ExtensionManagementDialog({
                   )}
 
                   {/* Groups list */}
-                  {extensionGroups.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">
-                      {t("extensions.noGroups")}
-                    </div>
-                  ) : (
-                    <FadingScrollArea
-                      className={cn(
-                        "min-h-0 flex-1",
-                        selectedGroups.length > 0 && "pb-16",
-                      )}
-                      style={
-                        {
-                          "--scroll-fade-top-offset": "32px",
-                        } as React.CSSProperties
-                      }
-                    >
-                      <Table
-                        className="w-full table-fixed"
-                        containerClassName="overflow-visible"
-                      >
-                        <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-0">
-                          {groupTable.getHeaderGroups().map((headerGroup) => (
-                            <TableRow
-                              key={headerGroup.id}
-                              className="border-0!"
-                            >
-                              {headerGroup.headers.map((header) => (
-                                <TableHead
-                                  key={header.id}
-                                  style={{
-                                    width:
-                                      header.column.id === "name"
-                                        ? undefined
-                                        : `${header.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    header.column.id === "name" && "max-w-0",
-                                  )}
-                                >
-                                  {header.isPlaceholder
-                                    ? null
-                                    : flexRender(
-                                        header.column.columnDef.header,
-                                        header.getContext(),
-                                      )}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableHeader>
-                        <TableBody>
-                          {groupTable.getRowModel().rows.map((row) => (
-                            <TableRow
-                              key={row.id}
-                              data-state={row.getIsSelected() && "selected"}
-                              className="border-0! hover:bg-muted"
-                            >
-                              {row.getVisibleCells().map((cell) => (
-                                <TableCell
-                                  key={cell.id}
-                                  style={{
-                                    width:
-                                      cell.column.id === "name"
-                                        ? undefined
-                                        : `${cell.column.getSize()}px`,
-                                  }}
-                                  className={cn(
-                                    cell.column.id === "name" && "max-w-0",
-                                  )}
-                                >
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext(),
-                                  )}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </FadingScrollArea>
-                  )}
+                  <ManagedDataTable
+                    table={groupTable}
+                    tools={groupTableTools}
+                    loading={isLoading}
+                    emptyText={t("extensions.noGroups")}
+                  />
                 </div>
               </AnimatedTabsContent>
             </AnimatedTabs>
@@ -2355,7 +2197,6 @@ export function ExtensionManagementDialog({
           <DataTableActionBarSelection table={extTable} />
           <DataTableActionBarAction
             tooltip={t("syncTooltips.bulkToggle")}
-            size="icon"
             onClick={() => {
               void handleBulkToggleExtSync();
             }}
@@ -2365,8 +2206,7 @@ export function ExtensionManagementDialog({
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}
             variant="destructive"
-            size="icon"
-            className="border-destructive bg-destructive hover:bg-destructive"
+            className="bg-destructive/12 text-destructive-text hover:bg-destructive/20"
             onClick={() => {
               setBulkExtDeleteOpen(true);
             }}
@@ -2381,7 +2221,6 @@ export function ExtensionManagementDialog({
           <DataTableActionBarSelection table={groupTable} />
           <DataTableActionBarAction
             tooltip={t("syncTooltips.bulkToggle")}
-            size="icon"
             onClick={() => {
               void handleBulkToggleGroupSync();
             }}
@@ -2391,8 +2230,7 @@ export function ExtensionManagementDialog({
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}
             variant="destructive"
-            size="icon"
-            className="border-destructive bg-destructive hover:bg-destructive"
+            className="bg-destructive/12 text-destructive-text hover:bg-destructive/20"
             onClick={() => {
               setBulkGroupDeleteOpen(true);
             }}

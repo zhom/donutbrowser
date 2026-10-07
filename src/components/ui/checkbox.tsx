@@ -2,7 +2,7 @@
 
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 import type * as React from "react";
-import { LuCheck } from "react-icons/lu";
+import { LuCheck, LuMinus } from "react-icons/lu";
 
 import { cn } from "@/lib/utils";
 
@@ -21,9 +21,10 @@ function Checkbox({
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="flex items-center justify-center text-current transition-none"
+        className="group/indicator flex items-center justify-center text-current transition-none"
       >
-        <LuCheck className="size-3.5" />
+        <LuCheck className="size-3.5 group-data-[state=indeterminate]/indicator:hidden" />
+        <LuMinus className="hidden size-3.5 group-data-[state=indeterminate]/indicator:block" />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

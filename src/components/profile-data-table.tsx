@@ -4,7 +4,6 @@ import {
   flexRender,
   type RowData,
   type RowSelectionState,
-  type SortingState,
   type TableFeatures,
   type ColumnVisibilityState as VisibilityState,
 } from "@tanstack/react-table";
@@ -23,9 +22,11 @@ import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import {
+  LuArrowDown,
+  LuArrowUp,
+  LuArrowUpDown,
   LuCheck,
   LuChevronDown,
-  LuChevronUp,
   LuCookie,
   LuInfo,
   LuLock,
@@ -67,9 +68,15 @@ import {
   ProfileInfoDialog,
   ProfileLaunchHookDialog,
 } from "@/components/profile-info-dialog";
+import {
+  DATA_TABLE_CLASSES,
+  TableColumnResizer,
+  TableRowCheckbox,
+  TableSelectHeader,
+  TableViewControls,
+} from "@/components/table-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -113,7 +120,8 @@ import { useLaunchActivity } from "@/hooks/use-launch-activity";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useRemoteHandoff } from "@/hooks/use-remote-handoff";
 import { useScrollFade } from "@/hooks/use-scroll-fade";
-import { useTableSorting } from "@/hooks/use-table-sorting";
+import { useTablePreferences } from "@/hooks/use-table-preferences";
+import { useTableKeyboard } from "@/hooks/use-table-tools";
 import { useTeamLocks } from "@/hooks/use-team-locks";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
@@ -133,6 +141,7 @@ import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { canUseCookieBot } from "@/lib/entitlements";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import type { RemoteHandoffState } from "@/lib/remote-sessions";
+import { resolveTableVisibility } from "@/lib/table-tools";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -218,8 +227,6 @@ interface TableMeta {
   selectedProfiles: string[];
   selectedDragProfiles: BrowserProfile[];
   canDragProfiles: (profiles: BrowserProfile[]) => boolean;
-  selectableCount: number;
-  showCheckboxes: boolean;
   isClient: boolean;
   runningProfiles: Set<string>;
   launchingProfiles: Set<string>;
@@ -273,10 +280,6 @@ interface TableMeta {
   >;
 
   // Selection helpers
-  isProfileSelected: (id: string) => boolean;
-  handleToggleAll: (checked: boolean) => void;
-  handleCheckboxChange: (id: string, checked: boolean) => void;
-  handleIconClick: (id: string) => void;
 
   // Rename helpers
   handleRename: () => void | Promise<void>;
@@ -476,6 +479,39 @@ function getProfileSyncStatusDot(
   }
 }
 
+/**
+ * An unset value in a row. A faint dash keeps a long table calm; the
+ * label stays for screen readers, and an editable cell names its action
+ * while the pointer is over it.
+ */
+function EmptyCellValue({
+  label,
+  hint,
+}: {
+  label: string;
+  hint?: string | null;
+}) {
+  return (
+    <span className="flex min-w-0 flex-1 truncate text-sm text-muted-foreground">
+      <span
+        aria-hidden="true"
+        className={cn("opacity-50", hint && "group-hover/cell:hidden")}
+      >
+        —
+      </span>
+      {hint && (
+        <span
+          aria-hidden="true"
+          className="hidden truncate group-hover/cell:inline"
+        >
+          {hint}
+        </span>
+      )}
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
 // Inline extension-group dropdown for the Ext column. Matches the
 // proxy column's Popover-style picker — no nested dialog.
 function ExtCell({
@@ -514,13 +550,15 @@ function ExtCell({
         <button
           type="button"
           disabled={isSaving}
-          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+          className="flex h-6 w-full items-center rounded-md px-2 text-left text-sm transition-colors duration-100 hover:bg-foreground/6 disabled:opacity-50"
         >
-          <LuPuzzle className="size-3 shrink-0" />
-          <span className="flex-1 truncate" title={label}>
-            {group?.name ?? "—"}
-          </span>
-          <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
+          {group ? (
+            <span className="flex-1 truncate" title={label}>
+              {group.name}
+            </span>
+          ) : (
+            <EmptyCellValue label={label} />
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="start">
@@ -601,18 +639,18 @@ function DnsCell({
           type="button"
           data-onborda="dns-blocklist"
           disabled={isSaving}
-          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+          className="flex h-6 w-full items-center rounded-md px-2 text-left text-sm transition-colors duration-100 hover:bg-foreground/6 disabled:opacity-50"
           title={
             level
               ? meta.t("profiles.table.dnsLevel", { level })
               : meta.t("dnsBlocklist.none")
           }
         >
-          <FiWifi className="size-3 shrink-0" />
-          <span className="flex-1 truncate text-[11px] tracking-wide">
-            {currentLabel ? meta.t(currentLabel) : "—"}
-          </span>
-          <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
+          {currentLabel ? (
+            <span className="flex-1 truncate">{meta.t(currentLabel)}</span>
+          ) : (
+            <EmptyCellValue label={meta.t("dnsBlocklist.none")} />
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-48 p-0" align="start">
@@ -679,8 +717,8 @@ function ProfileIdCell({
       </Tooltip>
       <CopyToClipboard
         text={profile.id}
-        variant="ghost"
-        className="size-6 text-muted-foreground"
+        variant="subtle"
+        className="row-reveal size-6 rounded-md"
         successMessage={meta.t("toasts.success.copied")}
       />
     </div>
@@ -857,27 +895,33 @@ const TagsCell = React.memo<{
           type="button"
           ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
           className={cn(
-            "flex h-6 w-full cursor-pointer items-center gap-1 overflow-hidden rounded border-none bg-transparent px-2 py-1",
+            "group/cell flex h-6 w-full cursor-pointer items-center gap-1 overflow-hidden rounded-md border-none bg-transparent px-2 py-1 transition-colors duration-100",
             isDisabled
               ? "cursor-not-allowed opacity-60"
-              : "cursor-pointer hover:bg-muted",
+              : "cursor-pointer hover:bg-foreground/6",
           )}
           onClick={() => {
             if (!isDisabled) setOpenTagsEditorFor(profile.id);
           }}
         >
           {effectiveTags.slice(0, visibleCount).map((t) => (
-            <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
+            <Badge key={t} variant="soft" className="px-2 py-0 text-xs">
               {t}
             </Badge>
           ))}
           {effectiveTags.length === 0 && (
-            <span className="text-muted-foreground">
-              {translate("profileTable.noTags")}
-            </span>
+            <EmptyCellValue
+              hint={
+                isDisabled ? null : translate("profileTable.addTagsPlaceholder")
+              }
+              label={translate("profileTable.noTags")}
+            />
           )}
           {hiddenCount > 0 && (
-            <Badge variant="outline" className="px-2 py-0 text-xs">
+            <Badge
+              variant="soft"
+              className="px-1.5 py-0 text-xs text-muted-foreground"
+            >
               +{hiddenCount}
             </Badge>
           )}
@@ -892,11 +936,7 @@ const TagsCell = React.memo<{
               <TooltipContent className="max-w-[320px]">
                 <div className="flex flex-wrap gap-1">
                   {effectiveTags.map((t) => (
-                    <Badge
-                      key={t}
-                      variant="secondary"
-                      className="px-2 py-0 text-xs"
-                    >
+                    <Badge key={t} variant="soft" className="px-2 py-0 text-xs">
                       {t}
                     </Badge>
                   ))}
@@ -931,7 +971,7 @@ const TagsCell = React.memo<{
                 : ""
             }
             className={cn(
-              "border-0! bg-transparent focus-within:ring-0!",
+              "border-0! bg-transparent focus-within:ring-0! focus-within:ring-offset-0!",
               "[&_div:first-child]:border-0! [&_div:first-child]:ring-0! [&_div:first-child]:focus-within:ring-0!",
               "[&_div:first-child]:min-h-6! [&_div:first-child]:px-2! [&_div:first-child]:py-1!",
               "[&_div:first-child>div]:h-6! [&_div:first-child>div]:items-center",
@@ -1070,29 +1110,27 @@ const ProxyCellTrigger = React.memo<{
         <PopoverTrigger asChild>
           <span
             className={cn(
-              "flex max-w-full min-w-0 items-center gap-2 rounded px-2 py-1",
+              "flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 transition-colors duration-100",
               isDisabled
                 ? "pointer-events-none cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:bg-muted",
+                : "cursor-pointer hover:bg-foreground/6",
             )}
           >
             {vpnBadge && (
               <Badge
-                variant="outline"
+                variant="soft"
                 className="shrink-0 px-1 py-0 text-[10px] leading-tight"
               >
                 {vpnBadge}
               </Badge>
             )}
-            <span
-              ref={textRef}
-              className={cn(
-                "min-w-0 truncate text-sm",
-                !hasAssignment && "text-muted-foreground",
-              )}
-            >
-              {displayName}
-            </span>
+            {hasAssignment ? (
+              <span ref={textRef} className="min-w-0 truncate text-sm">
+                {displayName}
+              </span>
+            ) : (
+              <EmptyCellValue label={displayName} />
+            )}
           </span>
         </PopoverTrigger>
       </TooltipTrigger>
@@ -1219,10 +1257,10 @@ const NoteCell = React.memo<{
               <button
                 type="button"
                 className={cn(
-                  "flex min-h-6 w-full min-w-0 items-center rounded border-none bg-transparent px-2 py-1 text-left",
+                  "group/cell flex min-h-6 w-full min-w-0 items-center rounded-md border-none bg-transparent px-2 py-1 text-left transition-colors duration-100",
                   isDisabled
                     ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-muted",
+                    : "cursor-pointer hover:bg-foreground/6",
                 )}
                 onClick={() => {
                   if (!isDisabled) {
@@ -1231,14 +1269,16 @@ const NoteCell = React.memo<{
                   }
                 }}
               >
-                <span
-                  className={cn(
-                    "block w-full truncate text-sm",
-                    !effectiveNote && "text-muted-foreground",
-                  )}
-                >
-                  {effectiveNote ? displayNote : t("profiles.note.empty")}
-                </span>
+                {effectiveNote ? (
+                  <span className="block w-full truncate text-sm">
+                    {displayNote}
+                  </span>
+                ) : (
+                  <EmptyCellValue
+                    hint={isDisabled ? null : t("profiles.note.placeholder")}
+                    label={t("profiles.note.empty")}
+                  />
+                )}
               </button>
             </TooltipTrigger>
             {showTooltip && (
@@ -1386,7 +1426,7 @@ const BotCell = React.memo<{
         <button
           type="button"
           aria-label={t("cookieBot.state.rowMenu", { name: profile.name })}
-          className="flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded border-none bg-transparent px-1.5 text-left transition-colors duration-100 hover:bg-muted"
+          className="flex h-6 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-md border-none bg-transparent px-2 text-left transition-colors duration-100 hover:bg-foreground/6"
         >
           {tone ? (
             <StatusDot tone={tone} pulse={isPreparing} className="size-1.5" />
@@ -1487,6 +1527,8 @@ const BotCell = React.memo<{
 BotCell.displayName = "BotCell";
 
 interface ProfilesDataTableProps {
+  filterControls?: React.ReactNode;
+  onClearFilters?: () => void;
   profiles: BrowserProfile[];
   allProfiles?: BrowserProfile[];
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<unknown>;
@@ -1554,6 +1596,8 @@ interface ProfilesDataTableProps {
 }
 
 export function ProfilesDataTable({
+  filterControls,
+  onClearFilters,
   profiles,
   allProfiles = profiles,
   onLaunchProfile,
@@ -1604,64 +1648,22 @@ export function ProfilesDataTable({
   const [internalInfoOpenMethod, setInternalInfoOpenMethod] = React.useState<
     "pointer" | "keyboard"
   >("pointer");
-  const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
-  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const view = useTablePreferences("profiles");
+  const sorting = view.preferences.sorting;
 
-  // Sync external selectedProfiles with table's row selection state
-  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
-  const prevSelectedProfilesRef = React.useRef<string[]>(selectedProfiles);
-
-  // Update row selection when external selectedProfiles changes
-  React.useEffect(() => {
-    // Only update if selectedProfiles actually changed
-    if (
-      prevSelectedProfilesRef.current.length !== selectedProfiles.length ||
-      !prevSelectedProfilesRef.current.every((id) =>
-        selectedProfiles.includes(id),
-      )
-    ) {
-      const newSelection: RowSelectionState = {};
-      for (const profileId of selectedProfiles) {
-        newSelection[profileId] = true;
-      }
-      setRowSelection(newSelection);
-      prevSelectedProfilesRef.current = selectedProfiles;
-      // When the parent clears the selection (e.g. after a bulk action like
-      // delete / move-to-group), collapse the checkbox column back to icons.
-      // Otherwise the row checkboxes stay visible and only revert after the
-      // user clicks one — which the per-checkbox handler resets.
-      if (selectedProfiles.length === 0) {
-        setShowCheckboxes(false);
-      }
-    }
-  }, [selectedProfiles]);
-
-  // Update external selectedProfiles when table selection changes
+  const rowSelection = React.useMemo<RowSelectionState>(
+    () => Object.fromEntries(selectedProfiles.map((id) => [id, true])),
+    [selectedProfiles],
+  );
   const handleRowSelectionChange = React.useCallback(
     (updater: React.SetStateAction<RowSelectionState>) => {
-      setRowSelection((prevSelection) => {
-        const newSelection =
-          typeof updater === "function" ? updater(prevSelection) : updater;
-
-        const selectedIds = Object.keys(newSelection).filter(
-          (id) => newSelection[id],
+      onSelectedProfilesChange((previous) => {
+        const selection = Object.fromEntries(
+          previous.map((id) => [id, true as const]),
         );
-
-        // Only update external state if selection actually changed.
-        // A Set gives O(1) membership; Array.includes() inside .every() would
-        // be O(n*m) over large selections.
-        const prevIdSet = new Set(
-          Object.keys(prevSelection).filter((id) => prevSelection[id]),
-        );
-
-        if (
-          selectedIds.length !== prevIdSet.size ||
-          !selectedIds.every((id) => prevIdSet.has(id))
-        ) {
-          onSelectedProfilesChange(selectedIds);
-        }
-
-        return newSelection;
+        const next =
+          typeof updater === "function" ? updater(selection) : updater;
+        return Object.keys(next).filter((id) => next[id]);
       });
     },
     [onSelectedProfilesChange],
@@ -1757,7 +1759,6 @@ export function ProfilesDataTable({
   const [vpnOverrides, setVpnOverrides] = React.useState<
     Record<string, string | null>
   >({});
-  const [showCheckboxes, setShowCheckboxes] = React.useState(false);
   const [tagsOverrides, setTagsOverrides] = React.useState<
     Record<string, string[]>
   >({});
@@ -2199,6 +2200,15 @@ export function ProfilesDataTable({
     browserState.isClient,
   ]);
 
+  React.useLayoutEffect(() => {
+    const visible = new Set(profiles.map((profile) => profile.id));
+    onSelectedProfilesChange((prev) =>
+      prev.every((id) => visible.has(id))
+        ? prev
+        : prev.filter((id) => visible.has(id)),
+    );
+  }, [profiles, onSelectedProfilesChange]);
+
   // Automatically deselect profiles that become running, updating, launching, or stopping
   React.useEffect(() => {
     const newSet = new Set(selectedProfiles);
@@ -2231,25 +2241,6 @@ export function ProfilesDataTable({
     onSelectedProfilesChange,
     selectedProfiles,
   ]);
-
-  // Update local sorting state when settings are loaded
-  React.useEffect(() => {
-    if (isLoaded && browserState.isClient) {
-      setSorting(getTableSorting());
-    }
-  }, [isLoaded, getTableSorting, browserState.isClient]);
-
-  // Handle sorting changes
-  const handleSortingChange = React.useCallback(
-    (updater: React.SetStateAction<SortingState>) => {
-      if (!browserState.isClient) return;
-      const newSorting =
-        typeof updater === "function" ? updater(sorting) : updater;
-      setSorting(newSorting);
-      updateSorting(newSorting);
-    },
-    [browserState.isClient, sorting, updateSorting],
-  );
 
   const handleRename = React.useCallback(async () => {
     if (!profileToRename || !newProfileName.trim()) return;
@@ -2308,107 +2299,11 @@ export function ProfilesDataTable({
     }
   };
 
-  // Handle icon/checkbox click
-  const handleIconClick = React.useCallback(
-    (profileId: string) => {
-      const profile = profiles.find((p) => p.id === profileId);
-      if (!profile) return;
-
-      // Prevent selection of profiles whose browsers are updating
-      if (!browserState.canSelectProfile(profile)) {
-        return;
-      }
-
-      setShowCheckboxes(true);
-      const newSet = new Set(selectedProfiles);
-      if (newSet.has(profileId)) {
-        newSet.delete(profileId);
-      } else {
-        newSet.add(profileId);
-      }
-
-      // Hide checkboxes if no profiles are selected
-      if (newSet.size === 0) {
-        setShowCheckboxes(false);
-      }
-
-      onSelectedProfilesChange(Array.from(newSet));
-    },
-    [profiles, browserState, onSelectedProfilesChange, selectedProfiles],
-  );
-
   React.useEffect(() => {
     if (browserState.isClient) {
       void loadAllTags();
     }
   }, [browserState.isClient, loadAllTags]);
-
-  // Handle checkbox change
-  const handleCheckboxChange = React.useCallback(
-    (profileId: string, checked: boolean) => {
-      const newSet = new Set(selectedProfiles);
-      if (checked) {
-        newSet.add(profileId);
-      } else {
-        newSet.delete(profileId);
-      }
-
-      // Hide checkboxes if no profiles are selected
-      if (newSet.size === 0) {
-        setShowCheckboxes(false);
-      }
-
-      onSelectedProfilesChange(Array.from(newSet));
-    },
-    [onSelectedProfilesChange, selectedProfiles],
-  );
-
-  // Handle select all checkbox
-  const handleToggleAll = React.useCallback(
-    (checked: boolean) => {
-      const newSet = checked
-        ? new Set(
-            profiles
-              .filter((profile) => {
-                const isRunning =
-                  browserState.isClient && runningProfiles.has(profile.id);
-                const isLaunching = launchingProfiles.has(profile.id);
-                const isStopping = stoppingProfiles.has(profile.id);
-                return !isRunning && !isLaunching && !isStopping;
-              })
-              .map((profile) => profile.id),
-          )
-        : new Set<string>();
-
-      setShowCheckboxes(checked);
-      onSelectedProfilesChange(Array.from(newSet));
-    },
-    [
-      profiles,
-      onSelectedProfilesChange,
-      browserState.isClient,
-      runningProfiles,
-      launchingProfiles,
-      stoppingProfiles,
-    ],
-  );
-
-  // Memoize selectableProfiles calculation
-  const selectableProfiles = React.useMemo(() => {
-    return profiles.filter((profile) => {
-      const isRunning =
-        browserState.isClient && runningProfiles.has(profile.id);
-      const isLaunching = launchingProfiles.has(profile.id);
-      const isStopping = stoppingProfiles.has(profile.id);
-      return !isRunning && !isLaunching && !isStopping;
-    });
-  }, [
-    profiles,
-    browserState.isClient,
-    runningProfiles,
-    launchingProfiles,
-    stoppingProfiles,
-  ]);
 
   // Build table meta from volatile state so columns can stay stable
   const selectedDragProfiles = React.useMemo(() => {
@@ -2455,8 +2350,6 @@ export function ProfilesDataTable({
       selectedProfiles,
       selectedDragProfiles,
       canDragProfiles,
-      selectableCount: selectableProfiles.length,
-      showCheckboxes,
       isClient: browserState.isClient,
       runningProfiles,
       launchingProfiles,
@@ -2494,12 +2387,6 @@ export function ProfilesDataTable({
       extensionGroups,
       onAssignExtensionGroup,
       setDnsBlocklistProfile,
-
-      // Selection helpers
-      isProfileSelected: (id: string) => selectedProfiles.includes(id),
-      handleToggleAll,
-      handleCheckboxChange,
-      handleIconClick,
 
       // Rename helpers
       handleRename,
@@ -2586,8 +2473,6 @@ export function ProfilesDataTable({
       selectedProfiles,
       selectedDragProfiles,
       canDragProfiles,
-      selectableProfiles.length,
-      showCheckboxes,
       browserState.isClient,
       runningProfiles,
       launchingProfiles,
@@ -2608,9 +2493,6 @@ export function ProfilesDataTable({
       handleVpnSelection,
       extensionGroups,
       onAssignExtensionGroup,
-      handleToggleAll,
-      handleCheckboxChange,
-      handleIconClick,
       handleRename,
       profileToRename,
       newProfileName,
@@ -2655,185 +2537,61 @@ export function ProfilesDataTable({
     () => [
       {
         id: "select",
-        header: ({ table }) => {
-          const meta = table.options.meta as TableMeta;
-          return (
-            <span>
-              <Checkbox
-                checked={
-                  meta.selectedProfiles.length === meta.selectableCount &&
-                  meta.selectableCount !== 0
-                }
-                onCheckedChange={(value) => {
-                  meta.handleToggleAll(!!value);
-                }}
-                aria-label={t("common.aria.selectAll")}
-                className="cursor-pointer"
-              />
-            </span>
-          );
-        },
+        header: ({ table }) => <TableSelectHeader table={table} />,
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
-          const browser = profile.browser;
-          const IconComponent = getProfileIcon(profile);
-          const isCrossOs = isCrossOsProfile(profile);
-
-          const isSelected = meta.isProfileSelected(profile.id);
-          const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
-          const isLaunching = meta.launchingProfiles.has(profile.id);
-          const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isDisabled = isRunning || isLaunching || isStopping;
-
-          // Cross-OS profiles: show OS icon when checkboxes aren't visible, show checkbox when they are
-          if (isCrossOs && !meta.showCheckboxes && !isSelected) {
-            const resolvedOs = profile.host_os || profile.wayfern_config?.os;
-            const osName = resolvedOs
-              ? getOSDisplayName(resolvedOs)
-              : "another OS";
-            const crossOsTooltip = t("crossOs.viewOnly", { os: osName });
-            const OsIcon =
-              resolvedOs === "macos"
-                ? FaApple
-                : resolvedOs === "windows"
-                  ? FaWindows
-                  : FaLinux;
-            return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex size-4 items-center justify-center">
-                    <button
-                      type="button"
-                      className="flex cursor-pointer items-center justify-center border-none p-0"
-                      onClick={() => {
-                        meta.handleIconClick(profile.id);
-                      }}
-                      aria-label={t("common.aria.selectProfile")}
-                    >
-                      <span className="group size-4">
-                        <OsIcon className="size-4 text-muted-foreground group-hover:hidden" />
-                        <span className="peer pointer-events-none hidden size-4 shrink-0 items-center justify-center rounded-[4px] border border-input shadow-xs transition-shadow duration-150 outline-none group-hover:block dark:bg-input/30 dark:data-[state=checked]:bg-primary" />
-                      </span>
-                    </button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{crossOsTooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          // Cross-OS profiles with checkboxes visible: show checkbox (selectable for bulk delete)
-          if (isCrossOs && (meta.showCheckboxes || isSelected)) {
-            const resolvedOs = profile.host_os || profile.wayfern_config?.os;
-            const osName = resolvedOs
-              ? getOSDisplayName(resolvedOs)
-              : "another OS";
-            const crossOsTooltip = t("crossOs.viewOnly", { os: osName });
-            return (
-              <NonHoverableTooltip
-                content={<p>{crossOsTooltip}</p>}
-                sideOffset={4}
-                horizontalOffset={8}
-              >
-                <span className="flex size-4 items-center justify-center">
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={(value) => {
-                      meta.handleCheckboxChange(profile.id, !!value);
-                    }}
-                    aria-label={t("common.aria.selectRow")}
-                    className="size-4"
-                  />
-                </span>
-              </NonHoverableTooltip>
-            );
-          }
-
-          if (isDisabled) {
-            const tooltipMessage = isRunning
+          const crossOs = isCrossOsProfile(profile);
+          const os = profile.host_os || profile.wayfern_config?.os || "";
+          const Icon = crossOs
+            ? os === "macos"
+              ? FaApple
+              : os === "windows"
+                ? FaWindows
+                : FaLinux
+            : getProfileIcon(profile);
+          const message = crossOs
+            ? t("crossOs.viewOnly", { os: getOSDisplayName(os) })
+            : meta.runningProfiles.has(profile.id)
               ? t("profiles.table.cantModifyRunning")
-              : isLaunching
+              : meta.launchingProfiles.has(profile.id)
                 ? t("profiles.table.cantModifyLaunching")
-                : isStopping
+                : meta.stoppingProfiles.has(profile.id)
                   ? t("profiles.table.cantModifyStopping")
-                  : t("profiles.table.cantModifyUpdating");
-
-            return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex size-4 cursor-not-allowed items-center justify-center">
-                    {IconComponent && (
-                      <IconComponent className="size-4 opacity-50" />
-                    )}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{tooltipMessage}</p>
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          const browserName = getBrowserDisplayName(browser);
-
-          if (meta.showCheckboxes || isSelected) {
-            return (
-              <NonHoverableTooltip
-                content={<p>{browserName}</p>}
-                sideOffset={4}
-                horizontalOffset={8}
-              >
-                <span className="flex size-4 items-center justify-center">
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={(value) => {
-                      meta.handleCheckboxChange(profile.id, !!value);
-                    }}
-                    aria-label={t("common.aria.selectRow")}
-                    className="size-4"
-                  />
-                </span>
-              </NonHoverableTooltip>
-            );
-          }
-
+                  : getBrowserDisplayName(profile.browser);
           return (
             <NonHoverableTooltip
-              content={<p>{browserName}</p>}
+              content={<p>{message}</p>}
               sideOffset={4}
               horizontalOffset={8}
             >
-              <span className="relative flex size-4 items-center justify-center">
-                <button
-                  type="button"
-                  className="flex cursor-pointer items-center justify-center border-none p-0"
-                  onClick={() => {
-                    meta.handleIconClick(profile.id);
-                  }}
-                  aria-label={t("common.aria.selectProfile")}
-                >
-                  <span className="group size-4">
-                    {IconComponent && (
-                      <IconComponent className="size-4 group-hover:hidden" />
-                    )}
-                    <span className="peer pointer-events-none hidden size-4 shrink-0 items-center justify-center rounded-[4px] border border-input shadow-xs transition-shadow duration-150 outline-none group-hover:block dark:bg-input/30 dark:data-[state=checked]:bg-primary" />
-                  </span>
-                </button>
+              <span className="inline-flex items-center">
+                <TableRowCheckbox
+                  table={table}
+                  row={row}
+                  icon={
+                    Icon ? (
+                      <Icon
+                        className={cn(
+                          "size-4",
+                          !row.getCanSelect() && "opacity-50",
+                        )}
+                      />
+                    ) : undefined
+                  }
+                />
               </span>
             </NonHoverableTooltip>
           );
         },
         enableSorting: false,
         enableHiding: false,
+        enableResizing: false,
         size: 28,
       },
       {
         id: "actions",
-        size: 48,
+        size: 44,
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -2939,12 +2697,6 @@ export function ProfilesDataTable({
             }
           };
 
-          const buttonVariant = isRunning
-            ? isFollower
-              ? "secondary"
-              : "destructive"
-            : "default";
-
           return (
             <div className="flex items-center gap-2">
               {isDesynced && (
@@ -2968,8 +2720,9 @@ export function ProfilesDataTable({
               >
                 <span className="inline-flex">
                   <RippleButton
-                    variant={buttonVariant}
+                    variant="soft"
                     size="sm"
+                    data-running={isRunning ? "true" : undefined}
                     disabled={!canLaunch || isLaunching || isStopping}
                     aria-label={
                       isRunning
@@ -2977,12 +2730,14 @@ export function ProfilesDataTable({
                         : meta.t("profiles.actions.launch")
                     }
                     className={cn(
-                      "grid size-7 place-items-center p-0",
+                      "grid size-7 place-items-center rounded-full p-0 transition-[background-color,color,transform] duration-150",
                       !canLaunch && "cursor-not-allowed opacity-50",
                       canLaunch && "cursor-pointer",
-                      isFollower && "border-accent",
+                      !isRunning &&
+                        "hover:bg-primary hover:text-primary-foreground",
                       isRunning &&
-                        "bg-destructive/10 text-destructive-text hover:bg-destructive/20",
+                        !isFollower &&
+                        "bg-destructive/12 text-destructive-text hover:bg-destructive/20",
                     )}
                     onClick={() =>
                       isRunning
@@ -2994,9 +2749,9 @@ export function ProfilesDataTable({
                       {isLaunching || isStopping ? (
                         <span className="size-3 animate-spin rounded-full border border-current border-t-transparent motion-reduce:animate-none" />
                       ) : isRunning ? (
-                        <LuSquare className="size-3.5 fill-current" />
+                        <LuSquare className="size-3 fill-current" />
                       ) : (
-                        <LuPlay className="size-3.5 fill-current" />
+                        <LuPlay className="size-3 translate-x-px fill-current" />
                       )}
                     </span>
                   </RippleButton>
@@ -3035,16 +2790,16 @@ export function ProfilesDataTable({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  variant="ghost"
-                  className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
+                  variant="subtle"
+                  className="-ml-1.5 h-6 justify-start gap-1 rounded-md px-1.5 text-left text-xs font-medium"
                 >
                   {meta.t("common.labels.name")}
                   {isActive("name", false) ? (
-                    <LuChevronUp className="ml-2 size-4" />
+                    <LuArrowUp className="size-3" />
                   ) : isActive("name", true) ? (
-                    <LuChevronDown className="ml-2 size-4" />
+                    <LuArrowDown className="size-3" />
                   ) : (
-                    <LuChevronDown className="ml-2 size-4 opacity-50" />
+                    <LuArrowUpDown className="size-3 opacity-60" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
@@ -3171,10 +2926,10 @@ export function ProfilesDataTable({
             <button
               type="button"
               className={cn(
-                "mr-auto h-6 max-w-full min-w-0 overflow-hidden rounded border-none bg-transparent px-2 py-1 text-left",
+                "mr-auto h-6 max-w-full min-w-0 overflow-hidden rounded-md border-none bg-transparent px-2 py-1 text-left transition-colors duration-100",
                 isCrossOsBlocked
                   ? "cursor-not-allowed opacity-60"
-                  : "cursor-pointer hover:bg-muted",
+                  : "cursor-pointer hover:bg-foreground/6",
               )}
               onClick={() => {
                 if (isCrossOsBlocked) return;
@@ -3197,7 +2952,7 @@ export function ProfilesDataTable({
           );
 
           return (
-            <div className="flex max-w-full min-w-0 items-center gap-1.5">
+            <div className="-ml-1 flex max-w-full min-w-0 items-center gap-0.5">
               <ProfileGroupDragHandle
                 profile={profile}
                 profiles={dragProfiles}
@@ -3477,7 +3232,7 @@ export function ProfilesDataTable({
                                   )}
                                 />
                                 <Badge
-                                  variant="outline"
+                                  variant="soft"
                                   className="mr-1 px-1 py-0 text-[10px] leading-tight"
                                 >
                                   WG
@@ -3623,8 +3378,8 @@ export function ProfilesDataTable({
           return (
             <div className="flex h-9 w-full items-center justify-end">
               <Button
-                variant="ghost"
-                className="size-7 p-0"
+                variant="subtle"
+                className="size-7 rounded-md p-0"
                 data-slot="profile-inspect-trigger"
                 data-profile-id={profile.id}
                 disabled={!meta.isClient}
@@ -3662,17 +3417,86 @@ export function ProfilesDataTable({
       profileId: false,
     });
 
+  const columnLabels = React.useMemo(
+    () => [
+      { id: "name", label: t("common.labels.name"), hideable: false },
+      { id: "created_at", label: t("search.fields.created"), hideable: false },
+      { id: "profileId", label: t("profiles.table.profileId") },
+      { id: "tags", label: t("profileTable.tagsHeader") },
+      { id: "note", label: t("profileTable.noteHeader") },
+      { id: "proxy", label: t("profiles.table.proxy") },
+      { id: "ext", label: t("profiles.table.ext") },
+      { id: "dns", label: t("profiles.table.dns") },
+      ...(cookieBotUnlocked
+        ? [{ id: "bot", label: t("profiles.table.bot") }]
+        : []),
+    ],
+    [t, cookieBotUnlocked],
+  );
+  const configuredColumns = React.useMemo<ColumnDef<BrowserProfile>[]>(
+    () =>
+      columns.map((column) => {
+        const id =
+          column.id ??
+          ("accessorKey" in column ? String(column.accessorKey) : "");
+        const fixed = ["select", "actions", "settings", "sync", "bot"].includes(
+          id,
+        );
+        const accessor = (row: BrowserProfile) => {
+          if (id === "tags") return (row.tags ?? []).join(", ");
+          if (id === "note") return row.note ?? "";
+          if (id === "proxy")
+            return (
+              storedProxies.find((proxy) => proxy.id === row.proxy_id)?.name ??
+              vpnConfigs.find((vpn) => vpn.id === row.vpn_id)?.name ??
+              ""
+            );
+          if (id === "ext")
+            return (
+              extensionGroups.find(
+                (group) => group.id === row.extension_group_id,
+              )?.name ?? ""
+            );
+          if (id === "dns") return row.dns_blocklist ?? "";
+          return row.id;
+        };
+        return {
+          ...column,
+          id,
+          enableResizing: !fixed && id !== "created_at",
+          minSize: fixed ? column.size : 48,
+          maxSize: 1600,
+          ...(["tags", "note", "proxy", "ext", "dns", "profileId"].includes(id)
+            ? {
+                accessorFn: accessor,
+                enableSorting: true,
+                sortingFn: "alphanumeric" as const,
+              }
+            : {}),
+        };
+      }),
+    [columns, storedProxies, vpnConfigs, extensionGroups],
+  );
+
   const table = useReactTable({
     data: profiles,
-    columns,
+    columns: configuredColumns,
     state: {
       sorting,
       rowSelection,
-      columnVisibility,
+      columnVisibility: resolveTableVisibility(
+        columnVisibility,
+        view.preferences.visibility,
+        ["select", "actions", "name", "settings"],
+        cookieBotUnlocked ? ["created_at"] : ["created_at", "bot"],
+      ),
+      columnSizing: view.preferences.sizing,
     },
-    onSortingChange: handleSortingChange,
+    onSortingChange: view.setSorting,
+    onColumnSizingChange: view.setSizing,
+    columnResizeMode: "onChange",
     onRowSelectionChange: handleRowSelectionChange,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: view.setVisibility,
     enableRowSelection: (row) => {
       const profile = row.original;
       const isRunning =
@@ -3701,6 +3525,8 @@ export function ProfilesDataTable({
   }, []);
   const columnWidth = React.useCallback(
     (id: string, sizePx: number) => {
+      if (view.preferences.sizing[id])
+        return `${view.preferences.sizing[id]}px`;
       // The bot column is the one column with two shapes: a labelled state at
       // full width, a bare mark when the table is narrow. Taking a proportion
       // in the compact shape would waste the space the name column needs.
@@ -3720,7 +3546,7 @@ export function ProfilesDataTable({
       if (!p) return `${sizePx}px`;
       return `${Math.max(p.floor, Math.round(containerWidth * p.pct))}px`;
     },
-    [containerWidth],
+    [containerWidth, view.preferences.sizing],
   );
   const sortedRows = table.getRowModel().rows;
   useScrollFade(scrollParentRef);
@@ -3759,9 +3585,8 @@ export function ProfilesDataTable({
     };
   }, [cookieBotUnlocked]);
 
-  // Compact 36px row from the redesign spec; estimateSize must match the
-  // actual rendered row height or virtualizer placement drifts under scroll.
-  const ROW_HEIGHT = 36;
+  // The virtual row estimate must match the selected row height.
+  const ROW_HEIGHT = view.preferences.density === "comfortable" ? 48 : 36;
 
   const rowVirtualizer = useVirtualizer({
     count: sortedRows.length,
@@ -3769,6 +3594,49 @@ export function ProfilesDataTable({
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
+
+  const measuredRowHeight = React.useRef(ROW_HEIGHT);
+  React.useEffect(() => {
+    if (measuredRowHeight.current !== ROW_HEIGHT) {
+      measuredRowHeight.current = ROW_HEIGHT;
+      rowVirtualizer.measure();
+    }
+  }, [ROW_HEIGHT, rowVirtualizer]);
+
+  const keyboard = useTableKeyboard(table, {
+    scrollToIndex: (index) =>
+      rowVirtualizer.scrollToIndex(index, { align: "auto" }),
+    edit: (rowId, columnId) => {
+      if (columnId !== "name") return false;
+      const profile = profiles.find((item) => item.id === rowId);
+      if (
+        !profile ||
+        isCrossOsProfile(profile) ||
+        runningProfiles.has(rowId) ||
+        launchingProfiles.has(rowId) ||
+        stoppingProfiles.has(rowId)
+      )
+        return true;
+      setProfileToRename(profile);
+      setNewProfileName(profile.name);
+      setRenameError(null);
+      return true;
+    },
+  });
+  const minimumWidth =
+    Object.keys(view.preferences.sizing).length ||
+    Object.values(view.preferences.visibility).some(Boolean)
+      ? table
+          .getVisibleLeafColumns()
+          .reduce(
+            (total, column) =>
+              total +
+              (column.id === "name" && !view.preferences.sizing.name
+                ? 220
+                : parseFloat(columnWidth(column.id, column.getSize()))),
+            0,
+          )
+      : undefined;
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
@@ -3780,6 +3648,10 @@ export function ProfilesDataTable({
 
   return (
     <>
+      <div className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-2">
+        {filterControls}
+        <TableViewControls table={table} view={view} labels={columnLabels} />
+      </div>
       <div
         ref={workspaceRef}
         data-slot="profile-workspace"
@@ -3789,10 +3661,8 @@ export function ProfilesDataTable({
           ref={scrollParentRef}
           className={cn(
             "scroll-fade relative min-h-0 min-w-0 flex-1 overflow-auto",
-            // Clearance for the floating selection action bar (bottom-6 +
-            // ~46px tall) so the last rows can scroll out from behind it.
-            // Same predicate DataTableActionBar uses for its visibility.
-            table.getFilteredSelectedRowModel().rows.length > 0 && "pb-20",
+            table.getFilteredSelectedRowModel().rows.length > 0 &&
+              "pb-[calc(var(--table-action-bar-height,56px)+32px)]",
           )}
           style={
             {
@@ -3803,24 +3673,51 @@ export function ProfilesDataTable({
             } as React.CSSProperties
           }
         >
-          <Table className="table-fixed" containerClassName="overflow-visible">
-            <TableHeader className="sticky top-0 z-10 overflow-visible bg-background [&_tr]:border-0">
+          <Table
+            ref={keyboard.tableRef}
+            role="grid"
+            aria-label={t("profiles.title")}
+            aria-rowcount={sortedRows.length + 1}
+            aria-colcount={table.getVisibleLeafColumns().length}
+            onKeyDown={keyboard.onKeyDown}
+            onKeyDownCapture={keyboard.onKeyDownCapture}
+            className={DATA_TABLE_CLASSES.table}
+            style={{ minWidth: minimumWidth, width: minimumWidth }}
+            containerClassName="overflow-visible"
+          >
+            <TableHeader
+              className={cn(DATA_TABLE_CLASSES.header, "overflow-visible")}
+            >
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
                   key={headerGroup.id}
-                  className="overflow-visible border-0!"
+                  className={cn(
+                    DATA_TABLE_CLASSES.headerRow,
+                    "overflow-visible",
+                  )}
                 >
                   {headerGroup.headers.map((header) => {
                     return (
                       <TableHead
                         key={header.id}
+                        role="columnheader"
+                        aria-sort={
+                          header.column.getIsSorted() === "asc"
+                            ? "ascending"
+                            : header.column.getIsSorted() === "desc"
+                              ? "descending"
+                              : undefined
+                        }
+                        className={DATA_TABLE_CLASSES.head}
                         style={{
-                          width: header.column.columnDef.meta?.flexWidth
-                            ? undefined
-                            : columnWidth(
-                                header.column.id,
-                                header.column.getSize(),
-                              ),
+                          width:
+                            header.column.columnDef.meta?.flexWidth &&
+                            !view.preferences.sizing[header.column.id]
+                              ? undefined
+                              : columnWidth(
+                                  header.column.id,
+                                  header.column.getSize(),
+                                ),
                         }}
                       >
                         {header.isPlaceholder
@@ -3829,6 +3726,15 @@ export function ProfilesDataTable({
                               header.column.columnDef.header,
                               header.getContext(),
                             )}
+                        <TableColumnResizer
+                          header={header}
+                          label={
+                            columnLabels.find(
+                              (column) => column.id === header.column.id,
+                            )?.label ?? ""
+                          }
+                          disabled={!view.loaded}
+                        />
                       </TableHead>
                     );
                   })}
@@ -3841,7 +3747,7 @@ export function ProfilesDataTable({
                   Array.from({ length: 8 }, (_, i) => (
                     <TableRow
                       key={`skeleton-${i}`}
-                      className="border-0!"
+                      className={DATA_TABLE_CLASSES.row}
                       style={{ height: `${ROW_HEIGHT}px` }}
                     >
                       <TableCell
@@ -3862,7 +3768,7 @@ export function ProfilesDataTable({
                     </TableRow>
                   ))
                 ) : showOnboardingEmptyState ? (
-                  <TableRow className="border-0! hover:bg-transparent">
+                  <TableRow className={DATA_TABLE_CLASSES.row}>
                     <TableCell
                       colSpan={table.getVisibleLeafColumns().length}
                       className="py-16"
@@ -3886,7 +3792,7 @@ export function ProfilesDataTable({
                           {onImportProfiles && (
                             <RippleButton
                               size="sm"
-                              variant="outline"
+                              variant="soft"
                               onClick={onImportProfiles}
                             >
                               {t("profiles.table.emptyImport")}
@@ -3897,13 +3803,13 @@ export function ProfilesDataTable({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  <TableRow className="border-0! hover:bg-transparent">
+                  <TableRow className={DATA_TABLE_CLASSES.row}>
                     <TableCell
                       colSpan={table.getVisibleLeafColumns().length}
                       className="py-16"
                     >
                       <div className="flex flex-col items-center gap-3 text-center">
-                        <div className="grid size-12 place-items-center rounded-full bg-muted/60">
+                        <div className="grid size-12 place-items-center rounded-full bg-foreground/6">
                           <LuUserSearch className="size-6 text-muted-foreground" />
                         </div>
                         <div>
@@ -3914,14 +3820,14 @@ export function ProfilesDataTable({
                             {t("profiles.table.emptyFilteredHint")}
                           </p>
                         </div>
-                        {onCreateProfile && (
+                        {onClearFilters && (
                           <RippleButton
                             size="sm"
-                            variant="outline"
+                            variant="soft"
                             className="mt-1"
-                            onClick={onCreateProfile}
+                            onClick={onClearFilters}
                           >
-                            {t("profiles.table.emptyCreate")}
+                            {t("tables.clearFilters")}
                           </RippleButton>
                         )}
                       </div>
@@ -3931,7 +3837,11 @@ export function ProfilesDataTable({
               ) : (
                 <>
                   {paddingTop > 0 && (
-                    <tr style={{ height: `${paddingTop}px` }}>
+                    <tr
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      style={{ height: `${paddingTop}px` }}
+                    >
                       <td colSpan={table.getVisibleLeafColumns().length} />
                     </tr>
                   )}
@@ -3950,6 +3860,10 @@ export function ProfilesDataTable({
                     return (
                       <TableRow
                         key={row.id}
+                        role="row"
+                        aria-rowindex={virtualRow.index + 2}
+                        aria-selected={row.getIsSelected()}
+                        data-table-row={row.id}
                         data-profile-id={row.id}
                         data-inspected={
                           profileForInfoDialog?.id === row.id
@@ -3965,23 +3879,30 @@ export function ProfilesDataTable({
                         title={crossOsTitle}
                         style={{ height: `${ROW_HEIGHT}px` }}
                         className={cn(
-                          "overflow-visible border-0! hover:bg-muted",
+                          DATA_TABLE_CLASSES.row,
+                          "overflow-visible",
                           rowIsCrossOs && "opacity-60",
-                          profileForInfoDialog?.id === row.id && "bg-muted/60",
-                          profileDrag?.movingIds.has(row.id) && "bg-muted",
                         )}
                       >
-                        {row.getVisibleCells().map((cell) => (
+                        {row.getVisibleCells().map((cell, columnIndex) => (
                           <TableCell
                             key={cell.id}
-                            className="overflow-visible py-0"
+                            role="gridcell"
+                            aria-colindex={columnIndex + 1}
+                            {...keyboard.cellProps(row.id, cell.column.id)}
+                            className={cn(
+                              DATA_TABLE_CLASSES.cell,
+                              "overflow-visible",
+                            )}
                             style={{
-                              width: cell.column.columnDef.meta?.flexWidth
-                                ? undefined
-                                : columnWidth(
-                                    cell.column.id,
-                                    cell.column.getSize(),
-                                  ),
+                              width:
+                                cell.column.columnDef.meta?.flexWidth &&
+                                !view.preferences.sizing[cell.column.id]
+                                  ? undefined
+                                  : columnWidth(
+                                      cell.column.id,
+                                      cell.column.getSize(),
+                                    ),
                             }}
                           >
                             {flexRender(
@@ -3994,7 +3915,11 @@ export function ProfilesDataTable({
                     );
                   })}
                   {paddingBottom > 0 && (
-                    <tr style={{ height: `${paddingBottom}px` }}>
+                    <tr
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      style={{ height: `${paddingBottom}px` }}
+                    >
                       <td colSpan={table.getVisibleLeafColumns().length} />
                     </tr>
                   )}
@@ -4093,9 +4018,9 @@ export function ProfilesDataTable({
                   ? t("profiles.actionBar.runSelected")
                   : t("profiles.actionBar.proRequired")
               }
+              label={t("profiles.actionBar.runSelected")}
               onClick={bulkActionsUnlocked ? onBulkRun : undefined}
               disabled={!bulkActionsUnlocked}
-              size="icon"
             >
               <LuPlay className="fill-current" />
             </DataTableActionBarAction>
@@ -4112,9 +4037,9 @@ export function ProfilesDataTable({
                   ? t("profiles.actionBar.stopSelected")
                   : t("profiles.actionBar.proRequired")
               }
+              label={t("profiles.actionBar.stopSelected")}
               onClick={bulkActionsUnlocked ? onBulkStop : undefined}
               disabled={!bulkActionsUnlocked}
-              size="icon"
             >
               <LuSquare className="fill-current" />
             </DataTableActionBarAction>
@@ -4127,7 +4052,6 @@ export function ProfilesDataTable({
           <DataTableActionBarAction
             tooltip={t("profiles.actionBar.assignToGroup")}
             onClick={onBulkGroupAssignment}
-            size="icon"
           >
             <LuUsers />
           </DataTableActionBarAction>
@@ -4136,67 +4060,60 @@ export function ProfilesDataTable({
           <DataTableActionBarAction
             tooltip={t("profiles.actionBar.assignProxy")}
             onClick={onBulkProxyAssignment}
-            size="icon"
           >
             <FiWifi />
           </DataTableActionBarAction>
         )}
-        {onBulkProxyDistribution && (
-          <DataTableActionBarAction
-            tooltip={t("profiles.actionBar.distributeProxies")}
-            aria-label={t("profiles.actionBar.distributeProxies")}
-            onClick={onBulkProxyDistribution}
-            size="icon"
-          >
-            <LuShuffle />
-          </DataTableActionBarAction>
-        )}
-        {onBulkExtensionGroupAssignment && (
-          <DataTableActionBarAction
-            tooltip={t("profiles.actionBar.assignExtensionGroup")}
-            onClick={onBulkExtensionGroupAssignment}
-            size="icon"
-          >
-            <LuPuzzle />
-          </DataTableActionBarAction>
-        )}
-        {onBulkCopyCookies && (
-          <DataTableActionBarAction
-            tooltip={t("profiles.actionBar.copyCookies")}
-            onClick={onBulkCopyCookies}
-            size="icon"
-          >
-            <LuCookie />
-          </DataTableActionBarAction>
-        )}
-        <span className="relative inline-flex">
-          <DataTableActionBarAction
-            tooltip={
-              cookieBotUnlocked
-                ? t("cookieBot.actionBar.enrol")
-                : t("cookieBot.actionBar.proRequired")
-            }
-            onClick={cookieBotUnlocked ? handleBulkCookieBotEnrol : undefined}
-            disabled={!cookieBotUnlocked}
-            size="icon"
-          >
-            <LuMoon />
-          </DataTableActionBarAction>
-          {!cookieBotUnlocked && (
-            <ProBadge className="pointer-events-none absolute -top-2 -right-2" />
-          )}
-        </span>
-        {onBulkDelete && (
-          <DataTableActionBarAction
-            tooltip={t("common.buttons.delete")}
-            onClick={onBulkDelete}
-            size="icon"
-            variant="destructive"
-            className="border-destructive bg-destructive hover:bg-destructive"
-          >
-            <LuTrash2 />
-          </DataTableActionBarAction>
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="soft" size="sm" className="h-7 rounded-lg text-xs">
+              {t("tables.moreActions")}
+              <LuChevronDown className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {onBulkProxyDistribution && (
+              <DropdownMenuItem onSelect={onBulkProxyDistribution}>
+                <LuShuffle />
+                {t("profiles.actionBar.distributeProxies")}
+              </DropdownMenuItem>
+            )}
+            {onBulkExtensionGroupAssignment && (
+              <DropdownMenuItem onSelect={onBulkExtensionGroupAssignment}>
+                <LuPuzzle />
+                {t("profiles.actionBar.assignExtensionGroup")}
+              </DropdownMenuItem>
+            )}
+            {onBulkCopyCookies && (
+              <DropdownMenuItem onSelect={onBulkCopyCookies}>
+                <LuCookie />
+                {t("profiles.actionBar.copyCookies")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              disabled={!cookieBotUnlocked}
+              onSelect={() => {
+                if (cookieBotUnlocked) handleBulkCookieBotEnrol();
+              }}
+            >
+              <LuMoon />
+              {t("cookieBot.actionBar.enrol")}
+              {!cookieBotUnlocked && <ProBadge />}
+            </DropdownMenuItem>
+            {onBulkDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={onBulkDelete}
+                >
+                  <LuTrash2 />
+                  {t("common.buttons.delete")}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </DataTableActionBar>
       {trafficDialogProfile && (
         <TrafficDetailsDialog

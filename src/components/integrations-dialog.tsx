@@ -5,10 +5,9 @@ import { listen } from "@tauri-apps/api/event";
 import { Eye, EyeOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuCheck, LuCloud, LuPlug, LuTrash2, LuZap } from "react-icons/lu";
+import { LuCheck, LuCloud, LuPlug, LuTrash2 } from "react-icons/lu";
 import { IntegrationDiagnostics } from "@/components/integration-diagnostics";
 import { AgentIcon } from "@/components/mcp-agent-icon";
-import { McpMigrationDialog } from "@/components/mcp-migration-dialog";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -35,9 +34,7 @@ import {
   credentialPrefixOf,
   FX_AGENT_ID,
   fxExportLine,
-  localMcpClients,
   type McpAgentInfo,
-  type McpEndpoint,
   type McpRemoteCredential,
   type McpRemoteCredentialRotation,
   type McpRemoteStatus,
@@ -51,24 +48,11 @@ interface AppSettings {
   api_enabled: boolean;
   api_port: number;
   api_token?: string;
-  mcp_enabled: boolean;
-  mcp_port?: number;
-  mcp_token?: string;
   mcp_remote_enabled: boolean;
-  /** The remote MCP credential, stored with the same posture as `mcp_token`. */
   mcp_remote_key?: string | null;
 }
 
-interface McpConfig {
-  port: number;
-  token: string;
-}
-
-type IntegrationsTab = "api" | "mcp" | "remote";
-
-function otherEndpoint(endpoint: McpEndpoint): McpEndpoint {
-  return endpoint === "local" ? "remote" : "local";
-}
+type IntegrationsTab = "api" | "remote";
 
 interface IntegrationsDialogProps {
   isOpen: boolean;
@@ -105,18 +89,11 @@ export function IntegrationsDialog({
     api_enabled: false,
     api_port: 10108,
     api_token: undefined,
-    mcp_enabled: false,
-    mcp_port: undefined,
-    mcp_token: undefined,
     mcp_remote_enabled: false,
   });
   const [apiServerPort, setApiServerPort] = useState<number | null>(null);
-  const [mcpConfig, setMcpConfig] = useState<McpConfig | null>(null);
-  const [, setMcpRunning] = useState(false);
   const [showApiToken, setShowApiToken] = useState(false);
-  const [showMcpUrl, setShowMcpUrl] = useState(false);
   const [isApiStarting, setIsApiStarting] = useState(false);
-  const [isMcpStarting, setIsMcpStarting] = useState(false);
   const [agents, setAgents] = useState<McpAgentInfo[]>([]);
   const [busyAgentIds, setBusyAgentIds] = useState<Set<string>>(new Set());
   const [apiPortDraft, setApiPortDraft] = useState<string>("10108");
@@ -127,9 +104,6 @@ export function IntegrationsDialog({
   );
   const [isRotatingCredential, setIsRotatingCredential] = useState(false);
   const [activeTab, setActiveTab] = useState<IntegrationsTab>(initialTab);
-  // Local MCP is removed; an in-app attempt to enable it opens this dialog.
-  const [localDeprecatedOpen, setLocalDeprecatedOpen] = useState(false);
-  const [migrationOpen, setMigrationOpen] = useState(false);
   // Mod+I re-targets an open dialog through `initialTab`. The tabs are
   // controlled (see `shownTab`), so a remount would not adopt the new value;
   // this is React's adjust-state-on-prop-change form of the same thing.
@@ -168,24 +142,6 @@ export function IntegrationsDialog({
       setApiPortDraft(String(loaded.api_port ?? ""));
     } catch (e) {
       console.error("Failed to load settings:", e);
-    }
-  }, []);
-
-  const loadMcpConfig = useCallback(async () => {
-    try {
-      const config = await invoke<McpConfig | null>("get_mcp_config");
-      setMcpConfig(config);
-    } catch (e) {
-      console.error("Failed to get MCP config:", e);
-    }
-  }, []);
-
-  const loadMcpServerStatus = useCallback(async () => {
-    try {
-      const isRunning = await invoke<boolean>("get_mcp_server_status");
-      setMcpRunning(isRunning);
-    } catch (e) {
-      console.error("Failed to get MCP server status:", e);
     }
   }, []);
 
@@ -248,8 +204,6 @@ export function IntegrationsDialog({
     if (isOpen) {
       void loadSettings();
       void loadApiServerStatus();
-      void loadMcpConfig();
-      void loadMcpServerStatus();
       void loadAgents();
       void loadRemoteStatus();
       void loadCredential();
@@ -259,8 +213,6 @@ export function IntegrationsDialog({
     isOpen,
     loadSettings,
     loadApiServerStatus,
-    loadMcpConfig,
-    loadMcpServerStatus,
     loadAgents,
     loadRemoteStatus,
     loadCredential,
@@ -311,37 +263,6 @@ export function IntegrationsDialog({
       });
     } finally {
       setIsApiStarting(false);
-    }
-  };
-
-  const handleMcpToggle = async (enabled: boolean) => {
-    setIsMcpStarting(true);
-    try {
-      if (enabled) {
-        // Local MCP is removed. The command refuses (MCP_LOCAL_REMOVED); open
-        // the dialog that points the user at remote MCP instead of enabling.
-        try {
-          await invoke<number>("start_mcp_server");
-        } catch {
-          setLocalDeprecatedOpen(true);
-        }
-        return;
-      } else {
-        await invoke("stop_mcp_server");
-        const next = await invoke<AppSettings>("save_app_settings", {
-          settings: { ...settings, mcp_enabled: false },
-        });
-        setSettings(next);
-        setMcpConfig(null);
-        showSuccessToast(t("integrations.mcpStopped"));
-      }
-    } catch (e) {
-      console.error("Failed to toggle MCP server:", e);
-      showErrorToast(t("integrations.mcpToggleFailed"), {
-        description: translateBackendError(t, e),
-      });
-    } finally {
-      setIsMcpStarting(false);
     }
   };
 
@@ -457,27 +378,21 @@ export function IntegrationsDialog({
   };
 
   /**
-   * Installs an endpoint into an agent. "Add" and "Switch" are the same
-   * write, because the installer replaces the Donut entry wholesale; only the
-   * toast differs.
+   * The installer replaces the Donut entry wholesale, so a client whose entry
+   * points anywhere else is fixed by the same write.
    */
-  const installEndpoint = async (
-    agent: McpAgentInfo,
-    target: McpEndpoint,
-    successMessage: string,
-  ) => {
+  const handleAddAgent = async (agent: McpAgentInfo) => {
     markAgentBusy(agent.id, true);
     try {
-      // The remote installer writes the stored credential and refuses when
-      // there is none, so the first client mints it here: one click for the
-      // user. The local server authenticates through its URL instead.
-      if (target === "remote") await ensureCredential();
-      await invoke("add_mcp_to_agent", { agentId: agent.id, target });
-      showSuccessToast(successMessage);
-      if (target === "remote") {
-        void loadCredential();
-        void loadSettings();
-      }
+      // The installer writes the stored credential and refuses when there is
+      // none, so the first client mints it here: one click for the user.
+      await ensureCredential();
+      await invoke("add_mcp_to_agent", { agentId: agent.id });
+      showSuccessToast(
+        t("integrations.mcp.addedToClient", { name: agent.display_name }),
+      );
+      void loadCredential();
+      void loadSettings();
       void loadAgents();
     } catch (e) {
       showErrorToast(translateBackendError(t, e), {
@@ -487,22 +402,6 @@ export function IntegrationsDialog({
       markAgentBusy(agent.id, false);
     }
   };
-
-  const handleAddAgent = (agent: McpAgentInfo, target: McpEndpoint) =>
-    installEndpoint(
-      agent,
-      target,
-      t("integrations.mcp.addedToClient", { name: agent.display_name }),
-    );
-
-  const handleSwitchAgent = (agent: McpAgentInfo, target: McpEndpoint) =>
-    installEndpoint(
-      agent,
-      target,
-      target === "remote"
-        ? t("integrations.remote.switchedClient", { name: agent.display_name })
-        : t("integrations.mcp.switchedToLocal", { name: agent.display_name }),
-    );
 
   const handleRemoveAgent = async (agent: McpAgentInfo) => {
     markAgentBusy(agent.id, true);
@@ -521,10 +420,6 @@ export function IntegrationsDialog({
     }
   };
 
-  const mcpUrl = mcpConfig
-    ? `http://127.0.0.1:${mcpConfig.port}/mcp/${mcpConfig.token}`
-    : "";
-
   const credentialPresent = credential?.present ?? false;
   const credentialPrefix = credentialPrefixOf(credential);
   // The example names the credential it expects by its visible prefix; the
@@ -541,13 +436,6 @@ export function IntegrationsDialog({
   ].join("\n");
   const fxLine = fxExportLine(settings.mcp_remote_key);
 
-  // The move off the local server is offered here whenever it applies, on the
-  // server's word only: the once-per-account automatic offer does not limit it.
-  const migrationOffered =
-    isLoggedIn &&
-    serverEntitled === true &&
-    (settings.mcp_enabled || localMcpClients(agents).length > 0);
-
   // Remote control is not something a regular user is told about: the tab
   // exists only for an account entitled to it, or while the bridge is already
   // on so it can always be switched off. Nothing else on the page names it.
@@ -558,12 +446,7 @@ export function IntegrationsDialog({
   const shownTab: IntegrationsTab =
     activeTab === "remote" && !remoteTabShown ? "api" : activeTab;
 
-  /**
-   * The clients grid, once for both tabs. `target` is the endpoint this tab
-   * installs; a client already on the other endpoint is told so and offered
-   * the switch, which is the same install with a different toast.
-   */
-  const clientsGrid = (target: McpEndpoint) => (
+  const clientsGrid = (
     <div className="@container flex flex-col gap-3">
       <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
         {t("integrations.mcp.clientsLabel")}
@@ -571,9 +454,6 @@ export function IntegrationsDialog({
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
         {agents.map((agent) => {
           const busy = busyAgentIds.has(agent.id);
-          const onOtherEndpoint =
-            agent.connected && agent.endpoint === otherEndpoint(target);
-          const onThisEndpoint = agent.connected && !onOtherEndpoint;
           return (
             <div
               key={agent.id}
@@ -591,23 +471,10 @@ export function IntegrationsDialog({
                 </div>
                 {agent.connected ? (
                   <div className="flex items-center gap-1">
-                    {onOtherEndpoint ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void handleSwitchAgent(agent, target)}
-                      >
-                        {target === "remote"
-                          ? t("integrations.remote.switchToRemote")
-                          : t("integrations.mcp.switchToLocal")}
-                      </Button>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
-                        <LuCheck className="size-3" />
-                        {t("appFeedback.configured")}
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+                      <LuCheck className="size-3" />
+                      {t("appFeedback.configured")}
+                    </span>
                     <Button
                       type="button"
                       variant="ghost"
@@ -627,7 +494,7 @@ export function IntegrationsDialog({
                     size="sm"
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void handleAddAgent(agent, target)}
+                    onClick={() => void handleAddAgent(agent)}
                   >
                     {t("integrations.mcp.add")}
                   </Button>
@@ -640,13 +507,7 @@ export function IntegrationsDialog({
                   </summary>
                   <OperationFlow
                     label={t("appFeedback.routeDetails")}
-                    active={
-                      agent.endpoint === "remote"
-                        ? remote?.connected
-                          ? 2
-                          : 1
-                        : 0
-                    }
+                    active={remote?.connected ? 2 : 1}
                     steps={[
                       {
                         id: "client",
@@ -655,23 +516,16 @@ export function IntegrationsDialog({
                       },
                       {
                         id: "endpoint",
-                        label: t(
-                          agent.endpoint === "remote"
-                            ? "integrations.tabRemote"
-                            : "integrations.tabMcp",
+                        label: t("integrations.tabRemote"),
+                        detail: (
+                          <span className="break-all">{REMOTE_MCP_URL}</span>
                         ),
-                        detail:
-                          agent.endpoint === "remote" ? (
-                            <span className="break-all">{REMOTE_MCP_URL}</span>
-                          ) : (
-                            t("integrations.mcp.deprecatedBannerTitle")
-                          ),
                       },
                       {
                         id: "device",
                         label: t("appFeedback.thisDevice"),
                         detail: t(
-                          agent.endpoint === "remote" && remote?.connected
+                          remote?.connected
                             ? "appFeedback.reachable"
                             : "appFeedback.notVerified",
                         ),
@@ -683,31 +537,22 @@ export function IntegrationsDialog({
                   </p>
                 </details>
               )}
-              {onOtherEndpoint && (
-                <p className="text-xs text-warning-text">
-                  {target === "remote"
-                    ? t("appFeedback.configuredLocal")
-                    : t("appFeedback.configuredRemote")}
-                </p>
+              {agent.connected && agent.id === FX_AGENT_ID && (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {t("integrations.remote.fxHint")}
+                  </p>
+                  {fxLine && (
+                    <CopyToClipboard
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      text={fxLine}
+                      successMessage={t("integrations.remote.fxExportCopied")}
+                    />
+                  )}
+                </div>
               )}
-              {target === "remote" &&
-                onThisEndpoint &&
-                agent.id === FX_AGENT_ID && (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {t("integrations.remote.fxHint")}
-                    </p>
-                    {fxLine && (
-                      <CopyToClipboard
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0"
-                        text={fxLine}
-                        successMessage={t("integrations.remote.fxExportCopied")}
-                      />
-                    )}
-                  </div>
-                )}
             </div>
           );
         })}
@@ -716,500 +561,193 @@ export function IntegrationsDialog({
   );
 
   return (
-    <>
-      <Dialog
-        open={isOpen}
-        onOpenChange={(open) => {
-          if (!open) onClose();
-        }}
-        subPage={subPage}
-      >
-        <DialogContent className="flex max-h-[calc(100vh-5rem)] max-w-3xl flex-col">
-          {!subPage && (
-            <DialogHeader className="shrink-0">
-              <DialogTitle>{t("integrations.title")}</DialogTitle>
-            </DialogHeader>
-          )}
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      subPage={subPage}
+    >
+      <DialogContent className="flex max-h-[calc(100vh-5rem)] max-w-3xl flex-col">
+        {!subPage && (
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{t("integrations.title")}</DialogTitle>
+          </DialogHeader>
+        )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className={cn(subPage && "mx-auto w-full max-w-4xl")}>
-              <AnimatedTabs
-                value={shownTab}
-                onValueChange={(value) =>
-                  setActiveTab(value as IntegrationsTab)
-                }
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={cn(subPage && "mx-auto w-full max-w-4xl")}>
+            <AnimatedTabs
+              value={shownTab}
+              onValueChange={(value) => setActiveTab(value as IntegrationsTab)}
+            >
+              <AnimatedTabsList>
+                <AnimatedTabsTrigger value="api">
+                  {t("integrations.tabApi")}
+                </AnimatedTabsTrigger>
+                {remoteTabShown && (
+                  <AnimatedTabsTrigger value="remote">
+                    <LuCloud className="size-3.5" />
+                    {t("integrations.tabRemote")}
+                  </AnimatedTabsTrigger>
+                )}
+              </AnimatedTabsList>
+
+              <AnimatedTabsContent
+                value="api"
+                className="@container mt-4 flex flex-col gap-4"
               >
-                <AnimatedTabsList>
-                  <AnimatedTabsTrigger value="api">
-                    {t("integrations.tabApi")}
-                  </AnimatedTabsTrigger>
-                  <AnimatedTabsTrigger value="mcp">
-                    {t("integrations.tabMcp")}
-                  </AnimatedTabsTrigger>
-                  {remoteTabShown && (
-                    <AnimatedTabsTrigger value="remote">
-                      <LuCloud className="size-3.5" />
-                      {t("integrations.tabRemote")}
-                    </AnimatedTabsTrigger>
-                  )}
-                </AnimatedTabsList>
-
-                <AnimatedTabsContent
-                  value="api"
-                  className="@container mt-4 flex flex-col gap-4"
-                >
-                  <IntegrationDiagnostics
-                    key={`${apiServerPort}:${settings.api_token ?? ""}`}
-                    target="api"
-                  />
-                  <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <LuPlug className="mt-0.5 size-5 text-muted-foreground" />
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-sm font-medium">
-                            {t("integrations.apiEnableLabel")}
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("integrations.apiEnableDescription")}
-                          </p>
-                        </div>
+                <IntegrationDiagnostics
+                  key={`${apiServerPort}:${settings.api_token ?? ""}`}
+                  target="api"
+                />
+                <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <LuPlug className="mt-0.5 size-5 text-muted-foreground" />
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-sm font-medium">
+                          {t("integrations.apiEnableLabel")}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {t("integrations.apiEnableDescription")}
+                        </p>
                       </div>
-                      <AnimatedSwitch
-                        checked={apiServerPort !== null}
-                        disabled={isApiStarting}
-                        onCheckedChange={(checked) =>
-                          void handleApiToggle(checked)
-                        }
-                      />
                     </div>
-
-                    {apiServerPort && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="size-1.5 rounded-full bg-success" />
-                        <span className="text-muted-foreground">
-                          {t("integrations.apiRunningOn")}
-                        </span>
-                        <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">
-                          http://127.0.0.1:{apiServerPort}
-                        </code>
-                      </div>
-                    )}
+                    <AnimatedSwitch
+                      checked={apiServerPort !== null}
+                      disabled={isApiStarting}
+                      onCheckedChange={(checked) =>
+                        void handleApiToggle(checked)
+                      }
+                    />
                   </div>
 
-                  {settings.api_enabled && (
-                    <>
-                      <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2">
-                        <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                          <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                            {t("integrations.apiPortLabel")}
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              value={apiPortDraft}
-                              onChange={(e) => {
-                                setApiPortDraft(e.target.value);
-                                const val = Number.parseInt(e.target.value, 10);
-                                if (
-                                  !Number.isNaN(val) &&
-                                  val >= 1 &&
-                                  val <= 65535
-                                ) {
-                                  setSettings({ ...settings, api_port: val });
-                                }
-                              }}
-                              onBlur={() => {
-                                const val = Number.parseInt(apiPortDraft, 10);
-                                if (
-                                  Number.isNaN(val) ||
-                                  val < 1 ||
-                                  val > 65535
-                                ) {
-                                  setApiPortDraft(String(settings.api_port));
-                                }
-                              }}
-                              className="w-24 font-mono"
-                              min={1}
-                              max={65535}
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={
-                                isApiStarting ||
-                                apiServerPort === settings.api_port
+                  {apiServerPort && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="size-1.5 rounded-full bg-success" />
+                      <span className="text-muted-foreground">
+                        {t("integrations.apiRunningOn")}
+                      </span>
+                      <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">
+                        http://127.0.0.1:{apiServerPort}
+                      </code>
+                    </div>
+                  )}
+                </div>
+
+                {settings.api_enabled && (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2">
+                      <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                        <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                          {t("integrations.apiPortLabel")}
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={apiPortDraft}
+                            onChange={(e) => {
+                              setApiPortDraft(e.target.value);
+                              const val = Number.parseInt(e.target.value, 10);
+                              if (
+                                !Number.isNaN(val) &&
+                                val >= 1 &&
+                                val <= 65535
+                              ) {
+                                setSettings({ ...settings, api_port: val });
                               }
-                              onClick={async () => {
-                                const port = settings.api_port;
-                                if (port < 1 || port > 65535) {
+                            }}
+                            onBlur={() => {
+                              const val = Number.parseInt(apiPortDraft, 10);
+                              if (Number.isNaN(val) || val < 1 || val > 65535) {
+                                setApiPortDraft(String(settings.api_port));
+                              }
+                            }}
+                            className="w-24 font-mono"
+                            min={1}
+                            max={65535}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              isApiStarting ||
+                              apiServerPort === settings.api_port
+                            }
+                            onClick={async () => {
+                              const port = settings.api_port;
+                              if (port < 1 || port > 65535) {
+                                showErrorToast(
+                                  t("integrations.apiInvalidPort"),
+                                  {
+                                    description: t(
+                                      "integrations.apiInvalidPortDescription",
+                                    ),
+                                  },
+                                );
+                                return;
+                              }
+                              setIsApiStarting(true);
+                              try {
+                                await invoke("stop_api_server");
+                                const next = await invoke<AppSettings>(
+                                  "save_app_settings",
+                                  { settings },
+                                );
+                                setSettings(next);
+                                const actualPort = await invoke<number>(
+                                  "start_api_server",
+                                  { port },
+                                );
+                                setApiServerPort(actualPort);
+                                if (actualPort !== port) {
                                   showErrorToast(
-                                    t("integrations.apiInvalidPort"),
+                                    t("integrations.apiPortInUse", { port }),
                                     {
                                       description: t(
-                                        "integrations.apiInvalidPortDescription",
+                                        "integrations.apiFallbackPort",
+                                        { port: actualPort },
                                       ),
                                     },
                                   );
-                                  return;
+                                } else {
+                                  showSuccessToast(
+                                    t("integrations.apiRunning", {
+                                      port: actualPort,
+                                    }),
+                                  );
                                 }
-                                setIsApiStarting(true);
-                                try {
-                                  await invoke("stop_api_server");
-                                  const next = await invoke<AppSettings>(
-                                    "save_app_settings",
-                                    { settings },
-                                  );
-                                  setSettings(next);
-                                  const actualPort = await invoke<number>(
-                                    "start_api_server",
-                                    { port },
-                                  );
-                                  setApiServerPort(actualPort);
-                                  if (actualPort !== port) {
-                                    showErrorToast(
-                                      t("integrations.apiPortInUse", { port }),
-                                      {
-                                        description: t(
-                                          "integrations.apiFallbackPort",
-                                          { port: actualPort },
-                                        ),
-                                      },
-                                    );
-                                  } else {
-                                    showSuccessToast(
-                                      t("integrations.apiRunning", {
-                                        port: actualPort,
-                                      }),
-                                    );
-                                  }
-                                } catch (e) {
-                                  showErrorToast(
-                                    t("integrations.apiStartFailed"),
-                                    {
-                                      description: translateBackendError(t, e),
-                                    },
-                                  );
-                                } finally {
-                                  setIsApiStarting(false);
-                                }
-                              }}
-                            >
-                              {t("common.buttons.save")}
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                              {t("integrations.apiTokenLabel")}
-                            </Label>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                              <Input
-                                type={showApiToken ? "text" : "password"}
-                                value={settings.api_token ?? ""}
-                                readOnly
-                                className="pr-10 font-mono"
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
-                                onClick={() => {
-                                  setShowApiToken(!showApiToken);
-                                }}
-                              >
-                                {showApiToken ? (
-                                  <EyeOff className="size-4" />
-                                ) : (
-                                  <Eye className="size-4" />
-                                )}
-                              </Button>
-                            </div>
-                            <CopyToClipboard
-                              text={settings.api_token ?? ""}
-                              successMessage={t("integrations.tokenCopied")}
-                            />
-                          </div>
+                              } catch (e) {
+                                showErrorToast(
+                                  t("integrations.apiStartFailed"),
+                                  {
+                                    description: translateBackendError(t, e),
+                                  },
+                                );
+                              } finally {
+                                setIsApiStarting(false);
+                              }
+                            }}
+                          >
+                            {t("common.buttons.save")}
+                          </Button>
                         </div>
                       </div>
 
                       <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
                         <div className="flex items-center justify-between">
                           <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                            {t("integrations.apiExampleRequest")}
+                            {t("integrations.apiTokenLabel")}
                           </Label>
-                          <CopyToClipboard
-                            text={`curl -H "Authorization: Bearer ${settings.api_token ?? "${TOKEN}"}" \\\n     http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
-                            successMessage={t("common.buttons.copied")}
-                          />
                         </div>
-                        <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
-                          {`curl -H "Authorization: Bearer \${TOKEN}" \\
-     http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
-                        </pre>
-                      </div>
-                    </>
-                  )}
-                </AnimatedTabsContent>
-
-                {remoteTabShown && (
-                  <AnimatedTabsContent
-                    value="remote"
-                    className="mt-4 flex flex-col gap-5"
-                  >
-                    <IntegrationDiagnostics
-                      key={`${credentialPrefixOf(credential)}:${remote?.enabled}`}
-                      target="remote"
-                    />
-                    <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <LuCloud className="mt-0.5 size-5 text-muted-foreground" />
-                          <div className="flex flex-col gap-1">
-                            <Label className="text-sm font-medium">
-                              {t("integrations.remote.enableLabel")}
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t("integrations.remote.enableDescription")}
-                            </p>
-                          </div>
-                        </div>
-                        <AnimatedSwitch
-                          checked={remote?.enabled ?? false}
-                          disabled={
-                            !termsAccepted || !isLoggedIn || isRemoteStarting
-                          }
-                          onCheckedChange={(checked) =>
-                            void handleRemoteToggle(checked)
-                          }
-                        />
-                      </div>
-
-                      {!isLoggedIn && (
-                        <p className="text-xs text-warning-text">
-                          {t("integrations.remote.signInRequired")}
-                        </p>
-                      )}
-                      {isLoggedIn && !termsAccepted && (
-                        <p className="text-xs text-warning-text">
-                          {t("integrations.mcpAcceptTermsFirst")}
-                        </p>
-                      )}
-
-                      {remote?.enabled && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              remote.connected
-                                ? "bg-success"
-                                : "bg-muted-foreground",
-                            )}
-                          />
-                          <span className="text-muted-foreground">
-                            {/* Three states, not two. A refusal the bridge will
-                            keep receiving (an unentitled plan, a taken slot,
-                            a dead credential) re-dials for ever without ever
-                            connecting, and "Connecting as" over the top of the
-                            error underneath it read as a hang rather than an
-                            answer. */}
-                            {remote.connected
-                              ? t("integrations.remote.connected")
-                              : remote.lastError
-                                ? t("integrations.remote.notConnected")
-                                : t("integrations.remote.connecting")}
-                          </span>
-                          {/* Only under a phrase that governs it. "Connected as"
-                          and "Connecting as" are open phrases; "Not connected"
-                          is closed, and the id dangling after it read as a
-                          sentence fragment in all ten locales. */}
-                          {!(remote.lastError && !remote.connected) && (
-                            <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">
-                              {remote.instanceId}
-                            </code>
-                          )}
-                        </div>
-                      )}
-
-                      {remote?.enabled &&
-                        !remote.connected &&
-                        remote.lastError && (
-                          <p className="text-xs text-destructive-text">
-                            {translateBackendError(t, remote.lastError)}
-                          </p>
-                        )}
-                    </div>
-
-                    {/* Gated on entitlement: handing an unentitled customer a
-                    URL, a credential or an "Add" button that can only answer
-                    402 is the same wrong-diagnosis trap as telling them their
-                    desktop is offline. */}
-                    {remote?.enabled &&
-                      (remoteEntitled || !remoteEntitlementKnown) && (
-                        <>
-                          <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                                {t("integrations.remote.credentialLabel")}
-                              </Label>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isRotatingCredential}
-                                onClick={() => void handleRotateCredential()}
-                              >
-                                {credentialPresent
-                                  ? t("integrations.remote.credentialRotate")
-                                  : t("integrations.remote.credentialCreate")}
-                              </Button>
-                            </div>
-                            {credentialPresent ? (
-                              credentialPrefix && (
-                                <code className="w-fit rounded bg-muted px-2 py-1 font-mono text-[11px]">
-                                  {t("integrations.remote.credentialPrefix", {
-                                    prefix: credentialPrefix,
-                                  })}
-                                </code>
-                              )
-                            ) : (
-                              <p className="text-xs text-muted-foreground">
-                                {t("integrations.remote.credentialNone")}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              {t("integrations.remote.credentialHint")}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                                {t("integrations.remote.endpointLabel")}
-                              </Label>
-                              <CopyToClipboard
-                                text={REMOTE_MCP_URL}
-                                successMessage={t(
-                                  "integrations.remote.endpointCopied",
-                                )}
-                              />
-                            </div>
-                            <Input
-                              value={REMOTE_MCP_URL}
-                              readOnly
-                              className="font-mono text-xs"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              {t("integrations.remote.endpointDescription")}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                                {t("integrations.remote.exampleRequest")}
-                              </Label>
-                              <CopyToClipboard
-                                text={remoteExampleRequest}
-                                successMessage={t("common.buttons.copied")}
-                              />
-                            </div>
-                            <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
-                              {remoteExampleRequest}
-                            </pre>
-                          </div>
-
-                          {clientsGrid("remote")}
-                        </>
-                      )}
-                  </AnimatedTabsContent>
-                )}
-
-                <AnimatedTabsContent
-                  value="mcp"
-                  className="mt-4 flex flex-col gap-5"
-                >
-                  <div className="flex flex-col gap-2 rounded-md border border-warning/50 bg-warning/10 p-4">
-                    <p className="text-sm font-medium">
-                      {t("integrations.mcp.deprecatedBannerTitle")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {t("integrations.mcp.deprecatedBannerBody")}
-                    </p>
-                    <div>
-                      {migrationOffered ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="mt-1"
-                          data-slot="mcp-migration-open"
-                          onClick={() => {
-                            setMigrationOpen(true);
-                          }}
-                        >
-                          {t("mcpMigration.start")}
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="mt-1"
-                          onClick={() => {
-                            setActiveTab("remote");
-                          }}
-                        >
-                          {t("integrations.mcp.deprecatedCta")}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <LuZap className="mt-0.5 size-5 text-muted-foreground" />
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-sm font-medium">
-                            {t("integrations.mcpEnableLabel")}
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("integrations.mcpEnableDescription")}
-                            {!termsAccepted && (
-                              <span className="ml-1 text-warning-text">
-                                {t("integrations.mcpAcceptTermsFirst")}
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <AnimatedSwitch
-                        checked={settings.mcp_enabled && mcpConfig !== null}
-                        disabled={!termsAccepted || isMcpStarting}
-                        onCheckedChange={(checked) =>
-                          void handleMcpToggle(checked)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  {mcpConfig && (
-                    <>
-                      <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
-                        <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                          {t("integrations.mcp.url")}
-                        </Label>
-                        <div className="flex items-center gap-x-2">
+                        <div className="flex items-center gap-2">
                           <div className="relative flex-1">
                             <Input
-                              type={showMcpUrl ? "text" : "password"}
-                              value={mcpUrl}
+                              type={showApiToken ? "text" : "password"}
+                              value={settings.api_token ?? ""}
                               readOnly
-                              className="pr-10 font-mono text-xs"
+                              className="pr-10 font-mono"
                             />
                             <Button
                               type="button"
@@ -1217,10 +755,10 @@ export function IntegrationsDialog({
                               size="sm"
                               className="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
                               onClick={() => {
-                                setShowMcpUrl(!showMcpUrl);
+                                setShowApiToken(!showApiToken);
                               }}
                             >
-                              {showMcpUrl ? (
+                              {showApiToken ? (
                                 <EyeOff className="size-4" />
                               ) : (
                                 <Eye className="size-4" />
@@ -1228,62 +766,207 @@ export function IntegrationsDialog({
                             </Button>
                           </div>
                           <CopyToClipboard
-                            text={mcpUrl}
-                            successMessage={t("integrations.mcp.urlCopied")}
+                            text={settings.api_token ?? ""}
+                            successMessage={t("integrations.tokenCopied")}
                           />
                         </div>
                       </div>
+                    </div>
 
-                      {clientsGrid("local")}
-                    </>
-                  )}
+                    <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                          {t("integrations.apiExampleRequest")}
+                        </Label>
+                        <CopyToClipboard
+                          text={`curl -H "Authorization: Bearer ${settings.api_token ?? "${TOKEN}"}" \\\n     http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
+                          successMessage={t("common.buttons.copied")}
+                        />
+                      </div>
+                      <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
+                        {`curl -H "Authorization: Bearer \${TOKEN}" \\
+     http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
+                      </pre>
+                    </div>
+                  </>
+                )}
+              </AnimatedTabsContent>
+
+              {remoteTabShown && (
+                <AnimatedTabsContent
+                  value="remote"
+                  className="mt-4 flex flex-col gap-5"
+                >
+                  <IntegrationDiagnostics
+                    key={`${credentialPrefixOf(credential)}:${remote?.enabled}`}
+                    target="remote"
+                  />
+                  <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <LuCloud className="mt-0.5 size-5 text-muted-foreground" />
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-sm font-medium">
+                            {t("integrations.remote.enableLabel")}
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            {t("integrations.remote.enableDescription")}
+                          </p>
+                        </div>
+                      </div>
+                      <AnimatedSwitch
+                        checked={remote?.enabled ?? false}
+                        disabled={
+                          !termsAccepted || !isLoggedIn || isRemoteStarting
+                        }
+                        onCheckedChange={(checked) =>
+                          void handleRemoteToggle(checked)
+                        }
+                      />
+                    </div>
+
+                    {!isLoggedIn && (
+                      <p className="text-xs text-warning-text">
+                        {t("integrations.remote.signInRequired")}
+                      </p>
+                    )}
+                    {isLoggedIn && !termsAccepted && (
+                      <p className="text-xs text-warning-text">
+                        {t("integrations.mcpAcceptTermsFirst")}
+                      </p>
+                    )}
+
+                    {remote?.enabled && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            remote.connected
+                              ? "bg-success"
+                              : "bg-muted-foreground",
+                          )}
+                        />
+                        <span className="text-muted-foreground">
+                          {/* Three states, not two. A refusal the bridge will
+                            keep receiving (an unentitled plan, a taken slot,
+                            a dead credential) re-dials for ever without ever
+                            connecting, and "Connecting as" over the top of the
+                            error underneath it read as a hang rather than an
+                            answer. */}
+                          {remote.connected
+                            ? t("integrations.remote.connected")
+                            : remote.lastError
+                              ? t("integrations.remote.notConnected")
+                              : t("integrations.remote.connecting")}
+                        </span>
+                        {/* Only under a phrase that governs it. "Connected as"
+                          and "Connecting as" are open phrases; "Not connected"
+                          is closed, and the id dangling after it read as a
+                          sentence fragment in all ten locales. */}
+                        {!(remote.lastError && !remote.connected) && (
+                          <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">
+                            {remote.instanceId}
+                          </code>
+                        )}
+                      </div>
+                    )}
+
+                    {remote?.enabled &&
+                      !remote.connected &&
+                      remote.lastError && (
+                        <p className="text-xs text-destructive-text">
+                          {translateBackendError(t, remote.lastError)}
+                        </p>
+                      )}
+                  </div>
+
+                  {/* Gated on entitlement: handing an unentitled customer a
+                    URL, a credential or an "Add" button that can only answer
+                    402 is the same wrong-diagnosis trap as telling them their
+                    desktop is offline. */}
+                  {remote?.enabled &&
+                    (remoteEntitled || !remoteEntitlementKnown) && (
+                      <>
+                        <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                              {t("integrations.remote.credentialLabel")}
+                            </Label>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isRotatingCredential}
+                              onClick={() => void handleRotateCredential()}
+                            >
+                              {credentialPresent
+                                ? t("integrations.remote.credentialRotate")
+                                : t("integrations.remote.credentialCreate")}
+                            </Button>
+                          </div>
+                          {credentialPresent ? (
+                            credentialPrefix && (
+                              <code className="w-fit rounded bg-muted px-2 py-1 font-mono text-[11px]">
+                                {t("integrations.remote.credentialPrefix", {
+                                  prefix: credentialPrefix,
+                                })}
+                              </code>
+                            )
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {t("integrations.remote.credentialNone")}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {t("integrations.remote.credentialHint")}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                              {t("integrations.remote.endpointLabel")}
+                            </Label>
+                            <CopyToClipboard
+                              text={REMOTE_MCP_URL}
+                              successMessage={t(
+                                "integrations.remote.endpointCopied",
+                              )}
+                            />
+                          </div>
+                          <Input
+                            value={REMOTE_MCP_URL}
+                            readOnly
+                            className="font-mono text-xs"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {t("integrations.remote.endpointDescription")}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                              {t("integrations.remote.exampleRequest")}
+                            </Label>
+                            <CopyToClipboard
+                              text={remoteExampleRequest}
+                              successMessage={t("common.buttons.copied")}
+                            />
+                          </div>
+                          <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
+                            {remoteExampleRequest}
+                          </pre>
+                        </div>
+
+                        {clientsGrid}
+                      </>
+                    )}
                 </AnimatedTabsContent>
-              </AnimatedTabs>
-            </div>
+              )}
+            </AnimatedTabs>
           </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={localDeprecatedOpen} onOpenChange={setLocalDeprecatedOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("mcpLocalDeprecated.title")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t("mcpLocalDeprecated.description")}
-          </p>
-          <div className="mt-2 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setLocalDeprecatedOpen(false);
-              }}
-            >
-              {t("common.buttons.close")}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setLocalDeprecatedOpen(false);
-                setActiveTab("remote");
-              }}
-            >
-              {t("integrations.mcp.deprecatedCta")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <McpMigrationDialog
-        open={migrationOpen}
-        onOpenChange={setMigrationOpen}
-        onChanged={() => {
-          void loadSettings();
-          void loadAgents();
-          void loadRemoteStatus();
-          void loadCredential();
-          void loadMcpConfig();
-        }}
-      />
-    </>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

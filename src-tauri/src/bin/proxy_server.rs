@@ -247,15 +247,6 @@ async fn main() {
             .help("Direct path to the Xray worker config JSON file"),
         ),
     )
-    .subcommand(
-      Command::new("mcp-bridge")
-        .about("Bridge stdio MCP to a local HTTP MCP server")
-        .arg(
-          Arg::new("url")
-            .required(true)
-            .help("HTTP MCP server URL (e.g. http://127.0.0.1:51080/mcp/TOKEN)"),
-        ),
-    )
     .get_matches();
 
   if let Some(proxy_matches) = matches.subcommand_matches("proxy") {
@@ -667,81 +658,6 @@ async fn main() {
     {
       log::error!("Xray worker failed: {error}");
       process::exit(1);
-    }
-  } else if let Some(bridge_matches) = matches.subcommand_matches("mcp-bridge") {
-    let url = bridge_matches
-      .get_one::<String>("url")
-      .expect("url is required")
-      .clone();
-
-    // Suppress debug logging for bridge mode — stderr noise confuses MCP clients
-    log::set_max_level(log::LevelFilter::Warn);
-
-    // stdio↔HTTP MCP bridge: translates stdio JSON-RPC to Streamable HTTP transport
-    let client = reqwest::Client::new();
-    let stdin = tokio::io::stdin();
-    let reader = tokio::io::BufReader::new(stdin);
-    let mut session_id: Option<String> = None;
-
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-    let mut lines = reader.lines();
-    let mut stdout = tokio::io::stdout();
-
-    while let Ok(Some(line)) = lines.next_line().await {
-      if line.trim().is_empty() {
-        continue;
-      }
-
-      // Check if this is a notification (no "id" field) to handle 202 responses
-      let is_notification = serde_json::from_str::<serde_json::Value>(&line)
-        .ok()
-        .map(|v| v.get("id").is_none() || v["id"].is_null())
-        .unwrap_or(false);
-
-      let mut req = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .header("Accept", "application/json");
-
-      if let Some(sid) = &session_id {
-        req = req.header("mcp-session-id", sid);
-      }
-
-      match req.body(line).send().await {
-        Ok(resp) => {
-          // Capture session ID from initialize response
-          if let Some(sid) = resp.headers().get("mcp-session-id") {
-            if let Ok(s) = sid.to_str() {
-              session_id = Some(s.to_string());
-            }
-          }
-
-          // Notifications return 202 with no body — don't write anything
-          if is_notification {
-            continue;
-          }
-
-          if let Ok(body) = resp.text().await {
-            if !body.is_empty() {
-              let _ = stdout.write_all(body.as_bytes()).await;
-              let _ = stdout.write_all(b"\n").await;
-              let _ = stdout.flush().await;
-            }
-          }
-        }
-        Err(e) => {
-          if !is_notification {
-            let err = serde_json::json!({
-              "jsonrpc": "2.0",
-              "id": null,
-              "error": {"code": -32000, "message": format!("HTTP error: {e}")},
-            });
-            let _ = stdout.write_all(err.to_string().as_bytes()).await;
-            let _ = stdout.write_all(b"\n").await;
-            let _ = stdout.flush().await;
-          }
-        }
-      }
     }
   } else {
     log::error!("No command specified");

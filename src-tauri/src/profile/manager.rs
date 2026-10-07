@@ -291,17 +291,22 @@ impl ProfileManager {
       // Generate a device if the profile has neither a legacy payload nor an
       // identity.
       if config.fingerprint.is_none() && config.identity_id.is_none() {
-        if let crate::profile_generation_limiter::GenerationOutcome::Limited { retry_after_secs } =
-          crate::profile_generation_limiter::record_profile_generation().await
+        if let crate::profile_generation_limiter::GenerationOutcome::Limited {
+          per_hour,
+          retry_after_secs,
+        } = crate::profile_generation_limiter::record_profile_generation().await
         {
           let _ = std::fs::remove_dir_all(&profile_uuid_dir);
           log::warn!(
-            "Refused to generate a fingerprint for '{name}': this account has generated its hourly maximum; retry in {retry_after_secs}s"
+            "Refused to generate a fingerprint for '{name}': this account has generated its hourly maximum of {per_hour}; retry in {retry_after_secs}s"
           );
           return Err(
             serde_json::json!({
               "code": "PROFILE_GENERATION_LIMIT_REACHED",
-              "params": { "retryAfterSeconds": retry_after_secs.to_string() }
+              "params": {
+                "limit": per_hour.to_string(),
+                "retryAfterSeconds": retry_after_secs.to_string(),
+              }
             })
             .to_string()
             .into(),

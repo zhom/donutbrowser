@@ -505,7 +505,13 @@
       "description": "Encrypts the on-disk profile data. Required to launch."
     },
     "downloadingSubtitle": "Downloading…",
-    "browsersDownloading": "Browsers are still downloading. Profile creation will be available once a download finishes."
+    "browsersDownloading": "Browsers are still downloading. Profile creation will be available once a download finishes.",
+    "advancedOptions": "Advanced options",
+    "hourlyLimit": {
+      "reached": "Your plan allows {{limit}} new profiles per hour. You can create the next one in about {{minutes}} min.",
+      "warningTitle": "You're creating profiles too quickly",
+      "warning": "Please wait a little. Creating too many profiles in one hour leads to a temporary block of 24 hours or more, during which you can't generate new identities. If you need a higher hourly limit, consider supporting Donut with a paid plan."
+    }
   },
   "deleteDialog": {
     "title": "Delete Profile",
@@ -833,8 +839,6 @@
   "integrations": {
     "title": "Integrations",
     "mcp": {
-      "url": "MCP Server URL",
-      "urlCopied": "URL copied",
       "clientsLabel": "Clients",
       "add": "Add",
       "addedToClient": "Added to {{name}}",
@@ -845,15 +849,9 @@
         "cli": "CLI",
         "editor": "Editor",
         "editorExt": "Editor ext"
-      },
-      "switchToLocal": "Switch",
-      "switchedToLocal": "{{name}} now uses the local MCP server",
-      "deprecatedBannerTitle": "Local MCP is being removed",
-      "deprecatedBannerBody": "The local MCP server no longer runs. Use remote MCP instead — you can connect to it from anywhere, not just this machine.",
-      "deprecatedCta": "Set up remote MCP"
+      }
     },
     "tabApi": "Local API",
-    "tabMcp": "MCP (AI Assistants)",
     "apiEnableLabel": "Enable Local API Server",
     "apiEnableDescription": "Allow managing profiles, groups, and proxies via REST API.",
     "apiPortLabel": "Port",
@@ -868,12 +866,7 @@
     "apiToggleFailed": "Failed to toggle API server",
     "apiStartFailed": "Failed to start API server",
     "tokenCopied": "Token copied",
-    "mcpEnableLabel": "Enable MCP Server (Model Context Protocol)",
-    "mcpEnableDescription": "Allow AI assistants like Claude Desktop to control browsers.",
     "mcpAcceptTermsFirst": "(Accept Wayfern terms in Settings first)",
-    "mcpStarted": "MCP server started on port {{port}}",
-    "mcpStopped": "MCP server stopped",
-    "mcpToggleFailed": "Failed to toggle MCP server",
     "openSettings": "Open Integrations Settings",
     "apiRunningOn": "Running on",
     "apiExampleRequest": "Example request",
@@ -902,8 +895,6 @@
       "credentialCreated": "Credential created",
       "credentialRotateFailed": "Could not rotate the credential",
       "credentialClientsFailed": "The credential is stored, but these clients could not be updated: {{clients}}. Rotate again to retry.",
-      "switchToRemote": "Switch",
-      "switchedClient": "{{name}} now uses Remote MCP",
       "fxHint": "fx reads the credential from DONUT_MCP_TOKEN. Export it in the shell that starts fx.",
       "fxExportCopied": "Export line copied"
     }
@@ -2216,10 +2207,6 @@
     "updatePreparationFailed": "Donut Browser could not safely stop a background network process. Restart your computer, then try the update again.",
     "wayfernTermsRequired": "Accept the Wayfern Terms and Conditions to use Wayfern.",
     "apiPortUnavailable": "The API server could not find an available port.",
-    "mcpServerAlreadyRunning": "The MCP server is already running.",
-    "mcpServerNotRunning": "The MCP server is not running.",
-    "mcpPortUnavailable": "The MCP server could not find an available port.",
-    "mcpConfigurationUnavailable": "The MCP server configuration is unavailable. Restart the server and try again.",
     "mcpAgentUnknown": "This MCP client is not supported.",
     "mcpAgentInstallFailed": "Could not add Donut Browser to the MCP client: {{detail}}",
     "mcpAgentRemoveFailed": "Could not remove Donut Browser from the MCP client: {{detail}}",
@@ -2297,7 +2284,7 @@
     "wayfernPlanCheckUnavailable": "Could not check your plan right now. Try again in a moment.",
     "wayfernCustomFingerprintRequiresPlan": "Your plan does not include custom fingerprints.",
     "wayfernGenerationUnavailable": "Could not create a fingerprint right now. Try again later.",
-    "profileGenerationLimitReached": "You have created 100 profiles in the last hour, which is the limit on Pro. Wait about {{minutes}} minutes before creating another one.",
+    "profileGenerationLimitReached": "You have created {{limit}} profiles in the last hour, which is the limit on your plan. Wait about {{minutes}} minutes before creating another one.",
     "wayfernBrowserBusy": "The browser was busy applying a fingerprint. Try again.",
     "wayfernBrowserExited": "The browser closed while starting. {{detail}}",
     "profileExportFailed": "This profile could not be exported. {{detail}}",
@@ -2330,7 +2317,6 @@
     "remoteSessionNotDrivable": "This remote session is not ready to be driven yet. Wait until it reports live.",
     "remotePlatformUnsupported": "Remote sessions run on macOS, Windows or Linux hosts only. This profile's platform is {{platform}}.",
     "remoteProfileNotSynced": "This profile has not finished uploading to cloud sync yet. Wait for its first sync to complete, then try again.",
-    "mcpLocalRemoved": "Donut's local MCP server has been removed. MCP is now remote and needs a paid plan.",
     "trashEntryNotFound": "This profile is no longer in the trash.",
     "trashRestoreConflict": "A profile with the same ID already exists, so this one cannot be restored.",
     "recipesNotEntitled": "Recipes need the Pro plan or higher.",
@@ -2372,7 +2358,10 @@
     "wayfernLaunchArgReserved": "Donut controls {{argument}}. Remove this argument.",
     "wayfernLaunchArgNotAllowed": "{{argument}} is not a supported launch argument. Remove it.",
     "wayfernLaunchArgValueInvalid": "The value of {{argument}} is not supported.",
-    "wayfernLaunchArgsLimit": "Use at most {{count}} launch arguments, each up to {{length}} characters."
+    "wayfernLaunchArgsLimit": "Use at most {{count}} launch arguments, each up to {{length}} characters.",
+    "tablePreferencesInvalid": "These table settings are invalid.",
+    "tablePreferencesLoadFailed": "Could not load the table settings. Try again.",
+    "tablePreferencesSaveFailed": "Could not save the table settings. Try again."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2605,7 +2594,7 @@
   },
   "profileGenerationLimit": {
     "title": "Hourly profile limit reached",
-    "description": "Your Pro plan allows 100 new profiles per hour. Creation is paused until the hour rolls over, so your account is not blocked."
+    "description": "Your plan's hourly limit for new profiles is reached. Creation resumes as the hour rolls over, so your account is not blocked."
   },
   "wayfernConfigDialog": {
     "titleView": "View Fingerprint Settings - {{name}} ({{browser}})",
@@ -3053,40 +3042,6 @@
     "device": "Device",
     "site": "Site"
   },
-  "mcpLocalDeprecated": {
-    "title": "Local MCP has been removed",
-    "description": "Donut now uses remote MCP, which you can connect to from anywhere. Set it up under the Remote MCP tab and point your AI clients there."
-  },
-  "mcpMigration": {
-    "title": "Move to remote MCP",
-    "doneTitle": "Moved to remote MCP",
-    "body": "The local MCP server is gone. Remote MCP connects your AI clients to this browser through Donut cloud, so they keep working from anywhere while Donut is open.",
-    "changes": "Donut points these clients at the remote endpoint with a private credential. Nothing else in their settings changes.",
-    "changesNone": "No AI client on this computer uses the local server. Donut turns on remote MCP and creates a credential for the clients you set up yourself.",
-    "start": "Move to remote MCP",
-    "notNow": "Not now",
-    "done": "Done",
-    "stepBridge": "Remote MCP",
-    "stepClients": "Clients",
-    "bridgeWorking": "Turning on",
-    "bridgeOn": "On",
-    "credentialWorking": "Creating",
-    "clientsProgress": "{{moved}} of {{total}} moved",
-    "clientsNone": "None to move",
-    "clientMoving": "Moving",
-    "clientMoved": "Moved",
-    "clientFailed": "Not changed",
-    "summary_one": "{{count}} client now uses remote MCP.",
-    "summary_other": "{{count}} clients now use remote MCP.",
-    "failed_one": "{{count}} client was not changed. Retry, or set it up by hand with the details below.",
-    "failed_other": "{{count}} clients were not changed. Retry, or set them up by hand with the details below.",
-    "manual": "For any other client, use this endpoint with the credential as its bearer token.",
-    "credentialCopied": "Credential copied",
-    "localServer": "The local server now only tells old clients that it moved. You can turn it off.",
-    "localServerOff": "Turn off local server",
-    "localServerIsOff": "Local server is off",
-    "localServerOffFailed": "Could not turn off the local server"
-  },
   "appFeedback": {
     "saveFailed": "Could not save settings",
     "searchSettings": "Search settings…",
@@ -3141,8 +3096,6 @@
     "authorized": "Credential accepted",
     "confirmed": "Yes",
     "unavailable": "No",
-    "configuredLocal": "Configured for local MCP",
-    "configuredRemote": "Configured for remote MCP",
     "apiProbeScope": "Checks the running local API with the saved credential. No profile is launched.",
     "remoteProbeScope": "Checks the saved MCP credential. Remote control also needs a connected device and an eligible plan; a configured client is not a live session."
   },
@@ -3567,5 +3520,40 @@
     "body": "Your plan just unlocked these. Each tip shows one of them working.",
     "cta": "Show me",
     "later": "Later"
+  },
+  "tables": {
+    "search": "Search rows",
+    "filters": "Filters",
+    "findFilter": "Find a filter…",
+    "noOptions": "No matching options.",
+    "removeFilter": "Remove filter: {{filter}}",
+    "clearFilters": "Clear filters",
+    "results": "{{count}} of {{total}} rows",
+    "sortSummary": "{{column}}: {{direction}}",
+    "descending": "Descending",
+    "ascending": "Ascending",
+    "sort": "Sort",
+    "sortColumn": "Sort column",
+    "moveSortUp": "Move sort up",
+    "removeSort": "Remove sort",
+    "addSort": "Add sort",
+    "clearSort": "Clear sort",
+    "view": "View",
+    "columns": "Columns",
+    "rowHeight": "Row height",
+    "compact": "Compact",
+    "comfortable": "Comfortable",
+    "resetView": "Reset view",
+    "resizeColumn": "Resize {{column}} column",
+    "noResults": "No rows match these filters.",
+    "moreActions": "More actions",
+    "dataTable": "Data table",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "running": "Running",
+    "stopped": "Stopped",
+    "noTags": "No tags",
+    "noProxy": "No proxy",
+    "encrypted": "Encrypted"
   }
 }

@@ -294,18 +294,10 @@ const HomeHeader = ({
           : undefined
       }
     >
-      {isMacOS && (
-        <div
-          aria-hidden="true"
-          className="mr-1 flex shrink-0 items-center gap-[7px]"
-        >
-          {/* Reserve space for the macOS native traffic lights — the OS draws
-              the colored buttons here through the transparent titlebar. */}
-          <div className="size-[11px] rounded-full" />
-          <div className="size-[11px] rounded-full" />
-          <div className="size-[11px] rounded-full" />
-        </div>
-      )}
+      {/* The OS draws the traffic lights here through the transparent
+          titlebar, 15px from the left edge (lib.rs). On macOS 26 they end at
+          75px; this keeps the header's content a 13px gap clear of them. */}
+      {isMacOS && <div aria-hidden="true" className="w-15 shrink-0" />}
 
       {pageTitle ? (
         <span className="ml-2 text-xs font-semibold text-card-foreground">
@@ -418,23 +410,24 @@ const HomeHeader = ({
 
       {showProfileToolbar && (
         <div className="relative shrink-0">
+          <LuSearch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="text"
+            variant="soft"
             placeholder={t("header.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => {
               onSearchQueryChange(e.target.value);
             }}
-            className="h-7 w-36 pr-7 pl-8 text-xs min-[860px]:w-52"
+            className="h-7 w-36 pr-7 pl-8 text-xs md:text-xs min-[860px]:w-52"
           />
-          <LuSearch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 transform text-muted-foreground" />
           {searchQuery ? (
             <button
               type="button"
               onClick={() => {
                 onSearchQueryChange("");
               }}
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 transform rounded-sm p-0.5 transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-sm p-0.5 transition-colors hover:bg-foreground/10"
               aria-label={t("header.clearSearch")}
             >
               <LuX className="size-3.5 text-muted-foreground hover:text-foreground" />

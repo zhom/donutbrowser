@@ -196,10 +196,6 @@ test("a tip for a feature already in use is skipped", () => {
     "localApi",
     "automation",
   ]);
-  assert.deepEqual(skipped({ ...IDLE, mcpEnabled: true }), [
-    "localApi",
-    "automation",
-  ]);
   assert.deepEqual(skipped({ ...IDLE, cookieBotEnrolled: true }), [
     "cookieBot",
   ]);

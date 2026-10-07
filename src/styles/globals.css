@@ -194,6 +194,67 @@
   }
 }
 
+/* Data tables (profiles and the management tables). No rules between rows:
+   the header is one tinted strip, and a row highlights as one rounded shape.
+   Every tint mixes the theme's own foreground or primary, so the table stays
+   quiet in themes whose muted, accent or secondary colors are loud. The
+   header tint is mixed into the background, not over it, because the header
+   is sticky and rows scroll beneath it. */
+@layer components {
+  .data-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .data-table > thead > tr > th {
+    background-color: color-mix(
+      in oklab,
+      var(--foreground) 4%,
+      var(--background)
+    );
+  }
+  .data-table > thead > tr > th:first-child,
+  .data-table > tbody > tr[data-table-row] > td:first-child {
+    border-start-start-radius: var(--radius);
+    border-end-start-radius: var(--radius);
+  }
+  .data-table > thead > tr > th:last-child,
+  .data-table > tbody > tr[data-table-row] > td:last-child {
+    border-start-end-radius: var(--radius);
+    border-end-end-radius: var(--radius);
+  }
+  .data-table > tbody > tr[data-table-row] > td {
+    transition: background-color 120ms var(--ease-out);
+  }
+  .data-table > tbody > tr[data-table-row]:hover > td,
+  .data-table > tbody > tr[data-table-row][data-inspected="true"] > td {
+    background-color: color-mix(in oklab, var(--foreground) 4%, transparent);
+  }
+  .data-table > tbody > tr[data-table-row][data-state="selected"] > td,
+  .data-table > tbody > tr[data-table-row][data-moving="true"] > td {
+    background-color: color-mix(in oklab, var(--primary) 9%, transparent);
+  }
+  /* Selection stays at or under 12%: Solarized's own text contrast is only
+     about 5:1, and a stronger tint drops it below 4.5:1. */
+  .data-table > tbody > tr[data-table-row][data-state="selected"]:hover > td {
+    background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  }
+  /* Secondary controls in a row (copy, drag) wait for the pointer or focus,
+     so a long table reads as names and values, not a grid of icons. */
+  .data-table > tbody > tr[data-table-row] .row-reveal {
+    opacity: 0;
+    transition: opacity 120ms var(--ease-out);
+  }
+  .data-table > tbody > tr[data-table-row]:hover .row-reveal,
+  .data-table > tbody > tr[data-table-row]:focus-within .row-reveal,
+  .data-table > tbody > tr[data-table-row] .row-reveal:focus-visible,
+  .data-table > tbody > tr[data-table-row] .row-reveal[aria-busy="true"] {
+    opacity: 1;
+  }
+  .data-table > tbody > tr[data-table-row]:hover .row-reveal:disabled {
+    opacity: 0.4;
+  }
+}
+
 /* Scroll-fade utility: a vertical mask that thins the alpha of the top and
    bottom 24px of the scroll container ONLY when that direction is actually
    scrollable. useScrollFade() writes `data-fade-top` / `data-fade-bottom`

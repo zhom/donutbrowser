@@ -4,6 +4,78 @@ import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment, withApp } from "../lib/app.mjs";
 
+test("table views persist separately, migrate the old sort, and reject invalid settings", async () => {
+  await withApp("smoke-table-views", async (app) => {
+    await app.invoke("save_table_sorting_settings", {
+      sorting: { column: "created_at", direction: "desc" },
+    });
+    assert.deepEqual(
+      (await app.invoke("get_table_preferences", { tableId: "profiles" }))
+        .sorting,
+      [{ id: "created_at", desc: true }],
+    );
+    const preferences = {
+      visibility: { note: false, tags: true },
+      sizing: { name: 280 },
+      sorting: [
+        { id: "name", desc: true },
+        { id: "sync", desc: false },
+      ],
+      density: "comfortable",
+    };
+    await app.invoke("save_table_preferences", {
+      tableId: "proxies",
+      preferences,
+    });
+    assert.deepEqual(
+      await app.invoke("get_table_preferences", { tableId: "proxies" }),
+      preferences,
+    );
+    assert.equal(
+      (await app.invoke("get_table_preferences", { tableId: "groups" }))
+        .density,
+      "compact",
+    );
+    for (const args of [
+      { tableId: "../outside", preferences },
+      {
+        tableId: "proxies",
+        preferences: { ...preferences, sizing: { name: -1 } },
+      },
+      {
+        tableId: "proxies",
+        preferences: {
+          ...preferences,
+          sorting: [
+            { id: "name", desc: true },
+            { id: "name", desc: false },
+          ],
+        },
+      },
+    ])
+      assert.match(
+        await app.invokeError("save_table_preferences", args),
+        /TABLE_PREFERENCES_INVALID/,
+      );
+    assert.match(
+      await app.invokeError("get_table_preferences", { tableId: "../outside" }),
+      /TABLE_PREFERENCES_INVALID/,
+    );
+    await app.restart();
+    assert.deepEqual(
+      await app.invoke("get_table_preferences", { tableId: "proxies" }),
+      preferences,
+    );
+    const saved = JSON.parse(
+      await readFile(
+        path.join(app.dataRoot, "data", "settings", "table_proxies.json"),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(saved, preferences);
+  });
+});
+
 test("fresh app renders, completes onboarding, persists settings, and never touches real app roots", async () => {
   await withApp(
     "smoke-fresh",
@@ -175,7 +247,6 @@ test("fresh app renders, completes onboarding, persists settings, and never touc
       );
       const persisted = JSON.parse(await readFile(settingsFile, "utf8"));
       assert.equal(persisted.api_token, null);
-      assert.equal(persisted.mcp_token, null);
     },
     { onboardingCompleted: false },
   );

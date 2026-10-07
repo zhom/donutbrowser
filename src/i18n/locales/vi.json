@@ -505,7 +505,13 @@
       "description": "Mã hóa dữ liệu hồ sơ trên ổ đĩa. Yêu cầu mật khẩu để khởi chạy."
     },
     "downloadingSubtitle": "Đang tải xuống…",
-    "browsersDownloading": "Trình duyệt vẫn đang được tải xuống. Việc tạo hồ sơ sẽ khả dụng khi quá trình tải hoàn tất."
+    "browsersDownloading": "Trình duyệt vẫn đang được tải xuống. Việc tạo hồ sơ sẽ khả dụng khi quá trình tải hoàn tất.",
+    "advancedOptions": "Tùy chọn nâng cao",
+    "hourlyLimit": {
+      "reached": "Gói của bạn cho phép tạo {{limit}} hồ sơ mới mỗi giờ. Bạn có thể tạo hồ sơ tiếp theo sau khoảng {{minutes}} phút.",
+      "warningTitle": "Bạn đang tạo hồ sơ quá nhanh",
+      "warning": "Vui lòng đợi một chút. Tạo quá nhiều hồ sơ trong một giờ sẽ dẫn đến việc bị chặn tạm thời từ 24 giờ trở lên, trong thời gian đó bạn không thể tạo danh tính mới. Nếu cần giới hạn mỗi giờ cao hơn, hãy cân nhắc ủng hộ Donut bằng một gói trả phí."
+    }
   },
   "deleteDialog": {
     "title": "Xóa hồ sơ",
@@ -833,8 +839,6 @@
   "integrations": {
     "title": "Tích hợp",
     "mcp": {
-      "url": "URL máy chủ MCP",
-      "urlCopied": "Đã sao chép URL",
       "clientsLabel": "Ứng dụng khách",
       "add": "Thêm",
       "addedToClient": "Đã thêm vào {{name}}",
@@ -845,15 +849,9 @@
         "cli": "CLI",
         "editor": "Trình soạn thảo",
         "editorExt": "Tiện ích editor"
-      },
-      "switchToLocal": "Chuyển",
-      "switchedToLocal": "{{name}} hiện dùng máy chủ MCP cục bộ",
-      "deprecatedBannerTitle": "MCP cục bộ đang bị gỡ bỏ",
-      "deprecatedBannerBody": "Máy chủ MCP cục bộ không còn chạy. Hãy dùng MCP từ xa — bạn có thể kết nối từ bất cứ đâu, không chỉ trên máy này.",
-      "deprecatedCta": "Thiết lập MCP từ xa"
+      }
     },
     "tabApi": "API cục bộ",
-    "tabMcp": "MCP (Trợ lý AI)",
     "apiEnableLabel": "Bật máy chủ API cục bộ",
     "apiEnableDescription": "Cho phép quản lý profile, nhóm và proxy qua REST API.",
     "apiPortLabel": "Cổng",
@@ -868,12 +866,7 @@
     "apiToggleFailed": "Bật/tắt máy chủ API thất bại",
     "apiStartFailed": "Khởi động máy chủ API thất bại",
     "tokenCopied": "Đã sao chép token",
-    "mcpEnableLabel": "Bật máy chủ MCP (Model Context Protocol)",
-    "mcpEnableDescription": "Cho phép trợ lý AI như Claude Desktop điều khiển trình duyệt.",
     "mcpAcceptTermsFirst": "(Chấp nhận điều khoản Wayfern trong Cài đặt trước)",
-    "mcpStarted": "Máy chủ MCP đã khởi động trên cổng {{port}}",
-    "mcpStopped": "Máy chủ MCP đã dừng",
-    "mcpToggleFailed": "Bật/tắt máy chủ MCP thất bại",
     "openSettings": "Mở cài đặt tích hợp",
     "apiRunningOn": "Đang chạy trên",
     "apiExampleRequest": "Ví dụ yêu cầu",
@@ -902,8 +895,6 @@
       "credentialCreated": "Đã tạo thông tin xác thực",
       "credentialRotateFailed": "Không thể xoay vòng thông tin xác thực",
       "credentialClientsFailed": "Thông tin xác thực đã được lưu, nhưng không thể cập nhật các ứng dụng khách sau: {{clients}}. Xoay vòng lại để thử lại.",
-      "switchToRemote": "Chuyển",
-      "switchedClient": "{{name}} hiện dùng MCP từ xa",
       "fxHint": "fx đọc thông tin xác thực từ DONUT_MCP_TOKEN. Hãy export biến này trong shell khởi chạy fx.",
       "fxExportCopied": "Đã sao chép dòng export"
     }
@@ -2216,10 +2207,6 @@
     "updatePreparationFailed": "Donut Browser không thể dừng an toàn một tiến trình mạng chạy nền. Hãy khởi động lại máy tính rồi thử cập nhật lại.",
     "wayfernTermsRequired": "Hãy chấp nhận Điều khoản và Điều kiện của Wayfern để sử dụng Wayfern.",
     "apiPortUnavailable": "Máy chủ API không tìm thấy cổng khả dụng.",
-    "mcpServerAlreadyRunning": "Máy chủ MCP đang chạy.",
-    "mcpServerNotRunning": "Máy chủ MCP chưa chạy.",
-    "mcpPortUnavailable": "Máy chủ MCP không tìm thấy cổng khả dụng.",
-    "mcpConfigurationUnavailable": "Cấu hình máy chủ MCP không khả dụng. Hãy khởi động lại máy chủ rồi thử lại.",
     "mcpAgentUnknown": "Ứng dụng MCP này không được hỗ trợ.",
     "mcpAgentInstallFailed": "Không thể thêm Donut Browser vào ứng dụng MCP: {{detail}}",
     "mcpAgentRemoveFailed": "Không thể xóa Donut Browser khỏi ứng dụng MCP: {{detail}}",
@@ -2297,7 +2284,7 @@
     "wayfernPlanCheckUnavailable": "Hiện không thể kiểm tra gói của bạn. Hãy thử lại sau giây lát.",
     "wayfernCustomFingerprintRequiresPlan": "Gói của bạn không bao gồm dấu vân tay tùy chỉnh.",
     "wayfernGenerationUnavailable": "Hiện không thể tạo dấu vân tay. Vui lòng thử lại sau.",
-    "profileGenerationLimitReached": "Bạn đã tạo 100 hồ sơ trong giờ qua, đây là giới hạn của gói Pro. Hãy đợi khoảng {{minutes}} phút trước khi tạo hồ sơ tiếp theo.",
+    "profileGenerationLimitReached": "Bạn đã tạo {{limit}} hồ sơ trong giờ qua, đây là giới hạn của gói hiện tại. Hãy đợi khoảng {{minutes}} phút trước khi tạo hồ sơ tiếp theo.",
     "wayfernBrowserBusy": "Trình duyệt đang bận áp dụng dấu vân tay. Hãy thử lại.",
     "wayfernBrowserExited": "Trình duyệt đã đóng khi đang khởi động. {{detail}}",
     "profileExportFailed": "Không thể xuất hồ sơ này. {{detail}}",
@@ -2330,7 +2317,6 @@
     "remoteSessionNotDrivable": "Phiên từ xa này chưa sẵn sàng để điều khiển. Hãy đợi đến khi phiên hoạt động.",
     "remotePlatformUnsupported": "Phiên từ xa chỉ chạy trên máy chủ macOS, Windows hoặc Linux. Nền tảng của hồ sơ này là {{platform}}.",
     "remoteProfileNotSynced": "Hồ sơ này chưa tải lên xong dịch vụ đồng bộ đám mây. Hãy đợi lần đồng bộ đầu tiên hoàn tất rồi thử lại.",
-    "mcpLocalRemoved": "Máy chủ MCP cục bộ của Donut đã bị gỡ bỏ. MCP giờ chạy từ xa và cần gói trả phí.",
     "trashEntryNotFound": "Hồ sơ này không còn trong thùng rác.",
     "trashRestoreConflict": "Đã tồn tại một hồ sơ có cùng ID nên không thể khôi phục hồ sơ này.",
     "recipesNotEntitled": "Công thức yêu cầu gói Pro trở lên.",
@@ -2372,7 +2358,10 @@
     "wayfernLaunchArgReserved": "Donut quản lý {{argument}}. Hãy xóa tham số này.",
     "wayfernLaunchArgNotAllowed": "{{argument}} không phải là tham số khởi chạy được hỗ trợ. Hãy xóa nó.",
     "wayfernLaunchArgValueInvalid": "Giá trị của {{argument}} không được hỗ trợ.",
-    "wayfernLaunchArgsLimit": "Dùng tối đa {{count}} tham số khởi chạy, mỗi tham số tối đa {{length}} ký tự."
+    "wayfernLaunchArgsLimit": "Dùng tối đa {{count}} tham số khởi chạy, mỗi tham số tối đa {{length}} ký tự.",
+    "tablePreferencesInvalid": "Cài đặt bảng không hợp lệ.",
+    "tablePreferencesLoadFailed": "Không thể tải cài đặt bảng. Hãy thử lại.",
+    "tablePreferencesSaveFailed": "Không thể lưu cài đặt bảng. Hãy thử lại."
   },
   "rail": {
     "profiles": "Profile",
@@ -2605,7 +2594,7 @@
   },
   "profileGenerationLimit": {
     "title": "Đã đạt giới hạn hồ sơ mỗi giờ",
-    "description": "Gói Pro cho phép tạo 100 hồ sơ mới mỗi giờ. Việc tạo hồ sơ tạm dừng cho đến khi sang giờ mới để tài khoản của bạn không bị khóa."
+    "description": "Bạn đã đạt giới hạn hồ sơ mới mỗi giờ của gói hiện tại. Việc tạo sẽ tiếp tục khi thời gian trôi qua, tài khoản của bạn không bị khóa."
   },
   "wayfernConfigDialog": {
     "titleView": "Xem cài đặt vân tay - {{name}} ({{browser}})",
@@ -3053,40 +3042,6 @@
     "device": "Thiết bị",
     "site": "Trang web"
   },
-  "mcpLocalDeprecated": {
-    "title": "MCP cục bộ đã bị gỡ bỏ",
-    "description": "Donut hiện dùng MCP từ xa, bạn có thể kết nối từ bất cứ đâu. Thiết lập trong tab MCP từ xa và trỏ các client AI của bạn tới đó."
-  },
-  "mcpMigration": {
-    "title": "Chuyển sang MCP từ xa",
-    "doneTitle": "Đã chuyển sang MCP từ xa",
-    "body": "Máy chủ MCP cục bộ đã bị gỡ bỏ. MCP từ xa kết nối các client AI của bạn với trình duyệt này qua đám mây Donut, nên chúng vẫn hoạt động từ bất cứ đâu khi Donut đang mở.",
-    "changes": "Donut trỏ các client này tới điểm cuối từ xa với một thông tin xác thực riêng. Các cài đặt khác của chúng không thay đổi.",
-    "changesNone": "Không có client AI nào trên máy này dùng máy chủ cục bộ. Donut sẽ bật MCP từ xa và tạo thông tin xác thực cho các client bạn tự thiết lập.",
-    "start": "Chuyển sang MCP từ xa",
-    "notNow": "Để sau",
-    "done": "Xong",
-    "stepBridge": "MCP từ xa",
-    "stepClients": "Client",
-    "bridgeWorking": "Đang bật",
-    "bridgeOn": "Đã bật",
-    "credentialWorking": "Đang tạo",
-    "clientsProgress": "Đã chuyển {{moved}}/{{total}}",
-    "clientsNone": "Không có gì để chuyển",
-    "clientMoving": "Đang chuyển",
-    "clientMoved": "Đã chuyển",
-    "clientFailed": "Chưa đổi",
-    "summary_one": "{{count}} client hiện dùng MCP từ xa.",
-    "summary_other": "{{count}} client hiện dùng MCP từ xa.",
-    "failed_one": "{{count}} client chưa được thay đổi. Hãy thử lại, hoặc tự thiết lập bằng thông tin bên dưới.",
-    "failed_other": "{{count}} client chưa được thay đổi. Hãy thử lại, hoặc tự thiết lập bằng thông tin bên dưới.",
-    "manual": "Với client khác, hãy dùng điểm cuối này và dùng thông tin xác thực làm bearer token.",
-    "credentialCopied": "Đã sao chép thông tin xác thực",
-    "localServer": "Máy chủ cục bộ giờ chỉ báo cho client cũ rằng nó đã chuyển đi. Bạn có thể tắt nó.",
-    "localServerOff": "Tắt máy chủ cục bộ",
-    "localServerIsOff": "Máy chủ cục bộ đã tắt",
-    "localServerOffFailed": "Không thể tắt máy chủ cục bộ"
-  },
   "appFeedback": {
     "saveFailed": "Không thể lưu cài đặt",
     "searchSettings": "Tìm cài đặt…",
@@ -3141,8 +3096,6 @@
     "authorized": "Thông tin xác thực được chấp nhận",
     "confirmed": "Có",
     "unavailable": "Không",
-    "configuredLocal": "Đã cấu hình cho MCP cục bộ",
-    "configuredRemote": "Đã cấu hình cho MCP từ xa",
     "apiProbeScope": "Kiểm tra API cục bộ đang chạy bằng thông tin xác thực đã lưu. Không khởi chạy hồ sơ.",
     "remoteProbeScope": "Kiểm tra thông tin xác thực MCP đã lưu. Điều khiển từ xa cũng cần thiết bị được kết nối và gói phù hợp; máy khách đã cấu hình không phải phiên đang hoạt động."
   },
@@ -3567,5 +3520,40 @@
     "body": "Gói của bạn vừa mở khóa những tính năng này. Mỗi mẹo cho thấy một tính năng đang hoạt động.",
     "cta": "Cho tôi xem",
     "later": "Để sau"
+  },
+  "tables": {
+    "search": "Tìm hàng",
+    "filters": "Bộ lọc",
+    "findFilter": "Tìm bộ lọc…",
+    "noOptions": "Không có lựa chọn phù hợp.",
+    "removeFilter": "Xóa bộ lọc: {{filter}}",
+    "clearFilters": "Xóa bộ lọc",
+    "results": "{{count}} trên {{total}} hàng",
+    "sortSummary": "{{column}}: {{direction}}",
+    "descending": "Giảm dần",
+    "ascending": "Tăng dần",
+    "sort": "Sắp xếp",
+    "sortColumn": "Cột sắp xếp",
+    "moveSortUp": "Đưa tiêu chí lên trên",
+    "removeSort": "Xóa tiêu chí",
+    "addSort": "Thêm tiêu chí",
+    "clearSort": "Xóa sắp xếp",
+    "view": "Chế độ xem",
+    "columns": "Cột",
+    "rowHeight": "Chiều cao hàng",
+    "compact": "Gọn",
+    "comfortable": "Thoải mái",
+    "resetView": "Đặt lại chế độ xem",
+    "resizeColumn": "Đổi chiều rộng cột {{column}}",
+    "noResults": "Không có hàng nào khớp với các bộ lọc này.",
+    "moreActions": "Thao tác khác",
+    "dataTable": "Bảng dữ liệu",
+    "enabled": "Đã bật",
+    "disabled": "Đã tắt",
+    "running": "Đang chạy",
+    "stopped": "Đã dừng",
+    "noTags": "Không có thẻ",
+    "noProxy": "Không có proxy",
+    "encrypted": "Đã mã hóa"
   }
 }

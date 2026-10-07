@@ -1765,6 +1765,7 @@ dependencies = [
  "nix",
  "objc2",
  "objc2-app-kit",
+ "objc2-foundation",
  "quick-xml 0.42.0",
  "rand 0.10.3",
  "regex-lite",

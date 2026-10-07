@@ -506,7 +506,13 @@
       "description": "Chiffre les données du profil sur disque. Requis au lancement."
     },
     "downloadingSubtitle": "Téléchargement…",
-    "browsersDownloading": "Les navigateurs sont encore en cours de téléchargement. La création de profils sera disponible une fois un téléchargement terminé."
+    "browsersDownloading": "Les navigateurs sont encore en cours de téléchargement. La création de profils sera disponible une fois un téléchargement terminé.",
+    "advancedOptions": "Options avancées",
+    "hourlyLimit": {
+      "reached": "Votre offre permet {{limit}} nouveaux profils par heure. Vous pourrez créer le suivant dans environ {{minutes}} min.",
+      "warningTitle": "Vous créez des profils trop rapidement",
+      "warning": "Patientez un peu. Créer trop de profils en une heure entraîne un blocage temporaire de 24 heures ou plus, pendant lequel vous ne pourrez pas générer de nouvelles identités. Si vous avez besoin d'une limite horaire plus élevée, pensez à soutenir Donut avec une offre payante."
+    }
   },
   "deleteDialog": {
     "title": "Supprimer le profil",
@@ -837,8 +843,6 @@
   "integrations": {
     "title": "Intégrations",
     "mcp": {
-      "url": "URL du serveur MCP",
-      "urlCopied": "URL copiée",
       "clientsLabel": "Clients",
       "add": "Ajouter",
       "addedToClient": "Ajouté à {{name}}",
@@ -849,15 +853,9 @@
         "cli": "CLI",
         "editor": "Éditeur",
         "editorExt": "Ext. d'éditeur"
-      },
-      "switchToLocal": "Basculer",
-      "switchedToLocal": "{{name}} utilise désormais le serveur MCP local",
-      "deprecatedBannerTitle": "Le MCP local est en cours de suppression",
-      "deprecatedBannerBody": "Le serveur MCP local ne fonctionne plus. Utilisez le MCP distant : vous pouvez vous y connecter depuis n'importe où, pas seulement depuis cette machine.",
-      "deprecatedCta": "Configurer le MCP distant"
+      }
     },
     "tabApi": "API locale",
-    "tabMcp": "MCP (Assistants IA)",
     "apiEnableLabel": "Activer le serveur API local",
     "apiEnableDescription": "Permet de gérer les profils, groupes et proxys via l'API REST.",
     "apiPortLabel": "Port",
@@ -872,12 +870,7 @@
     "apiToggleFailed": "Échec du basculement du serveur API",
     "apiStartFailed": "Échec du démarrage du serveur API",
     "tokenCopied": "Jeton copié",
-    "mcpEnableLabel": "Activer le serveur MCP (Model Context Protocol)",
-    "mcpEnableDescription": "Permet aux assistants IA comme Claude Desktop de contrôler les navigateurs.",
     "mcpAcceptTermsFirst": "(Acceptez d'abord les conditions Wayfern dans les Paramètres)",
-    "mcpStarted": "Serveur MCP démarré sur le port {{port}}",
-    "mcpStopped": "Serveur MCP arrêté",
-    "mcpToggleFailed": "Échec du basculement du serveur MCP",
     "openSettings": "Ouvrir les paramètres d'intégrations",
     "apiRunningOn": "En cours sur",
     "apiExampleRequest": "Exemple de requête",
@@ -906,8 +899,6 @@
       "credentialCreated": "Identifiant créé",
       "credentialRotateFailed": "Impossible de renouveler l'identifiant",
       "credentialClientsFailed": "L'identifiant est enregistré, mais ces clients n'ont pas pu être mis à jour : {{clients}}. Renouvelez-le pour réessayer.",
-      "switchToRemote": "Basculer",
-      "switchedClient": "{{name}} utilise désormais MCP à distance",
       "fxHint": "fx lit l'identifiant dans DONUT_MCP_TOKEN. Exportez-le dans le shell qui lance fx.",
       "fxExportCopied": "Ligne d'export copiée"
     }
@@ -2226,10 +2217,6 @@
     "updatePreparationFailed": "Donut Browser n’a pas pu arrêter en toute sécurité un processus réseau en arrière-plan. Redémarrez l’ordinateur, puis réessayez la mise à jour.",
     "wayfernTermsRequired": "Acceptez les conditions générales de Wayfern pour utiliser Wayfern.",
     "apiPortUnavailable": "Le serveur API n’a trouvé aucun port disponible.",
-    "mcpServerAlreadyRunning": "Le serveur MCP est déjà en cours d’exécution.",
-    "mcpServerNotRunning": "Le serveur MCP n’est pas en cours d’exécution.",
-    "mcpPortUnavailable": "Le serveur MCP n’a trouvé aucun port disponible.",
-    "mcpConfigurationUnavailable": "La configuration du serveur MCP est indisponible. Redémarrez le serveur et réessayez.",
     "mcpAgentUnknown": "Ce client MCP n’est pas pris en charge.",
     "mcpAgentInstallFailed": "Impossible d’ajouter Donut Browser au client MCP : {{detail}}",
     "mcpAgentRemoveFailed": "Impossible de retirer Donut Browser du client MCP : {{detail}}",
@@ -2307,7 +2294,7 @@
     "wayfernPlanCheckUnavailable": "Impossible de vérifier votre forfait pour le moment. Réessayez dans un instant.",
     "wayfernCustomFingerprintRequiresPlan": "Votre forfait n'inclut pas les empreintes personnalisées.",
     "wayfernGenerationUnavailable": "Impossible de créer une empreinte pour le moment. Réessayez plus tard.",
-    "profileGenerationLimitReached": "Vous avez créé 100 profils au cours de la dernière heure, la limite de l'offre Pro. Attendez environ {{minutes}} minutes avant d'en créer un autre.",
+    "profileGenerationLimitReached": "Vous avez créé {{limit}} profils au cours de la dernière heure, la limite de votre offre. Attendez environ {{minutes}} minutes avant d'en créer un autre.",
     "wayfernBrowserBusy": "Le navigateur était occupé à appliquer une empreinte. Réessayez.",
     "wayfernBrowserExited": "Le navigateur s'est fermé pendant le démarrage. {{detail}}",
     "profileExportFailed": "Ce profil n'a pas pu être exporté. {{detail}}",
@@ -2340,7 +2327,6 @@
     "remoteSessionNotDrivable": "Cette session distante n'est pas encore prête à être pilotée. Attendez qu'elle soit active.",
     "remotePlatformUnsupported": "Les sessions distantes ne fonctionnent que sur des hôtes macOS, Windows ou Linux. La plateforme de ce profil est {{platform}}.",
     "remoteProfileNotSynced": "Ce profil n'a pas encore fini d'être téléversé vers la synchronisation cloud. Attendez la fin de sa première synchronisation, puis réessayez.",
-    "mcpLocalRemoved": "Le serveur MCP local de Donut a été supprimé. Le MCP est désormais distant et nécessite un forfait payant.",
     "trashEntryNotFound": "Ce profil n'est plus dans la corbeille.",
     "trashRestoreConflict": "Un profil avec le même identifiant existe déjà, celui-ci ne peut donc pas être restauré.",
     "recipesNotEntitled": "Les recettes nécessitent le forfait Pro ou supérieur.",
@@ -2382,7 +2368,10 @@
     "wayfernLaunchArgReserved": "Donut gère {{argument}}. Supprimez cet argument.",
     "wayfernLaunchArgNotAllowed": "{{argument}} n'est pas un argument de lancement pris en charge. Supprimez-le.",
     "wayfernLaunchArgValueInvalid": "La valeur de {{argument}} n'est pas prise en charge.",
-    "wayfernLaunchArgsLimit": "Utilisez au maximum {{count}} arguments de lancement, de {{length}} caractères chacun au plus."
+    "wayfernLaunchArgsLimit": "Utilisez au maximum {{count}} arguments de lancement, de {{length}} caractères chacun au plus.",
+    "tablePreferencesInvalid": "Ces paramètres du tableau sont invalides.",
+    "tablePreferencesLoadFailed": "Impossible de charger les paramètres du tableau. Réessayez.",
+    "tablePreferencesSaveFailed": "Impossible d’enregistrer les paramètres du tableau. Réessayez."
   },
   "rail": {
     "profiles": "Profils",
@@ -2615,7 +2604,7 @@
   },
   "profileGenerationLimit": {
     "title": "Limite horaire de profils atteinte",
-    "description": "Votre offre Pro permet 100 nouveaux profils par heure. La création est suspendue jusqu'au renouvellement de la fenêtre, afin que votre compte ne soit pas bloqué."
+    "description": "La limite horaire de nouveaux profils de votre offre est atteinte. La création reprend au fil de l'heure, votre compte n'est donc pas bloqué."
   },
   "wayfernConfigDialog": {
     "titleView": "Voir les paramètres d'empreinte - {{name}} ({{browser}})",
@@ -3083,42 +3072,6 @@
     "device": "Appareil",
     "site": "Site"
   },
-  "mcpLocalDeprecated": {
-    "title": "Le MCP local a été supprimé",
-    "description": "Donut utilise désormais le MCP distant, accessible depuis n'importe où. Configurez-le dans l'onglet MCP distant et dirigez-y vos clients IA."
-  },
-  "mcpMigration": {
-    "title": "Migrer vers le MCP distant",
-    "doneTitle": "Migré vers le MCP distant",
-    "body": "Le serveur MCP local n'existe plus. Le MCP distant relie vos clients IA à ce navigateur via le cloud Donut : ils continuent de fonctionner depuis n'importe où tant que Donut est ouvert.",
-    "changes": "Donut dirige ces clients vers le point de terminaison distant avec un identifiant privé. Rien d'autre ne change dans leurs réglages.",
-    "changesNone": "Aucun client IA de cet ordinateur n'utilise le serveur local. Donut active le MCP distant et crée un identifiant pour les clients que vous configurez vous-même.",
-    "start": "Migrer vers le MCP distant",
-    "notNow": "Pas maintenant",
-    "done": "Terminé",
-    "stepBridge": "MCP distant",
-    "stepClients": "Clients",
-    "bridgeWorking": "Activation",
-    "bridgeOn": "Activé",
-    "credentialWorking": "Création",
-    "clientsProgress": "{{moved}} sur {{total}} migrés",
-    "clientsNone": "Rien à migrer",
-    "clientMoving": "Migration",
-    "clientMoved": "Migré",
-    "clientFailed": "Inchangé",
-    "summary_one": "{{count}} client utilise désormais le MCP distant.",
-    "summary_other": "{{count}} clients utilisent désormais le MCP distant.",
-    "summary_many": "{{count}} clients utilisent désormais le MCP distant.",
-    "failed_one": "{{count}} client n'a pas été modifié. Réessayez, ou configurez-le à la main avec les informations ci-dessous.",
-    "failed_other": "{{count}} clients n'ont pas été modifiés. Réessayez, ou configurez-les à la main avec les informations ci-dessous.",
-    "failed_many": "{{count}} clients n'ont pas été modifiés. Réessayez, ou configurez-les à la main avec les informations ci-dessous.",
-    "manual": "Pour tout autre client, utilisez ce point de terminaison avec l'identifiant comme jeton bearer.",
-    "credentialCopied": "Identifiant copié",
-    "localServer": "Le serveur local indique seulement aux anciens clients qu'il a été déplacé. Vous pouvez le désactiver.",
-    "localServerOff": "Désactiver le serveur local",
-    "localServerIsOff": "Le serveur local est désactivé",
-    "localServerOffFailed": "Impossible de désactiver le serveur local"
-  },
   "appFeedback": {
     "saveFailed": "Impossible d’enregistrer les paramètres",
     "searchSettings": "Rechercher un paramètre…",
@@ -3173,8 +3126,6 @@
     "authorized": "Identifiant accepté",
     "confirmed": "Oui",
     "unavailable": "Non",
-    "configuredLocal": "Configuré pour MCP local",
-    "configuredRemote": "Configuré pour MCP distant",
     "apiProbeScope": "Vérifie l’API locale active avec l’identifiant enregistré. Aucun profil n’est lancé.",
     "remoteProbeScope": "Vérifie l’identifiant MCP enregistré. Le contrôle distant nécessite aussi un appareil connecté et un forfait compatible ; un client configuré n’est pas une session active."
   },
@@ -3602,5 +3553,40 @@
     "body": "Votre offre vient de débloquer ceci. Chaque astuce montre une fonction en action.",
     "cta": "Montrez-moi",
     "later": "Plus tard"
+  },
+  "tables": {
+    "search": "Rechercher des lignes",
+    "filters": "Filtres",
+    "findFilter": "Rechercher un filtre…",
+    "noOptions": "Aucune option correspondante.",
+    "removeFilter": "Supprimer le filtre : {{filter}}",
+    "clearFilters": "Effacer les filtres",
+    "results": "{{count}} lignes sur {{total}}",
+    "sortSummary": "{{column}} : {{direction}}",
+    "descending": "Décroissant",
+    "ascending": "Croissant",
+    "sort": "Trier",
+    "sortColumn": "Colonne de tri",
+    "moveSortUp": "Monter le tri",
+    "removeSort": "Supprimer le tri",
+    "addSort": "Ajouter un tri",
+    "clearSort": "Effacer le tri",
+    "view": "Affichage",
+    "columns": "Colonnes",
+    "rowHeight": "Hauteur des lignes",
+    "compact": "Compacte",
+    "comfortable": "Confortable",
+    "resetView": "Réinitialiser la vue",
+    "resizeColumn": "Redimensionner la colonne {{column}}",
+    "noResults": "Aucune ligne ne correspond à ces filtres.",
+    "moreActions": "Autres actions",
+    "dataTable": "Tableau de données",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "running": "En cours",
+    "stopped": "Arrêté",
+    "noTags": "Aucune étiquette",
+    "noProxy": "Aucun proxy",
+    "encrypted": "Chiffré"
   }
 }

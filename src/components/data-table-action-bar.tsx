@@ -35,9 +35,26 @@ function DataTableActionBar<TData extends RowData>({
   const reduceMotion = useReducedMotion();
   const inputModality = useInputModality();
   const [mounted, setMounted] = React.useState(false);
+  const barRef = React.useRef<HTMLDivElement>(null);
+  const visible =
+    visibleProp ?? table.getFilteredSelectedRowModel().rows.length > 0;
   React.useLayoutEffect(() => {
     setMounted(true);
   }, []);
+  React.useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (!mounted || !visible || !bar) return;
+    const style = document.documentElement.style;
+    const measure = () =>
+      style.setProperty("--table-action-bar-height", `${bar.offsetHeight}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      style.removeProperty("--table-action-bar-height");
+    };
+  }, [mounted, visible]);
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -60,13 +77,12 @@ function DataTableActionBar<TData extends RowData>({
 
   if (!portalContainer) return null;
 
-  const visible =
-    visibleProp ?? table.getFilteredSelectedRowModel().rows.length > 0;
-
   if (!visible) return null;
 
   return ReactDOM.createPortal(
     <motion.div
+      ref={barRef}
+      data-slot="table-action-bar"
       role="toolbar"
       aria-orientation="horizontal"
       initial={reduceMotion || inputModality === "keyboard" ? false : { y: 6 }}
@@ -76,7 +92,7 @@ function DataTableActionBar<TData extends RowData>({
         ease: MOTION_EASE_OUT,
       }}
       className={cn(
-        "fixed inset-x-0 bottom-6 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center justify-center gap-2 rounded-md border bg-background p-2 text-foreground shadow-sm",
+        "surface-material-popover fixed inset-x-0 bottom-6 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center justify-center gap-1.5 rounded-xl p-1.5 text-foreground shadow-lg ring-1 ring-foreground/8",
         className,
       )}
       {...props}
@@ -90,12 +106,14 @@ function DataTableActionBar<TData extends RowData>({
 interface DataTableActionBarActionProps
   extends React.ComponentProps<typeof Button> {
   tooltip?: string;
+  label?: string;
   isPending?: boolean;
 }
 
 function DataTableActionBarAction({
   size = "sm",
   tooltip,
+  label,
   isPending,
   disabled,
   className,
@@ -104,14 +122,15 @@ function DataTableActionBarAction({
 }: DataTableActionBarActionProps) {
   const trigger = (
     <Button
-      variant="secondary"
+      variant="soft"
       size={size}
       className={cn(
-        "gap-1.5 border border-secondary bg-secondary text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground [&>svg]:size-3.5",
+        "gap-1.5 rounded-lg text-xs [&>svg]:size-3.5",
         size === "icon" ? "size-7" : "h-7",
         className,
       )}
       disabled={disabled || isPending}
+      aria-label={label ?? tooltip}
       {...props}
     >
       {isPending ? (
@@ -119,6 +138,7 @@ function DataTableActionBarAction({
       ) : (
         children
       )}
+      {size !== "icon" && (label ?? tooltip) && <span>{label ?? tooltip}</span>}
     </Button>
   );
 
@@ -150,19 +170,20 @@ function DataTableActionBarSelection<TData extends RowData>({
   }, [table]);
 
   return (
-    <div className="flex h-7 items-center rounded-md border pr-1 pl-2.5">
-      <span className="text-xs whitespace-nowrap">
+    <div className="flex h-7 items-center pr-1 pl-2">
+      <span className="text-xs font-medium whitespace-nowrap tabular-nums">
         {t("dataTableActionBar.selected", {
           count: table.getFilteredSelectedRowModel().rows.length,
         })}
       </span>
-      <div className="mr-1 ml-2 h-4 w-px bg-border" />
+      <div className="mr-1 ml-2 h-4 w-px bg-foreground/10" />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            variant="ghost"
+            variant="subtle"
             size="icon"
-            className="size-5"
+            className="size-5 rounded-md"
+            aria-label={t("dataTableActionBar.clearSelection")}
             onClick={onClearSelection}
           >
             <LuX className="size-3.5" />

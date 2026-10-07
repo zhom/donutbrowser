@@ -506,7 +506,13 @@
       "description": "Cifra los datos del perfil en disco. Necesario para abrirlo."
     },
     "downloadingSubtitle": "Descargando…",
-    "browsersDownloading": "Los navegadores aún se están descargando. La creación de perfiles estará disponible cuando termine una descarga."
+    "browsersDownloading": "Los navegadores aún se están descargando. La creación de perfiles estará disponible cuando termine una descarga.",
+    "advancedOptions": "Opciones avanzadas",
+    "hourlyLimit": {
+      "reached": "Tu plan permite {{limit}} perfiles nuevos por hora. Podrás crear el siguiente en unos {{minutes}} min.",
+      "warningTitle": "Estás creando perfiles demasiado rápido",
+      "warning": "Espera un poco. Crear demasiados perfiles en una hora provoca un bloqueo temporal de 24 horas o más, durante el cual no podrás generar nuevas identidades. Si necesitas un límite por hora más alto, considera apoyar a Donut con un plan de pago."
+    }
   },
   "deleteDialog": {
     "title": "Eliminar Perfil",
@@ -837,8 +843,6 @@
   "integrations": {
     "title": "Integraciones",
     "mcp": {
-      "url": "URL del servidor MCP",
-      "urlCopied": "URL copiada",
       "clientsLabel": "Clientes",
       "add": "Agregar",
       "addedToClient": "Agregado a {{name}}",
@@ -849,15 +853,9 @@
         "cli": "CLI",
         "editor": "Editor",
         "editorExt": "Extensión de editor"
-      },
-      "switchToLocal": "Cambiar",
-      "switchedToLocal": "{{name}} ahora usa el servidor MCP local",
-      "deprecatedBannerTitle": "El MCP local se está eliminando",
-      "deprecatedBannerBody": "El servidor MCP local ya no se ejecuta. Usa MCP remoto en su lugar: puedes conectarte desde cualquier lugar, no solo desde este equipo.",
-      "deprecatedCta": "Configurar MCP remoto"
+      }
     },
     "tabApi": "API local",
-    "tabMcp": "MCP (asistentes IA)",
     "apiEnableLabel": "Activar servidor API local",
     "apiEnableDescription": "Permite gestionar perfiles, grupos y proxies vía API REST.",
     "apiPortLabel": "Puerto",
@@ -872,12 +870,7 @@
     "apiToggleFailed": "Error al alternar el servidor API",
     "apiStartFailed": "Error al iniciar el servidor API",
     "tokenCopied": "Token copiado",
-    "mcpEnableLabel": "Activar servidor MCP (Model Context Protocol)",
-    "mcpEnableDescription": "Permite que asistentes IA como Claude Desktop controlen los navegadores.",
     "mcpAcceptTermsFirst": "(Acepta primero los términos de Wayfern en Configuración)",
-    "mcpStarted": "Servidor MCP iniciado en puerto {{port}}",
-    "mcpStopped": "Servidor MCP detenido",
-    "mcpToggleFailed": "Error al alternar el servidor MCP",
     "openSettings": "Abrir configuración de integraciones",
     "apiRunningOn": "Ejecutándose en",
     "apiExampleRequest": "Solicitud de ejemplo",
@@ -906,8 +899,6 @@
       "credentialCreated": "Credencial creada",
       "credentialRotateFailed": "No se pudo rotar la credencial",
       "credentialClientsFailed": "La credencial se guardó, pero no se pudieron actualizar estos clientes: {{clients}}. Vuelve a rotar para reintentar.",
-      "switchToRemote": "Cambiar",
-      "switchedClient": "{{name}} ahora usa MCP remoto",
       "fxHint": "fx lee la credencial de DONUT_MCP_TOKEN. Expórtala en la shell que inicia fx.",
       "fxExportCopied": "Línea de exportación copiada"
     }
@@ -2226,10 +2217,6 @@
     "updatePreparationFailed": "Donut Browser no pudo detener de forma segura un proceso de red en segundo plano. Reinicia el equipo y vuelve a intentar la actualización.",
     "wayfernTermsRequired": "Acepta los Términos y condiciones de Wayfern para usar Wayfern.",
     "apiPortUnavailable": "El servidor API no pudo encontrar un puerto disponible.",
-    "mcpServerAlreadyRunning": "El servidor MCP ya está en ejecución.",
-    "mcpServerNotRunning": "El servidor MCP no está en ejecución.",
-    "mcpPortUnavailable": "El servidor MCP no pudo encontrar un puerto disponible.",
-    "mcpConfigurationUnavailable": "La configuración del servidor MCP no está disponible. Reinicia el servidor e inténtalo de nuevo.",
     "mcpAgentUnknown": "Este cliente MCP no es compatible.",
     "mcpAgentInstallFailed": "No se pudo añadir Donut Browser al cliente MCP: {{detail}}",
     "mcpAgentRemoveFailed": "No se pudo eliminar Donut Browser del cliente MCP: {{detail}}",
@@ -2307,7 +2294,7 @@
     "wayfernPlanCheckUnavailable": "No se pudo comprobar tu plan ahora mismo. Inténtalo de nuevo en un momento.",
     "wayfernCustomFingerprintRequiresPlan": "Tu plan no incluye huellas digitales personalizadas.",
     "wayfernGenerationUnavailable": "No se pudo crear una huella digital ahora mismo. Inténtalo de nuevo más tarde.",
-    "profileGenerationLimitReached": "Has creado 100 perfiles en la última hora, el límite del plan Pro. Espera unos {{minutes}} minutos antes de crear otro.",
+    "profileGenerationLimitReached": "Has creado {{limit}} perfiles en la última hora, el límite de tu plan. Espera unos {{minutes}} minutos antes de crear otro.",
     "wayfernBrowserBusy": "El navegador estaba ocupado aplicando una huella digital. Inténtalo de nuevo.",
     "wayfernBrowserExited": "El navegador se cerró mientras se iniciaba. {{detail}}",
     "profileExportFailed": "No se pudo exportar este perfil. {{detail}}",
@@ -2340,7 +2327,6 @@
     "remoteSessionNotDrivable": "Esta sesión remota aún no está lista para controlarse. Espera a que esté activa.",
     "remotePlatformUnsupported": "Las sesiones remotas solo se ejecutan en hosts macOS, Windows o Linux. La plataforma de este perfil es {{platform}}.",
     "remoteProfileNotSynced": "Este perfil aún no ha terminado de subirse a la sincronización en la nube. Espera a que se complete su primera sincronización e inténtalo de nuevo.",
-    "mcpLocalRemoved": "Se ha eliminado el servidor MCP local de Donut. Ahora MCP es remoto y requiere un plan de pago.",
     "trashEntryNotFound": "Este perfil ya no está en la papelera.",
     "trashRestoreConflict": "Ya existe un perfil con el mismo ID, por lo que este no se puede restaurar.",
     "recipesNotEntitled": "Las recetas requieren el plan Pro o superior.",
@@ -2382,7 +2368,10 @@
     "wayfernLaunchArgReserved": "Donut controla {{argument}}. Elimina este argumento.",
     "wayfernLaunchArgNotAllowed": "{{argument}} no es un argumento de inicio compatible. Elimínalo.",
     "wayfernLaunchArgValueInvalid": "El valor de {{argument}} no es compatible.",
-    "wayfernLaunchArgsLimit": "Usa como máximo {{count}} argumentos de inicio, de hasta {{length}} caracteres cada uno."
+    "wayfernLaunchArgsLimit": "Usa como máximo {{count}} argumentos de inicio, de hasta {{length}} caracteres cada uno.",
+    "tablePreferencesInvalid": "La configuración de la tabla no es válida.",
+    "tablePreferencesLoadFailed": "No se pudo cargar la configuración de la tabla. Inténtalo de nuevo.",
+    "tablePreferencesSaveFailed": "No se pudo guardar la configuración de la tabla. Inténtalo de nuevo."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2615,7 +2604,7 @@
   },
   "profileGenerationLimit": {
     "title": "Límite de perfiles por hora alcanzado",
-    "description": "Tu plan Pro permite 100 perfiles nuevos por hora. La creación está en pausa hasta que avance la hora, para que tu cuenta no se bloquee."
+    "description": "Has alcanzado el límite por hora de perfiles nuevos de tu plan. La creación se reanuda a medida que avanza la hora, así que tu cuenta no se bloquea."
   },
   "wayfernConfigDialog": {
     "titleView": "Ver configuración de huella - {{name}} ({{browser}})",
@@ -3083,42 +3072,6 @@
     "device": "Dispositivo",
     "site": "Sitio"
   },
-  "mcpLocalDeprecated": {
-    "title": "El MCP local se ha eliminado",
-    "description": "Donut ahora usa MCP remoto, al que puedes conectarte desde cualquier lugar. Configúralo en la pestaña MCP remoto y apunta tus clientes de IA allí."
-  },
-  "mcpMigration": {
-    "title": "Migrar a MCP remoto",
-    "doneTitle": "Migrado a MCP remoto",
-    "body": "El servidor MCP local ya no existe. MCP remoto conecta tus clientes de IA a este navegador a través de la nube de Donut, así que siguen funcionando desde cualquier lugar mientras Donut esté abierto.",
-    "changes": "Donut apunta estos clientes al punto final remoto con una credencial privada. Nada más cambia en su configuración.",
-    "changesNone": "Ningún cliente de IA de este equipo usa el servidor local. Donut activa MCP remoto y crea una credencial para los clientes que configures tú.",
-    "start": "Migrar a MCP remoto",
-    "notNow": "Ahora no",
-    "done": "Listo",
-    "stepBridge": "MCP remoto",
-    "stepClients": "Clientes",
-    "bridgeWorking": "Activando",
-    "bridgeOn": "Activado",
-    "credentialWorking": "Creando",
-    "clientsProgress": "{{moved}} de {{total}} migrados",
-    "clientsNone": "Nada que migrar",
-    "clientMoving": "Migrando",
-    "clientMoved": "Migrado",
-    "clientFailed": "Sin cambios",
-    "summary_one": "{{count}} cliente ahora usa MCP remoto.",
-    "summary_other": "{{count}} clientes ahora usan MCP remoto.",
-    "summary_many": "{{count}} clientes ahora usan MCP remoto.",
-    "failed_one": "{{count}} cliente no se cambió. Reinténtalo o configúralo a mano con los datos de abajo.",
-    "failed_other": "{{count}} clientes no se cambiaron. Reinténtalo o configúralos a mano con los datos de abajo.",
-    "failed_many": "{{count}} clientes no se cambiaron. Reinténtalo o configúralos a mano con los datos de abajo.",
-    "manual": "Para cualquier otro cliente, usa este punto final con la credencial como token bearer.",
-    "credentialCopied": "Credencial copiada",
-    "localServer": "El servidor local ahora solo avisa a los clientes antiguos de que se ha movido. Puedes desactivarlo.",
-    "localServerOff": "Desactivar servidor local",
-    "localServerIsOff": "El servidor local está desactivado",
-    "localServerOffFailed": "No se pudo desactivar el servidor local"
-  },
   "appFeedback": {
     "saveFailed": "No se pudieron guardar los ajustes",
     "searchSettings": "Buscar ajustes…",
@@ -3173,8 +3126,6 @@
     "authorized": "Credencial aceptada",
     "confirmed": "Sí",
     "unavailable": "No",
-    "configuredLocal": "Configurado para MCP local",
-    "configuredRemote": "Configurado para MCP remoto",
     "apiProbeScope": "Comprueba la API local activa con la credencial guardada. No se inicia ningún perfil.",
     "remoteProbeScope": "Comprueba la credencial MCP guardada. El control remoto también requiere un dispositivo conectado y un plan compatible; un cliente configurado no es una sesión activa."
   },
@@ -3602,5 +3553,40 @@
     "body": "Tu plan acaba de desbloquear esto. Cada consejo muestra una función en acción.",
     "cta": "Enséñame",
     "later": "Más tarde"
+  },
+  "tables": {
+    "search": "Buscar filas",
+    "filters": "Filtros",
+    "findFilter": "Buscar un filtro…",
+    "noOptions": "No hay opciones coincidentes.",
+    "removeFilter": "Quitar filtro: {{filter}}",
+    "clearFilters": "Borrar filtros",
+    "results": "{{count}} de {{total}} filas",
+    "sortSummary": "{{column}}: {{direction}}",
+    "descending": "Descendente",
+    "ascending": "Ascendente",
+    "sort": "Ordenar",
+    "sortColumn": "Columna de ordenación",
+    "moveSortUp": "Subir ordenación",
+    "removeSort": "Quitar ordenación",
+    "addSort": "Añadir ordenación",
+    "clearSort": "Borrar ordenación",
+    "view": "Vista",
+    "columns": "Columnas",
+    "rowHeight": "Altura de fila",
+    "compact": "Compacta",
+    "comfortable": "Cómoda",
+    "resetView": "Restablecer vista",
+    "resizeColumn": "Cambiar ancho de {{column}}",
+    "noResults": "Ninguna fila coincide con estos filtros.",
+    "moreActions": "Más acciones",
+    "dataTable": "Tabla de datos",
+    "enabled": "Activado",
+    "disabled": "Desactivado",
+    "running": "En ejecución",
+    "stopped": "Detenido",
+    "noTags": "Sin etiquetas",
+    "noProxy": "Sin proxy",
+    "encrypted": "Cifrado"
   }
 }

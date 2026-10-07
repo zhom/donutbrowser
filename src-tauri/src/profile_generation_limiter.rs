@@ -1,174 +1,301 @@
-use std::collections::{HashMap, VecDeque};
+//! How many profiles with a freshly generated fingerprint an account creates
+//! per hour.
+//!
+//! Paid plans are capped and a creation past the cap is refused: Solo at 10 an
+//! hour, Pro, Team and every other paid plan at 100. The free allowance shrinks
+//! as the profile count grows and only warns; going past it is what gets
+//! generation blocked upstream, so the desktop says so before that happens.
+//!
+//! The window is kept on disk, so relaunching the app does not reset it.
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant};
 
 use crate::cloud_auth::CLOUD_AUTH;
 
-const GENERATION_WINDOW: Duration = Duration::from_secs(60 * 60);
-const PRO_GENERATIONS_PER_HOUR: u64 = 100;
+const WINDOW_SECS: u64 = 60 * 60;
+const PRO_PER_HOUR: u64 = 100;
+const SOLO_PER_HOUR: u64 = 10;
+/// The free allowance per hour while the profile count is below each bound.
+const FREE_TIERS: [(usize, u64); 3] = [(40, 8), (80, 6), (120, 4)];
+const FREE_FLOOR_PER_HOUR: u64 = 2;
+/// The identity generations are counted under while nobody is signed in.
+const SIGNED_OUT: &str = "local";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Enforcement {
+  /// Past the cap, creation is refused.
+  Hard,
+  /// Past the allowance, the user is warned.
+  Soft,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Allowance {
+  pub enforcement: Enforcement,
+  pub per_hour: u64,
+  /// Generations in the last hour.
+  pub used: u64,
+  /// Seconds until enough of them leave the window to allow one more, once
+  /// `used` has reached `per_hour`.
+  pub retry_after_secs: Option<u64>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenerationOutcome {
-  Unlimited,
-  Allowed { remaining: u64 },
-  Limited { retry_after_secs: u64 },
+  Allowed,
+  Limited {
+    per_hour: u64,
+    retry_after_secs: u64,
+  },
 }
 
-#[derive(Default)]
-struct ProfileGenerationLimiter {
-  generations: HashMap<String, VecDeque<Instant>>,
+fn free_per_hour(profiles: usize) -> u64 {
+  FREE_TIERS
+    .iter()
+    .find(|(below, _)| profiles < *below)
+    .map_or(FREE_FLOOR_PER_HOUR, |(_, per_hour)| *per_hour)
 }
 
-impl ProfileGenerationLimiter {
-  fn record_at(&mut self, identity: &str, per_hour: u64, now: Instant) -> GenerationOutcome {
-    if per_hour == 0 {
-      return GenerationOutcome::Unlimited;
-    }
+#[derive(Default, Serialize, Deserialize)]
+struct GenerationLog {
+  /// Unix seconds of each generation in the last hour, per identity.
+  generations: HashMap<String, Vec<u64>>,
+}
 
+impl GenerationLog {
+  fn allowance(
+    &mut self,
+    identity: &str,
+    enforcement: Enforcement,
+    per_hour: u64,
+    now: u64,
+  ) -> Allowance {
     self.generations.retain(|_, seen| {
-      while seen
-        .front()
-        .is_some_and(|started| now.duration_since(*started) >= GENERATION_WINDOW)
-      {
-        seen.pop_front();
-      }
+      seen.retain(|at| now.saturating_sub(*at) < WINDOW_SECS);
       !seen.is_empty()
     });
-
-    let seen = self.generations.entry(identity.to_string()).or_default();
-    if seen.len() as u64 >= per_hour {
-      let retry_after_secs = seen
-        .front()
-        .map(|started| {
-          let remaining = GENERATION_WINDOW.saturating_sub(now.duration_since(*started));
-          remaining
-            .as_secs()
-            .saturating_add(u64::from(remaining.subsec_nanos() > 0))
-            .max(1)
-        })
-        .unwrap_or(1);
-      return GenerationOutcome::Limited { retry_after_secs };
+    let mut seen = self.generations.get(identity).cloned().unwrap_or_default();
+    seen.sort_unstable();
+    let used = seen.len() as u64;
+    // Past a soft allowance, or after a move to a smaller plan, more than one
+    // generation has to leave before the next creation fits.
+    let retry_after_secs = (used >= per_hour).then(|| {
+      let freeing = seen[(used - per_hour) as usize];
+      (freeing + WINDOW_SECS).saturating_sub(now).max(1)
+    });
+    Allowance {
+      enforcement,
+      per_hour,
+      used,
+      retry_after_secs,
     }
+  }
 
-    seen.push_back(now);
-    GenerationOutcome::Allowed {
-      remaining: per_hour.saturating_sub(seen.len() as u64),
-    }
+  fn record(&mut self, identity: &str, now: u64) {
+    self
+      .generations
+      .entry(identity.to_string())
+      .or_default()
+      .push(now);
   }
 }
 
-static PROFILE_GENERATION_LIMITER: LazyLock<Mutex<ProfileGenerationLimiter>> =
-  LazyLock::new(|| Mutex::new(ProfileGenerationLimiter::default()));
-
-/// Identity and cap for the accounts this limiter applies to. Only `pro` is
-/// capped; every other plan returns `None` and stays unlimited here.
-async fn capped_identity() -> Option<(String, u64)> {
-  let state = CLOUD_AUTH.get_user().await?;
-  if !state.user.entitlements().active || state.user.effective_plan() != "pro" {
-    return None;
-  }
-  Some((state.user.id.clone(), PRO_GENERATIONS_PER_HOUR))
+struct Policy {
+  identity: String,
+  enforcement: Enforcement,
+  per_hour: u64,
 }
+
+async fn policy() -> Policy {
+  match CLOUD_AUTH.get_user().await {
+    // A team member's effective plan is the owner's, so Team is capped as Pro.
+    Some(state) if state.user.entitlements().active => Policy {
+      enforcement: Enforcement::Hard,
+      per_hour: if state.user.effective_plan() == "solo" {
+        SOLO_PER_HOUR
+      } else {
+        PRO_PER_HOUR
+      },
+      identity: state.user.id,
+    },
+    signed_in => Policy {
+      identity: signed_in.map_or_else(|| SIGNED_OUT.to_string(), |state| state.user.id),
+      enforcement: Enforcement::Soft,
+      per_hour: free_per_hour(
+        crate::profile::ProfileManager::instance()
+          .list_profiles()
+          .map_or(0, |profiles| profiles.len()),
+      ),
+    },
+  }
+}
+
+fn log_path() -> PathBuf {
+  crate::app_dirs::settings_dir().join("profile_generations.json")
+}
+
+fn load() -> GenerationLog {
+  std::fs::read(log_path())
+    .ok()
+    .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+    .unwrap_or_default()
+}
+
+fn save(log: &GenerationLog) {
+  let path = log_path();
+  let tmp = path.with_extension("json.tmp");
+  let written = serde_json::to_vec(log)
+    .map_err(std::io::Error::other)
+    .and_then(|bytes| {
+      if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+      }
+      std::fs::write(&tmp, bytes)?;
+      std::fs::rename(&tmp, &path)
+    });
+  if let Err(e) = written {
+    log::warn!("Could not save the profile generation window: {e}");
+  }
+}
+
+static GENERATION_LOG: LazyLock<Mutex<GenerationLog>> = LazyLock::new(|| Mutex::new(load()));
 
 pub async fn record_profile_generation() -> GenerationOutcome {
-  let Some((identity, per_hour)) = capped_identity().await else {
-    return GenerationOutcome::Unlimited;
-  };
+  let policy = policy().await;
+  let now = crate::proxy_manager::now_secs();
+  let mut log = GENERATION_LOG
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner());
+  let allowance = log.allowance(&policy.identity, policy.enforcement, policy.per_hour, now);
+  if let (Enforcement::Hard, Some(retry_after_secs)) =
+    (policy.enforcement, allowance.retry_after_secs)
+  {
+    return GenerationOutcome::Limited {
+      per_hour: policy.per_hour,
+      retry_after_secs,
+    };
+  }
+  log.record(&policy.identity, now);
+  save(&log);
+  GenerationOutcome::Allowed
+}
 
-  PROFILE_GENERATION_LIMITER
+#[tauri::command]
+pub async fn get_profile_creation_allowance() -> Allowance {
+  let policy = policy().await;
+  GENERATION_LOG
     .lock()
     .unwrap_or_else(|poisoned| poisoned.into_inner())
-    .record_at(&identity, per_hour, Instant::now())
+    .allowance(
+      &policy.identity,
+      policy.enforcement,
+      policy.per_hour,
+      crate::proxy_manager::now_secs(),
+    )
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
 
+  const NOW: u64 = 1_800_000_000;
+
   #[test]
   fn the_hundred_and_first_generation_in_an_hour_is_refused() {
-    let mut limiter = ProfileGenerationLimiter::default();
-    let now = Instant::now();
-
-    for i in 0..PRO_GENERATIONS_PER_HOUR {
-      assert_eq!(
-        limiter.record_at(
-          "user-a",
-          PRO_GENERATIONS_PER_HOUR,
-          now + Duration::from_secs(i)
-        ),
-        GenerationOutcome::Allowed {
-          remaining: PRO_GENERATIONS_PER_HOUR - i - 1
-        }
-      );
+    let mut log = GenerationLog::default();
+    for i in 0..PRO_PER_HOUR {
+      let allowance = log.allowance("user-a", Enforcement::Hard, PRO_PER_HOUR, NOW + i);
+      assert_eq!(allowance.used, i);
+      assert_eq!(allowance.retry_after_secs, None);
+      log.record("user-a", NOW + i);
     }
 
-    assert_eq!(
-      limiter.record_at(
-        "user-a",
-        PRO_GENERATIONS_PER_HOUR,
-        now + Duration::from_secs(PRO_GENERATIONS_PER_HOUR)
-      ),
-      GenerationOutcome::Limited {
-        retry_after_secs: 3600 - PRO_GENERATIONS_PER_HOUR
-      }
+    let full = log.allowance(
+      "user-a",
+      Enforcement::Hard,
+      PRO_PER_HOUR,
+      NOW + PRO_PER_HOUR,
     );
+    assert_eq!(full.used, PRO_PER_HOUR);
+    assert_eq!(full.retry_after_secs, Some(WINDOW_SECS - PRO_PER_HOUR));
   }
 
   #[test]
   fn the_window_rolls_so_the_oldest_slot_comes_back() {
-    let mut limiter = ProfileGenerationLimiter::default();
-    let now = Instant::now();
+    let mut log = GenerationLog::default();
+    log.record("user-a", NOW);
+    log.record("user-a", NOW + 10);
+    assert_eq!(
+      log
+        .allowance("user-a", Enforcement::Hard, 2, NOW + 20)
+        .retry_after_secs,
+      Some(3580)
+    );
+    let rolled = log.allowance("user-a", Enforcement::Hard, 2, NOW + WINDOW_SECS);
+    assert_eq!(rolled.used, 1);
+    assert_eq!(rolled.retry_after_secs, None);
+  }
 
-    assert_eq!(
-      limiter.record_at("user-a", 2, now),
-      GenerationOutcome::Allowed { remaining: 1 }
-    );
-    assert_eq!(
-      limiter.record_at("user-a", 2, now + Duration::from_secs(10)),
-      GenerationOutcome::Allowed { remaining: 0 }
-    );
-    assert_eq!(
-      limiter.record_at("user-a", 2, now + Duration::from_secs(20)),
-      GenerationOutcome::Limited {
-        retry_after_secs: 3580
-      }
-    );
-    assert_eq!(
-      limiter.record_at("user-a", 2, now + GENERATION_WINDOW),
-      GenerationOutcome::Allowed { remaining: 0 }
-    );
+  #[test]
+  fn past_the_allowance_the_wait_covers_every_generation_over_it() {
+    let mut log = GenerationLog::default();
+    for i in 0..10 {
+      log.record("local", NOW + i * 60);
+    }
+    // Ten in the window against an allowance of eight: the third oldest has to
+    // leave before an eleventh fits under it.
+    let allowance = log.allowance("local", Enforcement::Soft, 8, NOW + 600);
+    assert_eq!(allowance.used, 10);
+    assert_eq!(allowance.retry_after_secs, Some(WINDOW_SECS - 480));
   }
 
   #[test]
   fn each_account_gets_its_own_window() {
-    let mut limiter = ProfileGenerationLimiter::default();
-    let now = Instant::now();
-
+    let mut log = GenerationLog::default();
+    log.record("user-a", NOW);
+    assert!(log
+      .allowance("user-a", Enforcement::Hard, 1, NOW + 1)
+      .retry_after_secs
+      .is_some());
     assert_eq!(
-      limiter.record_at("user-a", 1, now),
-      GenerationOutcome::Allowed { remaining: 0 }
-    );
-    assert!(matches!(
-      limiter.record_at("user-a", 1, now + Duration::from_secs(1)),
-      GenerationOutcome::Limited { .. }
-    ));
-    assert_eq!(
-      limiter.record_at("user-b", 1, now + Duration::from_secs(1)),
-      GenerationOutcome::Allowed { remaining: 0 }
+      log
+        .allowance("user-b", Enforcement::Hard, 1, NOW + 1)
+        .retry_after_secs,
+      None
     );
   }
 
   #[test]
-  fn a_zero_cap_never_limits() {
-    let mut limiter = ProfileGenerationLimiter::default();
-    let now = Instant::now();
-
-    for i in 0..500 {
-      assert_eq!(
-        limiter.record_at("user-a", 0, now + Duration::from_secs(i)),
-        GenerationOutcome::Unlimited
-      );
+  fn the_free_allowance_shrinks_as_the_profile_count_grows() {
+    for (profiles, per_hour) in [
+      (0, 8),
+      (39, 8),
+      (40, 6),
+      (79, 6),
+      (80, 4),
+      (119, 4),
+      (120, 2),
+      (5_000, 2),
+    ] {
+      assert_eq!(free_per_hour(profiles), per_hour, "{profiles} profiles");
     }
+  }
+
+  #[test]
+  fn the_window_survives_a_round_trip_through_its_file_format() {
+    let mut log = GenerationLog::default();
+    log.record("user-a", NOW);
+    let mut restored: GenerationLog =
+      serde_json::from_slice(&serde_json::to_vec(&log).unwrap()).unwrap();
+    assert_eq!(
+      restored
+        .allowance("user-a", Enforcement::Hard, 1, NOW + 1)
+        .used,
+      1
+    );
   }
 }

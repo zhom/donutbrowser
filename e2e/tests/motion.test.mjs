@@ -295,7 +295,17 @@ test("paused CSS animations cannot retain dismissed selects or dropdowns", async
       await createProfile(app, "Motion popup Alpha");
       await createProfile(app, "Motion popup Beta");
       await app.clickSelector(`[aria-label="${en.rail.settings}"]`);
-      await app.clickSelector("#theme-select");
+      await app.waitFor(
+        () =>
+          app.execute(`
+            const trigger = document.querySelector('#theme-select');
+            if (!trigger || trigger.matches(':disabled')) return false;
+            trigger.focus();
+            return document.activeElement === trigger;
+          `),
+        { description: "enabled theme select" },
+      );
+      await app.pressShortcut({ key: "\uE007" });
       await assertPopupReadable(app, slot("select-content"));
 
       // Freeze CSS only after the first menu is fully open. A closed Radix

@@ -783,26 +783,13 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
   });
 });
 
-test("local MCP is removed: enabling it and installing a local client are refused", async () => {
+test("MCP clients are installed only against the remote endpoint", async () => {
   await withApp("integrations-mcp", async (app) => {
-    await seedTerms(app);
-    // Enabling the local server is refused with the removal code (it used to
-    // start a loopback MCP server), so nothing is left listening as a result.
-    await assertCommandErrorCode(app, "start_mcp_server", "MCP_LOCAL_REMOVED");
-    assert.equal(await app.invoke("get_mcp_server_status"), false);
-    // Nothing is configured for a server that no longer exists.
-    assert.equal(await app.invoke("get_mcp_config"), null);
-    // stop is a no-op when nothing is running.
-    await assertCommandErrorCode(
-      app,
-      "stop_mcp_server",
-      "MCP_SERVER_NOT_RUNNING",
-    );
-
-    // The client roster still resolves, so the Integrations page can offer the
-    // remote endpoint and show which clients are still on the removed local one.
+    // The client roster resolves, so the Integrations page can offer the
+    // remote endpoint. A row says whether the client is connected, not where.
     const agents = await app.invoke("list_mcp_agents");
     assert.ok(agents.some((agent) => agent.id === "cursor"));
+    assert.ok(agents.every((agent) => !("endpoint" in agent)));
     // fx cannot take the bearer from its config file, so the page tells the
     // user which variable to export; that name travels with the row.
     assert.equal(
@@ -811,34 +798,14 @@ test("local MCP is removed: enabling it and installing a local client are refuse
     );
     assert.equal(agents.find((agent) => agent.id === "cursor").token_env, null);
 
-    // An unknown agent and an unknown target keep their own distinct errors.
     await assertCommandErrorCode(app, "add_mcp_to_agent", "MCP_AGENT_UNKNOWN", {
       agentId: "missing-e2e-agent",
-      target: "remote",
     });
     await assertCommandErrorCode(
       app,
       "remove_mcp_from_agent",
       "MCP_AGENT_UNKNOWN",
       { agentId: "missing-e2e-agent" },
-    );
-    await assertCommandErrorCode(app, "add_mcp_to_agent", "INTERNAL_ERROR", {
-      agentId: "cursor",
-      target: "bogus",
-    });
-
-    // Installing a client to the LOCAL endpoint is refused now (it used to
-    // write a local config), and nothing is written.
-    await assertCommandErrorCode(app, "add_mcp_to_agent", "MCP_LOCAL_REMOVED", {
-      agentId: "cursor",
-      target: "local",
-    });
-    assert.equal(
-      (await app.invoke("list_mcp_agents")).find(
-        (agent) => agent.id === "cursor",
-      ).connected,
-      false,
-      "a refused local install must not have written an entry",
     );
 
     // Remote MCP with no stored `dmk_` credential is refused with a code the UI
@@ -847,7 +814,7 @@ test("local MCP is removed: enabling it and installing a local client are refuse
       app,
       "add_mcp_to_agent",
       "MCP_REMOTE_KEY_MISSING",
-      { agentId: "cursor", target: "remote" },
+      { agentId: "cursor" },
     );
     assert.equal(
       (await app.invoke("list_mcp_agents")).find(
@@ -1180,9 +1147,6 @@ test("the remote-control bridge refuses a signed-out desktop and stays off", asy
       present: false,
       token_prefix: null,
     });
-
-    // The local MCP server is a separate transport and is unaffected either way.
-    assert.equal(await app.invoke("get_mcp_server_status"), false);
   });
 });
 
@@ -1251,9 +1215,9 @@ test("REST browser automation requests hit the shared automation rate limit", as
       // authenticated automation call consumes a token even when the profile
       // is missing (404). With the window set to 2/hour below the contract is
       // exact: 404, 404, then 429 with a Retry-After. The limiter is shared
-      // with the MCP tool engine, whose branch has no automated coverage now
-      // that the loopback endpoint is gone: it needs the e2e-only override
-      // that `cargo test --lib` does not compile.
+      // with the MCP tool engine, whose branch has no automated coverage: it
+      // is reached only over the cloud bridge, and it needs the e2e-only
+      // override that `cargo test --lib` does not compile.
       const run = () =>
         jsonRequest(`${apiBase}/v1/profiles/${missingProfileId}/run`, {
           method: "POST",
@@ -1287,13 +1251,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
   await withApp(
     "integrations-contracts",
     async (app) => {
-      // Local MCP is removed: the enable command refuses uniformly with the
-      // removal code, regardless of whether the terms have been accepted.
-      await assertCommandErrorCode(
-        app,
-        "start_mcp_server",
-        "MCP_LOCAL_REMOVED",
-      );
       assert.equal(await app.invoke("cloud_get_user"), null);
       assert.equal(await app.invoke("cloud_get_proxy_usage"), null);
       assert.ok(await app.invoke("cloud_get_wayfern_token"));

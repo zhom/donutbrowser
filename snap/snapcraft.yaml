@@ -42,8 +42,8 @@ apps:
       DONUTBROWSER_DATA_DIR: $SNAP_USER_COMMON/.local/share/DonutBrowser
       DONUTBROWSER_CACHE_DIR: $SNAP_USER_COMMON/.cache/DonutBrowser
     plugs:
-      # Proxies, VPNs, sync and Wayfern downloads. The local API, the MCP server
-      # and the per-profile proxy workers listen on loopback ports.
+      # Proxies, VPNs, sync and Wayfern downloads. The local API and the
+      # per-profile proxy workers listen on loopback ports.
       - network
       - network-bind
       # Wayfern is Chromium based. Donut starts it with --no-sandbox, so the

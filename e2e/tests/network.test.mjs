@@ -236,25 +236,14 @@ async function createExtensionsThroughUi(app) {
   };
 }
 
-async function createProfileThroughUi(app, groupName) {
+async function createProfileThroughUi(app, groupName, proxy) {
   await app.clickSelector('[aria-label="Profiles"]');
   await app.clickText(groupName, { exact: false, roles: ["button"] });
   await app.clickText("New", { roles: ["button"] });
-  await app.waitFor(
-    async () => {
-      const text = await app.bodyText();
-      return (
-        text.includes("Create New Profile") ||
-        text.includes("Create New Chromium Profile")
-      );
-    },
-    { description: "profile creation dialog" },
-  );
-  if (!(await app.visibleTextIncludes("Create New Chromium Profile"))) {
-    await app.clickText("Chromium", { exact: false, roles: ["button"] });
-    await app.waitForText("Create New Chromium Profile");
-  }
+  await app.waitForText("Create New Profile");
   await app.fillSelector("#profile-name", "Visible Network Profile");
+  await app.clickSelector("#profile-proxy");
+  await app.clickText(proxy.name, { roles: ["option"] });
   await app.clickTextIn('[role="dialog"]', "Create", { roles: ["button"] });
   await app.waitForText("Visible Network Profile", 60_000);
   await app.waitFor(
@@ -262,7 +251,7 @@ async function createProfileThroughUi(app, groupName) {
       !(await app.execute(`
         return [...document.querySelectorAll('[role="dialog"]')].some(
           (dialog) =>
-            (dialog.innerText || "").includes("Create New Chromium Profile")
+            (dialog.innerText || "").includes("Create New Profile")
         );
       `)),
     { description: "profile creation dialog to unmount" },
@@ -806,10 +795,11 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
     assert.ok(extensionEntities.group);
     await app.capture("03-extension-and-group-created");
 
-    const profile = await createProfileThroughUi(app, group.name);
+    const profile = await createProfileThroughUi(app, group.name, httpProxy);
     assert.ok(profile);
     assert.equal(profile.version, prepared.version);
     assert.equal(profile.group_id, group.id);
+    assert.equal(profile.proxy_id, httpProxy.id);
     await assignExtensionGroupThroughUi(
       app,
       profile.name,
