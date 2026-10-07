@@ -33,13 +33,14 @@ import {
   AnimatedTabsTrigger,
 } from "@/components/ui/animated-tabs";
 import { Button } from "@/components/ui/button";
-import { CopyToClipboard } from "@/components/ui/copy-to-clipboard";
+import { CodeSnippet } from "@/components/ui/code-snippet";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SoftFields } from "@/components/ui/field-variant";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -164,16 +165,20 @@ function PauseControl({ agentConsole }: { agentConsole: AgentConsole }) {
             void pause();
           }}
         >
-          <Label htmlFor={noteId} className="text-xs">
+          <Label
+            htmlFor={noteId}
+            className="text-xs font-medium text-muted-foreground"
+          >
             {t("agent.pause.noteLabel")}
           </Label>
           <Textarea
             id={noteId}
+            variant="soft"
             rows={3}
             value={note}
             maxLength={MAX_TEXT_CHARS}
             placeholder={t("agent.pause.notePlaceholder")}
-            className="min-h-16 text-sm"
+            className="min-h-16 resize-none text-sm"
             data-testid="agent-pause-note"
             onChange={(event) => {
               setNote(event.target.value);
@@ -185,8 +190,9 @@ function PauseControl({ agentConsole }: { agentConsole: AgentConsole }) {
           <div className="flex justify-end gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="subtle"
               size="sm"
+              className="h-8 rounded-lg text-xs"
               onClick={() => {
                 setOpen(false);
               }}
@@ -196,7 +202,9 @@ function PauseControl({ agentConsole }: { agentConsole: AgentConsole }) {
             <Button
               type="submit"
               size="sm"
+              className="h-8 rounded-lg text-xs"
               disabled={busy}
+              aria-busy={busy}
               data-testid="agent-pause-confirm"
             >
               {t("agent.pause.confirm")}
@@ -218,7 +226,7 @@ function PausedBanner({ agentConsole }: { agentConsole: AgentConsole }) {
     <div
       role="status"
       data-testid="agent-paused-banner"
-      className="flex shrink-0 flex-wrap items-center gap-3 rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning-text"
+      className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning-text"
     >
       <LuPause className="size-4 shrink-0" aria-hidden="true" />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -234,9 +242,10 @@ function PausedBanner({ agentConsole }: { agentConsole: AgentConsole }) {
       <Button
         type="button"
         size="sm"
-        variant="outline"
-        className="gap-1.5"
+        variant="soft"
+        className="h-8 gap-1.5 rounded-lg text-xs"
         disabled={busy}
+        aria-busy={busy}
         data-testid="agent-resume"
         onClick={async () => {
           setBusy(true);
@@ -342,6 +351,7 @@ export function AgentPage({
       >
         <RippleButton
           size="sm"
+          className="h-8 rounded-lg text-xs"
           data-testid="agent-setup-sign-in"
           onClick={onOpenAccount}
         >
@@ -359,7 +369,8 @@ export function AgentPage({
           <ProBadge />
           <Button
             size="sm"
-            variant="outline"
+            variant="soft"
+            className="h-8 rounded-lg text-xs"
             data-testid="agent-setup-plan-account"
             onClick={onOpenAccount}
           >
@@ -378,6 +389,7 @@ export function AgentPage({
     >
       <RippleButton
         size="sm"
+        className="h-8 rounded-lg text-xs"
         data-testid="agent-setup-turn-on"
         onClick={onConnectAgent}
       >
@@ -394,27 +406,22 @@ export function AgentPage({
       body={t("agent.setup.waitingBody")}
     >
       <div className="flex w-full max-w-xl flex-col gap-2 text-left">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-foreground">
-            {t("agent.setup.starterLabel")}
-          </span>
-          <CopyToClipboard
-            text={t("agent.setup.starter")}
-            size="sm"
-            successMessage={t("agent.setup.starterCopied")}
-            className="h-7 w-7 p-0"
-          />
-        </div>
-        <p
+        <span className="text-xs font-medium text-muted-foreground">
+          {t("agent.setup.starterLabel")}
+        </span>
+        <CodeSnippet
+          multiline
+          wrap
           data-testid="agent-starter-text"
-          className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/40 p-3 text-xs break-words whitespace-pre-wrap text-foreground select-text"
-        >
-          {t("agent.setup.starter")}
-        </p>
+          code={t("agent.setup.starter")}
+          copyLabel={t("agent.setup.starterLabel")}
+          successMessage={t("agent.setup.starterCopied")}
+          className="font-sans text-xs leading-relaxed"
+        />
         <Button
           size="sm"
-          variant="outline"
-          className="gap-1.5 self-center"
+          variant="soft"
+          className="mt-1 h-8 gap-1.5 self-center rounded-lg text-xs"
           data-testid="agent-setup-connect"
           onClick={onConnectAgent}
         >
@@ -448,7 +455,7 @@ export function AgentPage({
             {remoteOff && (
               <div
                 data-testid="agent-setup-remote-off"
-                className="flex shrink-0 flex-wrap items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+                className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl bg-foreground/4 px-3 py-2 text-xs text-muted-foreground"
               >
                 <LuPower className="size-3.5 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
@@ -456,7 +463,8 @@ export function AgentPage({
                 </span>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="soft"
+                  className="h-8 rounded-lg text-xs"
                   data-testid="agent-setup-turn-on"
                   onClick={onConnectAgent}
                 >
@@ -489,148 +497,153 @@ export function AgentPage({
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
       <DialogContent className="flex max-h-[85vh] max-w-[min(80rem,calc(100%-4rem))] flex-col">
-        <div
-          data-testid="agent-page"
-          className="@container flex min-h-0 w-full flex-1 flex-col gap-3"
-        >
-          <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-col gap-1">
-              {subPage ? (
-                <>
-                  <h2 className="text-base leading-none font-semibold">
-                    {title}
-                  </h2>
-                  <p className="text-xs text-muted-foreground">{description}</p>
-                </>
-              ) : (
-                <>
-                  <DialogTitle>{title}</DialogTitle>
-                  <DialogDescription>{description}</DialogDescription>
-                </>
+        <SoftFields>
+          <div
+            data-testid="agent-page"
+            className="@container flex min-h-0 w-full flex-1 flex-col gap-3"
+          >
+            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-1">
+                {subPage ? (
+                  <>
+                    <h2 className="text-base leading-none font-semibold">
+                      {title}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {description}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
+                  </>
+                )}
+              </div>
+              {blocker === null && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {quota && (
+                    <span
+                      data-testid="agent-quota"
+                      className={cn(
+                        "text-xs tabular-nums",
+                        quota.left === 0
+                          ? "text-warning-text"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {t("agent.header.quota", {
+                        left: quota.left,
+                        limit: quota.limit,
+                      })}
+                    </span>
+                  )}
+                  <PauseControl agentConsole={agentConsole} />
+                  <RippleButton
+                    size="sm"
+                    className="flex h-8 items-center gap-1.5 rounded-lg text-xs"
+                    data-testid="agent-connect"
+                    onClick={onConnectAgent}
+                  >
+                    <LuPlug className="size-3.5" aria-hidden="true" />
+                    {t("agent.header.connect")}
+                  </RippleButton>
+                </div>
               )}
             </div>
-            {blocker === null && (
-              <div className="flex flex-wrap items-center gap-3">
-                {quota && (
-                  <span
-                    data-testid="agent-quota"
-                    className={cn(
-                      "text-xs tabular-nums",
-                      quota.left === 0
-                        ? "text-warning-text"
-                        : "text-muted-foreground",
-                    )}
+
+            {blocker === null && <PausedBanner agentConsole={agentConsole} />}
+
+            <AnimatedTabs
+              value={activeTab}
+              onValueChange={(value) => {
+                changeTab(value as AgentTab);
+              }}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <AnimatedTabsList className="shrink-0">
+                {TABS.map((tab) => (
+                  <AnimatedTabsTrigger
+                    key={tab}
+                    value={tab}
+                    data-testid={`agent-tab-${tab}`}
                   >
-                    {t("agent.header.quota", {
-                      left: quota.left,
-                      limit: quota.limit,
-                    })}
-                  </span>
-                )}
-                <PauseControl agentConsole={agentConsole} />
-                <RippleButton
-                  size="sm"
-                  className="flex items-center gap-2"
-                  data-testid="agent-connect"
-                  onClick={onConnectAgent}
-                >
-                  <LuPlug className="size-4" aria-hidden="true" />
-                  {t("agent.header.connect")}
-                </RippleButton>
-              </div>
-            )}
-          </div>
-
-          {blocker === null && <PausedBanner agentConsole={agentConsole} />}
-
-          <AnimatedTabs
-            value={activeTab}
-            onValueChange={(value) => {
-              changeTab(value as AgentTab);
-            }}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <AnimatedTabsList className="shrink-0">
-              {TABS.map((tab) => (
-                <AnimatedTabsTrigger
-                  key={tab}
-                  value={tab}
-                  data-testid={`agent-tab-${tab}`}
-                >
-                  {t(`agent.tabs.${tab}`)}
-                  {tab === "conversation" &&
-                    agentConsole.openRequests.length > 0 && (
-                      <span className="rounded-full bg-warning/15 px-1.5 text-xs tabular-nums text-warning-text">
-                        {agentConsole.openRequests.length}
-                      </span>
-                    )}
-                </AnimatedTabsTrigger>
-              ))}
-            </AnimatedTabsList>
-
-            <AnimatedTabsContent
-              value="conversation"
-              className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
-            >
-              {conversationBody()}
-            </AnimatedTabsContent>
-
-            <AnimatedTabsContent
-              value="profiles"
-              className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
-            >
-              {blockerPanel ?? (
-                <AgentProfiles
-                  agentConsole={agentConsole}
-                  profileNames={profileNames}
-                  now={now}
-                  onNote={openComposerFor}
-                />
-              )}
-            </AnimatedTabsContent>
-
-            <AnimatedTabsContent
-              value="activity"
-              className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
-            >
-              {blockerPanel ?? (
-                <AgentActivityFeed
-                  agentConsole={agentConsole}
-                  profileNames={profileNames}
-                  now={now}
-                />
-              )}
-            </AnimatedTabsContent>
-
-            <AnimatedTabsContent
-              value="recipes"
-              className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
-            >
-              {blockerPanel ??
-                (automation ? (
-                  <AgentRecipes profiles={profiles} />
-                ) : (
-                  <SetupPanel
-                    testId="agent-recipes-plan"
-                    icon={<LuLock />}
-                    title={t("agent.tabs.recipes")}
-                    body={t("agent.recipes.needsAutomation")}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ProBadge />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={onOpenAccount}
-                      >
-                        {t("agent.setup.planAction")}
-                      </Button>
-                    </div>
-                  </SetupPanel>
+                    {t(`agent.tabs.${tab}`)}
+                    {tab === "conversation" &&
+                      agentConsole.openRequests.length > 0 && (
+                        <span className="rounded-full bg-warning/15 px-1.5 text-xs tabular-nums text-warning-text">
+                          {agentConsole.openRequests.length}
+                        </span>
+                      )}
+                  </AnimatedTabsTrigger>
                 ))}
-            </AnimatedTabsContent>
-          </AnimatedTabs>
-        </div>
+              </AnimatedTabsList>
+
+              <AnimatedTabsContent
+                value="conversation"
+                className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
+              >
+                {conversationBody()}
+              </AnimatedTabsContent>
+
+              <AnimatedTabsContent
+                value="profiles"
+                className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
+              >
+                {blockerPanel ?? (
+                  <AgentProfiles
+                    agentConsole={agentConsole}
+                    profileNames={profileNames}
+                    now={now}
+                    onNote={openComposerFor}
+                  />
+                )}
+              </AnimatedTabsContent>
+
+              <AnimatedTabsContent
+                value="activity"
+                className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
+              >
+                {blockerPanel ?? (
+                  <AgentActivityFeed
+                    agentConsole={agentConsole}
+                    profileNames={profileNames}
+                    now={now}
+                  />
+                )}
+              </AnimatedTabsContent>
+
+              <AnimatedTabsContent
+                value="recipes"
+                className="mt-3 min-h-0 flex-1 flex-col data-[state=active]:flex"
+              >
+                {blockerPanel ??
+                  (automation ? (
+                    <AgentRecipes profiles={profiles} />
+                  ) : (
+                    <SetupPanel
+                      testId="agent-recipes-plan"
+                      icon={<LuLock />}
+                      title={t("agent.tabs.recipes")}
+                      body={t("agent.recipes.needsAutomation")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <ProBadge />
+                        <Button
+                          size="sm"
+                          variant="soft"
+                          className="h-8 rounded-lg text-xs"
+                          onClick={onOpenAccount}
+                        >
+                          {t("agent.setup.planAction")}
+                        </Button>
+                      </div>
+                    </SetupPanel>
+                  ))}
+              </AnimatedTabsContent>
+            </AnimatedTabs>
+          </div>
+        </SoftFields>
       </DialogContent>
     </Dialog>
   );

@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatusLight } from "@/components/ui/settings-panel";
 import { translateBackendError } from "@/lib/backend-errors";
 import {
   getRecipeRecording,
@@ -123,7 +124,7 @@ export function RecipeRecorder({
   return (
     <div
       data-slot="agent-recipe-recorder"
-      className="flex flex-col gap-3 rounded-md border border-border bg-card p-3"
+      className="flex flex-col gap-3 rounded-xl bg-foreground/3 p-3"
     >
       <p className="text-xs text-muted-foreground">
         {t("agent.recipes.recording.description")}
@@ -131,8 +132,8 @@ export function RecipeRecorder({
 
       {isRecording ? (
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-sm">
-            <LuCircleDot className="size-3.5 text-destructive" />
+          <span className="flex items-center gap-2 text-sm">
+            <StatusLight tone="destructive" live />
             {t("agent.recipes.recording.recording")}
           </span>
           <span className="text-xs text-muted-foreground">
@@ -141,8 +142,10 @@ export function RecipeRecorder({
           <div className="flex-1" />
           <Button
             size="sm"
-            variant="outline"
+            variant="soft"
+            className="h-8 gap-1.5 rounded-lg text-xs"
             disabled={isBusy}
+            aria-busy={isBusy}
             onClick={() => {
               void stop();
             }}
@@ -154,7 +157,10 @@ export function RecipeRecorder({
       ) : (
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex min-w-48 flex-col gap-1">
-            <Label htmlFor="agent-recorder-profile" className="text-xs">
+            <Label
+              htmlFor="agent-recorder-profile"
+              className="text-xs font-medium text-muted-foreground"
+            >
               {t("agent.recipes.recording.hint")}
             </Label>
             <Select
@@ -164,7 +170,8 @@ export function RecipeRecorder({
             >
               <SelectTrigger
                 id="agent-recorder-profile"
-                className="h-8 text-xs"
+                variant="soft"
+                className="h-8 w-full text-xs"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -179,7 +186,9 @@ export function RecipeRecorder({
           </div>
           <Button
             size="sm"
+            className="h-8 gap-1.5 rounded-lg text-xs"
             disabled={isBusy || !profileId}
+            aria-busy={isBusy}
             onClick={() => {
               void start();
             }}

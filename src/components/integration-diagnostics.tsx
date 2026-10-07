@@ -3,9 +3,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { LuActivity } from "react-icons/lu";
+import { LoadingButton } from "@/components/loading-button";
 import { OperationFlow } from "@/components/ui/operation-flow";
+import { SettingsPanel } from "@/components/ui/settings-panel";
 import { translateBackendError } from "@/lib/backend-errors";
+import { cn } from "@/lib/utils";
 
 interface Diagnostic {
   configured: boolean;
@@ -22,8 +25,10 @@ interface Diagnostic {
  */
 export function IntegrationDiagnostics({
   target,
+  className,
 }: {
   target: "api" | "remote";
+  className?: string;
 }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<Diagnostic | null>(null);
@@ -52,23 +57,33 @@ export function IntegrationDiagnostics({
           : "appFeedback.unavailable",
     );
   return (
-    <section
+    <SettingsPanel
       data-slot="integration-diagnostics"
-      className="space-y-3 rounded-md bg-muted/30 p-4"
+      className={cn("space-y-4", className)}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">
-          {t("appFeedback.connectionTest")}
-        </h3>
-        <Button
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h3 className="text-sm font-medium">
+            {t("appFeedback.connectionTest")}
+          </h3>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t(
+              target === "api"
+                ? "appFeedback.apiProbeScope"
+                : "appFeedback.remoteProbeScope",
+            )}
+          </p>
+        </div>
+        <LoadingButton
           size="sm"
-          variant="secondary"
-          disabled={busy}
-          aria-busy={busy}
+          variant="soft"
+          className="h-8 gap-1.5 rounded-lg text-xs"
+          isLoading={busy}
           onClick={() => void check()}
         >
-          {t(busy ? "appFeedback.checking" : "appFeedback.testConnection")}
-        </Button>
+          <LuActivity className="size-3.5" />
+          {t("appFeedback.testConnection")}
+        </LoadingButton>
       </div>
       <OperationFlow
         label={t("appFeedback.connectionTest")}
@@ -113,7 +128,7 @@ export function IntegrationDiagnostics({
       />
       <div
         role="status"
-        className="text-xs leading-relaxed text-muted-foreground"
+        className="text-xs leading-relaxed text-muted-foreground tabular-nums"
       >
         {busy
           ? t("appFeedback.checking")
@@ -123,21 +138,16 @@ export function IntegrationDiagnostics({
               })
             : t("appFeedback.notChecked")}
         {result?.http_status != null && (
-          <span className="ml-2 font-mono">HTTP {result.http_status}</span>
+          <span className="ml-2 rounded-md bg-foreground/5 px-1.5 py-0.5 font-mono">
+            HTTP {result.http_status}
+          </span>
         )}
       </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {t(
-          target === "api"
-            ? "appFeedback.apiProbeScope"
-            : "appFeedback.remoteProbeScope",
-        )}
-      </p>
       {error && (
         <p role="alert" className="break-words text-xs text-destructive-text">
           {error}
         </p>
       )}
-    </section>
+    </SettingsPanel>
   );
 }

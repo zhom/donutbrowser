@@ -859,7 +859,9 @@
     "apiEnableLabel": "Activer le serveur API local",
     "apiEnableDescription": "Permet de gérer les profils, groupes et proxys via l'API REST.",
     "apiPortLabel": "Port",
+    "apiPortDescription": "Le port sur lequel le serveur écoute. Seul cet ordinateur peut s'y connecter.",
     "apiTokenLabel": "Jeton d'authentification",
+    "apiTokenDescription": "Envoyez-le comme jeton Bearer avec chaque requête.",
     "apiInvalidPort": "Port invalide",
     "apiInvalidPortDescription": "Le port doit être entre 1 et 65535",
     "apiPortInUse": "Le port {{port}} est déjà utilisé",
@@ -874,6 +876,62 @@
     "openSettings": "Ouvrir les paramètres d'intégrations",
     "apiRunningOn": "En cours sur",
     "apiExampleRequest": "Exemple de requête",
+    "examples": {
+      "open": "Plus d'exemples",
+      "apiTitle": "Exemples de l'API locale",
+      "apiDescription": "Copiez une requête et exécutez-la depuis un terminal ou un script. Remplacez les valeurs surlignées par les vôtres.",
+      "remoteTitle": "Exemples MCP distant",
+      "remoteDescription": "Appelez directement le point de terminaison MCP distant, ou ajoutez-le à un client absent de la liste.",
+      "response": "Réponse",
+      "language": "Langage",
+      "paid": "Nécessite une offre payante",
+      "tokenIncluded": "Le code copié contient votre jeton complet. Gardez-le privé.",
+      "credentialTemplate": "Seul le début de l'identifiant est affiché. Remplacez-le par l'identifiant complet avant d'exécuter le code.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "Lister les profils",
+          "description": "Renvoie chaque profil avec son ID, son navigateur, son proxy et son état d'exécution."
+        },
+        "runProfile": {
+          "title": "Lancer un profil",
+          "description": "Démarre le navigateur et renvoie son port de débogage distant. Connectez Playwright, Puppeteer ou tout client CDP à ce port."
+        },
+        "openUrl": {
+          "title": "Ouvrir une URL",
+          "description": "Ouvre une page dans un profil déjà en cours d'exécution."
+        },
+        "killProfile": {
+          "title": "Arrêter un profil",
+          "description": "Ferme le navigateur d'un profil en cours d'exécution."
+        },
+        "createProxy": {
+          "title": "Ajouter un proxy",
+          "description": "Enregistre un proxy que vous pouvez attribuer à des profils."
+        },
+        "openApi": {
+          "title": "Référence de l'API",
+          "description": "Le document OpenAPI de tous les points de terminaison. Aucun jeton n'est nécessaire. Importez-le dans Postman, Insomnia ou un générateur de clients."
+        },
+        "listTools": {
+          "title": "Lister les outils",
+          "description": "Renvoie les outils qu'un agent peut appeler via le point de terminaison."
+        },
+        "callTool": {
+          "title": "Appeler un outil",
+          "description": "Exécute un outil. Cet exemple liste les profils de l'appareil connecté."
+        },
+        "clientConfig": {
+          "title": "Configuration du client",
+          "description": "Ajoutez cette entrée à la configuration MCP d'un client absent de la liste."
+        }
+      }
+    },
     "tabRemote": "MCP à distance",
     "remote": {
       "enableLabel": "Contrôle à distance",

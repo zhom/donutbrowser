@@ -855,7 +855,9 @@
     "apiEnableLabel": "로컬 API 서버 활성화",
     "apiEnableDescription": "REST API로 프로필, 그룹 및 프록시를 관리할 수 있도록 허용합니다.",
     "apiPortLabel": "포트",
+    "apiPortDescription": "서버가 수신 대기하는 포트입니다. 이 컴퓨터만 연결할 수 있습니다.",
     "apiTokenLabel": "인증 토큰",
+    "apiTokenDescription": "모든 요청에 Bearer 토큰으로 보내세요.",
     "apiInvalidPort": "잘못된 포트",
     "apiInvalidPortDescription": "포트는 1에서 65535 사이여야 합니다",
     "apiPortInUse": "포트 {{port}}이(가) 이미 사용 중입니다",
@@ -870,6 +872,62 @@
     "openSettings": "통합 설정 열기",
     "apiRunningOn": "실행 중",
     "apiExampleRequest": "예시 요청",
+    "examples": {
+      "open": "더 많은 예시",
+      "apiTitle": "로컬 API 예시",
+      "apiDescription": "요청을 복사해 터미널이나 스크립트에서 실행하세요. 강조 표시된 값은 직접 바꿔 주세요.",
+      "remoteTitle": "원격 MCP 예시",
+      "remoteDescription": "원격 MCP 엔드포인트를 직접 호출하거나 목록에 없는 클라이언트에 추가하세요.",
+      "response": "응답",
+      "language": "언어",
+      "paid": "유료 요금제가 필요합니다",
+      "tokenIncluded": "복사한 코드에는 전체 토큰이 포함됩니다. 다른 사람과 공유하지 마세요.",
+      "credentialTemplate": "자격 증명은 앞부분만 표시됩니다. 코드를 실행하기 전에 전체 자격 증명으로 바꾸세요.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "프로필 목록",
+          "description": "모든 프로필을 ID, 브라우저, 프록시, 실행 상태와 함께 반환합니다."
+        },
+        "runProfile": {
+          "title": "프로필 실행",
+          "description": "브라우저를 시작하고 원격 디버깅 포트를 반환합니다. Playwright, Puppeteer 또는 다른 CDP 클라이언트를 이 포트에 연결하세요."
+        },
+        "openUrl": {
+          "title": "URL 열기",
+          "description": "이미 실행 중인 프로필에서 페이지를 엽니다."
+        },
+        "killProfile": {
+          "title": "프로필 중지",
+          "description": "실행 중인 프로필의 브라우저를 닫습니다."
+        },
+        "createProxy": {
+          "title": "프록시 추가",
+          "description": "프로필에 할당할 수 있는 프록시를 저장합니다."
+        },
+        "openApi": {
+          "title": "API 레퍼런스",
+          "description": "모든 엔드포인트를 설명하는 OpenAPI 문서입니다. 토큰이 필요 없습니다. Postman, Insomnia 또는 클라이언트 생성기로 가져오세요."
+        },
+        "listTools": {
+          "title": "도구 목록",
+          "description": "에이전트가 엔드포인트를 통해 호출할 수 있는 도구를 반환합니다."
+        },
+        "callTool": {
+          "title": "도구 호출",
+          "description": "도구 하나를 실행합니다. 이 예시는 연결된 기기의 프로필 목록을 가져옵니다."
+        },
+        "clientConfig": {
+          "title": "클라이언트 구성",
+          "description": "목록에 없는 클라이언트의 MCP 구성에 이 항목을 추가하세요."
+        }
+      }
+    },
     "tabRemote": "원격 MCP",
     "remote": {
       "enableLabel": "원격 제어",

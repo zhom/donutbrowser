@@ -3,7 +3,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuTrash2 } from "react-icons/lu";
+import { LuSearch, LuTrash2 } from "react-icons/lu";
 import {
   activityDetailText,
   useTimeFormat,
@@ -102,6 +102,7 @@ export function AgentActivityFeed({
         <Select value={agent} onValueChange={setAgent}>
           <SelectTrigger
             id={agentId}
+            variant="soft"
             className="h-8 w-48 text-xs"
             data-testid="agent-activity-agent"
           >
@@ -119,16 +120,20 @@ export function AgentActivityFeed({
         <Label htmlFor={searchId} className="sr-only">
           {t("agent.activity.profileSearch")}
         </Label>
-        <Input
-          id={searchId}
-          value={query}
-          placeholder={t("agent.activity.profileSearch")}
-          className="h-8 w-48 text-sm"
-          data-testid="agent-activity-search"
-          onChange={(event) => {
-            setQuery(event.target.value);
-          }}
-        />
+        <div className="relative">
+          <LuSearch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id={searchId}
+            variant="soft"
+            value={query}
+            placeholder={t("agent.activity.profileSearch")}
+            className="h-8 w-48 pl-8 text-xs md:text-xs"
+            data-testid="agent-activity-search"
+            onChange={(event) => {
+              setQuery(event.target.value);
+            }}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <Checkbox
             id={errorsId}
@@ -144,10 +149,11 @@ export function AgentActivityFeed({
         </div>
         <Button
           type="button"
-          variant="outline"
+          variant="subtle"
           size="sm"
-          className="ml-auto gap-1.5"
+          className="ml-auto h-8 gap-1.5 rounded-lg text-xs"
           disabled={clearing || agentConsole.activity.length === 0}
+          aria-busy={clearing}
           data-testid="agent-activity-clear"
           onClick={async () => {
             setClearing(true);
@@ -178,7 +184,7 @@ export function AgentActivityFeed({
         role="list"
         aria-label={t("agent.activity.label")}
         data-testid="agent-activity-list"
-        className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border"
+        className="min-h-0 flex-1 overflow-y-auto"
       >
         {entries.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">
@@ -199,7 +205,7 @@ export function AgentActivityFeed({
                   key={entry.id}
                   role="listitem"
                   data-testid={`agent-activity-${entry.id}`}
-                  className="absolute top-0 left-0 flex w-full items-center gap-3 border-b border-border px-3 text-xs"
+                  className="absolute top-0 left-0 flex w-full items-center gap-3 rounded-md px-3 text-xs transition-colors duration-100 hover:bg-foreground/4"
                   style={{
                     height: ROW_HEIGHT,
                     transform: `translateY(${row.start}px)`,

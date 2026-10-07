@@ -855,7 +855,9 @@
     "apiEnableLabel": "启用本地 API 服务器",
     "apiEnableDescription": "允许通过 REST API 管理配置文件、分组和代理。",
     "apiPortLabel": "端口",
+    "apiPortDescription": "服务器监听的端口。只有这台电脑可以连接。",
     "apiTokenLabel": "认证令牌",
+    "apiTokenDescription": "在每个请求中作为 Bearer 令牌发送。",
     "apiInvalidPort": "无效的端口",
     "apiInvalidPortDescription": "端口必须在 1 到 65535 之间",
     "apiPortInUse": "端口 {{port}} 已被占用",
@@ -870,6 +872,62 @@
     "openSettings": "打开集成设置",
     "apiRunningOn": "运行于",
     "apiExampleRequest": "示例请求",
+    "examples": {
+      "open": "更多示例",
+      "apiTitle": "本地 API 示例",
+      "apiDescription": "复制请求并在终端或脚本中运行。将高亮的值替换为你自己的值。",
+      "remoteTitle": "远程 MCP 示例",
+      "remoteDescription": "直接调用远程 MCP 端点，或将其添加到列表中没有的客户端。",
+      "response": "响应",
+      "language": "语言",
+      "paid": "需要付费套餐",
+      "tokenIncluded": "复制的代码包含你的完整令牌。请妥善保管。",
+      "credentialTemplate": "仅显示凭据的开头部分。运行代码前请将其替换为完整凭据。",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "列出配置文件",
+          "description": "返回所有配置文件及其 ID、浏览器、代理和运行状态。"
+        },
+        "runProfile": {
+          "title": "启动配置文件",
+          "description": "启动浏览器并返回其远程调试端口。将 Playwright、Puppeteer 或任意 CDP 客户端连接到该端口。"
+        },
+        "openUrl": {
+          "title": "打开 URL",
+          "description": "在已运行的配置文件中打开页面。"
+        },
+        "killProfile": {
+          "title": "停止配置文件",
+          "description": "关闭正在运行的配置文件的浏览器。"
+        },
+        "createProxy": {
+          "title": "添加代理",
+          "description": "保存一个可分配给配置文件的代理。"
+        },
+        "openApi": {
+          "title": "API 参考",
+          "description": "描述所有端点的 OpenAPI 文档。无需令牌。可导入 Postman、Insomnia 或客户端生成器。"
+        },
+        "listTools": {
+          "title": "列出工具",
+          "description": "返回代理可通过该端点调用的工具。"
+        },
+        "callTool": {
+          "title": "调用工具",
+          "description": "运行一个工具。此示例列出已连接设备上的配置文件。"
+        },
+        "clientConfig": {
+          "title": "客户端配置",
+          "description": "将此条目添加到列表中没有的客户端的 MCP 配置中。"
+        }
+      }
+    },
     "tabRemote": "远程 MCP",
     "remote": {
       "enableLabel": "远程控制",

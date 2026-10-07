@@ -97,8 +97,7 @@ export function NoteAction({
   icon,
   onConfirm,
   disabled,
-  variant = "outline",
-  size = "sm",
+  variant = "soft",
   testId,
   className,
 }: {
@@ -109,8 +108,7 @@ export function NoteAction({
   icon?: ReactNode;
   onConfirm: (note: string | null) => Promise<boolean>;
   disabled?: boolean;
-  variant?: "outline" | "default" | "ghost" | "secondary";
-  size?: "sm" | "default";
+  variant?: "soft" | "subtle" | "default";
   testId?: string;
   className?: string;
 }) {
@@ -137,10 +135,10 @@ export function NoteAction({
         <Button
           type="button"
           variant={variant}
-          size={size}
+          size="sm"
           disabled={disabled}
           data-testid={testId}
-          className={cn("gap-1.5", className)}
+          className={cn("h-8 gap-1.5 rounded-lg text-xs", className)}
         >
           {icon}
           {label}
@@ -154,16 +152,20 @@ export function NoteAction({
             void submit();
           }}
         >
-          <Label htmlFor={noteId} className="text-xs">
+          <Label
+            htmlFor={noteId}
+            className="text-xs font-medium text-muted-foreground"
+          >
             {title ?? t("agent.actions.noteOptional")}
           </Label>
           <Textarea
             id={noteId}
+            variant="soft"
             value={note}
             rows={3}
             maxLength={MAX_TEXT_CHARS}
             placeholder={placeholder}
-            className="min-h-16 text-sm"
+            className="min-h-16 resize-none text-sm"
             data-testid={testId ? `${testId}-note` : undefined}
             onChange={(event) => {
               setNote(event.target.value);
@@ -172,8 +174,9 @@ export function NoteAction({
           <div className="flex justify-end gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="subtle"
               size="sm"
+              className="h-8 rounded-lg text-xs"
               onClick={() => {
                 setOpen(false);
               }}
@@ -183,7 +186,9 @@ export function NoteAction({
             <Button
               type="submit"
               size="sm"
+              className="h-8 rounded-lg text-xs"
               disabled={busy}
+              aria-busy={busy}
               data-testid={testId ? `${testId}-confirm` : undefined}
             >
               {confirmLabel ?? label}
@@ -220,7 +225,12 @@ export function SetupPanel({
         className,
       )}
     >
-      <span className="text-muted-foreground [&>svg]:size-10">{icon}</span>
+      <span
+        aria-hidden="true"
+        className="grid size-12 place-items-center rounded-2xl bg-foreground/5 text-muted-foreground [&>svg]:size-5"
+      >
+        {icon}
+      </span>
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       <p className="max-w-md text-xs text-muted-foreground">{body}</p>
       {children}
@@ -242,7 +252,7 @@ export function ProgressBar({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percent}
-      className="h-1 w-full overflow-hidden rounded-full bg-muted"
+      className="h-1 w-full overflow-hidden rounded-full bg-foreground/8"
     >
       <div
         className="h-full rounded-full bg-primary transition-[width] duration-300 motion-reduce:transition-none"

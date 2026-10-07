@@ -855,7 +855,9 @@
     "apiEnableLabel": "ローカル API サーバーを有効にする",
     "apiEnableDescription": "REST API でプロファイル、グループ、プロキシを管理できます。",
     "apiPortLabel": "ポート",
+    "apiPortDescription": "サーバーが待ち受けるポートです。接続できるのはこのコンピューターだけです。",
     "apiTokenLabel": "認証トークン",
+    "apiTokenDescription": "すべてのリクエストで Bearer トークンとして送信します。",
     "apiInvalidPort": "無効なポート",
     "apiInvalidPortDescription": "ポートは 1 から 65535 の間で指定してください",
     "apiPortInUse": "ポート {{port}} は既に使用中です",
@@ -870,6 +872,62 @@
     "openSettings": "統合設定を開く",
     "apiRunningOn": "実行中",
     "apiExampleRequest": "リクエスト例",
+    "examples": {
+      "open": "その他の例",
+      "apiTitle": "ローカル API の例",
+      "apiDescription": "リクエストをコピーして、ターミナルやスクリプトから実行します。強調表示された値は自分の値に置き換えてください。",
+      "remoteTitle": "リモート MCP の例",
+      "remoteDescription": "リモート MCP エンドポイントを直接呼び出すか、一覧にないクライアントに追加します。",
+      "response": "レスポンス",
+      "language": "言語",
+      "paid": "有料プランが必要です",
+      "tokenIncluded": "コピーしたコードにはトークン全体が含まれます。他人に共有しないでください。",
+      "credentialTemplate": "認証情報は先頭部分のみ表示されています。実行する前に完全な認証情報に置き換えてください。",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "プロファイル一覧",
+          "description": "すべてのプロファイルを ID、ブラウザー、プロキシ、実行状態とともに返します。"
+        },
+        "runProfile": {
+          "title": "プロファイルを起動",
+          "description": "ブラウザーを起動し、リモートデバッグポートを返します。Playwright、Puppeteer などの CDP クライアントをそのポートに接続します。"
+        },
+        "openUrl": {
+          "title": "URL を開く",
+          "description": "実行中のプロファイルでページを開きます。"
+        },
+        "killProfile": {
+          "title": "プロファイルを停止",
+          "description": "実行中のプロファイルのブラウザーを閉じます。"
+        },
+        "createProxy": {
+          "title": "プロキシを追加",
+          "description": "プロファイルに割り当てられるプロキシを保存します。"
+        },
+        "openApi": {
+          "title": "API リファレンス",
+          "description": "すべてのエンドポイントを記述した OpenAPI ドキュメントです。トークンは不要です。Postman、Insomnia、クライアント生成ツールにインポートできます。"
+        },
+        "listTools": {
+          "title": "ツール一覧",
+          "description": "エージェントがエンドポイント経由で呼び出せるツールを返します。"
+        },
+        "callTool": {
+          "title": "ツールを呼び出す",
+          "description": "ツールを 1 つ実行します。この例では接続中のデバイスのプロファイルを一覧表示します。"
+        },
+        "clientConfig": {
+          "title": "クライアント設定",
+          "description": "一覧にないクライアントの MCP 設定にこのエントリを追加します。"
+        }
+      }
+    },
     "tabRemote": "リモート MCP",
     "remote": {
       "enableLabel": "リモート制御",

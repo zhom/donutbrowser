@@ -139,7 +139,7 @@ export function RecipeStepsEditor({
           // Rows are reordered and removed, so the index is the identity here.
           // eslint-disable-next-line react/no-array-index-key
           key={`step-${index}`}
-          className="flex flex-col gap-2 rounded-md border border-border p-2"
+          className="flex flex-col gap-2 rounded-lg bg-foreground/4 p-2"
           data-slot="agent-recipe-step"
         >
           <div className="flex items-center gap-2">
@@ -166,9 +166,10 @@ export function RecipeStepsEditor({
             </Select>
             <div className="flex-1" />
             <Button
-              variant="ghost"
+              variant="subtle"
               size="icon"
               type="button"
+              className="size-8 rounded-lg"
               disabled={disabled || index === 0}
               aria-label={t("agent.recipes.moveStepUp")}
               onClick={() => {
@@ -178,9 +179,10 @@ export function RecipeStepsEditor({
               <LuArrowUp className="size-3.5" />
             </Button>
             <Button
-              variant="ghost"
+              variant="subtle"
               size="icon"
               type="button"
+              className="size-8 rounded-lg"
               disabled={disabled || index === steps.length - 1}
               aria-label={t("agent.recipes.moveStepDown")}
               onClick={() => {
@@ -190,9 +192,10 @@ export function RecipeStepsEditor({
               <LuArrowDown className="size-3.5" />
             </Button>
             <Button
-              variant="ghost"
+              variant="subtle"
               size="icon"
               type="button"
+              className="size-8 rounded-lg"
               disabled={disabled}
               aria-label={t("agent.recipes.removeStep")}
               onClick={() => {
@@ -410,7 +413,7 @@ function Field({
   const id = useId();
   return (
     <div className="flex flex-col gap-1">
-      <Label htmlFor={id} className="text-xs">
+      <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
         {label}
       </Label>
       {cloneElement(children, { id })}

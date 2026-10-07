@@ -855,7 +855,9 @@
     "apiEnableLabel": "Lokalen API-Server aktivieren",
     "apiEnableDescription": "Ermöglicht die Verwaltung von Profilen, Gruppen und Proxys über die REST API.",
     "apiPortLabel": "Port",
+    "apiPortDescription": "Der Port, auf dem der Server lauscht. Nur dieser Computer kann sich verbinden.",
     "apiTokenLabel": "Authentifizierungstoken",
+    "apiTokenDescription": "Bei jeder Anfrage als Bearer-Token mitsenden.",
     "apiInvalidPort": "Ungültiger Port",
     "apiInvalidPortDescription": "Der Port muss zwischen 1 und 65535 liegen",
     "apiPortInUse": "Port {{port}} wird bereits verwendet",
@@ -870,6 +872,62 @@
     "openSettings": "Integrationseinstellungen öffnen",
     "apiRunningOn": "Läuft auf",
     "apiExampleRequest": "Beispielanfrage",
+    "examples": {
+      "open": "Weitere Beispiele",
+      "apiTitle": "Beispiele für die lokale API",
+      "apiDescription": "Kopiere eine Anfrage und führe sie im Terminal oder in einem Skript aus. Ersetze die markierten Werte durch deine eigenen.",
+      "remoteTitle": "Remote-MCP-Beispiele",
+      "remoteDescription": "Rufe den Remote-MCP-Endpunkt direkt auf oder füge ihn einem Client hinzu, der nicht in der Liste steht.",
+      "response": "Antwort",
+      "language": "Sprache",
+      "paid": "Erfordert einen kostenpflichtigen Plan",
+      "tokenIncluded": "Kopierter Code enthält dein vollständiges Token. Halte es geheim.",
+      "credentialTemplate": "Es wird nur der Anfang der Zugangsdaten angezeigt. Ersetze ihn vor dem Ausführen durch die vollständigen Zugangsdaten.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "Profile auflisten",
+          "description": "Gibt jedes Profil mit ID, Browser, Proxy und Laufstatus zurück."
+        },
+        "runProfile": {
+          "title": "Profil starten",
+          "description": "Startet den Browser und gibt seinen Remote-Debugging-Port zurück. Verbinde Playwright, Puppeteer oder einen anderen CDP-Client mit diesem Port."
+        },
+        "openUrl": {
+          "title": "URL öffnen",
+          "description": "Öffnet eine Seite in einem Profil, das bereits läuft."
+        },
+        "killProfile": {
+          "title": "Profil stoppen",
+          "description": "Schließt den Browser eines laufenden Profils."
+        },
+        "createProxy": {
+          "title": "Proxy hinzufügen",
+          "description": "Speichert einen Proxy, den du Profilen zuweisen kannst."
+        },
+        "openApi": {
+          "title": "API-Referenz",
+          "description": "Das OpenAPI-Dokument für alle Endpunkte. Es braucht kein Token. Importiere es in Postman, Insomnia oder einen Client-Generator."
+        },
+        "listTools": {
+          "title": "Tools auflisten",
+          "description": "Gibt die Tools zurück, die ein Agent über den Endpunkt aufrufen kann."
+        },
+        "callTool": {
+          "title": "Tool aufrufen",
+          "description": "Führt ein Tool aus. Dieses Beispiel listet die Profile auf dem verbundenen Gerät auf."
+        },
+        "clientConfig": {
+          "title": "Client-Konfiguration",
+          "description": "Füge diesen Eintrag der MCP-Konfiguration eines Clients hinzu, der nicht in der Liste steht."
+        }
+      }
+    },
     "tabRemote": "Remote-MCP",
     "remote": {
       "enableLabel": "Fernsteuerung",

@@ -855,7 +855,9 @@
     "apiEnableLabel": "Yerel API Sunucusunu Etkinleştir",
     "apiEnableDescription": "Profillerin, grupların ve proxy'lerin REST API üzerinden yönetilmesine izin verin.",
     "apiPortLabel": "Bağlantı Noktası",
+    "apiPortDescription": "Sunucunun dinlediği port. Yalnızca bu bilgisayar bağlanabilir.",
     "apiTokenLabel": "Kimlik Doğrulama Jetonu",
+    "apiTokenDescription": "Her istekte Bearer token olarak gönderin.",
     "apiInvalidPort": "Geçersiz bağlantı noktası",
     "apiInvalidPortDescription": "Bağlantı noktası 1 ile 65535 arasında olmalıdır",
     "apiPortInUse": "{{port}} bağlantı noktası zaten kullanımda",
@@ -870,6 +872,62 @@
     "openSettings": "Entegrasyon Ayarlarını Aç",
     "apiRunningOn": "Çalıştığı adres",
     "apiExampleRequest": "Örnek istek",
+    "examples": {
+      "open": "Daha fazla örnek",
+      "apiTitle": "Yerel API örnekleri",
+      "apiDescription": "Bir isteği kopyalayıp terminalde veya bir betikte çalıştırın. Vurgulanan değerleri kendi değerlerinizle değiştirin.",
+      "remoteTitle": "Uzak MCP örnekleri",
+      "remoteDescription": "Uzak MCP uç noktasını doğrudan çağırın veya listede olmayan bir istemciye ekleyin.",
+      "response": "Yanıt",
+      "language": "Dil",
+      "paid": "Ücretli plan gerektirir",
+      "tokenIncluded": "Kopyalanan kod tam token'ınızı içerir. Gizli tutun.",
+      "credentialTemplate": "Kimlik bilgisinin yalnızca başı gösterilir. Kodu çalıştırmadan önce tam kimlik bilgisiyle değiştirin.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "Profilleri listele",
+          "description": "Her profili kimliği, tarayıcısı, proxy'si ve çalışma durumuyla döndürür."
+        },
+        "runProfile": {
+          "title": "Profil başlat",
+          "description": "Tarayıcıyı başlatır ve uzaktan hata ayıklama portunu döndürür. Playwright, Puppeteer veya herhangi bir CDP istemcisini bu porta bağlayın."
+        },
+        "openUrl": {
+          "title": "URL aç",
+          "description": "Zaten çalışan bir profilde bir sayfa açar."
+        },
+        "killProfile": {
+          "title": "Profili durdur",
+          "description": "Çalışan bir profilin tarayıcısını kapatır."
+        },
+        "createProxy": {
+          "title": "Proxy ekle",
+          "description": "Profillere atayabileceğiniz bir proxy kaydeder."
+        },
+        "openApi": {
+          "title": "API başvurusu",
+          "description": "Tüm uç noktaları açıklayan OpenAPI belgesi. Token gerekmez. Postman, Insomnia veya bir istemci oluşturucuya aktarın."
+        },
+        "listTools": {
+          "title": "Araçları listele",
+          "description": "Bir ajanın uç nokta üzerinden çağırabileceği araçları döndürür."
+        },
+        "callTool": {
+          "title": "Araç çağır",
+          "description": "Bir aracı çalıştırır. Bu örnek bağlı cihazdaki profilleri listeler."
+        },
+        "clientConfig": {
+          "title": "İstemci yapılandırması",
+          "description": "Bu girdiyi listede olmayan bir istemcinin MCP yapılandırmasına ekleyin."
+        }
+      }
+    },
     "tabRemote": "Uzak MCP",
     "remote": {
       "enableLabel": "Uzaktan kontrol",

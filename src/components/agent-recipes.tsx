@@ -90,19 +90,19 @@ export function AgentRecipes({ profiles }: AgentRecipesProps) {
         </p>
         <RippleButton
           size="sm"
-          className="flex items-center gap-2"
+          className="flex h-8 items-center gap-1.5 rounded-lg text-xs"
           disabled={editing !== null}
           onClick={() => {
             setEditing("new");
           }}
         >
-          <GoPlus className="size-4" />
+          <GoPlus className="size-3.5" />
           {t("agent.recipes.new")}
         </RippleButton>
       </div>
 
       {error !== null && (
-        <p className="shrink-0 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive-text">
+        <p className="shrink-0 rounded-xl bg-destructive/10 p-3 text-sm text-destructive-text">
           {translateBackendError(t, error)}
         </p>
       )}
@@ -152,7 +152,7 @@ export function AgentRecipes({ profiles }: AgentRecipesProps) {
             recipes.map((recipe) => (
               <div
                 key={recipe.id}
-                className="flex items-center gap-3 rounded-md border border-border bg-card p-3"
+                className="flex items-center gap-3 rounded-xl bg-foreground/3 p-3 transition-colors duration-150 hover:bg-foreground/5"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate text-sm font-medium text-foreground">
@@ -165,8 +165,9 @@ export function AgentRecipes({ profiles }: AgentRecipesProps) {
                   </span>
                 </div>
                 <Button
-                  variant="outline"
+                  variant="soft"
                   size="sm"
+                  className="h-8 rounded-lg text-xs"
                   onClick={() => {
                     setEditing(recipe);
                   }}
@@ -174,8 +175,9 @@ export function AgentRecipes({ profiles }: AgentRecipesProps) {
                   {t("common.buttons.edit")}
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="subtle"
                   size="sm"
+                  className="h-8 rounded-lg text-xs hover:bg-destructive/10 hover:text-destructive-text"
                   onClick={() => {
                     setPendingRemoval(recipe);
                   }}
@@ -262,14 +264,19 @@ function RecipeEditor({
   return (
     <form
       data-slot="agent-recipe-editor"
-      className="flex shrink-0 flex-col gap-3 rounded-md border border-border bg-card p-3"
+      className="flex shrink-0 flex-col gap-3 rounded-xl bg-foreground/3 p-3"
       onSubmit={(event) => {
         event.preventDefault();
         void handleSave();
       }}
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="agent-recipe-name">{t("agent.recipes.name")}</Label>
+        <Label
+          htmlFor="agent-recipe-name"
+          className="text-xs font-medium text-muted-foreground"
+        >
+          {t("agent.recipes.name")}
+        </Label>
         <Input
           id="agent-recipe-name"
           value={name}
@@ -280,7 +287,9 @@ function RecipeEditor({
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label>{t("agent.recipes.steps")}</Label>
+        <Label className="text-xs font-medium text-muted-foreground">
+          {t("agent.recipes.steps")}
+        </Label>
         <RecipeStepsEditor
           steps={steps}
           onChange={setSteps}
@@ -291,9 +300,10 @@ function RecipeEditor({
             {t("agent.recipes.stepsHint")}
           </p>
           <Button
-            variant="outline"
+            variant="soft"
             size="sm"
             type="button"
+            className="h-8 gap-1.5 rounded-lg text-xs"
             disabled={isSaving}
             onClick={() => {
               setSteps([...steps, emptyStep("navigate")]);
@@ -305,10 +315,21 @@ function RecipeEditor({
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onCancel} type="button">
+        <Button
+          variant="subtle"
+          size="sm"
+          className="h-8 rounded-lg text-xs"
+          onClick={onCancel}
+          type="button"
+        >
           {t("common.buttons.cancel")}
         </Button>
-        <RippleButton type="submit" size="sm" disabled={!canSave}>
+        <RippleButton
+          type="submit"
+          size="sm"
+          className="h-8 rounded-lg text-xs"
+          disabled={!canSave}
+        >
           {isSaving ? t("common.buttons.saving") : t("common.buttons.save")}
         </RippleButton>
       </div>

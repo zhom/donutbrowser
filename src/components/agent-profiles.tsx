@@ -6,6 +6,7 @@ import {
   LuAppWindow,
   LuHand,
   LuMessageSquareText,
+  LuSearch,
   LuUndo2,
 } from "react-icons/lu";
 import {
@@ -13,6 +14,7 @@ import {
   NoteAction,
   useTimeFormat,
 } from "@/components/agent-console-parts";
+import { DATA_TABLE_CLASSES } from "@/components/table-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,10 +43,10 @@ import {
 import { cn } from "@/lib/utils";
 
 const STATE_CLASS: Record<AgentProfileState, string> = {
-  held: "border-primary/40 bg-primary/10 text-primary-text",
-  working: "border-success/40 bg-success/10 text-success-text",
-  error: "border-destructive/40 bg-destructive/10 text-destructive-text",
-  idle: "border-border text-muted-foreground",
+  held: "bg-primary/10 text-primary-text",
+  working: "bg-success/10 text-success-text",
+  error: "bg-destructive/10 text-destructive-text",
+  idle: "bg-foreground/6 text-muted-foreground",
 };
 
 export function AgentProfiles({
@@ -119,16 +121,20 @@ export function AgentProfiles({
         <Label htmlFor={searchId} className="sr-only">
           {t("agent.profiles.search")}
         </Label>
-        <Input
-          id={searchId}
-          value={query}
-          placeholder={t("agent.profiles.search")}
-          className="h-8 w-56 text-sm"
-          data-testid="agent-profiles-search"
-          onChange={(event) => {
-            setQuery(event.target.value);
-          }}
-        />
+        <div className="relative">
+          <LuSearch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id={searchId}
+            variant="soft"
+            value={query}
+            placeholder={t("agent.profiles.search")}
+            className="h-8 w-56 pl-8 text-xs md:text-xs"
+            data-testid="agent-profiles-search"
+            onChange={(event) => {
+              setQuery(event.target.value);
+            }}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <Checkbox
             id={errorsId}
@@ -179,11 +185,11 @@ export function AgentProfiles({
           {t("agent.profiles.noMatches")}
         </p>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Table className="data-table">
+            <TableHeader className={DATA_TABLE_CLASSES.header}>
+              <TableRow className={DATA_TABLE_CLASSES.headerRow}>
+                <TableHead className={cn(DATA_TABLE_CLASSES.head, "w-8")}>
                   <Checkbox
                     checked={allChecked}
                     aria-label={t("common.aria.selectAll")}
@@ -196,19 +202,42 @@ export function AgentProfiles({
                     }}
                   />
                 </TableHead>
-                <TableHead>{t("agent.profiles.columns.profile")}</TableHead>
-                <TableHead className="hidden @2xl:table-cell">
+                <TableHead className={DATA_TABLE_CLASSES.head}>
+                  {t("agent.profiles.columns.profile")}
+                </TableHead>
+                <TableHead
+                  className={cn(
+                    DATA_TABLE_CLASSES.head,
+                    "hidden @2xl:table-cell",
+                  )}
+                >
                   {t("agent.profiles.columns.agent")}
                 </TableHead>
-                <TableHead>{t("agent.profiles.columns.lastAction")}</TableHead>
-                <TableHead className="hidden @xl:table-cell">
+                <TableHead className={DATA_TABLE_CLASSES.head}>
+                  {t("agent.profiles.columns.lastAction")}
+                </TableHead>
+                <TableHead
+                  className={cn(
+                    DATA_TABLE_CLASSES.head,
+                    "hidden @xl:table-cell",
+                  )}
+                >
                   {t("agent.profiles.columns.result")}
                 </TableHead>
-                <TableHead className="hidden @xl:table-cell">
+                <TableHead
+                  className={cn(
+                    DATA_TABLE_CLASSES.head,
+                    "hidden @xl:table-cell",
+                  )}
+                >
                   {t("agent.profiles.columns.when")}
                 </TableHead>
-                <TableHead>{t("agent.profiles.columns.state")}</TableHead>
-                <TableHead className="text-right">
+                <TableHead className={DATA_TABLE_CLASSES.head}>
+                  {t("agent.profiles.columns.state")}
+                </TableHead>
+                <TableHead
+                  className={cn(DATA_TABLE_CLASSES.head, "text-right")}
+                >
                   {t("common.labels.actions")}
                 </TableHead>
               </TableRow>
@@ -222,6 +251,8 @@ export function AgentProfiles({
                 return (
                   <TableRow
                     key={row.profile_id}
+                    data-table-row={row.profile_id}
+                    className={DATA_TABLE_CLASSES.row}
                     data-testid={`agent-profile-${row.profile_id}`}
                     data-state={
                       selected.has(row.profile_id) ? "selected" : undefined
@@ -298,7 +329,7 @@ export function AgentProfiles({
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant="outline"
+                        variant="soft"
                         className={cn("font-normal", STATE_CLASS[row.state])}
                       >
                         {t(`agent.profiles.state.${row.state}`)}
@@ -338,9 +369,9 @@ export function AgentProfiles({
                           <TooltipTrigger asChild>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="subtle"
                               size="icon"
-                              className="size-8"
+                              className="row-reveal size-8 rounded-lg"
                               aria-label={t("agent.actions.showWindow")}
                               data-testid="agent-profile-show-window"
                               onClick={() => {
@@ -358,9 +389,9 @@ export function AgentProfiles({
                           <TooltipTrigger asChild>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="subtle"
                               size="icon"
-                              className="size-8"
+                              className="row-reveal size-8 rounded-lg"
                               aria-label={t("agent.actions.note")}
                               data-testid="agent-profile-note"
                               onClick={() => {

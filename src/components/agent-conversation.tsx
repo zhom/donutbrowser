@@ -67,7 +67,7 @@ function useSessionNamer(sessions: readonly AgentSession[]): SessionNamer {
 
 function ProfileChip({ name }: { name: string }) {
   return (
-    <span className="max-w-48 truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+    <span className="max-w-48 truncate rounded-md bg-foreground/6 px-1.5 py-0.5 text-[11px] text-foreground">
       {name}
     </span>
   );
@@ -103,8 +103,9 @@ function RequestCard({
   const dismissButton = (
     <Button
       type="button"
-      variant="ghost"
+      variant="subtle"
       size="sm"
+      className="h-8 rounded-lg text-xs"
       disabled={busy}
       data-testid="agent-dismiss"
       onClick={() => {
@@ -119,7 +120,7 @@ function RequestCard({
     <article
       data-testid={`agent-request-${item.id}`}
       aria-labelledby={`${baseId}-title`}
-      className="flex flex-col gap-2 rounded-md border border-warning/50 bg-warning/5 p-3"
+      className="flex flex-col gap-2 rounded-xl bg-warning/10 p-3"
     >
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         {isHelp ? (
@@ -149,9 +150,9 @@ function RequestCard({
           {item.profile_id && (
             <Button
               type="button"
-              variant="outline"
+              variant="soft"
               size="sm"
-              className="gap-1.5"
+              className="h-8 gap-1.5 rounded-lg text-xs"
               data-testid="agent-show-window"
               onClick={() => {
                 if (item.profile_id)
@@ -184,7 +185,8 @@ function RequestCard({
                   key={choice}
                   type="button"
                   size="sm"
-                  variant="secondary"
+                  variant="soft"
+                  className="h-8 rounded-lg text-xs"
                   disabled={busy}
                   data-testid="agent-choice"
                   onClick={() => {
@@ -208,10 +210,11 @@ function RequestCard({
             </Label>
             <Input
               id={`${baseId}-answer`}
+              variant="soft"
               value={answer}
               maxLength={MAX_TEXT_CHARS}
               placeholder={t("agent.request.answerPlaceholder")}
-              className="h-8 text-sm"
+              className="h-8 text-xs md:text-xs"
               data-testid="agent-answer-input"
               onChange={(event) => {
                 setAnswer(event.target.value);
@@ -220,7 +223,7 @@ function RequestCard({
             <Button
               type="submit"
               size="sm"
-              className="gap-1.5"
+              className="h-8 gap-1.5 rounded-lg text-xs"
               disabled={busy || answer.trim().length === 0}
               data-testid="agent-answer-send"
             >
@@ -312,8 +315,8 @@ function SessionButton({
       data-testid={`agent-session-${session.session_id}`}
       onClick={onSelect}
       className={cn(
-        "flex w-full cursor-pointer flex-col gap-1 rounded-md px-2 py-2 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        selected && "bg-accent text-accent-foreground",
+        "flex w-full cursor-pointer flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors duration-100 hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        selected && "bg-foreground/7 hover:bg-foreground/7",
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
@@ -407,8 +410,8 @@ function SessionList({
           onSelectSession(null);
         }}
         className={cn(
-          "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-          selectedSessionId === null && "bg-accent text-accent-foreground",
+          "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition-colors duration-100 hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+          selectedSessionId === null && "bg-foreground/7 hover:bg-foreground/7",
         )}
       >
         {t("agent.sessions.all")}
@@ -549,7 +552,7 @@ function ThreadEntry({
         <span aria-hidden="true">·</span>
         {time}
       </span>
-      <div className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground">
+      <div className="flex items-start gap-2 rounded-xl bg-foreground/5 px-3 py-2 text-sm text-foreground">
         {isHelp ? (
           <LuHand className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
         ) : (
@@ -624,14 +627,14 @@ function ProfilePicker({
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="soft"
           size="sm"
           role="combobox"
           aria-expanded={open}
           aria-controls={listId}
           aria-label={t("agent.composer.profile")}
           data-testid="agent-composer-profile"
-          className="max-w-56 justify-between gap-2 font-normal"
+          className="h-8 max-w-56 justify-between gap-2 rounded-lg text-xs font-normal"
         >
           <span className="truncate">
             {selected ?? t("agent.composer.noProfile")}
@@ -742,7 +745,7 @@ function Composer({
 
   return (
     <form
-      className="flex shrink-0 flex-col gap-2 border-t border-border p-3"
+      className="flex shrink-0 flex-col gap-2 border-t border-foreground/6 p-3"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -763,6 +766,7 @@ function Composer({
             ? t("agent.composer.placeholderOne", { agent: sessionName })
             : t("agent.composer.placeholderAll")
         }
+        variant="soft"
         className="min-h-14 resize-none text-sm"
         data-testid="agent-composer-input"
         onChange={(event) => {
@@ -795,7 +799,7 @@ function Composer({
         <Button
           type="submit"
           size="sm"
-          className="ml-auto gap-1.5"
+          className="ml-auto h-8 gap-1.5 rounded-lg text-xs"
           disabled={busy || text.trim().length === 0}
           data-testid="agent-composer-send"
         >
@@ -860,7 +864,7 @@ export function AgentConversation({
         onSelectSession={onSelectSession}
         now={now}
       />
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl bg-foreground/3">
         <div
           ref={threadRef}
           role="log"

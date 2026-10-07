@@ -4,6 +4,13 @@ import path from "node:path";
 import test from "node:test";
 import Color from "color";
 import en from "../../src/i18n/locales/en.json" with { type: "json" };
+import {
+  curlSnippet,
+  javascriptSnippet,
+  LOCAL_API_EXAMPLES,
+  maskToken,
+  oneLine,
+} from "../../src/lib/api-examples.ts";
 import { getDerivedThemeColors, THEMES } from "../../src/lib/themes.ts";
 import { withApp } from "../lib/app.mjs";
 import {
@@ -1383,6 +1390,111 @@ test("the integrations page ships only the Local API tab and never names remote 
     assert.equal(await activeTab(), en.integrations.tabApi);
     assert.deepEqual(await tabs(), [en.integrations.tabApi]);
 
+    await dismissSurface(app);
+  });
+});
+
+test("the local API page shows a one-line example and opens runnable examples in a dialog", async () => {
+  await withApp("ui-integrations-examples", async (app) => {
+    const settings = await app.invoke("get_app_settings");
+    const saved = await app.invoke("save_app_settings", {
+      settings: {
+        ...settings,
+        api_enabled: true,
+        api_port: 0,
+        api_token: null,
+      },
+    });
+    const token = saved.api_token;
+    assert.ok(token?.length >= 32);
+    const port = await app.invoke("start_api_server", { port: 0 });
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    await app.clickSelector('[aria-label="Integrations"]');
+    // The section label is set in capitals, so innerText reads it that way.
+    await app.waitForText(en.integrations.apiExampleRequest.toUpperCase());
+    await app.execute(
+      `window.__copied = [];
+       navigator.clipboard.writeText = async (text) => { window.__copied.push(text); };`,
+    );
+    const copied = () => app.execute("return window.__copied;");
+
+    // The page shows only the ends of the token, and the copy carries all of
+    // it, so a pasted command runs as is.
+    const quickStart = '[data-testid="integrations-api-example"]';
+    const shown = await app.execute(
+      "return document.querySelector(arguments[0]).innerText;",
+      [quickStart],
+    );
+    assert.ok(!shown.includes(token), "the full token is never on screen");
+    assert.ok(shown.includes(maskToken(token)));
+    assert.ok(shown.includes(`${baseUrl}/v1/profiles`));
+    await app.clickSelector(
+      `[data-slot="code-snippet"]:has(${quickStart}) button`,
+    );
+    await app.waitFor(async () => (await copied()).length === 1, {
+      description: "the quick start was copied",
+    });
+    assert.equal(
+      (await copied())[0],
+      oneLine(curlSnippet(LOCAL_API_EXAMPLES[0].request, { baseUrl, token })),
+    );
+    await app.capture("integrations-local-api");
+
+    await app.clickText(en.integrations.examples.open);
+    await app.waitForText(en.integrations.examples.apiTitle);
+    for (const example of LOCAL_API_EXAMPLES) {
+      await app.clickSelector(`[data-testid="code-example-${example.id}"]`);
+      await app.waitFor(
+        async () =>
+          (
+            (await dialogText(app, en.integrations.examples.apiTitle)) ?? ""
+          ).includes(en.integrations.examples.items[example.id].description),
+        { description: `${example.id} example` },
+      );
+    }
+
+    // The JavaScript the dialog hands over is real code against the real
+    // server: run the copy and read the profiles it prints.
+    await app.clickSelector('[data-testid="code-example-listProfiles"]');
+    await app.clickText(en.integrations.examples.languages.javascript, {
+      roles: ["tab"],
+    });
+    await app.clickSelector(
+      '[data-testid="code-examples-dialog"] [data-slot="code-snippet"] button',
+    );
+    await app.waitFor(async () => (await copied()).length === 2, {
+      description: "the JavaScript example was copied",
+    });
+    const javascript = (await copied())[1];
+    assert.equal(
+      javascript,
+      javascriptSnippet(LOCAL_API_EXAMPLES[0].request, { baseUrl, token }),
+    );
+    const printed = [];
+    await new (async () => {}).constructor("fetch", "console", javascript)(
+      fetch,
+      { log: (value) => printed.push(value) },
+    );
+    assert.equal(printed.length, 1);
+    assert.ok(Array.isArray(printed[0].profiles), JSON.stringify(printed[0]));
+
+    // The language is the reader's choice and stays as they move on.
+    await app.clickSelector('[data-testid="code-example-createProxy"]');
+    await app.waitFor(
+      async () =>
+        (
+          (await dialogText(app, en.integrations.examples.apiTitle)) ?? ""
+        ).includes("JSON.stringify({"),
+      { description: "JavaScript stays selected" },
+    );
+    await app.capture("integrations-local-api-examples");
+    await dismissSurface(app);
+    await dismissSurface(app);
+
+    await app.clickSelector(`[aria-label="${en.rail.account}"]`);
+    await app.waitForText(en.account.signedOutDescription);
+    await app.capture("account-signed-out");
     await dismissSurface(app);
   });
 });

@@ -855,7 +855,9 @@
     "apiEnableLabel": "Enable Local API Server",
     "apiEnableDescription": "Allow managing profiles, groups, and proxies via REST API.",
     "apiPortLabel": "Port",
+    "apiPortDescription": "The port the server listens on. Only this computer can connect to it.",
     "apiTokenLabel": "Authentication Token",
+    "apiTokenDescription": "Send it as a bearer token with every request.",
     "apiInvalidPort": "Invalid port",
     "apiInvalidPortDescription": "Port must be between 1 and 65535",
     "apiPortInUse": "Port {{port}} is already in use",
@@ -870,6 +872,62 @@
     "openSettings": "Open Integrations Settings",
     "apiRunningOn": "Running on",
     "apiExampleRequest": "Example request",
+    "examples": {
+      "open": "More examples",
+      "apiTitle": "Local API examples",
+      "apiDescription": "Copy a request and run it from a terminal or a script. Replace the highlighted values with your own.",
+      "remoteTitle": "Remote MCP examples",
+      "remoteDescription": "Call the remote MCP endpoint directly, or add it to a client that is not in the list.",
+      "response": "Response",
+      "language": "Language",
+      "paid": "Needs a paid plan",
+      "tokenIncluded": "Copied code includes your full token. Keep it private.",
+      "credentialTemplate": "Only the start of the credential is shown. Replace it with the full credential before you run the code.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "List profiles",
+          "description": "Returns every profile with its ID, browser, proxy and running state."
+        },
+        "runProfile": {
+          "title": "Launch a profile",
+          "description": "Starts the browser and returns its remote debugging port. Connect Playwright, Puppeteer or any CDP client to that port."
+        },
+        "openUrl": {
+          "title": "Open a URL",
+          "description": "Opens a page in a profile that is already running."
+        },
+        "killProfile": {
+          "title": "Stop a profile",
+          "description": "Closes the browser of a running profile."
+        },
+        "createProxy": {
+          "title": "Add a proxy",
+          "description": "Saves a proxy that you can assign to profiles."
+        },
+        "openApi": {
+          "title": "API reference",
+          "description": "The OpenAPI document for every endpoint. It needs no token. Import it into Postman, Insomnia or a client generator."
+        },
+        "listTools": {
+          "title": "List tools",
+          "description": "Returns the tools that an agent can call through the endpoint."
+        },
+        "callTool": {
+          "title": "Call a tool",
+          "description": "Runs one tool. This example lists the profiles on the connected device."
+        },
+        "clientConfig": {
+          "title": "Client configuration",
+          "description": "Add this entry to the MCP configuration of a client that is not in the list."
+        }
+      }
+    },
     "tabRemote": "Remote MCP",
     "remote": {
       "enableLabel": "Remote control",

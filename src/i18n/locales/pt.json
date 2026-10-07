@@ -859,7 +859,9 @@
     "apiEnableLabel": "Ativar servidor API local",
     "apiEnableDescription": "Permite gerenciar perfis, grupos e proxies via API REST.",
     "apiPortLabel": "Porta",
+    "apiPortDescription": "A porta em que o servidor escuta. Só este computador pode se conectar.",
     "apiTokenLabel": "Token de autenticação",
+    "apiTokenDescription": "Envie-o como token Bearer em cada requisição.",
     "apiInvalidPort": "Porta inválida",
     "apiInvalidPortDescription": "A porta deve estar entre 1 e 65535",
     "apiPortInUse": "A porta {{port}} já está em uso",
@@ -874,6 +876,62 @@
     "openSettings": "Abrir configurações de integrações",
     "apiRunningOn": "Em execução em",
     "apiExampleRequest": "Exemplo de solicitação",
+    "examples": {
+      "open": "Mais exemplos",
+      "apiTitle": "Exemplos da API local",
+      "apiDescription": "Copie uma requisição e execute-a em um terminal ou script. Substitua os valores destacados pelos seus.",
+      "remoteTitle": "Exemplos do MCP remoto",
+      "remoteDescription": "Chame o endpoint MCP remoto diretamente ou adicione-o a um cliente que não está na lista.",
+      "response": "Resposta",
+      "language": "Linguagem",
+      "paid": "Requer um plano pago",
+      "tokenIncluded": "O código copiado inclui seu token completo. Mantenha-o privado.",
+      "credentialTemplate": "Só o início da credencial é exibido. Substitua-o pela credencial completa antes de executar o código.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "Listar perfis",
+          "description": "Retorna todos os perfis com ID, navegador, proxy e estado de execução."
+        },
+        "runProfile": {
+          "title": "Iniciar um perfil",
+          "description": "Inicia o navegador e retorna a porta de depuração remota. Conecte o Playwright, o Puppeteer ou qualquer cliente CDP a essa porta."
+        },
+        "openUrl": {
+          "title": "Abrir uma URL",
+          "description": "Abre uma página em um perfil que já está em execução."
+        },
+        "killProfile": {
+          "title": "Parar um perfil",
+          "description": "Fecha o navegador de um perfil em execução."
+        },
+        "createProxy": {
+          "title": "Adicionar um proxy",
+          "description": "Salva um proxy que você pode atribuir a perfis."
+        },
+        "openApi": {
+          "title": "Referência da API",
+          "description": "O documento OpenAPI de todos os endpoints. Não precisa de token. Importe-o no Postman, no Insomnia ou em um gerador de clientes."
+        },
+        "listTools": {
+          "title": "Listar ferramentas",
+          "description": "Retorna as ferramentas que um agente pode chamar pelo endpoint."
+        },
+        "callTool": {
+          "title": "Chamar uma ferramenta",
+          "description": "Executa uma ferramenta. Este exemplo lista os perfis do dispositivo conectado."
+        },
+        "clientConfig": {
+          "title": "Configuração do cliente",
+          "description": "Adicione esta entrada à configuração MCP de um cliente que não está na lista."
+        }
+      }
+    },
     "tabRemote": "MCP remoto",
     "remote": {
       "enableLabel": "Controlo remoto",

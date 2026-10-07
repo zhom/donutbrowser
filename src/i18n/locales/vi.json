@@ -855,7 +855,9 @@
     "apiEnableLabel": "Bật máy chủ API cục bộ",
     "apiEnableDescription": "Cho phép quản lý profile, nhóm và proxy qua REST API.",
     "apiPortLabel": "Cổng",
+    "apiPortDescription": "Cổng mà máy chủ lắng nghe. Chỉ máy tính này có thể kết nối.",
     "apiTokenLabel": "Token xác thực",
+    "apiTokenDescription": "Gửi nó dưới dạng Bearer token trong mỗi yêu cầu.",
     "apiInvalidPort": "Cổng không hợp lệ",
     "apiInvalidPortDescription": "Cổng phải từ 1 đến 65535",
     "apiPortInUse": "Cổng {{port}} đang được sử dụng",
@@ -870,6 +872,62 @@
     "openSettings": "Mở cài đặt tích hợp",
     "apiRunningOn": "Đang chạy trên",
     "apiExampleRequest": "Ví dụ yêu cầu",
+    "examples": {
+      "open": "Thêm ví dụ",
+      "apiTitle": "Ví dụ API cục bộ",
+      "apiDescription": "Sao chép một yêu cầu và chạy nó trong terminal hoặc script. Thay các giá trị được đánh dấu bằng giá trị của bạn.",
+      "remoteTitle": "Ví dụ MCP từ xa",
+      "remoteDescription": "Gọi trực tiếp endpoint MCP từ xa, hoặc thêm nó vào một client không có trong danh sách.",
+      "response": "Phản hồi",
+      "language": "Ngôn ngữ",
+      "paid": "Cần gói trả phí",
+      "tokenIncluded": "Mã đã sao chép chứa toàn bộ token của bạn. Hãy giữ bí mật.",
+      "credentialTemplate": "Chỉ phần đầu của thông tin xác thực được hiển thị. Hãy thay bằng thông tin xác thực đầy đủ trước khi chạy mã.",
+      "languages": {
+        "curl": "cURL",
+        "javascript": "JavaScript",
+        "python": "Python",
+        "json": "JSON"
+      },
+      "items": {
+        "listProfiles": {
+          "title": "Liệt kê hồ sơ",
+          "description": "Trả về mọi hồ sơ cùng ID, trình duyệt, proxy và trạng thái chạy."
+        },
+        "runProfile": {
+          "title": "Khởi chạy hồ sơ",
+          "description": "Khởi động trình duyệt và trả về cổng gỡ lỗi từ xa. Kết nối Playwright, Puppeteer hoặc bất kỳ client CDP nào vào cổng đó."
+        },
+        "openUrl": {
+          "title": "Mở URL",
+          "description": "Mở một trang trong hồ sơ đang chạy."
+        },
+        "killProfile": {
+          "title": "Dừng hồ sơ",
+          "description": "Đóng trình duyệt của một hồ sơ đang chạy."
+        },
+        "createProxy": {
+          "title": "Thêm proxy",
+          "description": "Lưu một proxy mà bạn có thể gán cho hồ sơ."
+        },
+        "openApi": {
+          "title": "Tài liệu API",
+          "description": "Tài liệu OpenAPI cho mọi endpoint. Không cần token. Nhập nó vào Postman, Insomnia hoặc trình tạo client."
+        },
+        "listTools": {
+          "title": "Liệt kê công cụ",
+          "description": "Trả về các công cụ mà agent có thể gọi qua endpoint."
+        },
+        "callTool": {
+          "title": "Gọi công cụ",
+          "description": "Chạy một công cụ. Ví dụ này liệt kê hồ sơ trên thiết bị đã kết nối."
+        },
+        "clientConfig": {
+          "title": "Cấu hình client",
+          "description": "Thêm mục này vào cấu hình MCP của một client không có trong danh sách."
+        }
+      }
+    },
     "tabRemote": "MCP từ xa",
     "remote": {
       "enableLabel": "Điều khiển từ xa",
