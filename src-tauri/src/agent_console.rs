@@ -864,7 +864,7 @@ fn profile_exists(profile_id: &str) -> Result<(), String> {
   let profiles = crate::profile::manager::ProfileManager::instance()
     .list_profiles()
     .map_err(|e| {
-      log::warn!("[agent-console] profiles could not be read: {e}");
+      log::warn!("Agent console: profile list failed err=\"{e}\"");
       crate::backend_error("INTERNAL_ERROR")
     })?;
   if profiles.iter().any(|p| p.id.to_string() == profile_id) {

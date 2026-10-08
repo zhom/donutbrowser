@@ -24,6 +24,11 @@ use tower_http::cors::CorsLayer;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
+/// Refused requests come in bursts from one client; one line per route and
+/// status a minute is enough to see who is refused and how often.
+static REFUSED_REQUESTS: crate::log_streak::Throttle =
+  crate::log_streak::Throttle::new(std::time::Duration::from_secs(60));
+
 // API Types
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ApiProfile {
@@ -887,9 +892,8 @@ impl ApiServer {
         "/v1/openapi.json",
         get(move || async move { Json(api_for_v1) }),
       )
-      // Outermost layer: logs every request so customer reports show what
-      // their automation is actually calling, what the response status was,
-      // and how long it took. Never logs request bodies or auth headers.
+      // Outermost layer: logs failed requests with route, status and duration.
+      // Never logs request bodies, query strings or auth headers.
       .layer(middleware::from_fn(request_logging_middleware))
       .layer(CorsLayer::permissive())
       .with_state(state);
@@ -1047,7 +1051,7 @@ async fn auth_middleware(
   let token = match auth_header {
     Some(token) => token,
     None => {
-      log::warn!("[api] Rejected {path}: missing Authorization header");
+      log::debug!("API auth refused reason=missing_header path={path}");
       return Err(StatusCode::UNAUTHORIZED);
     }
   };
@@ -1057,13 +1061,11 @@ async fn auth_middleware(
   let stored_token = match settings_manager.get_api_token(&state.app_handle).await {
     Ok(Some(stored_token)) => stored_token,
     Ok(None) => {
-      log::warn!(
-        "[api] Rejected {path}: API server has no stored token (was the API toggled off?)"
-      );
+      log::debug!("API auth refused reason=no_stored_token path={path}");
       return Err(StatusCode::UNAUTHORIZED);
     }
     Err(e) => {
-      log::error!("[api] Failed to read stored API token: {e}");
+      log::error!("API token not readable err=\"{e}\"");
       return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
   };
@@ -1076,7 +1078,7 @@ async fn auth_middleware(
   let stored_bytes = stored_token.as_bytes();
   let matches = token_bytes.len() == stored_bytes.len() && token_bytes.ct_eq(stored_bytes).into();
   if !matches {
-    log::warn!("[api] Rejected {path}: token mismatch");
+    log::debug!("API auth refused reason=token_mismatch path={path}");
     return Err(StatusCode::UNAUTHORIZED);
   }
 
@@ -1084,12 +1086,16 @@ async fn auth_middleware(
   Ok(next.run(request).await)
 }
 
-/// Logs every request: method, path, query, response status, duration.
+/// Logs a failed request with its route, status and duration; a successful
+/// one at debug. 401 and 429 are logged by their own middleware.
 /// Skips Authorization header and request bodies entirely.
 async fn request_logging_middleware(request: axum::extract::Request, next: Next) -> Response {
   let method = request.method().clone();
-  let path = request.uri().path().to_string();
-  let query = request.uri().query().map(|q| q.to_string());
+  let route = request
+    .extensions()
+    .get::<axum::extract::MatchedPath>()
+    .map(|matched| matched.as_str().to_string())
+    .unwrap_or_else(|| request.uri().path().to_string());
   let started = std::time::Instant::now();
 
   let response = next.run(request).await;
@@ -1097,20 +1103,25 @@ async fn request_logging_middleware(request: axum::extract::Request, next: Next)
   let status = response.status();
   let elapsed_ms = started.elapsed().as_millis();
 
+  if !(status.is_client_error() || status.is_server_error()) {
+    log::debug!(
+      "API request method={method} path={route} status={} elapsed_ms={elapsed_ms}",
+      status.as_u16()
+    );
+    return response;
+  }
   let level = if status.is_server_error() {
     log::Level::Error
-  } else if status.is_client_error() {
-    log::Level::Warn
   } else {
-    log::Level::Info
+    log::Level::Warn
   };
-
-  match query {
-    Some(q) => log::log!(
+  if let Some(dropped) = REFUSED_REQUESTS.allow(&format!("{method} {route} {}", status.as_u16())) {
+    log::log!(
       level,
-      "[api] {method} {path}?{q} -> {status} ({elapsed_ms} ms)"
-    ),
-    None => log::log!(level, "[api] {method} {path} -> {status} ({elapsed_ms} ms)"),
+      "API request failed method={method} path={route} status={} elapsed_ms={elapsed_ms}{}",
+      status.as_u16(),
+      crate::log_streak::suppressed(dropped)
+    );
   }
 
   response
@@ -1192,10 +1203,9 @@ async fn rate_limit_middleware(request: axum::extract::Request, next: Next) -> R
 
   match crate::automation_rate_limiter::check_automation_rate_limit().await {
     crate::automation_rate_limiter::RateLimitOutcome::Limited { retry_after_secs } => {
-      log::warn!(
-        "[api] Rejected {}: automation rate limit exceeded; retry in {}s",
-        request.uri().path(),
-        retry_after_secs
+      log::debug!(
+        "API automation rate limited path={} retry_after_s={retry_after_secs}",
+        request.uri().path()
       );
       (
         StatusCode::TOO_MANY_REQUESTS,
@@ -1618,8 +1628,9 @@ async fn create_profile(
         let _ = crate::events::emit_empty("profile-generation-limit-reached");
       }
       log::warn!(
-        "[api] Could not create profile '{}': {body}",
-        Plain(&request.name)
+        "API profile create failed status={} err=\"{}\"",
+        status.as_u16(),
+        Plain(&body)
       );
       Err((status, body))
     }
@@ -3506,7 +3517,7 @@ async fn pump_cdp(session_id: String, client: WebSocket, upstream: crate::cdp_ta
     () = to_client => {}
   }
   log::info!(
-    "CDP proxy for remote session {} closed",
+    "Remote session CDP proxy closed session={}",
     ShortId(&session_id)
   );
 }

@@ -204,7 +204,7 @@ impl BrowserVersionManager {
         .api_client
         .save_cached_versions(browser, &merged_releases)
       {
-        log::error!("Failed to save merged cache for {browser}: {e}");
+        log::warn!("Browser version cache save failed browser={browser} err=\"{e}\"");
       }
     }
 
@@ -282,7 +282,7 @@ impl BrowserVersionManager {
       })
       .collect();
     if let Err(e) = self.api_client.save_cached_versions(browser, &releases) {
-      log::error!("Failed to save updated cache for {browser}: {e}");
+      log::warn!("Browser version cache save failed browser={browser} err=\"{e}\"");
     }
 
     Ok(new_versions_count)
@@ -486,11 +486,15 @@ pub async fn fetch_browser_versions_cached_first(
       let service_clone = BrowserVersionManager::instance();
       let browser_str_clone = browser_str.clone();
       tokio::spawn(async move {
-        if let Err(e) = service_clone
+        match service_clone
           .fetch_browser_versions_detailed(&browser_str_clone, false)
           .await
         {
-          log::error!("Background version update failed for {browser_str_clone}: {e}");
+          Ok(_) => BACKGROUND_UPDATE.succeeded(),
+          Err(e) => BACKGROUND_UPDATE.failed(format_args!(
+            "browser={browser_str_clone} {}",
+            crate::log_redaction::text(&e.to_string())
+          )),
         }
       });
     }
@@ -518,11 +522,15 @@ pub async fn fetch_browser_versions_with_count_cached_first(
       let service_clone = BrowserVersionManager::instance();
       let browser_str_clone = browser_str.clone();
       tokio::spawn(async move {
-        if let Err(e) = service_clone
+        match service_clone
           .fetch_browser_versions_with_count(&browser_str_clone, false)
           .await
         {
-          log::error!("Background version update failed for {browser_str_clone}: {e}");
+          Ok(_) => BACKGROUND_UPDATE.succeeded(),
+          Err(e) => BACKGROUND_UPDATE.failed(format_args!(
+            "browser={browser_str_clone} {}",
+            crate::log_redaction::text(&e.to_string())
+          )),
         }
       });
     }
@@ -554,5 +562,8 @@ pub async fn fetch_browser_versions_with_count(
 }
 
 // Global singleton instance
+static BACKGROUND_UPDATE: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Background browser version update");
+
 static BROWSER_VERSION_SERVICE: std::sync::LazyLock<BrowserVersionManager> =
   std::sync::LazyLock::new(BrowserVersionManager::new);

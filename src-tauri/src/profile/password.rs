@@ -305,7 +305,7 @@ pub async fn set_profile_password(profile_id: String, password: String) -> Resul
   }
   if let Err(e) = std::fs::remove_dir_all(&backup) {
     log::warn!(
-      "Failed to remove plaintext backup at {}: {e}",
+      "Plaintext backup removal failed path=\"{}\" err=\"{e}\"",
       backup.display()
     );
   }
@@ -529,7 +529,7 @@ pub async fn remove_profile_password(profile_id: String, password: String) -> Re
   }
   if let Err(e) = std::fs::remove_dir_all(&backup) {
     log::warn!(
-      "Failed to remove encrypted backup at {}: {e}",
+      "Encrypted backup removal failed path=\"{}\" err=\"{e}\"",
       backup.display()
     );
   }
@@ -607,7 +607,7 @@ pub fn prepare_for_launch(profile: &crate::profile::BrowserProfile) -> Result<Pa
   } else {
     // Wipe any stale contents and re-decrypt.
     if let Err(e) = clear_dir_contents(&ephemeral) {
-      log::warn!("Failed to clear stale ephemeral contents: {e}");
+      log::warn!("Stale decrypted copy clear failed profile={id} err=\"{e}\"");
     }
     decrypt_profile_dir(&key, &encrypted_dir, &ephemeral).map_err(|e| match e {
       crate::profile::encryption::PasswordError::WrongPassword => err_code("INCORRECT_PASSWORD"),
@@ -693,18 +693,18 @@ pub fn complete_after_quit_blocking(
     &snapshot,
   ) {
     Ok(n) => {
-      log::info!("Re-encrypted {n} changed file(s) for profile {id}");
+      log::info!(
+        "Profile re-encrypted profile={id} changed_files={n} keep_decrypted={keep_decrypted}"
+      );
       Some(n)
     }
     Err(e) => {
-      log::error!("Re-encryption failed for profile {id}: {e}");
+      log::error!("Profile re-encryption failed profile={id} err=\"{e}\"");
       None
     }
   };
 
-  if keep_decrypted {
-    log::info!("Keeping decrypted copy of profile {id} in RAM (per settings)");
-  } else {
+  if !keep_decrypted {
     drop_cached_key(&id);
     if let Ok(mut guard) = POPULATED_EPHEMERAL.lock() {
       guard.remove(&id);
@@ -737,7 +737,7 @@ pub async fn complete_after_quit_and_wait(
   tokio::task::spawn_blocking(move || complete_after_quit_blocking(&profile, keep_decrypted))
     .await
     .unwrap_or_else(|e| {
-      log::error!("complete_after_quit_and_wait join error: {e}");
+      log::error!("Profile re-encryption task panicked err=\"{e}\"");
       None
     })
 }

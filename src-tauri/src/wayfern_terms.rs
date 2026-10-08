@@ -130,12 +130,6 @@ impl WayfernTermsManager {
       "No Wayfern browser downloaded. Please download a Wayfern browser version first.".to_string()
     })?;
 
-    log::info!(
-      "Running Wayfern with {} flag: {:?}",
-      ACCEPT_TERMS_FLAG,
-      executable_path
-    );
-
     #[cfg(target_os = "macos")]
     {
       // On macOS, if it's an app bundle, we need to find the actual executable
@@ -169,7 +163,11 @@ impl WayfernTermsManager {
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      log::error!("Wayfern terms acceptance failed: {stderr}");
+      log::error!(
+        "Wayfern terms acceptance failed status=\"{}\" stderr={:?}",
+        output.status,
+        crate::log_redaction::text(stderr.trim())
+      );
       return Err(format!(
         "Wayfern terms acceptance failed with exit code: {:?}",
         output.status.code()
@@ -183,7 +181,7 @@ impl WayfernTermsManager {
       );
     }
 
-    log::info!("Wayfern terms and conditions accepted successfully");
+    log::info!("Wayfern terms accepted");
     // The frontend only re-reads the marker when it drove the acceptance
     // itself. Anything else that accepts (the REST API, a WebDriver session)
     // would leave the blocking dialog open, so the change is announced.

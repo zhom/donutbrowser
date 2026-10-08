@@ -151,23 +151,19 @@ fn mismatch_error(result: &ConsistencyResult, token: &str) -> String {
 /// either, so the launch says what it could not check.
 fn report_consistency(profile: &BrowserProfile, result: &ConsistencyResult) {
   if result.is_verified() {
-    log::debug!(
-      "Fingerprint gate: {} agrees with its exit on every dimension",
-      profile.name
-    );
+    log::debug!("Fingerprint gate passed profile={}", profile.id);
     return;
   }
   if result.unverified.is_empty() {
     return;
   }
-  log::warn!(
-    "Fingerprint gate: {} reached its exit but could not verify {}; \
-     the fingerprint declares no value to compare against",
-    profile.name,
-    result.unverified.join(", ")
+  log::info!(
+    "Fingerprint gate could not verify, fingerprint declares no value profile={} unverified={}",
+    profile.id,
+    result.unverified.join(",")
   );
   if let Err(e) = crate::events::emit("fingerprint-consistency-unverified", result) {
-    log::warn!("Failed to emit fingerprint consistency notice: {e}");
+    log::warn!("Event emit failed event=fingerprint-consistency-unverified err=\"{e}\"");
   }
 }
 
@@ -242,8 +238,9 @@ async fn enforce_direct_exit(
     Ok(result) => result,
     Err(e) => {
       log::warn!(
-        "Fingerprint gate: direct exit probe failed for profile {}, allowing launch: {e}",
-        profile.name
+        "Fingerprint gate direct exit probe failed, launch allowed profile={} err=\"{}\"",
+        profile.id,
+        crate::log_redaction::text(&e.to_string())
       );
       return Ok(());
     }
@@ -292,9 +289,10 @@ pub async fn enforce_fingerprint_gate(
   let key = fingerprint_consistency::exit_cache_key(profile);
   if key.is_none() || upstream.is_none() {
     log::warn!(
-      "Fingerprint gate: {} declares a proxy/VPN that yielded no usable upstream; \
-       measuring the direct exit it will actually use",
-      profile.name
+      "Profile route gave no usable upstream, gate measures the direct exit profile={} proxy={} vpn={}",
+      profile.id,
+      profile.proxy_id.as_deref().unwrap_or("none"),
+      profile.vpn_id.as_deref().unwrap_or("none")
     );
     return enforce_direct_exit(profile, gate).await;
   }
@@ -320,8 +318,9 @@ pub async fn enforce_fingerprint_gate(
       Ok(result) => result,
       Err(e) => {
         log::warn!(
-          "Fingerprint gate: exit probe failed for profile {}, allowing launch: {e}",
-          profile.name
+          "Fingerprint gate exit probe failed, launch allowed profile={} err=\"{}\"",
+          profile.id,
+          crate::log_redaction::text(&e.to_string())
         );
         return Ok(());
       }
@@ -343,12 +342,12 @@ pub async fn enforce_fingerprint_gate(
   // `proxy` permission silently disarmed the gate for good.
   if matches!(gate, FingerprintGate::Advisory) {
     log::warn!(
-      "Fingerprint gate: {} launching with a known exit mismatch ({})",
-      profile.name,
-      result.mismatches.join(", ")
+      "Launching with a known fingerprint exit mismatch profile={} mismatches={}",
+      profile.id,
+      result.mismatches.join(",")
     );
     if let Err(e) = crate::events::emit("fingerprint-consistency-warning", &result) {
-      log::warn!("Failed to emit fingerprint consistency warning: {e}");
+      log::warn!("Event emit failed event=fingerprint-consistency-warning err=\"{e}\"");
     }
     return Ok(());
   }

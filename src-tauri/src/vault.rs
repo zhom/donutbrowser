@@ -213,7 +213,7 @@ pub fn open(file: &Path, magic: &[u8; 6]) -> Result<Option<String>, String> {
     Some(secret) => {
       if let Err(e) = seal_with(file, magic, &secret, &key) {
         log::warn!(
-          "Could not re-seal {} under the vault key: {e}",
+          "Re-seal under vault key failed path=\"{}\" err=\"{e}\"",
           file.display()
         );
       }

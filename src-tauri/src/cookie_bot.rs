@@ -950,19 +950,22 @@ async fn send_profile_state(profile_id: String, state: ProfileState, identity: P
   if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
     match update_profile_state(&profile_id, state, &identity).await {
       Ok(_) => {
+        STATE_REPORT.succeeded(&format!("profile={profile_id}"));
         record_enrolment(&mut enrolled_profiles(), &profile_id, true);
-        log::debug!("Re-declared cookie-bot profile state for {profile_id}");
+        log::debug!("Cookie bot profile state re-declared profile={profile_id}");
       }
       // Not enrolled is the common answer and not worth a log line at warn.
       Err(e) if e.code() == "COOKIE_BOT_NOT_ENROLLED" => {
+        STATE_REPORT.succeeded(&format!("profile={profile_id}"));
         record_enrolment(&mut enrolled_profiles(), &profile_id, false);
       }
-      Err(e) => {
-        log::warn!("Could not re-declare cookie-bot profile state for {profile_id}: {e}");
-      }
+      Err(e) => STATE_REPORT.failed(&format!("profile={profile_id}"), e),
     }
   }
 }
+
+static STATE_REPORT: crate::log_streak::KeyedStreak =
+  crate::log_streak::KeyedStreak::new(module_path!(), "Cookie bot profile state report");
 
 pub fn report_profiles_using_proxy(proxy_id: &str) {
   report_matching(|profile| profile.proxy_id.as_deref() == Some(proxy_id));
@@ -989,7 +992,7 @@ pub async fn report_enrolled_profiles() {
   let list = match list_schedules(None).await {
     Ok(list) => list,
     Err(e) => {
-      log::debug!("Could not list cookie-bot schedules at startup: {e}");
+      log::debug!("Cookie bot schedules not listed at startup err=\"{e}\"");
       return;
     }
   };
@@ -1361,7 +1364,7 @@ pub async fn delete_user_template(id: &str) -> Result<bool, CookieBotError> {
 /// in a Japanese UI is the failure the `{"code":…}` convention exists to stop.
 fn command_error(context: &str, err: CookieBotError) -> String {
   log::warn!(
-    "Cookie bot {context} failed: {} (HTTP {})",
+    "Cookie bot request failed action=\"{context}\" code={} status={}",
     err.code(),
     err.status()
   );

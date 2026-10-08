@@ -49,6 +49,20 @@ fn is_download_artifact(file_name: &str) -> bool {
     .any(|suffix| lowered.ends_with(suffix))
 }
 
+/// Said once per browser type: every maintenance pass meets the same entries.
+fn note_unsupported_browser(browser: &str) {
+  static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+  let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+  if seen.iter().any(|known| known == browser) {
+    return;
+  }
+  seen.push(browser.to_string());
+  log::warn!(
+    "Unsupported browser type, entries ignored browser={}",
+    crate::log_redaction::Plain(browser)
+  );
+}
+
 impl DownloadedBrowsersRegistry {
   fn new() -> Self {
     Self {
@@ -135,7 +149,7 @@ impl DownloadedBrowsersRegistry {
     let browser_type = match BrowserType::from_str(browser) {
       Ok(bt) => bt,
       Err(_) => {
-        log::info!("Invalid browser type: {browser}");
+        note_unsupported_browser(browser);
         return false;
       }
     };
@@ -147,7 +161,7 @@ impl DownloadedBrowsersRegistry {
 
     // If files don't exist but registry thinks they do, clean up the registry
     if !files_exist {
-      log::info!("Cleaning up stale registry entry for {browser} {version}");
+      log::info!("Removed stale registry entry browser={browser} version={version}");
       self.remove_browser(browser, version);
       let _ = self.save(); // Don't fail if save fails, just log
     }
@@ -167,10 +181,8 @@ impl DownloadedBrowsersRegistry {
   pub fn mark_download_started(&self, browser: &str, version: &str, file_path: PathBuf) {
     // Only mark download started, don't add to registry yet
     // The browser will be added to registry only after verification succeeds
-    log::info!(
-      "Marking download started for {}:{} at {}",
-      browser,
-      version,
+    log::debug!(
+      "Download started browser={browser} version={version} path={}",
       file_path.display()
     );
   }
@@ -188,7 +200,7 @@ impl DownloadedBrowsersRegistry {
       file_path,
     };
     self.add_browser(info);
-    log::info!("Browser {browser}:{version} successfully added to registry after verification");
+    log::debug!("Registered browser={browser} version={version}");
     Ok(())
   }
 
@@ -202,7 +214,7 @@ impl DownloadedBrowsersRegistry {
     // maintenance task land here, and a freshly downloaded version is referenced
     // by no persisted profile while profile creation is still in flight.
     if crate::downloader::is_downloading(browser, version) {
-      log::info!("Skipping cleanup of {browser} {version}: a download is in progress");
+      log::debug!("Cleanup skipped, download in progress browser={browser} version={version}");
       return Ok(());
     }
 
@@ -262,7 +274,7 @@ impl DownloadedBrowsersRegistry {
     let pending_updates = match self.auto_updater.get_pending_update_versions() {
       Ok(updates) => updates,
       Err(e) => {
-        log::warn!("Warning: Failed to get pending updates for cleanup: {e}");
+        log::warn!("Pending update lookup failed, cleanup ignores pending updates err=\"{e}\"");
         std::collections::HashSet::new()
       }
     };
@@ -277,13 +289,13 @@ impl DownloadedBrowsersRegistry {
 
           // Don't remove if it's used by any active profile
           if active_set.contains(&browser_version) {
-            log::info!("Keeping: {browser} {version} (in use by profile)");
+            log::debug!("Keeping browser={browser} version={version} reason=in_use");
             continue;
           }
 
           // Don't remove if it's currently running (even if not in active profiles)
           if running_set.contains(&browser_version) {
-            log::info!("Keeping: {browser} {version} (currently running)");
+            log::debug!("Keeping browser={browser} version={version} reason=running");
             continue;
           }
 
@@ -294,14 +306,14 @@ impl DownloadedBrowsersRegistry {
             let has_running_profile_for_browser =
               running_profiles.iter().any(|(b, _)| b == browser);
             if has_running_profile_for_browser {
-              log::info!("Keeping: {browser} {version} (pending update for running profile)");
+              log::debug!("Keeping browser={browser} version={version} reason=pending_update");
               continue;
             }
           }
 
           // Mark for removal
           to_remove.push(browser_version);
-          log::info!("Marking for removal: {browser} {version} (not used by any profile)");
+          log::debug!("Unused browser={browser} version={version}");
         }
       }
     }
@@ -344,7 +356,7 @@ impl DownloadedBrowsersRegistry {
           .get(browser)
           .is_some_and(|keep| keep == version)
         {
-          log::info!("Keeping latest available version: {browser} {version}");
+          log::debug!("Keeping browser={browser} version={version} reason=latest");
           return false;
         }
         true
@@ -354,21 +366,24 @@ impl DownloadedBrowsersRegistry {
     // Remove unused binaries and their version folders
     for (browser, version) in to_remove {
       if let Err(e) = self.cleanup_failed_download(&browser, &version) {
-        log::error!("Failed to cleanup unused binary {browser}:{version}: {e}");
+        log::warn!("Unused browser removal failed browser={browser} version={version} err=\"{e}\"");
       } else {
         // After removing the binary, also remove the empty version folder
         if let Err(e) = self.remove_empty_version_folder(&browser, &version) {
-          log::error!("Failed to remove empty version folder for {browser}:{version}: {e}");
+          log::warn!(
+            "Empty version folder removal failed browser={browser} version={version} err=\"{e}\""
+          );
         }
         cleaned_up.push(format!("{browser} {version}"));
-        log::info!("Successfully removed unused binary: {browser} {version}");
       }
     }
 
-    if cleaned_up.is_empty() {
-      log::info!("No unused binaries found to clean up");
-    } else {
-      log::info!("Cleaned up {} unused binaries", cleaned_up.len());
+    if !cleaned_up.is_empty() {
+      log::info!(
+        "Removed unused browsers count={} versions=\"{}\"",
+        cleaned_up.len(),
+        cleaned_up.join(", ")
+      );
     }
 
     Ok(cleaned_up)
@@ -424,7 +439,7 @@ impl DownloadedBrowsersRegistry {
           // Files don't exist, remove from registry
           if let Some(_removed) = self.remove_browser(&browser_str, &version) {
             cleaned_up.push(format!("{browser_str} {version}"));
-            log::info!("Removed stale registry entry for {browser_str} {version}");
+            log::info!("Removed stale registry entry browser={browser_str} version={version}");
           }
         }
       }
@@ -576,7 +591,7 @@ impl DownloadedBrowsersRegistry {
         if entries.next().is_none() {
           // Directory is empty, remove it
           fs::remove_dir(&version_dir)?;
-          log::info!("Removed empty version folder: {}", version_dir.display());
+          log::debug!("Removed empty version folder browser={browser} version={version}");
 
           // Also check if the browser folder is now empty and remove it too
           let browser_dir = binaries_dir.join(browser);
@@ -584,7 +599,7 @@ impl DownloadedBrowsersRegistry {
             if let Ok(mut browser_entries) = fs::read_dir(&browser_dir) {
               if browser_entries.next().is_none() {
                 fs::remove_dir(&browser_dir)?;
-                log::info!("Removed empty browser folder: {}", browser_dir.display());
+                log::debug!("Removed empty browser folder browser={browser}");
               }
             }
           }
@@ -671,15 +686,13 @@ impl DownloadedBrowsersRegistry {
       // Remove empty version directories
       for (version_path, version_name) in empty_version_dirs {
         if let Err(e) = fs::remove_dir(&version_path) {
-          log::error!(
-            "Failed to remove empty version folder {}: {e}",
-            version_path.display()
+          log::warn!(
+            "Empty version folder removal failed browser={browser_name} version={version_name} err=\"{e}\""
           );
         } else {
           cleaned_up.push(format!(
             "Removed empty version folder: {browser_name}/{version_name}"
           ));
-          log::info!("Removed empty version folder: {}", version_path.display());
         }
       }
 
@@ -688,13 +701,9 @@ impl DownloadedBrowsersRegistry {
         if let Ok(mut entries) = fs::read_dir(&browser_path) {
           if entries.next().is_none() {
             if let Err(e) = fs::remove_dir(&browser_path) {
-              log::error!(
-                "Failed to remove empty browser folder {}: {e}",
-                browser_path.display()
-              );
+              log::warn!("Empty browser folder removal failed browser={browser_name} err=\"{e}\"");
             } else {
               cleaned_up.push(format!("Removed empty browser folder: {browser_name}"));
-              log::info!("Removed empty browser folder: {}", browser_path.display());
             }
           }
         }
@@ -730,9 +739,9 @@ impl DownloadedBrowsersRegistry {
           profiles_to_update.push(*profile);
           older_versions_to_remove.insert(profile.version.clone());
         } else {
-          log::info!(
-            "Skipping version update for running profile: {} ({})",
-            profile.name,
+          log::debug!(
+            "Version update deferred, browser running profile={} version={}",
+            profile.id,
             profile.version
           );
         }
@@ -744,26 +753,29 @@ impl DownloadedBrowsersRegistry {
       match update_profile(profile) {
         Ok(()) => {
           consolidated.push(format!(
-            "Updated profile '{}' from {} to {}",
-            profile.name, profile.version, latest_version
+            "profile {} {} -> {}",
+            profile.id, profile.version, latest_version
           ));
         }
         Err(e) => {
-          log::error!("Failed to update profile '{}': {}", profile.name, e);
+          log::warn!(
+            "Profile browser update failed profile={} to={latest_version} err=\"{e}\"",
+            profile.id
+          );
         }
       }
     }
 
     // Remove older version binaries that are no longer needed
     for old_version in &older_versions_to_remove {
-      log::info!("Consolidating: removing old version {browser_name} {old_version}");
       match remove_version(old_version.as_str()) {
         Ok(()) => {
           consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
-          log::info!("Successfully removed old version: {browser_name} {old_version}");
         }
         Err(e) => {
-          log::error!("Failed to cleanup old version {browser_name} {old_version}: {e}");
+          log::warn!(
+            "Old browser removal failed browser={browser_name} version={old_version} err=\"{e}\""
+          );
         }
       }
     }
@@ -776,8 +788,6 @@ impl DownloadedBrowsersRegistry {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Starting browser version consolidation...");
-
     let profiles = self
       .profile_manager
       .list_profiles()
@@ -811,16 +821,15 @@ impl DownloadedBrowsersRegistry {
         if browser.is_version_downloaded(&profile.version, &binaries_dir) {
           available_versions.push(profile.version.clone());
         } else {
-          log::info!(
-            "Profile '{}' references version {} that doesn't exist on disk",
-            profile.name,
+          log::debug!(
+            "Profile browser not on disk profile={} browser={browser_name} version={}",
+            profile.id,
             profile.version
           );
         }
       }
 
       if available_versions.is_empty() {
-        log::info!("No available versions found for {browser_name}, skipping consolidation");
         continue;
       }
 
@@ -831,7 +840,6 @@ impl DownloadedBrowsersRegistry {
       });
 
       let latest_version = &available_versions[0];
-      log::info!("Latest available version for {browser_name}: {latest_version}");
 
       let mut consolidated_for_browser = Self::consolidate_profiles_for_browser(
         browser_name,
@@ -858,10 +866,13 @@ impl DownloadedBrowsersRegistry {
       .save()
       .map_err(|e| format!("Failed to save registry after consolidation: {e}"))?;
 
-    log::info!(
-      "Browser version consolidation completed: {} actions taken",
-      consolidated.len()
-    );
+    if !consolidated.is_empty() {
+      log::info!(
+        "Browser versions consolidated count={} actions=\"{}\"",
+        consolidated.len(),
+        consolidated.join("; ")
+      );
+    }
     Ok(consolidated)
   }
 
@@ -881,11 +892,7 @@ impl DownloadedBrowsersRegistry {
       let browser_type = match BrowserType::from_str(&profile.browser) {
         Ok(bt) => bt,
         Err(_) => {
-          log::info!(
-            "Warning: Invalid browser type '{}' for profile '{}'",
-            profile.browser,
-            profile.name
-          );
+          note_unsupported_browser(&profile.browser);
           continue;
         }
       };
@@ -893,11 +900,6 @@ impl DownloadedBrowsersRegistry {
       let browser = create_browser(browser_type.clone());
 
       let binaries_dir = crate::app_dirs::binaries_dir();
-
-      log::info!(
-        "binaries_dir: {binaries_dir:?} for profile: {}",
-        profile.name
-      );
 
       // Check if the version is downloaded
       if !browser.is_version_downloaded(&profile.version, &binaries_dir) {
@@ -914,77 +916,48 @@ impl DownloadedBrowsersRegistry {
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // First, clean up any stale registry entries
-    if let Ok(cleaned_up) = self.verify_and_cleanup_stale_entries() {
-      if !cleaned_up.is_empty() {
-        log::info!(
-          "Cleaned up {} stale registry entries: {}",
-          cleaned_up.len(),
-          cleaned_up.join(", ")
-        );
-      }
-    }
+    let _ = self.verify_and_cleanup_stale_entries();
 
     // Consolidate browser versions - keep only latest version per browser
-    if let Ok(consolidated) = self.consolidate_browser_versions(app_handle) {
-      if !consolidated.is_empty() {
-        log::info!("Version consolidation results:");
-        for action in &consolidated {
-          log::info!("  {action}");
-        }
-      }
-    }
+    let _ = self.consolidate_browser_versions(app_handle);
 
     let missing_binaries = self.check_missing_binaries().await?;
     let mut downloaded = Vec::new();
 
     for (profile_name, browser, version) in missing_binaries {
-      log::info!("Downloading missing binary for profile '{profile_name}': {browser} {version}");
-
-      match crate::downloader::download_browser(
-        app_handle.clone(),
-        browser.clone(),
-        version.clone(),
-      )
-      .await
+      // A failed download logs itself.
+      if crate::downloader::download_browser(app_handle.clone(), browser.clone(), version.clone())
+        .await
+        .is_ok()
       {
-        Ok(_) => {
-          downloaded.push(format!(
-            "{browser} {version} (for profile '{profile_name}')"
-          ));
+        downloaded.push(format!(
+          "{browser} {version} (for profile '{profile_name}')"
+        ));
 
-          // After successful download, update profiles that use this browser to the new version
-          match self
-            .update_profiles_to_version(app_handle, &browser, &version)
-            .await
-          {
-            Ok(updated_profiles) => {
-              if !updated_profiles.is_empty() {
-                log::info!(
-                  "Successfully updated {} profiles to version {}:",
-                  updated_profiles.len(),
-                  version
-                );
-                for update_msg in updated_profiles {
-                  log::info!("  {update_msg}");
-                }
-              }
-            }
-            Err(e) => {
-              log::error!("CRITICAL: Failed to update profiles to version {version}: {e}");
-              log::error!("This may cause profile version inconsistencies and cleanup issues");
+        // After successful download, update profiles that use this browser to the new version
+        match self
+          .update_profiles_to_version(app_handle, &browser, &version)
+          .await
+        {
+          Ok(updated_profiles) => {
+            if !updated_profiles.is_empty() {
+              log::info!(
+                "Profiles moved to downloaded browser count={} browser={browser} version={version}",
+                updated_profiles.len()
+              );
             }
           }
-        }
-        Err(e) => {
-          log::error!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
+          Err(e) => {
+            log::error!(
+              "Moving profiles to downloaded browser failed browser={browser} version={version} err=\"{e}\""
+            );
+          }
         }
       }
     }
 
     // Check if GeoIP database is missing for Wayfern profiles
     if self.geoip_downloader.check_missing_geoip_database()? {
-      log::info!("GeoIP database is missing for Wayfern profiles, downloading...");
-
       match self
         .geoip_downloader
         .download_geoip_database(app_handle)
@@ -992,10 +965,12 @@ impl DownloadedBrowsersRegistry {
       {
         Ok(_) => {
           downloaded.push("GeoIP database".to_string());
-          log::info!("GeoIP database downloaded successfully");
         }
         Err(e) => {
-          log::error!("Failed to download GeoIP database: {e}");
+          log::error!(
+            "GeoIP database download failed err=\"{}\"",
+            crate::log_redaction::text(&e.to_string())
+          );
           // Don't fail the entire operation if GeoIP download fails
         }
       }
@@ -1022,9 +997,9 @@ impl DownloadedBrowsersRegistry {
       if profile.browser == browser && profile.version != version {
         // Check if profile is currently running
         if profile.process_id.is_some() {
-          log::info!(
-            "Skipping version update for running profile: {} ({})",
-            profile.name,
+          log::debug!(
+            "Version update deferred, browser running profile={} version={}",
+            profile.id,
             profile.version
           );
           continue;
@@ -1038,22 +1013,20 @@ impl DownloadedBrowsersRegistry {
         ) {
           Ok(_) => {
             updated_profiles.push(format!(
-              "Updated profile '{}' from {} to {}",
-              profile.name, profile.version, version
+              "profile {} {} -> {}",
+              profile.id, profile.version, version
             ));
-            log::info!(
-              "Successfully updated profile '{}' to version {}",
-              profile.name,
-              version
-            );
 
             // Save registry after each profile update to ensure consistency
             if let Err(e) = self.save() {
-              log::warn!("Warning: Failed to save registry after profile update: {e}");
+              log::warn!("Registry save failed err=\"{e}\"");
             }
           }
           Err(e) => {
-            log::error!("Failed to update profile '{}': {}", profile.name, e);
+            log::warn!(
+              "Profile browser update failed profile={} to={version} err=\"{e}\"",
+              profile.id
+            );
           }
         }
       }
@@ -1095,7 +1068,7 @@ static DOWNLOADED_BROWSERS_REGISTRY: std::sync::LazyLock<DownloadedBrowsersRegis
   std::sync::LazyLock::new(|| {
     let registry = DownloadedBrowsersRegistry::new();
     if let Err(e) = registry.load() {
-      log::warn!("Warning: Failed to load downloaded browsers registry: {e}");
+      log::warn!("Browser registry load failed err=\"{e}\"");
     }
     registry
   });
@@ -1534,7 +1507,7 @@ pub async fn ensure_active_browsers_downloaded(
   if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
-    log::info!("E2E: skipping proactive browser download");
+    log::debug!("E2E: skipping proactive browser download");
     return Ok(Vec::new());
   }
 
@@ -1546,13 +1519,8 @@ pub async fn ensure_active_browsers_downloaded(
     // Check if any version is already downloaded
     let existing = registry.get_downloaded_versions(browser);
     if !existing.is_empty() {
-      log::info!(
-        "ensure_active: Skipping {browser}: already have {} version(s) downloaded",
-        existing.len()
-      );
       continue;
     }
-    log::info!("ensure_active: No {browser} versions found, will download");
 
     // Resolve the version to download. For wayfern, only the currently
     // published version is downloadable, so ask the API fresh — the release-type
@@ -1565,7 +1533,10 @@ pub async fn ensure_active_browsers_downloaded(
       {
         Ok(info) => info.version,
         Err(e) => {
-          log::warn!("Failed to resolve current {browser} version: {e}");
+          log::warn!(
+            "Browser version lookup failed browser={browser} err=\"{}\"",
+            crate::log_redaction::text(&e.to_string())
+          );
           // The first-run screen listens for this. Without it the screen
           // waits at 0% for a download that never starts (issue #625).
           let _ = crate::events::emit(
@@ -1580,7 +1551,10 @@ pub async fn ensure_active_browsers_downloaded(
       let release_types = match version_manager.get_browser_release_types(browser).await {
         Ok(rt) => rt,
         Err(e) => {
-          log::warn!("Failed to get release types for {browser}: {e}");
+          log::warn!(
+            "Browser release lookup failed browser={browser} err=\"{}\"",
+            crate::log_redaction::text(&e.to_string())
+          );
           continue;
         }
       };
@@ -1594,8 +1568,6 @@ pub async fn ensure_active_browsers_downloaded(
         }
       }
     };
-
-    log::info!("Auto-downloading {browser} {version} (no versions found locally)");
 
     // Retry transient failures a few times. Each attempt is wrapped in an overall
     // timeout so that a hang anywhere in the download pipeline (version resolution,
@@ -1618,14 +1590,10 @@ pub async fn ensure_active_browsers_downloaded(
       match result {
         Ok(Ok(_)) => {
           downloaded.push(format!("{browser} {version}"));
-          log::info!("Successfully auto-downloaded {browser} {version}");
           succeeded = true;
           break;
         }
         Ok(Err(e)) => {
-          log::warn!(
-            "Failed to auto-download {browser} {version} (attempt {attempt}/{MAX_ATTEMPTS}): {e}"
-          );
           // A proxy setting stays wrong until the user changes it.
           if crate::system_proxy::is_unreachable_error(&e.to_string()) {
             break;
@@ -1637,7 +1605,7 @@ pub async fn ensure_active_browsers_downloaded(
           // (by browser prefix, as a catch-all for whatever key was in flight) and
           // emit a terminal error event so the UI stops spinning.
           log::warn!(
-            "Auto-download of {browser} {version} timed out after {}s (attempt {attempt}/{MAX_ATTEMPTS})",
+            "Browser auto-download timed out browser={browser} version={version} attempt={attempt}/{MAX_ATTEMPTS} timeout_s={}",
             ATTEMPT_TIMEOUT.as_secs()
           );
           crate::downloader::clear_download_state_for_browser(browser);
@@ -1656,7 +1624,9 @@ pub async fn ensure_active_browsers_downloaded(
     if !succeeded {
       // Do NOT abort the whole routine: continue with remaining browsers
       // still gets its chance even though this one failed/timed out.
-      log::warn!("Giving up on auto-download of {browser} {version} after {MAX_ATTEMPTS} attempts");
+      log::error!(
+        "Browser auto-download gave up browser={browser} version={version} attempts={MAX_ATTEMPTS}"
+      );
     }
   }
 
@@ -1692,7 +1662,7 @@ pub async fn ensure_all_binaries_exist(
   if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
-    log::info!("E2E: skipping proactive binary and GeoIP downloads");
+    log::debug!("E2E: skipping proactive binary and GeoIP downloads");
     return Ok(Vec::new());
   }
 

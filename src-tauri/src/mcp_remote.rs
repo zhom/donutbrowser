@@ -117,6 +117,9 @@ const WRITER_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 static BRIDGE_RUNNING: AtomicBool = AtomicBool::new(false);
 static BRIDGE_TASK: Mutex<Option<tauri::async_runtime::JoinHandle<()>>> = Mutex::new(None);
 static BRIDGE_CONNECTED: AtomicBool = AtomicBool::new(false);
+static BRIDGE_ANNOUNCED: AtomicBool = AtomicBool::new(false);
+static BRIDGE_LINK: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Remote control bridge");
 static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 /// What the Integrations page shows about remote control.
@@ -252,9 +255,7 @@ fn read_or_create_instance_id(path: &std::path::Path) -> String {
       return trimmed.to_string();
     }
     if !trimmed.is_empty() {
-      log::warn!(
-        "[mcp-remote] Persisted instance id is not a shape the bridge accepts; regenerating"
-      );
+      log::warn!("Remote control instance id malformed, regenerated");
     }
   }
 
@@ -265,7 +266,7 @@ fn read_or_create_instance_id(path: &std::path::Path) -> String {
   if let Err(e) = std::fs::write(path, &fresh) {
     // A machine that cannot persist this still works; it just loses the
     // reclaim-my-own-slot property until the write succeeds.
-    log::warn!("[mcp-remote] Could not persist the instance id: {e}");
+    log::warn!("Remote control instance id not saved err=\"{e}\"");
   }
   fresh
 }
@@ -384,6 +385,7 @@ async fn run() {
   // of exactly once.
   let mut refreshed = false;
   let greeted = Arc::new(AtomicBool::new(false));
+  BRIDGE_ANNOUNCED.store(false, Ordering::SeqCst);
 
   while BRIDGE_RUNNING.load(Ordering::SeqCst) {
     // `dialled_with` is the access token the socket was dialled with, so a
@@ -392,7 +394,7 @@ async fn run() {
     let (failure, dialled_with) = match connect().await {
       Ok((stream, token)) => {
         greeted.store(false, Ordering::SeqCst);
-        log::info!("[mcp-remote] Bridge dialled as instance {}", instance_id());
+        log::debug!("Remote control bridge dialled instance={}", instance_id());
 
         // The connection is announced by `dispatch`, synchronously, the moment
         // the `hello` is read, NOT here, and no longer from a task of its own.
@@ -439,8 +441,8 @@ async fn run() {
           }
         }
         match &outcome {
-          Ok(()) => log::info!("[mcp-remote] Bridge closed by the backend"),
-          Err(e) => log::warn!("[mcp-remote] Bridge ended: {e}"),
+          Ok(()) => log::debug!("Remote control bridge closed by the backend"),
+          Err(e) => BRIDGE_LINK.failed(e),
         }
         // The code for the screen, the prose for the log above.
         publish_state(
@@ -453,7 +455,7 @@ async fn run() {
         (outcome.err(), Some(token))
       }
       Err(e) => {
-        log::warn!("[mcp-remote] Bridge could not connect: {e}");
+        BRIDGE_LINK.failed(&e);
         publish_state(false, Some(crate::backend_error(e.code())));
         (Some(e), None)
       }
@@ -487,14 +489,12 @@ async fn run() {
             .as_deref(),
         );
       if rotated {
-        log::info!(
-          "[mcp-remote] The refused access token has already been replaced; redialling with the current one"
-        );
+        log::debug!("Remote control bridge redialling with the already rotated token");
         attempt = 0;
       } else if should_refresh_credential(error, refreshed) {
         match CLOUD_AUTH.refresh_access_token().await {
           Ok(()) => {
-            log::info!("[mcp-remote] Refreshed the access token; retrying the bridge at once");
+            log::debug!("Remote control bridge retrying with a refreshed token");
             // Spent only NOW. Marking it before the attempt meant a refresh
             // that FAILED, a transient network blip at exactly the wrong
             // moment, permanently disarmed the retry: the reset needs a
@@ -505,7 +505,7 @@ async fn run() {
             attempt = 0;
           }
           Err(e) => {
-            log::warn!("[mcp-remote] Could not refresh the access token: {e}");
+            log::warn!("Remote control bridge token refresh failed err=\"{e}\"");
             attempt = attempt.max(TERMINAL_BACKOFF_ATTEMPT);
           }
         }
@@ -527,7 +527,7 @@ async fn run() {
   }
 
   BRIDGE_CONNECTED.store(false, Ordering::SeqCst);
-  log::info!("[mcp-remote] Bridge stopped");
+  log::info!("Remote control bridge stopped");
 }
 
 /// Whether this failure is worth one token refresh and an immediate retry.
@@ -804,7 +804,7 @@ async fn drain_writer(writer: tokio::task::JoinHandle<()>, budget: Duration) {
   let mut writer = writer;
   if tokio::time::timeout(budget, &mut writer).await.is_err() {
     log::warn!(
-      "[mcp-remote] A relayed call outlived its socket; abandoning the writer after {}s",
+      "Remote control relayed call outlived its socket, writer abandoned after_s={}",
       budget.as_secs()
     );
     writer.abort();
@@ -867,7 +867,7 @@ fn parse_frame(text: &str) -> Option<BridgeFrame> {
     other => {
       // Forward compatibility: a newer relay may add frames this build has
       // never heard of, and dropping one must not take the socket down.
-      log::debug!("[mcp-remote] Ignoring unknown bridge frame '{other}'");
+      log::debug!("Remote control bridge frame unknown, ignored frame={other}");
       None
     }
   }
@@ -885,11 +885,16 @@ fn dispatch(
       // is what makes it the signal `run` uses to allow another refresh and to
       // tell the screen the bridge is actually up.
       greeted.store(true, Ordering::SeqCst);
-      log::info!("[mcp-remote] Bridge accepted; the relay greeted us");
+      BRIDGE_LINK.succeeded();
+      if BRIDGE_ANNOUNCED.swap(true, Ordering::SeqCst) {
+        log::debug!("Remote control bridge connected instance={}", instance_id());
+      } else {
+        log::info!("Remote control bridge connected instance={}", instance_id());
+      }
       publish_state(true, None);
       if protocol != BRIDGE_PROTOCOL {
         log::warn!(
-          "[mcp-remote] The bridge speaks '{protocol}' and this build speaks '{BRIDGE_PROTOCOL}'"
+          "Remote control bridge protocol mismatch relay={protocol} build={BRIDGE_PROTOCOL}"
         );
       }
     }
@@ -904,7 +909,7 @@ fn dispatch(
       payload,
     } => {
       let Ok(permit) = Arc::clone(permits).try_acquire_owned() else {
-        log::warn!("[mcp-remote] Refused a relayed call: {MAX_IN_FLIGHT} already in flight");
+        log::warn!("Remote control relayed call refused: busy in_flight={MAX_IN_FLIGHT}");
         let _ = tx.try_send(encode(&serde_json::json!({
           "t": "result",
           "cid": cid,
@@ -938,7 +943,7 @@ fn result_frame(cid: &str, outcome: McpOutcome) -> serde_json::Value {
       let encoded = body.to_string();
       if encoded.len() > MAX_RESULT_BYTES {
         log::warn!(
-          "[mcp-remote] Result of {} bytes exceeds the {MAX_RESULT_BYTES}-byte frame budget",
+          "Remote control result too large bytes={} max={MAX_RESULT_BYTES}",
           encoded.len()
         );
         return serde_json::json!({

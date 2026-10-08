@@ -138,9 +138,14 @@ async fn wait_until_ready(
     if let Some(config) = get_xray_worker_config(id) {
       if !process_identity_matches(supervisor_pid, Some(supervisor_start_time)) {
         let log = std::fs::read_to_string(xray_worker_log_path(id)).unwrap_or_default();
-        if !log.is_empty() {
-          log::error!("Xray worker {id} exited during startup: {log}");
-        }
+        let tail: String = {
+          let chars: Vec<char> = log.trim().chars().collect();
+          chars[chars.len().saturating_sub(1500)..].iter().collect()
+        };
+        log::warn!(
+          "Xray worker exited during startup id={id} pid={supervisor_pid} log=\"{}\"",
+          crate::log_redaction::Plain(&crate::log_redaction::text(&tail))
+        );
         return Err(structured_error("XRAY_START_FAILED"));
       }
       if config.pid == Some(supervisor_pid)
@@ -226,11 +231,7 @@ pub async fn start_xray_worker_for_owner(
     match spawn_xray_worker(profile_id, vless_uri, owner_pid, owner_start_time).await {
       Ok(worker) => return Ok(worker),
       Err(error) => {
-        if attempt < 3 {
-          log::warn!(
-            "Xray worker startup attempt {attempt} failed; retrying with a new local port"
-          );
-        }
+        log::debug!("Xray worker start attempt failed attempt={attempt}/3 err=\"{error}\"");
         last_error = Some(error.to_string());
       }
     }
@@ -248,6 +249,7 @@ async fn spawn_xray_worker(
   owner_pid: u32,
   owner_start_time: u64,
 ) -> Result<XrayWorkerConfig, Box<dyn std::error::Error>> {
+  let started = std::time::Instant::now();
   let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
     .map_err(|error| structured_error_with_detail("XRAY_START_FAILED", error))?;
   let local_port = listener
@@ -332,6 +334,15 @@ async fn spawn_xray_worker(
 
   let ready = wait_until_ready(&id, supervisor_pid, supervisor_start_time).await?;
   pending.armed = false;
+  log::info!(
+    "Xray worker started id={id} pid={supervisor_pid} xray_pid={} port={local_port} profile={} elapsed_ms={}",
+    ready
+      .xray_pid
+      .map(|pid| pid.to_string())
+      .unwrap_or_else(|| "none".to_string()),
+    profile_id.unwrap_or("none"),
+    started.elapsed().as_millis()
+  );
   Ok(ready)
 }
 
@@ -340,7 +351,9 @@ pub fn set_browser_pid(worker_id: &str, browser_pid: u32) -> bool {
     return false;
   }
   let Some(browser_pid_start_time) = resolve_process_start_time(browser_pid) else {
-    log::warn!("Failed to resolve browser PID {browser_pid} identity for Xray worker {worker_id}");
+    log::warn!(
+      "Browser start time unknown, Xray worker owner not recorded xray_worker={worker_id} browser_pid={browser_pid}"
+    );
     return false;
   };
   let Some(mut config) = get_xray_worker_config(worker_id) else {
@@ -358,7 +371,7 @@ fn persist_browser_identity(
   config.browser_pid_start_time = Some(browser_pid_start_time);
   if !crate::xray_worker_storage::update_xray_worker_config(config) {
     log::warn!(
-      "Failed to persist browser PID {browser_pid} on Xray worker {}",
+      "Xray worker owner write failed xray_worker={} browser_pid={browser_pid}",
       config.id
     );
     return false;
@@ -392,6 +405,10 @@ impl Drop for PendingSupervisor {
       if let Some(pid) = self.pid {
         if self.pid_start_time.is_none() || process_identity_matches(pid, self.pid_start_time) {
           terminate_supervisor_unchecked(pid);
+          log::info!(
+            "Xray worker stopped id={} pid={pid} reason=start_failed",
+            self.id
+          );
         }
       }
       if let Some((pid, start_time)) = xray_process {
@@ -457,19 +474,35 @@ pub fn stop_xray_worker_now(id: &str) -> Result<bool, Box<dyn std::error::Error>
   };
 
   delete_xray_worker_config(id);
-  if let Some(pid) = config
+  let supervisor = config
     .pid
-    .filter(|pid| process_identity_matches(*pid, config.pid_start_time))
-  {
+    .filter(|pid| process_identity_matches(*pid, config.pid_start_time));
+  if let Some(pid) = supervisor {
     terminate_supervisor_unchecked(pid);
   }
-  if let Some(pid) = config
+  let xray = config
     .xray_pid
-    .filter(|pid| process_identity_matches(*pid, config.xray_pid_start_time))
-  {
+    .filter(|pid| process_identity_matches(*pid, config.xray_pid_start_time));
+  if let Some(pid) = xray {
     terminate_process_unchecked(pid);
   }
   delete_xray_worker_config(id);
+  let pid_text = |pid: Option<u32>| {
+    pid
+      .map(|pid| pid.to_string())
+      .unwrap_or_else(|| "none".to_string())
+  };
+  log::info!(
+    "Xray worker stopped id={id} pid={} xray_pid={} profile={} how={}",
+    pid_text(config.pid),
+    pid_text(config.xray_pid),
+    config.profile_id.as_deref().unwrap_or("none"),
+    if supervisor.is_some() || xray.is_some() {
+      "terminated"
+    } else {
+      "already_gone"
+    }
+  );
   Ok(true)
 }
 

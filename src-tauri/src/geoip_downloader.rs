@@ -127,7 +127,7 @@ impl GeoIPDownloader {
       .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
       .is_err()
     {
-      log::info!("GeoIP database download already in progress, skipping");
+      log::debug!("GeoIP download already running");
       return Ok(());
     }
     let result = self.download_geoip_database_inner(_app_handle).await;
@@ -279,7 +279,10 @@ impl GeoIPDownloader {
     // the download that fingerprint geolocation actually depends on.
     if let Some(url) = asn_url {
       if let Err(e) = self.download_asn_database(&url).await {
-        log::warn!("Failed to download the GeoIP ASN database: {e}");
+        log::warn!(
+          "GeoIP ASN database download failed err=\"{}\"",
+          crate::log_redaction::text(&e.to_string())
+        );
       }
     }
 

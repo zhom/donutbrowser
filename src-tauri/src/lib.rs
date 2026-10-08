@@ -34,6 +34,25 @@ pub(crate) fn vless_config_error(error: &crate::xray::XrayError) -> String {
   .to_string()
 }
 
+/// `donutbrowser_lib::sync::scheduler` -> `sync::scheduler`, `lib.rs` itself
+/// -> `app`, and `webview::<script url:line:col>` -> `webview`. The crate name
+/// and the logging call's own location are on every line and say nothing.
+fn short_log_target(target: &str) -> &str {
+  if target.starts_with(tauri_plugin_log::WEBVIEW_TARGET) {
+    return tauri_plugin_log::WEBVIEW_TARGET;
+  }
+  match target.strip_prefix("donutbrowser_lib") {
+    Some("") => "app",
+    Some(rest) => rest.strip_prefix("::").unwrap_or(target),
+    None => target,
+  }
+}
+
+static PROXY_CLEANUP: log_streak::Streak =
+  log_streak::Streak::new(module_path!(), "Dead-browser proxy cleanup");
+static STATUS_CHECK: log_streak::Streak =
+  log_streak::Streak::new(module_path!(), "Browser status check");
+
 fn e2e_automation_enabled() -> bool {
   #[cfg(feature = "e2e")]
   {
@@ -82,8 +101,11 @@ mod human_typing;
 mod ip_utils;
 mod launch_gate;
 mod launch_gate_prefs;
+mod legacy_autostart;
 mod log_redaction;
+pub mod log_streak;
 mod platform_browser;
+mod process_report;
 mod profile;
 mod profile_generation_limiter;
 mod profile_import;
@@ -342,12 +364,10 @@ fn headless_automation() -> bool {
 // Called internally for deep-link / startup URL handling — not invoked from the
 // frontend, so it is intentionally not a `#[tauri::command]`.
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
-  log::info!("Handling URL open request");
+  log::debug!("Opening URL from the OS");
 
   // Check if the main window exists and is ready
   if let Some(window) = app.get_webview_window("main") {
-    log::debug!("Main window exists");
-
     // Try to show and focus the window first. Skip under a headless automation
     // driver so an e2e run never steals the user's focus.
     if !headless_automation() {
@@ -360,7 +380,6 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
       .map_err(|e| format!("Failed to emit URL open event: {e}"))?;
   } else {
     // Window doesn't exist yet - add to pending URLs
-    log::debug!("Main window doesn't exist, adding URL to pending list");
     let mut pending = PENDING_URLS.lock().unwrap();
     pending.push(url);
   }
@@ -920,7 +939,7 @@ async fn rotate_mcp_remote_credential() -> Result<McpRemoteCredentialRotation, S
     Ok(grant) => grant,
     Err(e) if is_mcp_key_limit(&e) => match previous.as_deref() {
       Some(id) => {
-        log::info!("[mcp-remote] At the credential cap; retiring {id} before minting again");
+        log::info!("Retiring MCP credential at the cap id={id}");
         cloud_auth::CLOUD_AUTH.revoke_mcp_key(id).await?;
         cloud_auth::CLOUD_AUTH.create_mcp_key(&label).await?
       }
@@ -937,12 +956,12 @@ async fn rotate_mcp_remote_credential() -> Result<McpRemoteCredentialRotation, S
     // Best effort: the new key is already stored and installed below, and a
     // key that outlives its replacement is visible on the account page.
     if let Err(e) = cloud_auth::CLOUD_AUTH.revoke_mcp_key(&old).await {
-      log::warn!("[mcp-remote] Could not revoke the replaced credential {old}: {e}");
+      log::warn!("Revoking the replaced MCP credential failed id={old} err=\"{e}\"");
     }
   }
 
   log::info!(
-    "[mcp-remote] Rotated the remote MCP credential to {}",
+    "Rotated MCP credential key_prefix={}",
     mcp_key_display_prefix(&grant.key)
   );
   // Every client whose entry points at the remote endpoint is rewritten with
@@ -980,10 +999,10 @@ async fn forget_mcp_remote_credential() -> Result<(), String> {
       cloud_auth::CLOUD_AUTH.revoke_mcp_key(&id).await?;
     }
     Some(id) => log::warn!(
-      "[mcp-remote] Forgetting credential {id} while signed out; revoke it from the account page"
+      "Forgot MCP credential while signed out id={id}; it stays valid until revoked on the account page"
     ),
     None => log::warn!(
-      "[mcp-remote] Forgetting a credential with no stored id; revoke it from the account page"
+      "Forgot MCP credential while signed out id=unknown; it stays valid until revoked on the account page"
     ),
   }
 
@@ -1331,14 +1350,14 @@ fn reinstall_mcp_agents() -> Vec<String> {
   let target = match mcp_target() {
     Ok(target) => target,
     Err(e) => {
-      log::warn!("Could not resolve the MCP target, so no client was refreshed: {e}");
+      log::warn!("MCP client refresh skipped: target unresolved err=\"{e}\"");
       return agents;
     }
   };
   let mut failed = Vec::new();
   for agent_id in agents {
     if let Err(e) = install_mcp_agent(&agent_id, &target) {
-      log::warn!("Could not refresh the MCP entry for {agent_id}: {e}");
+      log::warn!("MCP client entry refresh failed agent={agent_id} err=\"{e}\"");
       failed.push(agent_id);
     }
   }
@@ -1507,9 +1526,9 @@ async fn delete_vpn_config(app_handle: tauri::AppHandle, vpn_id: String) -> Resu
       match sync::SyncEngine::create_from_settings(&app_handle_clone).await {
         Ok(engine) => {
           if let Err(e) = engine.delete_vpn(&vpn_id_clone).await {
-            log::warn!("Failed to delete VPN {} from sync: {}", vpn_id_clone, e);
+            log::warn!("VPN remote delete failed vpn={vpn_id_clone} err=\"{e}\"");
           } else {
-            log::info!("VPN {} deleted from sync storage", vpn_id_clone);
+            log::info!("VPN deleted from sync vpn={vpn_id_clone}");
           }
         }
         Err(e) => {
@@ -1621,6 +1640,7 @@ pub async fn check_vpn_validity_core(
   );
 
   let mut result = None;
+  let mut last_error = String::new();
   for attempt in 0..3 {
     if attempt > 0 {
       tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1648,11 +1668,11 @@ pub async fn check_vpn_validity_core(
         break;
       }
       Err(error) => {
-        log::warn!(
-          "VPN validation attempt {} failed to fetch public IP through donut-proxy: {}",
-          attempt + 1,
-          error
+        log::debug!(
+          "VPN check attempt failed attempt={} err=\"{error}\"",
+          attempt + 1
         );
+        last_error = error.to_string();
       }
     }
   }
@@ -1660,6 +1680,9 @@ pub async fn check_vpn_validity_core(
   let _ = crate::proxy_runner::stop_proxy_process(&local_proxy.id).await;
   if !had_existing_worker {
     let _ = vpn_worker_runner::stop_vpn_worker(&vpn_worker.id).await;
+  }
+  if result.is_none() {
+    log::warn!("VPN check failed vpn={vpn_id} attempts=3 err=\"{last_error}\"");
   }
 
   let result = result.unwrap_or(crate::proxy_manager::ProxyCheckResult {
@@ -1886,7 +1909,7 @@ async fn generate_sample_fingerprint(
 /// untranslated if it is surfaced as-is. The raw text is kept in the app log,
 /// where support can read it, and never in the toast.
 fn remote_session_error(context: &str, err: remote_session::RemoteSessionError) -> String {
-  log::warn!("Remote session {context} failed: {err}");
+  log::warn!("Remote session {context} failed err=\"{err}\"");
   err.to_error_json()
 }
 
@@ -1970,8 +1993,15 @@ fn get_remote_session_events_status() -> bool {
 
 /// Turn a cookie-bot failure into the code the frontend translates.
 fn cookie_bot_error(context: &str, err: cookie_bot::CookieBotError) -> String {
-  log::warn!(
-    "Cookie bot {context} failed: {} (HTTP {})",
+  // Signed out is a state the page shows, not a fault.
+  let level = if err.code() == "CLOUD_NOT_SIGNED_IN" {
+    log::Level::Debug
+  } else {
+    log::Level::Warn
+  };
+  log::log!(
+    level,
+    "Cookie bot {context} failed code={} http={}",
     err.code(),
     err.status()
   );
@@ -2303,7 +2333,6 @@ pub fn run_with_builder(
   let startup_url = urls_from_args(args.iter()).into_iter().next();
 
   if let Some(url) = startup_url.clone() {
-    log::info!("Found startup URL in command line");
     let mut pending = PENDING_URLS.lock().unwrap();
     pending.push(url.clone());
   }
@@ -2347,7 +2376,7 @@ pub fn run_with_builder(
         out.finish(format_args!(
           "[{}][{}][{}] {}",
           timestamp,
-          record.target(),
+          short_log_target(record.target()),
           record.level(),
           message
         ))
@@ -2358,7 +2387,10 @@ pub fn run_with_builder(
   #[cfg(not(feature = "e2e"))]
   let builder = builder.plugin(tauri_plugin_single_instance::init(
     |app_handle, args, _cwd| {
-      log::info!("Single instance triggered with args: {args:?}");
+      log::info!(
+        "Second launch forwarded args={}",
+        args.len().saturating_sub(1)
+      );
       if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
@@ -2374,7 +2406,7 @@ pub fn run_with_builder(
         let handle = app_handle.clone();
         tauri::async_runtime::spawn(async move {
           if let Err(e) = handle_url_open(handle, url).await {
-            log::error!("Failed to handle a forwarded URL: {e}");
+            log::error!("Forwarded URL failed err=\"{e}\"");
           }
         });
       }
@@ -2407,7 +2439,7 @@ pub fn run_with_builder(
         if let Some(path) = app_dirs::window_state_path_override() {
           if let Some(parent) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-              log::warn!("Failed to create the window-state directory: {e}");
+              log::warn!("Window-state directory create failed err=\"{e}\"");
             }
           }
           window_state = window_state.with_filename(path.to_string_lossy().into_owned());
@@ -2428,6 +2460,24 @@ pub fn run_with_builder(
     );
 
   builder.setup(|app| {
+      // The home folder carries the OS user name, and this line is in every
+      // log someone attaches to an issue.
+      let data_dir = app_dirs::data_dir();
+      let data_dir = dirs::home_dir()
+        .and_then(|home| data_dir.strip_prefix(home).ok())
+        .map(|rest| format!("~/{}", rest.display()))
+        .unwrap_or_else(|| data_dir.display().to_string());
+      log::info!(
+        "Donut started version={} os=\"{}\" arch={} pid={} tz={} portable={} data_dir={}",
+        env!("BUILD_VERSION"),
+        sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string()),
+        std::env::consts::ARCH,
+        std::process::id(),
+        chrono::Local::now().format("%:z"),
+        app_dirs::is_portable(),
+        data_dir
+      );
+
       // Recover ephemeral dir mappings from RAM-backed storage (tmpfs/ramdisk)
       ephemeral_dirs::recover_ephemeral_dirs();
 
@@ -2521,7 +2571,7 @@ pub fn run_with_builder(
       #[cfg(not(feature = "e2e"))]
       {
         if let Err(e) = setup_system_tray(app.handle()) {
-          log::warn!("System tray unavailable, continuing without it: {e}");
+          log::warn!("System tray unavailable err=\"{e}\"");
         }
       }
 
@@ -2537,7 +2587,7 @@ pub fn run_with_builder(
             }
             api.prevent_close();
             if let Err(e) = app_handle.emit("close-confirm-requested", ()) {
-              log::warn!("Failed to emit close-confirm-requested: {e}");
+              log::warn!("Emit close-confirm-requested failed err=\"{e}\"");
             }
           }
         });
@@ -2553,7 +2603,7 @@ pub fn run_with_builder(
       #[cfg(target_os = "linux")]
       {
         log::info!(
-          "Linux window decorations: server-side = {:?}",
+          "Linux window decorations server_side={:?}",
           window.is_decorated()
         );
 
@@ -2573,10 +2623,10 @@ pub fn run_with_builder(
           .unwrap_or(false);
         if window_decorations::use_client_side_decorations() && !has_saved_geometry {
           if let Err(e) = window.set_size(tauri::LogicalSize::new(880.0, 500.0)) {
-            log::warn!("Failed to re-apply the window size after dropping decorations: {e}");
+            log::warn!("Window resize after dropping decorations failed err=\"{e}\"");
           }
           if let Err(e) = window.center() {
-            log::warn!("Failed to re-center the window after dropping decorations: {e}");
+            log::warn!("Window re-center after dropping decorations failed err=\"{e}\"");
           }
         }
       }
@@ -2586,7 +2636,7 @@ pub fn run_with_builder(
       // entering immersive native fullscreen.
       #[cfg(target_os = "macos")]
       if let Err(e) = window.disable_native_fullscreen() {
-        log::warn!("Failed to disable native fullscreen: {e}");
+        log::warn!("Disabling native fullscreen failed err=\"{e}\"");
       }
 
       // Set up deep link handler
@@ -2595,14 +2645,14 @@ pub fn run_with_builder(
       // Initialize the global event emitter for the events module
       let emitter = std::sync::Arc::new(events::TauriEmitter::new(handle.clone()));
       if let Err(e) = events::set_global_emitter(emitter) {
-        log::warn!("Failed to set global event emitter: {e}");
+        log::warn!("Setting the global event emitter failed err=\"{e}\"");
       }
 
       #[cfg(all(windows, not(feature = "e2e")))]
       {
         // For Windows, register all deep links at runtime
         if let Err(e) = app.deep_link().register_all() {
-          log::warn!("Failed to register deep links: {e}");
+          log::warn!("Deep link registration failed err=\"{e}\"");
         }
       }
 
@@ -2622,16 +2672,15 @@ pub fn run_with_builder(
           let handle = handle.clone();
           move |event| {
             let urls = event.urls();
-            log::info!("Deep link event received with {} URLs", urls.len());
+            log::info!("Deep link received urls={}", urls.len());
 
             for url in urls {
               let url_string = url.to_string();
-              log::info!("Processing deep link URL");
               let handle_clone = handle.clone();
 
               tauri::async_runtime::spawn(async move {
                 if let Err(e) = handle_url_open(handle_clone, url_string.clone()).await {
-                  log::error!("Failed to handle deep link URL: {e}");
+                  log::error!("Deep link failed err=\"{e}\"");
                 }
               });
             }
@@ -2642,9 +2691,8 @@ pub fn run_with_builder(
       if let Some(startup_url) = startup_url {
         let handle_clone = handle.clone();
         tauri::async_runtime::spawn(async move {
-          log::info!("Processing startup URL from command line");
           if let Err(e) = handle_url_open(handle_clone, startup_url.clone()).await {
-            log::error!("Failed to handle startup URL: {e}");
+            log::error!("Startup URL failed err=\"{e}\"");
           }
         });
       }
@@ -2663,7 +2711,7 @@ pub fn run_with_builder(
           {
             let updater_guard = version_updater.lock().await;
             if let Err(e) = updater_guard.start_background_updates().await {
-              log::error!("Failed to start background updates: {e}");
+              log::error!("Background version updates failed to start err=\"{e}\"");
             }
           }
         });
@@ -2698,18 +2746,18 @@ pub fn run_with_builder(
                 cloud_auth::ensure_remote_bridge(&bridge_handle).await;
                 if !mcp_remote::is_running() {
                   log::info!(
-                    "MCP remote control is enabled in settings but nobody is signed in; the bridge opens on sign-in"
+                    "MCP remote control enabled; bridge waits for sign-in"
                   );
                 }
               });
             } else {
               log::info!(
-                "MCP remote control is DISABLED in settings (mcp_remote_enabled=false). This browser cannot be driven from donutbrowser.com until it's enabled in Settings → Integrations."
+                "MCP remote control disabled mcp_remote_enabled=false"
               );
             }
           }
           Err(e) => {
-            log::warn!("Could not read settings to determine MCP state: {e}");
+            log::warn!("Reading settings for MCP state failed err=\"{e}\"");
           }
         }
       }
@@ -2726,11 +2774,7 @@ pub fn run_with_builder(
             if let Some(pid) = profile.process_id {
               let sysinfo_pid = sysinfo::Pid::from_u32(pid);
               if system.process(sysinfo_pid).is_none() {
-                log::info!(
-                  "Clearing stale process_id {} for profile {}",
-                  pid,
-                  profile.name
-                );
+                log::info!("Cleared stale browser pid profile={} pid={pid}", profile.id);
                 let mut updated = profile.clone();
                 updated.process_id = None;
                 let _ = profile_manager.save_profile(&updated);
@@ -2739,6 +2783,10 @@ pub fn run_with_builder(
           }
         }
       }
+
+      tauri::async_runtime::spawn_blocking(legacy_autostart::remove);
+
+      log::info!("Found from an earlier run {}", process_report::summary());
 
       // Kill orphaned proxy and VPN worker processes from previous app runs.
       // Since active_proxies is an in-memory map that starts empty, any running
@@ -2785,21 +2833,14 @@ pub fn run_with_builder(
               .is_some_and(|pid| running_profile_ids.contains(pid))
           };
           if has_running_browser {
-            log::info!(
-              "Startup: preserving proxy worker {} (browser still running)",
-              config.id
-            );
             continue;
           }
 
           if let Some(pid) = config.pid {
             if is_process_running(pid) {
-              log::info!(
-                "Startup: killing orphaned proxy worker {} (PID {})",
-                config.id,
-                pid
-              );
-              let _ = crate::proxy_runner::stop_proxy_process(&config.id).await;
+              let _ =
+                crate::proxy_runner::stop_proxy_process_because(&config.id, "orphan_at_startup")
+                  .await;
               continue;
             }
           }
@@ -2808,20 +2849,11 @@ pub fn run_with_builder(
 
         for worker in list_vpn_worker_configs() {
           if running_vpn_ids.contains(&worker.vpn_id) {
-            log::info!(
-              "Startup: preserving VPN worker {} (profile browser using vpn_id {} still running)",
-              worker.id,
-              worker.vpn_id
-            );
             continue;
           }
 
           if crate::vpn_worker_runner::vpn_worker_alive(&worker) {
-            log::info!(
-              "Startup: killing orphaned VPN worker {} (PID {:?})",
-              worker.id,
-              worker.pid
-            );
+            // stop_vpn_worker writes the stop line.
             let _ = crate::vpn_worker_runner::stop_vpn_worker(&worker.id).await;
             continue;
           }
@@ -2839,14 +2871,13 @@ pub fn run_with_builder(
           Ok(updated) => {
             if !updated.is_empty() {
               log::info!(
-                "Startup: bumped {} profiles to latest installed versions: {:?}",
-                updated.len(),
-                updated
+                "Moved profiles to the latest installed browser count={}",
+                updated.len()
               );
             }
           }
           Err(e) => {
-            log::error!("Startup: failed to bump profiles to latest installed versions: {e}");
+            log::error!("Moving profiles to the latest installed browser failed err=\"{e}\"");
           }
         }
         wayfern_identity_storage::request_conversion_pass();
@@ -2873,9 +2904,8 @@ pub fn run_with_builder(
         };
 
         for url in pending_urls {
-          log::info!("Processing pending URL");
           if let Err(e) = handle_url_open(handle_pending.clone(), url).await {
-            log::error!("Failed to handle pending URL: {e}");
+            log::error!("Pending URL failed err=\"{e}\"");
           }
         }
       });
@@ -2891,7 +2921,7 @@ pub fn run_with_builder(
         tauri::async_runtime::spawn(async move {
           let swept = profile::ProfileManager::instance().sweep_temporary_profiles(&handle);
           if swept > 0 {
-            log::info!("Swept {swept} temporary profile(s) left by an earlier run");
+            log::info!("Swept temporary profiles from an earlier run count={swept}");
           }
         });
       }
@@ -2912,9 +2942,7 @@ pub fn run_with_builder(
             let registry =
               crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
             if let Err(e) = registry.cleanup_unused_binaries() {
-              log::error!("Periodic cleanup failed: {e}");
-            } else {
-              log::debug!("Periodic cleanup completed successfully");
+              log::error!("Unused browser binary cleanup failed err=\"{e}\"");
             }
           }
         });
@@ -2933,20 +2961,11 @@ pub fn run_with_builder(
           let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3 * 60 * 60));
           loop {
             interval.tick().await;
-            log::info!("Checking for app updates...");
-            match app_auto_updater::check_for_app_updates().await {
-              Ok(Some(update_info)) => {
-                log::info!(
-                  "App update available: {} -> {}",
-                  update_info.current_version,
-                  update_info.new_version
-                );
-                if let Err(e) = events::emit("app-update-available", &update_info) {
-                  log::error!("Failed to emit app update event: {e}");
-                }
+            // check_for_app_updates logs its own result and failure streak.
+            if let Ok(Some(update_info)) = app_auto_updater::check_for_app_updates().await {
+              if let Err(e) = events::emit("app-update-available", &update_info) {
+                log::error!("Emit app-update-available failed err=\"{e}\"");
               }
-              Ok(None) => log::debug!("No app updates available"),
-              Err(e) => log::error!("Failed to check for app updates: {e}"),
             }
           }
         });
@@ -2957,21 +2976,21 @@ pub fn run_with_builder(
           let geoip_downloader = crate::geoip_downloader::GeoIPDownloader::instance();
           match geoip_downloader.check_missing_geoip_database() {
             Ok(true) => {
-              log::info!(
-                "GeoIP database is missing for Wayfern profiles, downloading at startup..."
-              );
+              let started = std::time::Instant::now();
               let geoip_downloader = GeoIPDownloader::instance();
-              if let Err(e) = geoip_downloader
+              match geoip_downloader
                 .download_geoip_database(&app_handle_geoip)
                 .await
               {
-                log::error!("Failed to download GeoIP database at startup: {e}");
-              } else {
-                log::info!("GeoIP database downloaded successfully at startup");
+                Ok(_) => log::info!(
+                  "GeoIP database downloaded reason=missing elapsed_ms={}",
+                  started.elapsed().as_millis()
+                ),
+                Err(e) => log::error!("GeoIP database download failed reason=missing err=\"{e}\""),
               }
             }
             Ok(false) => {}
-            Err(e) => log::error!("Failed to check GeoIP database status at startup: {e}"),
+            Err(e) => log::error!("GeoIP database check failed err=\"{e}\""),
           }
         });
       }
@@ -2989,16 +3008,12 @@ pub fn run_with_builder(
             .await
           {
             Ok(dead_pids) => {
+              PROXY_CLEANUP.succeeded();
               if !dead_pids.is_empty() {
-                log::info!(
-                  "Cleaned up proxies for {} dead browser processes",
-                  dead_pids.len()
-                );
+                log::info!("Stopped proxies of exited browsers browser_pids={dead_pids:?}");
               }
             }
-            Err(e) => {
-              log::error!("Error during proxy cleanup: {e}");
-            }
+            Err(e) => PROXY_CLEANUP.failed(e),
           }
         }
       });
@@ -3027,7 +3042,7 @@ pub fn run_with_builder(
           let profiles = match runner.profile_manager.list_profiles() {
             Ok(p) => p,
             Err(e) => {
-              log::warn!("Failed to list profiles in status checker: {e}");
+              STATUS_CHECK.failed(format!("list profiles: {e}"));
               continue;
             }
           };
@@ -3072,6 +3087,7 @@ pub fn run_with_builder(
             })
             .collect();
 
+          let mut status_error = None;
           for profile in profiles_to_check {
             let had_pid = profile.process_id.is_some();
             // Check browser status and track changes
@@ -3095,10 +3111,7 @@ pub fn run_with_builder(
 
                 if should_emit {
                   log::debug!(
-                    "Status checker detected change for profile {}: {} -> {}",
-                    profile.name,
-                    last_state,
-                    is_running
+                    "Browser running state changed profile={profile_id} running={is_running} was={last_state}"
                   );
 
                   #[derive(serde::Serialize)]
@@ -3113,13 +3126,7 @@ pub fn run_with_builder(
                   };
 
                   if let Err(e) = events::emit("profile-running-changed", &payload) {
-                    log::warn!("Failed to emit profile running changed event: {e}");
-                  } else {
-                    log::debug!(
-                      "Status checker emitted profile-running-changed event for {}: running={}",
-                      profile.name,
-                      is_running
-                    );
+                    log::warn!("Emit profile-running-changed failed err=\"{e}\"");
                   }
 
                   // Re-encrypt password-protected profiles when the browser
@@ -3172,10 +3179,14 @@ pub fn run_with_builder(
                 }
               }
               Err(e) => {
-                log::warn!("Status check failed for profile {}: {}", profile.name, e);
+                status_error = Some(format!("profile={} {e}", profile.id));
                 continue;
               }
             }
+          }
+          match status_error {
+            Some(e) => STATUS_CHECK.failed(e),
+            None => STATUS_CHECK.succeeded(),
           }
         }
       });
@@ -3188,12 +3199,11 @@ pub fn run_with_builder(
         match crate::settings_manager::get_app_settings(app_handle_api.clone()).await {
           Ok(settings) => {
             if settings.api_enabled {
-              log::info!("API is enabled in settings, starting API server...");
               match crate::api_server::start_api_server_internal(settings.api_port, &app_handle_api)
                 .await
               {
                 Ok(port) => {
-                  log::info!("API server started successfully on port {port}");
+                  log::info!("API server started port={port}");
                   // Emit success toast to frontend
                   if let Err(e) = events::emit(
                     "show-toast",
@@ -3204,11 +3214,11 @@ pub fn run_with_builder(
                       description: Some(format!("API server running on port {port}")),
                     },
                   ) {
-                    log::error!("Failed to emit API start toast: {e}");
+                    log::error!("Emit API start toast failed err=\"{e}\"");
                   }
                 }
                 Err(e) => {
-                  log::error!("Failed to start API server at startup: {e}");
+                  log::error!("API server start failed port={} err=\"{e}\"", settings.api_port);
                   // Emit error toast to frontend
                   if let Err(toast_err) = events::emit(
                     "show-toast",
@@ -3219,14 +3229,14 @@ pub fn run_with_builder(
                       description: Some(format!("Error: {e}")),
                     },
                   ) {
-                    log::error!("Failed to emit API error toast: {toast_err}");
+                    log::error!("Emit API error toast failed err=\"{toast_err}\"");
                   }
                 }
               }
             }
           }
           Err(e) => {
-            log::error!("Failed to load app settings for API startup: {e}");
+            log::error!("Reading settings for API startup failed err=\"{e}\"");
           }
         }
       });
@@ -3249,18 +3259,15 @@ pub fn run_with_builder(
         // api_call_with_retry handles 401/refresh internally — no direct
         // refresh_access_token call needed.
         if cloud_auth::CLOUD_AUTH.is_logged_in().await {
+          // Both calls log their failures through cloud_auth's streaks.
           let sync_token_fut = async {
-            if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
-              log::warn!("Failed to refresh cloud sync token on startup: {e}");
-            }
+            let _ = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await;
           };
           let proxy_fut = async {
             cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
           };
           let wayfern_fut = async {
-            if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
-              log::warn!("Failed to request wayfern token on startup: {e}");
-            }
+            let _ = cloud_auth::CLOUD_AUTH.request_wayfern_token().await;
           };
           tokio::join!(sync_token_fut, proxy_fut, wayfern_fut);
 
@@ -3569,6 +3576,8 @@ pub fn run_with_builder(
         // one account holds one bridge at a time, so an instance that exits
         // without hanging up delays the account's next machine.
         mcp_remote::stop(None);
+        ephemeral_dirs::detach_unused_ram_disk();
+        log::info!("Donut exiting {}", process_report::summary());
         tauri::async_runtime::block_on(
           team_lock::PROFILE_LOCK.release_all_held_within(team_lock::SHUTDOWN_RELEASE_TIMEOUT),
         );
@@ -3590,6 +3599,20 @@ pub fn run_with_builder(
 #[cfg(test)]
 mod tests {
   use std::fs;
+
+  #[test]
+  fn log_targets_drop_what_every_line_repeats() {
+    assert_eq!(
+      super::short_log_target("donutbrowser_lib::sync::scheduler"),
+      "sync::scheduler"
+    );
+    assert_eq!(super::short_log_target("donutbrowser_lib"), "app");
+    assert_eq!(
+      super::short_log_target("webview::http://tauri.localhost/_next/static/chunks/app.js:1:2"),
+      "webview"
+    );
+    assert_eq!(super::short_log_target("donut_proxy"), "donut_proxy");
+  }
 
   #[test]
   fn a_command_line_yields_the_links_and_files_it_carries() {

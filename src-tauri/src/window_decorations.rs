@@ -50,7 +50,7 @@ pub struct WindowDecorations {
 pub fn use_client_side_decorations() -> bool {
   if let Ok(value) = std::env::var("DONUT_LINUX_CLIENT_DECORATIONS") {
     let forced = matches!(value.trim(), "1" | "true" | "yes");
-    log::info!("Client-side decorations forced to {forced} by DONUT_LINUX_CLIENT_DECORATIONS");
+    log::info!("Client-side decorations forced={forced} by=DONUT_LINUX_CLIENT_DECORATIONS");
     return forced;
   }
 
@@ -86,8 +86,8 @@ pub fn use_client_side_decorations() -> bool {
 
   if on_kde && on_wayland {
     log::info!(
-      "Keeping server-side decorations: KWin on Wayland may draw its own titlebar over the \
-       app's. Set DONUT_LINUX_CLIENT_DECORATIONS=1 to override."
+      "Server-side decorations kept: KWin on Wayland draws its own titlebar \
+       (DONUT_LINUX_CLIENT_DECORATIONS=1 overrides)"
     );
     return false;
   }
@@ -121,14 +121,14 @@ mod imp {
     use tauri::Emitter;
 
     let Some(settings) = gtk::Settings::default() else {
-      log::warn!("No GTK settings available; using the default decoration layout");
+      log::warn!("GTK settings unavailable; default decoration layout used");
       return;
     };
 
     store(settings.gtk_decoration_layout().map(|v| v.to_string()));
     log::info!(
-      "Window decoration layout: {}",
-      cached().as_deref().unwrap_or("<unset>")
+      "Window decoration layout=\"{}\"",
+      cached().as_deref().unwrap_or("-")
     );
 
     // The user can rearrange titlebar buttons while the app is running, and
@@ -139,12 +139,12 @@ mod imp {
     settings.connect_gtk_decoration_layout_notify(move |settings| {
       let layout = settings.gtk_decoration_layout().map(|v| v.to_string());
       log::info!(
-        "Window decoration layout changed to: {}",
-        layout.as_deref().unwrap_or("<unset>")
+        "Window decoration layout changed layout=\"{}\"",
+        layout.as_deref().unwrap_or("-")
       );
       store(layout.clone());
       if let Err(e) = handle.emit("window-decoration-layout-changed", layout) {
-        log::warn!("Failed to emit window decoration layout change: {e}");
+        log::warn!("Event emit failed event=window-decoration-layout-changed err=\"{e}\"");
       }
     });
   }

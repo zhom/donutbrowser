@@ -97,7 +97,10 @@ fn remove_tree(dir: &Path, zero: bool, removed: &mut u64) {
   let entries = match fs::read_dir(dir) {
     Ok(entries) => entries,
     Err(e) => {
-      log::warn!("Secure erase could not read {}: {e}", dir.display());
+      log::warn!(
+        "Secure erase could not read dir path=\"{}\" err=\"{e}\"",
+        dir.display()
+      );
       return;
     }
   };

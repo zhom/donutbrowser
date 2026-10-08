@@ -98,7 +98,11 @@ pub mod macos {
     executable_path: &std::path::Path,
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Launching browser on macOS: {executable_path:?} with args: {args:?}");
+    log::debug!(
+      "Spawning browser path={} args={}",
+      executable_path.display(),
+      args.len()
+    );
     // If the executable is inside an app bundle, launch via Launch Services so
     // macOS recognizes the real application for privacy permissions (e.g. Screen Recording).
     // This ensures TCC prompts are attributed to the browser app, not our launcher.
@@ -137,8 +141,6 @@ pub mod macos {
     pid: u32,
     profile_data_path: Option<&str>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Attempting to kill browser process with PID: {pid}");
-
     let mut pids_to_kill = vec![pid];
 
     let descendants = get_all_descendant_pids(pid).await;
@@ -148,16 +150,15 @@ pub mod macos {
       let additional_pids = find_processes_by_profile_path(profile_path).await;
       for p in additional_pids {
         if !pids_to_kill.contains(&p) {
-          log::info!("Found additional process {} using profile path", p);
+          log::debug!("Found another process on the profile path pid={p}");
           pids_to_kill.push(p);
         }
       }
     }
 
-    log::info!("Total processes to kill: {:?}", pids_to_kill);
+    log::debug!("Force killing browser processes pid={pid} pids={pids_to_kill:?}");
 
     for &p in &pids_to_kill {
-      log::info!("Sending SIGKILL to PID: {p}");
       let _ = Command::new("kill")
         .args(["-KILL", &p.to_string()])
         .output();
@@ -176,7 +177,7 @@ pub mod macos {
     for &p in &pids_to_kill {
       let system = System::new_all();
       if system.process(Pid::from(p as usize)).is_some() {
-        log::info!("Process {p} still running, retrying kill");
+        log::debug!("Process still running, killing again pid={p}");
         let _ = Command::new("kill")
           .args(["-KILL", &p.to_string()])
           .output();
@@ -194,10 +195,7 @@ pub mod macos {
     }
 
     if !still_running.is_empty() {
-      log::info!(
-        "Processes {:?} still running, trying final termination",
-        still_running
-      );
+      log::debug!("Processes still running, final kill pids={still_running:?}");
 
       for p in &still_running {
         let _ = Command::new("/bin/kill")
@@ -216,10 +214,6 @@ pub mod macos {
       }
 
       if !final_still_running.is_empty() {
-        log::error!(
-          "ERROR: Processes {:?} could not be terminated despite aggressive attempts",
-          final_still_running
-        );
         return Err(
           format!(
             "Failed to terminate browser processes {:?} - still running",
@@ -230,7 +224,10 @@ pub mod macos {
       }
     }
 
-    log::info!("Browser termination completed for PID: {pid}");
+    log::debug!(
+      "Browser processes killed pid={pid} count={}",
+      pids_to_kill.len()
+    );
     Ok(())
   }
 
@@ -298,7 +295,6 @@ pub mod macos {
     let pid = profile.process_id.unwrap();
 
     // First, try using the browser's built-in URL opening capability
-    log::info!("Trying Chromium URL opening for PID: {pid}");
 
     let browser = create_browser(browser_type);
     if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
@@ -312,15 +308,16 @@ pub mod macos {
 
       match remote_output {
         Ok(output) if output.status.success() => {
-          log::info!("Chromium URL opening succeeded");
           return Ok(());
         }
         Ok(output) => {
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          log::info!("Chromium URL opening failed: {stderr}, trying AppleScript");
+          log::debug!(
+            "Chromium remote URL open failed pid={pid} stderr={:?}",
+            crate::log_redaction::text(&String::from_utf8_lossy(&output.stderr))
+          );
         }
         Err(e) => {
-          log::info!("Chromium URL opening error: {e}, trying AppleScript");
+          log::debug!("Chromium remote URL open did not run pid={pid} err=\"{e}\"");
         }
       }
     }
@@ -349,10 +346,10 @@ pub mod windows {
     executable_path: &std::path::Path,
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
-    log::info!(
-      "Launching browser on Windows: {:?} with args: {:?}",
-      executable_path,
-      args
+    log::debug!(
+      "Spawning browser path={} args={}",
+      executable_path.display(),
+      args.len()
     );
 
     // Check if the executable exists
@@ -391,10 +388,7 @@ pub mod windows {
       .spawn()
       .map_err(|e| format!("Failed to launch browser process: {}", e))?;
 
-    log::info!(
-      "Successfully launched browser process with PID: {}",
-      child.id()
-    );
+    log::debug!("Browser spawned pid={}", child.id());
     Ok(child)
   }
 
@@ -445,7 +439,7 @@ pub mod windows {
     let system = System::new_all();
     if let Some(process) = system.process(Pid::from(pid as usize)) {
       if process.kill() {
-        log::info!("Successfully killed browser process with PID: {pid}");
+        log::debug!("Browser process killed pid={pid}");
         return Ok(());
       }
     }
@@ -464,7 +458,7 @@ pub mod windows {
     match output {
       Ok(result) => {
         if result.status.success() {
-          log::info!("Successfully killed browser process with PID: {pid} using taskkill");
+          log::debug!("Browser process killed with taskkill pid={pid}");
           Ok(())
         } else {
           Err(
@@ -491,10 +485,10 @@ pub mod linux {
     executable_path: &std::path::Path,
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
-    log::info!(
-      "Launching browser on Linux: {:?} with args: {:?}",
-      executable_path,
-      args
+    log::debug!(
+      "Spawning browser path={} args={}",
+      executable_path.display(),
+      args.len()
     );
 
     // Check if the executable exists and is executable
@@ -557,7 +551,7 @@ pub mod linux {
       // Set the combined LD_LIBRARY_PATH
       if !ld_library_path.is_empty() {
         cmd.env("LD_LIBRARY_PATH", ld_library_path.join(":"));
-        log::info!("Set LD_LIBRARY_PATH to: {}", ld_library_path.join(":"));
+        log::debug!("LD_LIBRARY_PATH={}", ld_library_path.join(":"));
       }
     }
 
@@ -580,7 +574,7 @@ pub mod linux {
     // available. Using OR here would fire on every normal Wayland-only session
     // (DISPLAY unset) or X11-only session (WAYLAND_DISPLAY unset).
     if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
-      log::info!("No display detected, browser may fail to start");
+      log::warn!("No X11 or Wayland display, browser may fail to start");
     }
 
     // Attempt to spawn with better error handling for architecture issues
@@ -652,8 +646,6 @@ pub mod linux {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 
-    log::info!("Attempting to kill browser process with PID: {pid}");
-
     let mut pids_to_kill = vec![pid];
 
     // Find all descendant processes
@@ -665,17 +657,16 @@ pub mod linux {
       let additional_pids = find_processes_by_profile_path(profile_path);
       for p in additional_pids {
         if !pids_to_kill.contains(&p) {
-          log::info!("Found additional process {} using profile path", p);
+          log::debug!("Found another process on the profile path pid={p}");
           pids_to_kill.push(p);
         }
       }
     }
 
-    log::info!("Total processes to kill: {:?}", pids_to_kill);
+    log::debug!("Force killing browser processes pid={pid} pids={pids_to_kill:?}");
 
     // Send SIGKILL to all identified processes
     for &p in &pids_to_kill {
-      log::info!("Sending SIGKILL to PID: {p}");
       let _ = Command::new("kill")
         .args(["-KILL", &p.to_string()])
         .output();
@@ -701,10 +692,7 @@ pub mod linux {
     }
 
     if !still_running.is_empty() {
-      log::info!(
-        "Processes {:?} still running, trying final termination",
-        still_running
-      );
+      log::debug!("Processes still running, final kill pids={still_running:?}");
 
       for p in &still_running {
         let _ = Command::new("kill")
@@ -725,10 +713,6 @@ pub mod linux {
       }
 
       if !final_still_running.is_empty() {
-        log::error!(
-          "ERROR: Processes {:?} could not be terminated despite aggressive attempts",
-          final_still_running
-        );
         return Err(
           format!(
             "Failed to terminate browser processes {:?} - still running",
@@ -739,7 +723,10 @@ pub mod linux {
       }
     }
 
-    log::info!("Browser termination completed for PID: {pid}");
+    log::debug!(
+      "Browser processes killed pid={pid} count={}",
+      pids_to_kill.len()
+    );
     Ok(())
   }
 

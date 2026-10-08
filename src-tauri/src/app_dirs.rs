@@ -146,7 +146,7 @@ fn window_state_override_for(relocated: bool, data_dir: PathBuf) -> Option<PathB
   let path = data_dir.join(WINDOW_STATE_FILENAME);
   if !path.is_absolute() {
     log::warn!(
-      "Ignoring relative window-state override {}: the plugin resolves its filename against app_config_dir, so geometry would never persist. Set DONUTBROWSER_DATA_DIR/DONUTBROWSER_DATA_ROOT to an absolute path.",
+      "Relative window-state path ignored: geometry would not persist; set DONUTBROWSER_DATA_DIR or DONUTBROWSER_DATA_ROOT to an absolute path path=\"{}\"",
       path.display()
     );
     return None;
@@ -345,7 +345,10 @@ pub fn restrict_to_owner(path: &std::path::Path) {
   {
     use std::os::unix::fs::PermissionsExt;
     if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
-      log::warn!("Failed to restrict permissions on {}: {e}", path.display());
+      log::warn!(
+        "Owner-only permission set failed path=\"{}\" err=\"{e}\"",
+        path.display()
+      );
     }
   }
   #[cfg(not(unix))]

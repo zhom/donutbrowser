@@ -14,7 +14,10 @@ import {
   NoteAction,
   useTimeFormat,
 } from "@/components/agent-console-parts";
-import { DATA_TABLE_CLASSES } from "@/components/table-controls";
+import {
+  DATA_TABLE_CLASSES,
+  TableCheckboxSlot,
+} from "@/components/table-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -190,17 +193,19 @@ export function AgentProfiles({
             <TableHeader className={DATA_TABLE_CLASSES.header}>
               <TableRow className={DATA_TABLE_CLASSES.headerRow}>
                 <TableHead className={cn(DATA_TABLE_CLASSES.head, "w-8")}>
-                  <Checkbox
-                    checked={allChecked}
-                    aria-label={t("common.aria.selectAll")}
-                    onCheckedChange={(checked) => {
-                      setSelected(
-                        checked === true
-                          ? new Set(rows.map((row) => row.profile_id))
-                          : new Set(),
-                      );
-                    }}
-                  />
+                  <TableCheckboxSlot>
+                    <Checkbox
+                      checked={allChecked}
+                      aria-label={t("common.aria.selectAll")}
+                      onCheckedChange={(checked) => {
+                        setSelected(
+                          checked === true
+                            ? new Set(rows.map((row) => row.profile_id))
+                            : new Set(),
+                        );
+                      }}
+                    />
+                  </TableCheckboxSlot>
                 </TableHead>
                 <TableHead className={DATA_TABLE_CLASSES.head}>
                   {t("agent.profiles.columns.profile")}
@@ -259,18 +264,20 @@ export function AgentProfiles({
                     }
                   >
                     <TableCell>
-                      <Checkbox
-                        checked={selected.has(row.profile_id)}
-                        aria-label={t("agent.profiles.selectRow", { name })}
-                        onCheckedChange={(checked) => {
-                          setSelected((previous) => {
-                            const next = new Set(previous);
-                            if (checked === true) next.add(row.profile_id);
-                            else next.delete(row.profile_id);
-                            return next;
-                          });
-                        }}
-                      />
+                      <TableCheckboxSlot>
+                        <Checkbox
+                          checked={selected.has(row.profile_id)}
+                          aria-label={t("agent.profiles.selectRow", { name })}
+                          onCheckedChange={(checked) => {
+                            setSelected((previous) => {
+                              const next = new Set(previous);
+                              if (checked === true) next.add(row.profile_id);
+                              else next.delete(row.profile_id);
+                              return next;
+                            });
+                          }}
+                        />
+                      </TableCheckboxSlot>
                     </TableCell>
                     <TableCell className="max-w-56">
                       <span className="block truncate text-sm font-medium">

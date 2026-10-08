@@ -158,7 +158,6 @@ mod linux {
   #[allow(dead_code)]
   pub fn prepare_executable(executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // On Linux, ensure the executable has proper permissions
-    log::info!("Setting execute permissions for: {:?}", executable_path);
 
     let metadata = std::fs::metadata(executable_path)?;
     let mut permissions = metadata.permissions();
@@ -169,10 +168,7 @@ mod linux {
 
     std::fs::set_permissions(executable_path, permissions)?;
 
-    log::info!(
-      "Execute permissions set successfully for: {:?}",
-      executable_path
-    );
+    log::debug!("Execute permission set path={}", executable_path.display());
     Ok(())
   }
 }

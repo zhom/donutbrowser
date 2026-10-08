@@ -265,7 +265,10 @@ fn copy_dir(
           // A store we cannot snapshot is a store we must not copy: a torn
           // copy is deleted by Chromium on open, which looks identical to
           // "the import silently lost my data".
-          log::warn!("Skipping unreadable store {}: {e}", source_path.display());
+          log::warn!(
+            "Import skipped an unreadable store path=\"{}\" err=\"{e}\"",
+            source_path.display()
+          );
           outcome.unreadable_stores.push(name.to_string());
           continue;
         }
@@ -274,7 +277,10 @@ fn copy_dir(
 
     match fs::copy(&source_path, &dest_path) {
       Ok(bytes) => outcome.bytes_copied += bytes,
-      Err(e) => log::warn!("Failed to copy {}: {e}", source_path.display()),
+      Err(e) => log::warn!(
+        "Import file copy failed path=\"{}\" err=\"{e}\"",
+        source_path.display()
+      ),
     }
   }
 

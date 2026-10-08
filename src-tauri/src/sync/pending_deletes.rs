@@ -44,7 +44,7 @@ fn read() -> Vec<PendingDelete> {
     return Vec::new();
   };
   serde_json::from_str(&content).unwrap_or_else(|e| {
-    log::warn!("Ignoring unreadable {FILE_NAME}: {e}");
+    log::warn!("Pending cloud deletes unreadable, ignored file={FILE_NAME} err=\"{e}\"");
     Vec::new()
   })
 }
@@ -54,7 +54,7 @@ fn write(entries: &[PendingDelete]) {
   if entries.is_empty() {
     if let Err(e) = std::fs::remove_file(&path) {
       if e.kind() != std::io::ErrorKind::NotFound {
-        log::warn!("Could not remove {}: {e}", path.display());
+        log::warn!("Pending cloud deletes not removed file={FILE_NAME} err=\"{e}\"");
       }
     }
     return;
@@ -70,7 +70,7 @@ fn write(entries: &[PendingDelete]) {
       std::fs::rename(&tmp, &path)
     });
   if let Err(e) = result {
-    log::warn!("Could not write {}: {e}", path.display());
+    log::warn!("Pending cloud deletes not written file={FILE_NAME} err=\"{e}\"");
   }
 }
 
@@ -114,7 +114,7 @@ pub async fn wait_for(profile_id: &str) {
   let handle = lock(&RUNNING).remove(profile_id);
   if let Some(handle) = handle {
     if let Err(e) = handle.await {
-      log::warn!("The cloud delete of profile {profile_id} ended abnormally: {e}");
+      log::warn!("Cloud profile delete task ended abnormally profile={profile_id} err=\"{e}\"");
     }
   }
 }

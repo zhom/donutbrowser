@@ -207,7 +207,7 @@ fn local_exit_refusal(verdict: &ExitReachability) -> Option<RemoteSessionError> 
     // sidecar that is not available remotely, and no retry changes that.
     ExitReachability::UnsupportedKind { kind, .. } => {
       log::warn!(
-        "Refusing an interactive remote session: {}",
+        "Remote session refused reason=\"{}\"",
         verdict
           .refusal_detail()
           .unwrap_or_else(|| format!("the profile's exit is {kind}"))
@@ -228,7 +228,7 @@ fn local_exit_refusal(verdict: &ExitReachability) -> Option<RemoteSessionError> 
       // The prose names the offending host, which belongs in the log where
       // support can read it. The toast gets the code so it stays translated.
       if let Some(detail) = unusable.refusal_detail() {
-        log::warn!("Refusing an interactive remote session: {detail}");
+        log::warn!("Remote session refused reason=\"{detail}\"");
       }
       // `Other` rather than a typed variant: the other three are each pinned to
       // a status and a meaning — "the fleet is busy", "already open somewhere",
@@ -763,7 +763,7 @@ pub async fn live_session_for_profile(profile_id: &str) -> Option<RemoteSessionS
       with_index(|map| map.get(profile_id).cloned())
     }
     Err(e) => {
-      log::debug!("Could not refresh remote sessions while resolving a CDP target: {e}");
+      log::debug!("Remote session refresh for CDP target failed err=\"{e}\"");
       None
     }
   }
@@ -915,7 +915,7 @@ pub fn route_frame(event: Option<&str>, data: &str) -> Option<(&'static str, ser
   let payload = match serde_json::from_str::<serde_json::Value>(data) {
     Ok(value) => value,
     Err(e) => {
-      log::warn!("Ignoring malformed remote-session event: {e}");
+      log::warn!("Remote session event malformed, ignored err=\"{e}\"");
       return None;
     }
   };
@@ -951,7 +951,7 @@ pub fn route_frame(event: Option<&str>, data: &str) -> Option<(&'static str, ser
   if object.contains_key("session_id") {
     return Some((EVENT_SESSION_STATE, payload));
   }
-  log::warn!("Ignoring remote-session frame with no session: {kind}");
+  log::warn!("Remote session frame without a session, ignored kind={kind}");
   None
 }
 
@@ -962,6 +962,11 @@ pub fn reconnect_delay(attempt: u32) -> Duration {
     .saturating_mul(factor.min(u32::MAX as u64) as u32)
     .min(RECONNECT_MAX)
 }
+
+static STREAM_CONNECT: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Remote session stream connect");
+static STREAM_DROP: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Remote session stream");
 
 /// Start or wake the one subscriber that receives session transitions.
 pub fn start_session_events(app: AppHandle) {
@@ -1013,14 +1018,16 @@ async fn run_session_events(app: AppHandle) {
     match connect_session_events(last_event_id.as_deref()).await {
       Ok(response) => {
         attempt = 0;
+        STREAM_CONNECT.succeeded();
         emit_stream_status(&app, true, None);
         match consume_session_events(&app, response, &mut last_event_id).await {
           Ok(()) => {
-            log::info!("Remote session stream closed by the backend");
+            STREAM_DROP.succeeded();
+            log::debug!("Remote session stream closed by the backend");
             emit_stream_status(&app, false, None);
           }
           Err(reason) => {
-            log::warn!("Remote session stream ended: {reason}");
+            STREAM_DROP.failed(&reason);
             emit_stream_status(&app, false, Some(&reason));
           }
         }
@@ -1031,7 +1038,7 @@ async fn run_session_events(app: AppHandle) {
           auth_failure = true;
           attempt = attempt.max(AUTH_BACKOFF_ATTEMPT);
         }
-        log::warn!("Remote session stream could not connect: {reason}");
+        STREAM_CONNECT.failed(&reason);
         emit_stream_status(&app, false, Some(&reason));
       }
     }
@@ -1186,7 +1193,7 @@ fn dispatch_frame(app: &AppHandle, frame: &SseFrame) {
 
   use tauri::Emitter;
   if let Err(e) = app.emit(target, payload) {
-    log::warn!("Failed to emit {target}: {e}");
+    log::warn!("Event not emitted event={target} err=\"{e}\"");
   }
 }
 
@@ -1200,14 +1207,14 @@ pub fn apply_to_index(app: Option<&AppHandle>, target: &str, payload: &serde_jso
     let Some(array) = payload.get("sessions").and_then(|v| v.as_array()) else {
       // Marking the index authoritative off a frame that carried no list would
       // answer "no session" for every profile until the next reconnect.
-      log::warn!("Ignoring a remote-session snapshot that carried no session list");
+      log::warn!("Remote session snapshot without a session list, ignored");
       return;
     };
     let mut sessions = Vec::with_capacity(array.len());
     for value in array {
       match serde_json::from_value::<RemoteSessionState>(value.clone()) {
         Ok(session) => sessions.push(session),
-        Err(e) => log::warn!("Skipping an undecodable session in the snapshot: {e}"),
+        Err(e) => log::warn!("Remote session in snapshot undecodable, skipped err=\"{e}\""),
       }
     }
     reindex(app, &sessions);
@@ -1218,7 +1225,7 @@ pub fn apply_to_index(app: Option<&AppHandle>, target: &str, payload: &serde_jso
   if target == EVENT_SESSION_STATE {
     match serde_json::from_value::<RemoteSessionState>(payload.clone()) {
       Ok(session) => index_session(app, &session),
-      Err(e) => log::warn!("Ignoring an undecodable session transition: {e}"),
+      Err(e) => log::warn!("Remote session transition undecodable, ignored err=\"{e}\""),
     }
   }
 }
@@ -1234,7 +1241,7 @@ fn emit_stream_status(app: &AppHandle, connected: bool, reason: Option<&str>) {
   use tauri::Emitter;
   let payload = serde_json::json!({ "connected": connected, "reason": reason });
   if let Err(e) = app.emit(EVENT_STREAM_STATUS, payload) {
-    log::warn!("Failed to emit {EVENT_STREAM_STATUS}: {e}");
+    log::warn!("Event not emitted event={EVENT_STREAM_STATUS} err=\"{e}\"");
   }
 }
 

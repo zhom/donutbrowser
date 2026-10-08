@@ -109,7 +109,7 @@ impl WgDevice {
       match result {
         TunnResult::WriteToNetwork(packet) => {
           if let Err(e) = self.udp_socket.send_to(packet, self.peer_addr) {
-            log::error!("[wg] udp send_to failed: {e}");
+            crate::proxy_server::warn_throttled(&format!("WireGuard UDP send failed err=\"{e}\""));
           }
         }
         TunnResult::Done => {
@@ -117,13 +117,14 @@ impl WgDevice {
           // complete); silently drop. smoltcp will retransmit.
         }
         TunnResult::Err(e) => {
-          log::error!(
-            "[wg] encapsulate error for {}B IP packet: {e:?}",
-            ip_packet.len()
-          );
+          crate::proxy_server::warn_throttled(&format!(
+            "WireGuard encapsulate failed err=\"{e:?}\""
+          ));
         }
         TunnResult::WriteToTunnelV4(_, _) | TunnResult::WriteToTunnelV6(_, _) => {
-          log::error!("[wg] encapsulate returned unexpected WriteToTunnel — bug?");
+          crate::proxy_server::warn_throttled(
+            "WireGuard encapsulate returned WriteToTunnel; unexpected, packet dropped",
+          );
         }
       }
     }
@@ -337,11 +338,12 @@ impl WireGuardSocks5Server {
       })
   }
 
+  /// Returns how many attempts the handshake took.
   fn do_handshake(
     tunn: &mut Tunn,
     socket: &UdpSocket,
     peer_addr: SocketAddr,
-  ) -> Result<(), VpnError> {
+  ) -> Result<u32, VpnError> {
     socket
       .set_read_timeout(Some(std::time::Duration::from_secs(5)))
       .map_err(|e| VpnError::Connection(format!("Failed to set timeout: {e}")))?;
@@ -384,8 +386,8 @@ impl WireGuardSocks5Server {
             TunnResult::Done => {}
             TunnResult::Err(e) => {
               last_error = format!("handshake response error: {e:?}");
-              log::warn!(
-                "[vpn-worker] Handshake attempt {attempt}/{max_attempts} failed: {last_error}"
+              log::debug!(
+                "WireGuard handshake attempt failed attempt={attempt}/{max_attempts} err=\"{last_error}\""
               );
               continue;
             }
@@ -395,11 +397,11 @@ impl WireGuardSocks5Server {
           socket
             .set_read_timeout(None)
             .map_err(|e| VpnError::Connection(format!("Failed to clear timeout: {e}")))?;
-          return Ok(());
+          return Ok(attempt);
         }
         Err(e) if attempt < max_attempts => {
-          log::warn!(
-            "[vpn-worker] Handshake attempt {attempt}/{max_attempts} timed out: {e}, retrying"
+          log::debug!(
+            "WireGuard handshake attempt timed out attempt={attempt}/{max_attempts} err=\"{e}\""
           );
           last_error = format!("timeout: {e}");
           continue;
@@ -420,19 +422,18 @@ impl WireGuardSocks5Server {
     config_id: String,
     config_path: Option<std::path::PathBuf>,
   ) -> Result<(), VpnError> {
+    let started = std::time::Instant::now();
     let peer_addr = self.resolve_endpoint()?;
     let mut tunn = self.create_tunnel()?;
 
     let udp_socket = UdpSocket::bind("0.0.0.0:0")
       .map_err(|e| VpnError::Connection(format!("Failed to create UDP socket: {e}")))?;
 
-    Self::do_handshake(&mut tunn, &udp_socket, peer_addr)?;
+    let handshake_attempts = Self::do_handshake(&mut tunn, &udp_socket, peer_addr)?;
 
     udp_socket
       .set_nonblocking(true)
       .map_err(|e| VpnError::Connection(format!("Failed to set non-blocking: {e}")))?;
-
-    log::info!("[vpn-worker] WireGuard handshake completed");
 
     let local_addrs = parse_cidr_addresses(&self.config.address)?;
 
@@ -508,6 +509,9 @@ impl WireGuardSocks5Server {
         .or_else(|| crate::vpn_worker_storage::get_vpn_worker_config(&config_id)),
       None => crate::vpn_worker_storage::get_vpn_worker_config(&config_id),
     };
+    let vpn_id = updated
+      .as_ref()
+      .map_or_else(|| "-".to_string(), |wc| wc.vpn_id.clone());
     if let Some(mut wc) = updated {
       wc.local_port = Some(actual_port);
       wc.local_url = Some(format!("socks5://127.0.0.1:{}", actual_port));
@@ -518,22 +522,21 @@ impl WireGuardSocks5Server {
       };
       if let Err(e) = result {
         log::error!(
-          "[vpn-worker] Failed to write back local_url to config: {} (path={:?})",
-          e,
+          "Worker config write-back failed; the app will not see this port id={config_id} path={:?} err=\"{e}\"",
           config_path
         );
       }
     } else {
       log::error!(
-        "[vpn-worker] Could not load worker config for write-back (id={}, path={:?})",
-        config_id,
+        "Worker config write-back skipped: config not found id={config_id} path={:?}",
         config_path
       );
     }
 
     log::info!(
-      "[vpn-worker] SOCKS5 server listening on 127.0.0.1:{}",
-      actual_port
+      "Worker started kind=vpn id={config_id} pid={} listen=127.0.0.1:{actual_port} vpn={vpn_id} vpn_type=wireguard peer={peer_addr} handshake_attempts={handshake_attempts} elapsed_ms={}",
+      std::process::id(),
+      started.elapsed().as_millis()
     );
 
     // DNS resolution for domain-name CONNECT requests must go THROUGH the tunnel, never
@@ -857,11 +860,9 @@ impl WireGuardSocks5Server {
                       });
                     }
                     Err(e) => {
-                      log::warn!(
-                        "[vpn-worker] Failed to start DNS query for {}: {:?}",
-                        domain,
-                        e
-                      );
+                      crate::proxy_server::warn_throttled(&format!(
+                        "Tunnel DNS query start failed err=\"{e:?}\""
+                      ));
                       let _ = conn
                         .tcp_stream
                         .try_write(&[0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);

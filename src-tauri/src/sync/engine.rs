@@ -6,6 +6,7 @@ use super::manifest::{
 use super::types::*;
 use crate::events;
 use crate::log_redaction::Plain;
+use crate::log_streak::KeyedStreak;
 use crate::profile::types::{BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
 use crate::settings_manager::SettingsManager;
@@ -22,6 +23,8 @@ use tokio::sync::{Mutex as TokioMutex, Semaphore};
 /// entity's user-edit timestamp in unix seconds. Used to resolve sync conflicts
 /// (last-write-wins) from a HEAD request without downloading the object body.
 const UPDATED_AT_META_KEY: &str = "updated-at";
+
+static TOMBSTONE_CHECK: KeyedStreak = KeyedStreak::new(module_path!(), "Sync tombstone check");
 
 /// What one profile reconcile actually did.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -276,20 +279,22 @@ fn checkpoint_sqlite_wal_files(profile_dir: &Path) {
     match rusqlite::Connection::open(&db_path) {
       Ok(conn) => match conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
         Ok(_) => {
-          log::info!(
-            "Checkpointed WAL for: {}",
+          log::debug!(
+            "WAL checkpointed db={}",
             db_path.file_name().unwrap_or_default().to_string_lossy()
           );
         }
         Err(e) => {
-          log::warn!("Failed to checkpoint WAL for {}: {}", db_path.display(), e);
+          log::warn!(
+            "WAL checkpoint failed db={} err=\"{e}\"",
+            db_path.file_name().unwrap_or_default().to_string_lossy()
+          );
         }
       },
       Err(e) => {
         log::warn!(
-          "Failed to open DB for WAL checkpoint {}: {}",
-          db_path.display(),
-          e
+          "WAL checkpoint failed: DB not opened db={} err=\"{e}\"",
+          db_path.file_name().unwrap_or_default().to_string_lossy()
         );
       }
     }
@@ -588,22 +593,19 @@ impl SyncEngine {
   ) -> SyncResult<bool> {
     let tombstone_key = format!("tombstones/{}/{}.json", kind, id);
     let stat = match self.client.stat(&tombstone_key).await {
-      Ok(stat) => stat,
+      Ok(stat) => {
+        TOMBSTONE_CHECK.succeeded(&format!("key={tombstone_key}"));
+        stat
+      }
       Err(e) => {
-        log::warn!(
-          "Could not check {} before syncing {} {}; skipping this pass: {}",
-          tombstone_key,
-          kind,
-          id,
-          e
-        );
+        TOMBSTONE_CHECK.failed(&format!("key={tombstone_key}"), &e);
         return Err(e);
       }
     };
     let written_at = stat.last_modified.as_deref().and_then(rfc3339_secs);
     let blocked = tombstone_outranks_local(stat.exists, written_at, local_updated_at);
     if blocked {
-      log::info!("Skipping sync of {} {}: deleted remotely", kind, id);
+      log::debug!("Sync skipped, deleted remotely kind={kind} id={id}");
     }
     Ok(blocked)
   }
@@ -643,6 +645,7 @@ impl SyncEngine {
     bias: DiffBias,
     reencrypt: bool,
   ) -> SyncResult<ProfileSyncOutcome> {
+    let started = Instant::now();
     let profile_id = profile.id.to_string();
     let _sync_guard = profile_sync_lock(&profile_id).lock_owned().await;
     let pending_session = match crate::remote_handoff::session_for(&profile_id) {
@@ -676,9 +679,8 @@ impl SyncEngine {
     let profile = &current_profile;
 
     if profile.is_cross_os() {
-      log::info!(
-        "Cross-OS profile: {} ({}) — syncing metadata only",
-        profile.name,
+      log::debug!(
+        "Profile sync: cross-OS, metadata only profile={}",
         profile.id
       );
       self.sync_cross_os_metadata(app_handle, profile).await?;
@@ -689,9 +691,8 @@ impl SyncEngine {
 
     // Skip team profiles for self-hosted sync
     if Self::is_self_hosted_sync().await && profile.created_by_id.is_some() {
-      log::info!(
-        "Skipping team profile for self-hosted sync: {} ({})",
-        profile.name,
+      log::debug!(
+        "Profile sync skipped: team profile on self-hosted sync profile={}",
         profile.id
       );
       return Ok(ProfileSyncOutcome::Skipped(
@@ -701,11 +702,7 @@ impl SyncEngine {
 
     // Skip if profile is currently running locally
     if profile.process_id.is_some() {
-      log::info!(
-        "Skipping sync for running profile: {} ({})",
-        profile.name,
-        profile.id
-      );
+      log::debug!("Profile sync skipped: running profile={}", profile.id);
       return Ok(ProfileSyncOutcome::Skipped("profile is running locally"));
     }
 
@@ -725,9 +722,8 @@ impl SyncEngine {
       .is_locked_by_another(&profile.id.to_string())
       .await
     {
-      log::info!(
-        "Skipping sync for profile locked by another holder: {} ({})",
-        profile.name,
+      log::debug!(
+        "Profile sync skipped: locked elsewhere profile={}",
         profile.id
       );
       return Ok(ProfileSyncOutcome::Skipped("profile is locked elsewhere"));
@@ -765,15 +761,9 @@ impl SyncEngine {
     // Determine team key prefix for team profiles
     let key_prefix = Self::get_team_key_prefix(profile).await;
 
-    log::info!(
-      "Starting delta sync for profile: {} ({}){}",
-      profile.name,
-      profile_id,
-      if key_prefix.is_empty() {
-        String::new()
-      } else {
-        format!(" [team prefix: {}]", key_prefix)
-      }
+    log::debug!(
+      "Profile sync started profile={profile_id} team={}",
+      !key_prefix.is_empty()
     );
 
     let _ = events::emit(
@@ -813,13 +803,9 @@ impl SyncEngine {
       .files
       .iter()
       .any(|f| f.path.contains("Local State"));
-    log::info!(
-      "Profile {} manifest: {} files, {} bytes total, cookies={}, local_state={}",
-      profile_id,
-      local_manifest.files.len(),
-      total_size,
-      has_cookies,
-      has_local_state
+    log::debug!(
+      "Profile manifest built profile={profile_id} files={} bytes={total_size} cookies={has_cookies} local_state={has_local_state}",
+      local_manifest.files.len()
     );
 
     // Save the hash cache for future runs
@@ -848,7 +834,11 @@ impl SyncEngine {
     let diff = compute_diff_with_bias(&local_manifest, remote_manifest.as_ref(), bias);
 
     if diff.is_empty() && !reencrypt && remote_manifest.is_some() && profile.last_sync.is_some() {
-      log::info!("Profile {} is already in sync", profile_id);
+      log::debug!(
+        "Profile already in sync profile={profile_id} files={} elapsed_ms={}",
+        local_manifest.files.len(),
+        started.elapsed().as_millis()
+      );
       if let Some(session_id) = &pending_session {
         crate::remote_handoff::clear_pending(&profile_id, session_id);
       }
@@ -872,9 +862,8 @@ impl SyncEngine {
       + diff.files_to_delete_local.len()
       + diff.files_to_delete_remote.len();
 
-    log::info!(
-      "Profile {} diff: {} to upload, {} to download, {} to delete local, {} to delete remote",
-      profile_id,
+    log::debug!(
+      "Profile diff profile={profile_id} upload={} download={} delete_local={} delete_remote={}",
       diff.files_to_upload.len(),
       diff.files_to_download.len(),
       diff.files_to_delete_local.len(),
@@ -909,7 +898,7 @@ impl SyncEngine {
     }
 
     if cancel_flag.load(Ordering::Relaxed) {
-      log::info!("Sync cancelled for profile {} after uploads", profile_id);
+      log::info!("Profile sync cancelled profile={profile_id} stage=upload");
       return Err(SyncError::Cancelled);
     }
 
@@ -935,7 +924,7 @@ impl SyncEngine {
     }
 
     if cancel_flag.load(Ordering::Relaxed) {
-      log::info!("Sync cancelled for profile {} after downloads", profile_id);
+      log::info!("Profile sync cancelled profile={profile_id} stage=download");
       return Err(SyncError::Cancelled);
     }
 
@@ -944,16 +933,13 @@ impl SyncEngine {
       // The delete list comes from the remote-controlled manifest; guard against
       // traversal/absolute paths so it can't delete files outside the profile.
       if !is_safe_manifest_path(path) {
-        log::warn!(
-          "Skipping local delete with unsafe relative path: {:?}",
-          path
-        );
+        log::warn!("Unsafe manifest path, local delete skipped path={path:?}");
         continue;
       }
       let file_path = profile_dir.join(path);
       if file_path.exists() {
         let _ = fs::remove_file(&file_path);
-        log::debug!("Deleted local file: {}", path);
+        log::debug!("Local file deleted path={path}");
       }
     }
 
@@ -961,7 +947,7 @@ impl SyncEngine {
     for path in &diff.files_to_delete_remote {
       let remote_key = format!("{}profiles/{}/files/{}", key_prefix, profile_id, path);
       let _ = self.client.delete(&remote_key, None).await;
-      log::debug!("Deleted remote file: {}", path);
+      log::debug!("Remote file deleted path={path}");
     }
 
     // If this sync changed the local profile directory (downloaded files and/or
@@ -1052,7 +1038,14 @@ impl SyncEngine {
 
     crate::cookie_bot::report_profile_state(&updated_profile);
 
-    log::info!("Profile {} synced successfully", profile_id);
+    log::info!(
+      "Profile synced profile={profile_id} uploaded={} downloaded={} deleted_local={} deleted_remote={} bytes_up={upload_bytes} bytes_down={download_bytes} elapsed_ms={}",
+      diff.files_to_upload.len(),
+      diff.files_to_download.len(),
+      diff.files_to_delete_local.len(),
+      diff.files_to_delete_remote.len(),
+      started.elapsed().as_millis()
+    );
     Ok(ProfileSyncOutcome::Completed)
   }
 
@@ -1212,7 +1205,7 @@ impl SyncEngine {
       }),
     );
 
-    log::info!("Cross-OS profile {} metadata synced", profile_id);
+    log::debug!("Cross-OS profile metadata synced profile={profile_id}");
     Ok(())
   }
 
@@ -1271,18 +1264,10 @@ impl SyncEngine {
 
     if skipped > 0 {
       log::info!(
-        "Resume: skipping {} already-uploaded files, processing {} remaining for profile {}",
-        skipped,
-        files_to_process.len(),
-        profile_id
+        "Profile upload resumed profile={profile_id} done={skipped} left={}",
+        files_to_process.len()
       );
     }
-
-    log::info!(
-      "Uploading {} files for profile {}",
-      files_to_process.len(),
-      profile_id
-    );
 
     if files_to_process.is_empty() {
       return Ok(());
@@ -1357,10 +1342,7 @@ impl SyncEngine {
 
     for file in &files_to_process {
       if cancel_flag.load(Ordering::Relaxed) {
-        log::info!(
-          "Upload cancelled for profile {} before scheduling more files",
-          profile_id_owned
-        );
+        log::debug!("Profile upload cancelled profile={profile_id_owned}");
         break;
       }
       // Reject paths that would escape the profile dir (path traversal /
@@ -1369,7 +1351,7 @@ impl SyncEngine {
       // Legitimate profile files are always plain relative paths, so a real file
       // is never skipped.
       if !is_safe_manifest_path(&file.path) {
-        log::warn!("Skipping file with unsafe relative path: {:?}", file.path);
+        log::warn!("Unsafe manifest path skipped path={:?}", file.path);
         continue;
       }
       let sem = semaphore.clone();
@@ -1384,7 +1366,7 @@ impl SyncEngine {
       let critical = is_critical_file(&file.path);
 
       if url.is_none() {
-        log::warn!("No presigned URL for {}", remote_key);
+        log::warn!("Presigned URL missing key={remote_key}");
         if critical {
           return Err(SyncError::NetworkError(format!(
             "No presigned URL for critical file: {}",
@@ -1415,13 +1397,13 @@ impl SyncEngine {
         let data = match fs::read(&file_path) {
           Ok(d) => d,
           Err(e) if e.kind() == std::io::ErrorKind::NotFound && !critical => {
-            log::debug!("File disappeared, skipping: {}", file_path.display());
+            log::debug!("File gone before upload path={relative_path}");
             tracker.record_success(0);
             return Ok(relative_path);
           }
           Err(e) => {
             let msg = format!("Failed to read {}: {}", file_path.display(), e);
-            log::warn!("{}", msg);
+            log::debug!("{msg}");
             tracker.record_failure();
             return Err((relative_path, msg, critical));
           }
@@ -1432,7 +1414,7 @@ impl SyncEngine {
             Ok(encrypted) => encrypted,
             Err(e) => {
               let msg = format!("Failed to encrypt {}: {}", file_path.display(), e);
-              log::warn!("{}", msg);
+              log::debug!("{msg}");
               tracker.record_failure();
               return Err((relative_path, msg, critical));
             }
@@ -1467,11 +1449,8 @@ impl SyncEngine {
               last_err = format!("{}", e);
               if attempt < MAX_FILE_RETRIES - 1 {
                 log::debug!(
-                  "Retry {}/{} for {}: {}",
-                  attempt + 1,
-                  MAX_FILE_RETRIES,
-                  relative_path,
-                  last_err
+                  "File transfer retry attempt={} of={MAX_FILE_RETRIES} path={relative_path} err=\"{last_err}\"",
+                  attempt + 1
                 );
                 tokio::time::sleep(std::time::Duration::from_millis(500 * (attempt as u64 + 1)))
                   .await;
@@ -1484,7 +1463,7 @@ impl SyncEngine {
           "Failed to upload {} after {} retries: {}",
           relative_path, MAX_FILE_RETRIES, last_err
         );
-        log::warn!("{}", msg);
+        log::debug!("{msg}");
         tracker.record_failure();
         Err((relative_path, msg, critical))
       }));
@@ -1500,7 +1479,7 @@ impl SyncEngine {
         Ok(Err((path, msg, true))) => critical_failures.push((path, msg)),
         Ok(Err((path, msg, false))) => non_critical_failures.push((path, msg)),
         Err(e) => {
-          log::warn!("Upload task panicked: {}", e);
+          log::warn!("Profile upload task panicked err=\"{e}\"");
         }
       }
     }
@@ -1513,11 +1492,10 @@ impl SyncEngine {
 
     tracker.emit_final();
 
-    if !non_critical_failures.is_empty() {
+    if let Some((_, first)) = non_critical_failures.first() {
       log::warn!(
-        "Upload completed with {} non-critical failures for profile {}",
-        non_critical_failures.len(),
-        profile_id_owned
+        "Profile upload skipped non-critical files profile={profile_id_owned} failed={} first_err=\"{first}\"",
+        non_critical_failures.len()
       );
     }
 
@@ -1564,18 +1542,10 @@ impl SyncEngine {
 
     if skipped > 0 {
       log::info!(
-        "Resume: skipping {} already-downloaded files, processing {} remaining for profile {}",
-        skipped,
-        files_to_process.len(),
-        profile_id
+        "Profile download resumed profile={profile_id} done={skipped} left={}",
+        files_to_process.len()
       );
     }
-
-    log::info!(
-      "Downloading {} files for profile {}",
-      files_to_process.len(),
-      profile_id
-    );
 
     if files_to_process.is_empty() {
       return Ok(());
@@ -1642,10 +1612,7 @@ impl SyncEngine {
 
     for file in &files_to_process {
       if cancel_flag.load(Ordering::Relaxed) {
-        log::info!(
-          "Download cancelled for profile {} before scheduling more files",
-          profile_id_owned
-        );
+        log::debug!("Profile download cancelled profile={profile_id_owned}");
         break;
       }
       // Reject paths that would escape the profile dir (path traversal /
@@ -1654,7 +1621,7 @@ impl SyncEngine {
       // Legitimate profile files are always plain relative paths, so a real file
       // is never skipped.
       if !is_safe_manifest_path(&file.path) {
-        log::warn!("Skipping file with unsafe relative path: {:?}", file.path);
+        log::warn!("Unsafe manifest path skipped path={:?}", file.path);
         continue;
       }
       let sem = semaphore.clone();
@@ -1669,7 +1636,7 @@ impl SyncEngine {
       let critical = is_critical_file(&file.path);
 
       if url.is_none() {
-        log::warn!("No presigned URL for {}", remote_key);
+        log::warn!("Presigned URL missing key={remote_key}");
         if critical {
           return Err(SyncError::NetworkError(format!(
             "No presigned URL for critical file: {}",
@@ -1707,7 +1674,7 @@ impl SyncEngine {
                   Ok(decrypted) => decrypted,
                   Err(e) => {
                     let msg = format!("Failed to decrypt {}: {}", relative_path, e);
-                    log::warn!("{}", msg);
+                    log::debug!("{msg}");
                     tracker.record_failure();
                     return Err((relative_path, msg, critical));
                   }
@@ -1721,7 +1688,7 @@ impl SyncEngine {
               }
               if let Err(e) = fs::write(&file_path, &write_data) {
                 let msg = format!("Failed to write {}: {}", file_path.display(), e);
-                log::warn!("{}", msg);
+                log::debug!("{msg}");
                 tracker.record_failure();
                 return Err((relative_path, msg, critical));
               }
@@ -1743,11 +1710,8 @@ impl SyncEngine {
               last_err = format!("{}", e);
               if attempt < MAX_FILE_RETRIES - 1 {
                 log::debug!(
-                  "Retry {}/{} for {}: {}",
-                  attempt + 1,
-                  MAX_FILE_RETRIES,
-                  relative_path,
-                  last_err
+                  "File transfer retry attempt={} of={MAX_FILE_RETRIES} path={relative_path} err=\"{last_err}\"",
+                  attempt + 1
                 );
                 tokio::time::sleep(std::time::Duration::from_millis(500 * (attempt as u64 + 1)))
                   .await;
@@ -1760,7 +1724,7 @@ impl SyncEngine {
           "Failed to download {} after {} retries: {}",
           relative_path, MAX_FILE_RETRIES, last_err
         );
-        log::warn!("{}", msg);
+        log::debug!("{msg}");
         tracker.record_failure();
         Err((relative_path, msg, critical))
       }));
@@ -1775,7 +1739,7 @@ impl SyncEngine {
         Ok(Err((path, msg, true))) => critical_failures.push((path, msg)),
         Ok(Err((path, msg, false))) => non_critical_failures.push((path, msg)),
         Err(e) => {
-          log::warn!("Download task panicked: {}", e);
+          log::warn!("Profile download task panicked err=\"{e}\"");
         }
       }
     }
@@ -1788,11 +1752,10 @@ impl SyncEngine {
 
     tracker.emit_final();
 
-    if !non_critical_failures.is_empty() {
+    if let Some((_, first)) = non_critical_failures.first() {
       log::warn!(
-        "Download completed with {} non-critical failures for profile {}",
-        non_critical_failures.len(),
-        profile_id_owned
+        "Profile download skipped non-critical files profile={profile_id_owned} failed={} first_err=\"{first}\"",
+        non_critical_failures.len()
       );
     }
 
@@ -1847,7 +1810,7 @@ impl SyncEngine {
       }
       (None, false) => {
         // Neither exists - nothing to do
-        log::debug!("Proxy {} not found locally or remotely", proxy_id);
+        log::debug!("Sync no-op, missing on both sides proxy={proxy_id}");
       }
     }
 
@@ -1881,7 +1844,7 @@ impl SyncEngine {
       ))
     })?;
 
-    log::info!("Proxy {} uploaded", proxy.id);
+    log::info!("Proxy uploaded proxy={}", proxy.id);
     crate::cookie_bot::report_profiles_using_proxy(&proxy.id);
     Ok(())
   }
@@ -1954,7 +1917,7 @@ impl SyncEngine {
       );
     }
 
-    log::info!("Proxy {} downloaded", proxy_id);
+    log::info!("Proxy downloaded proxy={proxy_id}");
     Ok(())
   }
 
@@ -2001,7 +1964,7 @@ impl SyncEngine {
       }
       (None, false) => {
         // Neither exists - nothing to do
-        log::debug!("Group {} not found locally or remotely", group_id);
+        log::debug!("Sync no-op, missing on both sides group={group_id}");
       }
     }
 
@@ -2029,11 +1992,11 @@ impl SyncEngine {
     {
       let group_manager = crate::group_manager::GROUP_MANAGER.lock().unwrap();
       if let Err(e) = group_manager.update_group_internal(&updated_group) {
-        log::warn!("Failed to update group last_sync: {}", e);
+        log::warn!("Group last_sync not saved group={} err=\"{e}\"", group.id);
       }
     }
 
-    log::info!("Group {} uploaded", group.id);
+    log::info!("Group uploaded group={}", group.id);
     Ok(())
   }
 
@@ -2063,7 +2026,7 @@ impl SyncEngine {
     {
       let group_manager = crate::group_manager::GROUP_MANAGER.lock().unwrap();
       if let Err(e) = group_manager.upsert_group_internal(&group) {
-        log::warn!("Failed to save downloaded group: {}", e);
+        log::warn!("Downloaded group not saved group={group_id} err=\"{e}\"");
       }
     }
 
@@ -2079,7 +2042,7 @@ impl SyncEngine {
       );
     }
 
-    log::info!("Group {} downloaded", group_id);
+    log::info!("Group downloaded group={group_id}");
     Ok(())
   }
 
@@ -2117,8 +2080,7 @@ impl SyncEngine {
       .await?;
 
     log::info!(
-      "Profile {} deleted from sync ({} objects removed)",
-      profile_id,
+      "Profile deleted from cloud profile={profile_id} objects={}",
       result.deleted_count
     );
 
@@ -2133,8 +2095,7 @@ impl SyncEngine {
           .await?;
         if team_result.deleted_count > 0 {
           log::info!(
-            "Profile {} deleted from team sync ({} objects removed)",
-            profile_id,
+            "Profile deleted from team cloud profile={profile_id} objects={}",
             team_result.deleted_count
           );
         }
@@ -2150,10 +2111,13 @@ impl SyncEngine {
   pub async fn profile_tombstone_exists(&self, profile: &BrowserProfile) -> bool {
     for key in Self::profile_tombstone_keys(profile).await {
       match self.client.stat(&key).await {
-        Ok(stat) if stat.exists => return true,
-        Ok(_) => {}
+        Ok(stat) if stat.exists => {
+          TOMBSTONE_CHECK.succeeded(&format!("key={key}"));
+          return true;
+        }
+        Ok(_) => TOMBSTONE_CHECK.succeeded(&format!("key={key}")),
         Err(e) => {
-          log::warn!("Could not check {key}: {e}");
+          TOMBSTONE_CHECK.failed(&format!("key={key}"), e);
           return false;
         }
       }
@@ -2187,7 +2151,7 @@ impl SyncEngine {
       .delete(&remote_key, Some(&tombstone_key))
       .await?;
 
-    log::info!("Proxy {} deleted from sync", proxy_id);
+    log::info!("Proxy deleted from cloud proxy={proxy_id}");
     Ok(())
   }
 
@@ -2200,7 +2164,7 @@ impl SyncEngine {
       .delete(&remote_key, Some(&tombstone_key))
       .await?;
 
-    log::info!("Group {} deleted from sync", group_id);
+    log::info!("Group deleted from cloud group={group_id}");
     Ok(())
   }
 
@@ -2239,7 +2203,7 @@ impl SyncEngine {
         self.download_vpn(vpn_id, app_handle).await?;
       }
       (None, false) => {
-        log::debug!("VPN {} not found locally or remotely", vpn_id);
+        log::debug!("Sync no-op, missing on both sides vpn={vpn_id}");
       }
     }
 
@@ -2267,11 +2231,11 @@ impl SyncEngine {
     {
       let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
       if let Err(e) = storage.update_sync_fields(&vpn.id, vpn.sync_enabled, Some(now)) {
-        log::warn!("Failed to update VPN last_sync: {}", e);
+        log::warn!("VPN last_sync not saved vpn={} err=\"{e}\"", vpn.id);
       }
     }
 
-    log::info!("VPN {} uploaded", vpn.id);
+    log::info!("VPN uploaded vpn={}", vpn.id);
     crate::cookie_bot::report_profiles_using_vpn(&vpn.id);
     Ok(())
   }
@@ -2309,7 +2273,7 @@ impl SyncEngine {
     {
       let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
       if let Err(e) = storage.save_config(&vpn) {
-        log::warn!("Failed to save downloaded VPN: {}", e);
+        log::warn!("Downloaded VPN not saved vpn={vpn_id} err=\"{e}\"");
       }
     }
 
@@ -2325,7 +2289,7 @@ impl SyncEngine {
       );
     }
 
-    log::info!("VPN {} downloaded", vpn_id);
+    log::info!("VPN downloaded vpn={vpn_id}");
     Ok(())
   }
 
@@ -2346,7 +2310,7 @@ impl SyncEngine {
       .delete(&remote_key, Some(&tombstone_key))
       .await?;
 
-    log::info!("VPN {} deleted from sync", vpn_id);
+    log::info!("VPN deleted from cloud vpn={vpn_id}");
     Ok(())
   }
 
@@ -2398,7 +2362,7 @@ impl SyncEngine {
         self.download_extension(ext_id, app_handle).await?;
       }
       (None, false) => {
-        log::debug!("Extension {} not found locally or remotely", ext_id);
+        log::debug!("Sync no-op, missing on both sides extension={ext_id}");
       }
     }
 
@@ -2456,11 +2420,14 @@ impl SyncEngine {
     {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       if let Err(e) = manager.update_extension_internal(&updated_ext) {
-        log::warn!("Failed to update extension last_sync: {}", e);
+        log::warn!(
+          "Extension last_sync not saved extension={} err=\"{e}\"",
+          ext.id
+        );
       }
     }
 
-    log::info!("Extension {} uploaded", ext.id);
+    log::info!("Extension uploaded extension={}", ext.id);
     Ok(())
   }
 
@@ -2527,7 +2494,7 @@ impl SyncEngine {
     {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       if let Err(e) = manager.upsert_extension_internal(&ext) {
-        log::warn!("Failed to save downloaded extension: {}", e);
+        log::warn!("Downloaded extension not saved extension={ext_id} err=\"{e}\"");
       }
     }
 
@@ -2535,7 +2502,7 @@ impl SyncEngine {
       let _ = events::emit("extensions-changed", ());
     }
 
-    log::info!("Extension {} downloaded", ext_id);
+    log::info!("Extension downloaded extension={ext_id}");
     Ok(())
   }
 
@@ -2561,7 +2528,7 @@ impl SyncEngine {
     // Delete file data
     let _ = self.client.delete_prefix(&file_prefix, None).await;
 
-    log::info!("Extension {} deleted from sync", ext_id);
+    log::info!("Extension deleted from cloud extension={ext_id}");
     Ok(())
   }
 
@@ -2606,7 +2573,7 @@ impl SyncEngine {
         self.download_extension_group(group_id, app_handle).await?;
       }
       (None, false) => {
-        log::debug!("Extension group {} not found locally or remotely", group_id);
+        log::debug!("Sync no-op, missing on both sides extension_group={group_id}");
       }
     }
 
@@ -2638,11 +2605,14 @@ impl SyncEngine {
     {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       if let Err(e) = manager.update_group_internal(&updated_group) {
-        log::warn!("Failed to update extension group last_sync: {}", e);
+        log::warn!(
+          "Extension group last_sync not saved extension_group={} err=\"{e}\"",
+          group.id
+        );
       }
     }
 
-    log::info!("Extension group {} uploaded", group.id);
+    log::info!("Extension group uploaded extension_group={}", group.id);
     Ok(())
   }
 
@@ -2675,7 +2645,7 @@ impl SyncEngine {
     {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       if let Err(e) = manager.upsert_group_internal(&group) {
-        log::warn!("Failed to save downloaded extension group: {}", e);
+        log::warn!("Downloaded extension group not saved extension_group={group_id} err=\"{e}\"");
       }
     }
 
@@ -2683,7 +2653,7 @@ impl SyncEngine {
       let _ = events::emit("extensions-changed", ());
     }
 
-    log::info!("Extension group {} downloaded", group_id);
+    log::info!("Extension group downloaded extension_group={group_id}");
     Ok(())
   }
 
@@ -2704,7 +2674,7 @@ impl SyncEngine {
       .delete(&remote_key, Some(&tombstone_key))
       .await?;
 
-    log::info!("Extension group {} deleted from sync", group_id);
+    log::info!("Extension group deleted from cloud extension_group={group_id}");
     Ok(())
   }
 
@@ -2715,6 +2685,7 @@ impl SyncEngine {
     profile_id: &str,
     key_prefix: &str,
   ) -> SyncResult<bool> {
+    let started = Instant::now();
     let profile_manager = ProfileManager::instance();
     let profiles_dir = profile_manager.get_profiles_dir();
     let profile_dir = profiles_dir.join(profile_id);
@@ -2730,7 +2701,7 @@ impl SyncEngine {
     let exists_locally = profiles.iter().any(|p| p.id == profile_uuid);
 
     if exists_locally {
-      log::debug!("Profile {} exists locally, skipping download", profile_id);
+      log::debug!("Missing-profile download skipped: exists locally profile={profile_id}");
       return Ok(false);
     }
 
@@ -2739,24 +2710,16 @@ impl SyncEngine {
     let stat = self.client.stat(&manifest_key).await?;
 
     if !stat.exists {
-      log::debug!("Profile {} does not exist remotely, skipping", profile_id);
+      log::debug!("Missing-profile download skipped: not in cloud profile={profile_id}");
       return Ok(false);
     }
-
-    log::info!(
-      "Profile {} exists remotely but not locally, downloading...",
-      profile_id
-    );
 
     // Download metadata.json first to get profile info
     let metadata_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
     let metadata_stat = self.client.stat(&metadata_key).await?;
 
     if !metadata_stat.exists {
-      log::warn!(
-        "Profile {} manifest exists but metadata.json missing, skipping",
-        profile_id
-      );
+      log::warn!("Cloud profile has a manifest but no metadata, skipped profile={profile_id}");
       return Ok(false);
     }
 
@@ -2776,12 +2739,6 @@ impl SyncEngine {
 
     // Cross-OS profile: save metadata only, skip manifest + file downloads
     if profile.is_cross_os() {
-      log::info!(
-        "Profile {} is cross-OS (host_os={:?}), downloading metadata only",
-        profile_id,
-        profile.host_os
-      );
-
       fs::create_dir_all(&profile_dir).map_err(|e| {
         SyncError::IoError(format!(
           "Failed to create profile directory {}: {e}",
@@ -2814,8 +2771,8 @@ impl SyncEngine {
       );
 
       log::info!(
-        "Cross-OS profile {} metadata downloaded successfully",
-        profile_id
+        "Cross-OS profile metadata downloaded profile={profile_id} host_os={:?}",
+        profile.host_os
       );
       return Ok(true);
     }
@@ -2861,20 +2818,6 @@ impl SyncEngine {
 
     // Download all files from manifest
     let total_size: u64 = manifest.files.iter().map(|f| f.size).sum();
-    log::info!(
-      "Profile {} recovery: downloading {} files ({} bytes total)",
-      profile_id,
-      manifest.files.len(),
-      total_size
-    );
-    for file in &manifest.files {
-      log::info!(
-        "  -> {} ({} bytes, hash: {})",
-        file.path,
-        file.size,
-        file.hash
-      );
-    }
     if !manifest.files.is_empty() {
       let cancel_flag = register_sync_cancel(profile_id);
       let _cancel_guard = SyncCancelGuard(profile_id.to_string());
@@ -2906,36 +2849,12 @@ impl SyncEngine {
         profile_dir.join("profile").join("Default").join("Cookies")
       }
     };
-    if os_crypt_key_path.exists() {
-      let key_data = fs::read(&os_crypt_key_path).unwrap_or_default();
-      log::info!(
-        "Profile {} sync: os_crypt_key present ({} bytes, sha256: {:x})",
-        profile_id,
-        key_data.len(),
-        {
-          use std::hash::{Hash, Hasher};
-          let mut h = std::collections::hash_map::DefaultHasher::new();
-          key_data.hash(&mut h);
-          h.finish()
-        }
-      );
-    } else {
+    let has_os_crypt_key = os_crypt_key_path.exists();
+    let cookies_bytes = fs::metadata(&cookies_path).ok().map(|meta| meta.len());
+    if !has_os_crypt_key || cookies_bytes.is_none() {
       log::warn!(
-        "Profile {} sync: os_crypt_key NOT FOUND after download",
-        profile_id
-      );
-    }
-    if cookies_path.exists() {
-      let cookies_meta = fs::metadata(&cookies_path).unwrap_or_else(|_| fs::metadata(".").unwrap());
-      log::info!(
-        "Profile {} sync: Cookies present ({} bytes)",
-        profile_id,
-        cookies_meta.len()
-      );
-    } else {
-      log::warn!(
-        "Profile {} sync: Cookies NOT FOUND after download",
-        profile_id
+        "Downloaded profile lacks critical files profile={profile_id} os_crypt_key={has_os_crypt_key} cookies={}",
+        cookies_bytes.is_some()
       );
     }
 
@@ -2968,7 +2887,12 @@ impl SyncEngine {
       }),
     );
 
-    log::info!("Profile {} downloaded successfully", profile_id);
+    log::info!(
+      "Missing profile downloaded profile={profile_id} files={} bytes={total_size} cookies_bytes={} elapsed_ms={}",
+      manifest.files.len(),
+      cookies_bytes.unwrap_or(0),
+      started.elapsed().as_millis()
+    );
     Ok(true)
   }
 
@@ -2977,8 +2901,6 @@ impl SyncEngine {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> SyncResult<Vec<String>> {
-    log::info!("Checking for missing synced profiles...");
-
     // List all personal profiles from S3 (paginated)
     let all_objects = self.client.list_all("profiles/").await?;
 
@@ -3019,10 +2941,7 @@ impl SyncEngine {
       }
     }
 
-    log::info!(
-      "Found {} profiles in remote storage, checking for missing ones...",
-      profiles_to_check.len()
-    );
+    let remote_count = profiles_to_check.len();
 
     // Deletes this device made while the cloud was out of reach. They are
     // settled before anything downloads, or the download below would bring the
@@ -3031,7 +2950,7 @@ impl SyncEngine {
     for pending in super::pending_deletes::list() {
       let profile_id = pending.profile_id;
       let Some(key_prefix) = profiles_to_check.remove(&profile_id) else {
-        log::info!("Profile {profile_id} is already gone from the cloud");
+        log::info!("Owed cloud delete dropped: already gone profile={profile_id}");
         super::pending_deletes::forget(&profile_id);
         continue;
       };
@@ -3039,21 +2958,19 @@ impl SyncEngine {
       let changed_at = match self.client.stat(&manifest_key).await {
         Ok(stat) => stat.last_modified.as_deref().and_then(rfc3339_secs),
         Err(e) => {
-          log::warn!("Could not check profile {profile_id} before its owed delete: {e}");
+          log::warn!("Owed cloud delete postponed: check failed profile={profile_id} err=\"{e}\"");
           continue;
         }
       };
       if changed_at.is_some_and(|changed| changed > pending.deleted_at) {
-        log::info!(
-          "Profile {profile_id} changed in the cloud after this device deleted it; keeping the newer copy"
-        );
+        log::info!("Owed cloud delete dropped: cloud copy is newer profile={profile_id}");
         super::pending_deletes::forget(&profile_id);
         profiles_to_check.insert(profile_id, key_prefix);
         continue;
       }
       match self.delete_profile(&profile_id).await {
         Ok(()) => super::pending_deletes::forget(&profile_id),
-        Err(e) => log::warn!("The owed cloud delete of profile {profile_id} failed again: {e}"),
+        Err(e) => log::warn!("Owed cloud delete failed again profile={profile_id} err=\"{e}\""),
       }
     }
 
@@ -3082,17 +2999,14 @@ impl SyncEngine {
         false
       };
       if has_personal_tombstone || has_team_tombstone {
-        log::info!(
-          "Skipping download of tombstoned profile {} (clearing leftover remote files)",
-          profile_id
-        );
         let prefix = format!("{}profiles/{}/", key_prefix, profile_id);
-        if let Err(e) = self.client.delete_prefix(&prefix, None).await {
-          log::warn!(
-            "Failed to clear stale remote files for tombstoned profile {}: {}",
-            profile_id,
-            e
-          );
+        match self.client.delete_prefix(&prefix, None).await {
+          Ok(_) => {
+            log::info!("Leftover cloud files of a deleted profile cleared profile={profile_id}")
+          }
+          Err(e) => log::warn!(
+            "Leftover cloud files of a deleted profile not cleared profile={profile_id} err=\"{e}\""
+          ),
         }
         continue;
       }
@@ -3108,19 +3022,18 @@ impl SyncEngine {
           // Profile exists locally or doesn't exist remotely, skip
         }
         Err(e) => {
-          log::warn!("Failed to check/download profile {}: {}", profile_id, e);
+          log::warn!("Missing profile download failed profile={profile_id} err=\"{e}\"");
         }
       }
     }
 
     if !downloaded.is_empty() {
       log::info!(
-        "Downloaded {} missing profiles: {:?}",
-        downloaded.len(),
-        downloaded
+        "Missing profile check done remote={remote_count} downloaded={} profiles={downloaded:?}",
+        downloaded.len()
       );
     } else {
-      log::info!("No missing profiles found");
+      log::debug!("Missing profile check done remote={remote_count} downloaded=0");
     }
 
     // Delete local synced profiles that have a remote tombstone (deleted on another device)
@@ -3148,18 +3061,14 @@ impl SyncEngine {
             .find(|p| p.id.to_string() == *pid)
             .is_some_and(|p| p.is_sync_enabled());
           if !still_sync_enabled {
-            log::info!(
-              "Profile {} has a tombstone but sync is no longer enabled locally — keeping local copy (originating device)",
-              pid
-            );
+            log::info!("Tombstone ignored, sync turned off here profile={pid}");
             continue;
           }
-          log::info!(
-            "Profile {} has remote tombstone, deleting locally (deleted on another device)",
-            pid
-          );
-          if let Err(e) = profile_manager.delete_profile_local_only(pid) {
-            log::warn!("Failed to delete tombstoned profile {}: {}", pid, e);
+          match profile_manager.delete_profile_local_only(pid) {
+            Ok(_) => log::info!("Profile deleted remotely, removed locally profile={pid}"),
+            Err(e) => {
+              log::warn!("Remotely deleted profile not removed locally profile={pid} err=\"{e}\"")
+            }
           }
         }
       }
@@ -3209,22 +3118,18 @@ impl SyncEngine {
                       .as_secs(),
                   );
                   if let Err(e) = profile_manager.save_profile(&remote_profile) {
-                    log::warn!("Failed to refresh cross-OS profile {} metadata: {}", pid, e);
+                    log::warn!("Cross-OS profile metadata not saved profile={pid} err=\"{e}\"");
                   } else {
-                    log::debug!("Refreshed cross-OS profile {} metadata", pid);
+                    log::debug!("Cross-OS profile metadata refreshed profile={pid}");
                   }
                 }
               }
               Err(e) => {
-                log::warn!(
-                  "Failed to download cross-OS profile {} metadata: {}",
-                  pid,
-                  e
-                );
+                log::warn!("Cross-OS profile metadata download failed profile={pid} err=\"{e}\"");
               }
             },
             Err(e) => {
-              log::warn!("Failed to presign cross-OS profile {} metadata: {}", pid, e);
+              log::warn!("Cross-OS profile metadata presign failed profile={pid} err=\"{e}\"");
             }
           },
           _ => {}
@@ -3241,8 +3146,6 @@ impl SyncEngine {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> SyncResult<()> {
-    log::info!("Checking for missing synced entities...");
-
     // Check for remote proxies not present locally
     let remote_proxies = self.client.list("proxies/").await?;
     for obj in &remote_proxies.objects {
@@ -3263,12 +3166,8 @@ impl SyncEngine {
           {
             continue;
           }
-          log::info!(
-            "Proxy {} exists remotely but not locally, downloading...",
-            proxy_id
-          );
           if let Err(e) = self.download_proxy(proxy_id, Some(app_handle)).await {
-            log::warn!("Failed to download missing proxy {}: {}", proxy_id, e);
+            log::warn!("Missing proxy download failed proxy={proxy_id} err=\"{e}\"");
           }
         }
       }
@@ -3298,12 +3197,8 @@ impl SyncEngine {
           {
             continue;
           }
-          log::info!(
-            "Group {} exists remotely but not locally, downloading...",
-            group_id
-          );
           if let Err(e) = self.download_group(group_id, Some(app_handle)).await {
-            log::warn!("Failed to download missing group {}: {}", group_id, e);
+            log::warn!("Missing group download failed group={group_id} err=\"{e}\"");
           }
         }
       }
@@ -3329,12 +3224,8 @@ impl SyncEngine {
           {
             continue;
           }
-          log::info!(
-            "VPN {} exists remotely but not locally, downloading...",
-            vpn_id
-          );
           if let Err(e) = self.download_vpn(vpn_id, Some(app_handle)).await {
-            log::warn!("Failed to download missing VPN {}: {}", vpn_id, e);
+            log::warn!("Missing VPN download failed vpn={vpn_id} err=\"{e}\"");
           }
         }
       }
@@ -3367,12 +3258,8 @@ impl SyncEngine {
           {
             continue;
           }
-          log::info!(
-            "Extension {} exists remotely but not locally, downloading...",
-            ext_id
-          );
           if let Err(e) = self.download_extension(ext_id, Some(app_handle)).await {
-            log::warn!("Failed to download missing extension {}: {}", ext_id, e);
+            log::warn!("Missing extension download failed extension={ext_id} err=\"{e}\"");
           }
         }
       }
@@ -3403,25 +3290,19 @@ impl SyncEngine {
           {
             continue;
           }
-          log::info!(
-            "Extension group {} exists remotely but not locally, downloading...",
-            group_id
-          );
           if let Err(e) = self
             .download_extension_group(group_id, Some(app_handle))
             .await
           {
             log::warn!(
-              "Failed to download missing extension group {}: {}",
-              group_id,
-              e
+              "Missing extension group download failed extension_group={group_id} err=\"{e}\""
             );
           }
         }
       }
     }
 
-    log::info!("Missing synced entities check complete");
+    log::debug!("Missing entity check done");
     Ok(())
   }
 }
@@ -3462,7 +3343,7 @@ pub async fn enable_proxy_sync_if_needed(proxy_id: &str) -> Result<(), String> {
   if !proxy.sync_enabled {
     proxy_manager.set_stored_proxy_sync_state(proxy_id, true, proxy.last_sync)?;
     let _ = events::emit("stored-proxies-changed", ());
-    log::info!("Auto-enabled sync for proxy {}", proxy_id);
+    log::info!("Sync auto-enabled proxy={proxy_id}");
   }
 
   Ok(())
@@ -3496,7 +3377,7 @@ pub async fn enable_vpn_sync_if_needed(vpn_id: &str) -> Result<(), String> {
       .map_err(|e| format!("Failed to enable VPN sync: {e}"))?;
 
     let _ = events::emit("vpn-configs-changed", ());
-    log::info!("Auto-enabled sync for VPN {}", vpn_id);
+    log::info!("Sync auto-enabled vpn={vpn_id}");
   }
 
   Ok(())
@@ -3526,7 +3407,7 @@ pub async fn enable_group_sync_if_needed(group_id: &str) -> Result<(), String> {
     }
 
     let _ = events::emit("groups-changed", ());
-    log::info!("Auto-enabled sync for group {}", group_id);
+    log::info!("Sync auto-enabled group={group_id}");
   }
 
   Ok(())
@@ -3559,10 +3440,7 @@ pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> 
         .map_err(|e| format!("Failed to update extension group sync: {e}"))?;
     }
     let _ = events::emit("extensions-changed", ());
-    log::info!(
-      "Auto-enabled sync for extension group {}",
-      extension_group_id
-    );
+    log::info!("Sync auto-enabled extension_group={extension_group_id}");
   }
 
   // Cascade to every extension referenced by the group so the other device
@@ -3583,9 +3461,9 @@ pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> 
       if let Ok(mut ext) = manager.get_extension(ext_id) {
         ext.sync_enabled = true;
         if let Err(e) = manager.update_extension_internal(&ext) {
-          log::warn!("Failed to auto-enable sync for extension {}: {e}", ext_id);
+          log::warn!("Sync auto-enable failed extension={ext_id} err=\"{e}\"");
         } else {
-          log::info!("Auto-enabled sync for extension {}", ext_id);
+          log::info!("Sync auto-enabled extension={ext_id}");
         }
       }
     }
@@ -3726,10 +3604,8 @@ async fn apply_profile_sync_mode(
       let manifest_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
       let _ = engine.client.delete(&manifest_key, None).await;
       log::info!(
-        "Deleted remote manifest for profile {} due to sync mode change ({:?} -> {:?})",
-        Plain(&profile_id),
-        old_mode,
-        new_mode
+        "Cloud manifest deleted for sync mode change profile={} from={old_mode:?} to={new_mode:?}",
+        Plain(&profile_id)
       );
     }
   }
@@ -3752,9 +3628,8 @@ async fn apply_profile_sync_mode(
         return Err(format!("Could not clear the profile's tombstone: {e}"));
       }
       log::warn!(
-        "Failed to clear the tombstone of profile {}: {}",
-        Plain(&profile_id),
-        e
+        "Profile tombstone not cleared profile={} err=\"{e}\"",
+        Plain(&profile_id)
       );
     }
   }
@@ -3793,32 +3668,28 @@ async fn apply_profile_sync_mode(
 
       if let Some(ref proxy_id) = profile.proxy_id {
         if let Err(e) = enable_proxy_sync_if_needed(proxy_id).await {
-          log::warn!("Failed to enable sync for proxy {}: {}", proxy_id, e);
+          log::warn!("Sync enable failed proxy={proxy_id} err=\"{e}\"");
         } else {
           scheduler.queue_proxy_sync(proxy_id.clone()).await;
         }
       }
       if let Some(ref group_id) = profile.group_id {
         if let Err(e) = enable_group_sync_if_needed(group_id).await {
-          log::warn!("Failed to enable sync for group {}: {}", group_id, e);
+          log::warn!("Sync enable failed group={group_id} err=\"{e}\"");
         } else {
           scheduler.queue_group_sync(group_id.clone()).await;
         }
       }
       if let Some(ref vpn_id) = profile.vpn_id {
         if let Err(e) = enable_vpn_sync_if_needed(vpn_id).await {
-          log::warn!("Failed to enable sync for VPN {}: {}", vpn_id, e);
+          log::warn!("Sync enable failed vpn={vpn_id} err=\"{e}\"");
         } else {
           scheduler.queue_vpn_sync(vpn_id.clone()).await;
         }
       }
       if let Some(ref ext_group_id) = profile.extension_group_id {
         if let Err(e) = enable_extension_group_sync_if_needed(ext_group_id).await {
-          log::warn!(
-            "Failed to enable sync for extension group {}: {}",
-            ext_group_id,
-            e
-          );
+          log::warn!("Sync enable failed extension_group={ext_group_id} err=\"{e}\"");
         } else {
           scheduler
             .queue_extension_group_sync(ext_group_id.clone())
@@ -3826,7 +3697,10 @@ async fn apply_profile_sync_mode(
         }
       }
     } else {
-      log::warn!("Scheduler not initialized, sync will not start");
+      log::warn!(
+        "Profile sync not queued: no scheduler profile={}",
+        Plain(&profile_id)
+      );
     }
   } else {
     // Delete remote data when disabling sync. Awaited (not spawned) so the
@@ -3840,16 +3714,13 @@ async fn apply_profile_sync_mode(
         Ok(engine) => {
           if let Err(e) = engine.delete_profile(&profile_id).await {
             log::warn!(
-              "Failed to delete profile {} from sync: {}",
-              Plain(&profile_id),
-              e
+              "Cloud profile delete failed profile={} err=\"{e}\"",
+              Plain(&profile_id)
             );
-          } else {
-            log::info!("Profile {} deleted from sync service", Plain(&profile_id));
           }
         }
         Err(e) => {
-          log::debug!("Sync not configured, skipping remote deletion: {}", e);
+          log::debug!("Cloud profile delete skipped: sync not configured err=\"{e}\"");
         }
       }
     }
@@ -3875,7 +3746,7 @@ async fn apply_profile_sync_mode(
         .report_sync_profile_count(sync_count as i64)
         .await
       {
-        log::warn!("Failed to report sync profile count: {e}");
+        log::warn!("Sync profile count not reported err=\"{e}\"");
       }
     });
   }
@@ -4024,7 +3895,7 @@ async fn clear_config_tombstone(app_handle: &tauri::AppHandle, kind: &str, id: &
   if let Ok(engine) = SyncEngine::create_from_settings(app_handle).await {
     let tombstone_key = format!("tombstones/{}/{}.json", kind, id);
     if let Err(e) = engine.client.delete(&tombstone_key, None).await {
-      log::warn!("Failed to clear tombstone {}: {}", tombstone_key, e);
+      log::warn!("Tombstone not cleared key={tombstone_key} err=\"{e}\"");
     }
   }
 }
@@ -4317,7 +4188,7 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
     for proxy in &proxies {
       if !proxy.sync_enabled && !proxy.is_cloud_managed {
         if let Err(e) = set_proxy_sync_enabled(app_handle.clone(), proxy.id.clone(), true).await {
-          log::warn!("Failed to enable sync for proxy {}: {e}", proxy.id);
+          log::warn!("Sync enable failed proxy={} err=\"{e}\"", proxy.id);
         }
       }
     }
@@ -4333,7 +4204,7 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
     for group in &groups {
       if !group.sync_enabled {
         if let Err(e) = set_group_sync_enabled(app_handle.clone(), group.id.clone(), true).await {
-          log::warn!("Failed to enable sync for group {}: {e}", group.id);
+          log::warn!("Sync enable failed group={} err=\"{e}\"", group.id);
         }
       }
     }
@@ -4350,7 +4221,7 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
     for config in &configs {
       if !config.sync_enabled {
         if let Err(e) = set_vpn_sync_enabled(app_handle.clone(), config.id.clone(), true).await {
-          log::warn!("Failed to enable sync for VPN {}: {e}", config.id);
+          log::warn!("Sync enable failed vpn={} err=\"{e}\"", config.id);
         }
       }
     }
@@ -4368,7 +4239,7 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
       // rather than reported as a failure on every sync setup.
       if !ext.sync_enabled && !ext.is_linked() {
         if let Err(e) = set_extension_sync_enabled(app_handle.clone(), ext.id.clone(), true).await {
-          log::warn!("Failed to enable sync for extension {}: {e}", ext.id);
+          log::warn!("Sync enable failed extension={} err=\"{e}\"", ext.id);
         }
       }
     }
@@ -4387,7 +4258,7 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
           set_extension_group_sync_enabled(app_handle.clone(), group.id.clone(), true).await
         {
           log::warn!(
-            "Failed to enable sync for extension group {}: {e}",
+            "Sync enable failed extension_group={} err=\"{e}\"",
             group.id
           );
         }

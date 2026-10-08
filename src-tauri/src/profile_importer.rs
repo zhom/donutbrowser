@@ -710,6 +710,7 @@ impl ProfileImporter {
       .map(|p| p.name.to_lowercase())
       .collect();
 
+    let started = std::time::Instant::now();
     let total = items.len();
     let mut results = Vec::new();
     let mut imported_count = 0usize;
@@ -793,18 +794,30 @@ impl ProfileImporter {
           emit_import_progress(total, completed, index, &final_name, "failed");
           // The name was reserved but the import failed — free it again.
           taken_names.remove(&final_name.to_lowercase());
+          let error = error_to_code_string(e);
+          // The text can quote the profile name and the source paths.
+          let logged =
+            crate::log_redaction::text(&error.replace(&format!("'{final_name}'"), "'<name>'"));
+          log::warn!(
+            "Profile import item failed index={index} source_browser={} err=\"{logged}\"",
+            item.browser_type
+          );
           results.push(ProfileImportItemResult {
             name: final_name,
             source_path: item.source_path,
             status: "failed".to_string(),
             profile_id: None,
-            error: Some(error_to_code_string(e)),
+            error: Some(error),
             report: None,
           });
         }
       }
     }
 
+    log::info!(
+      "Profile import finished items={total} imported={imported_count} skipped={skipped_count} failed={failed_count} elapsed_ms={}",
+      started.elapsed().as_millis()
+    );
     Ok(ProfileImportBatchResult {
       imported_count,
       skipped_count,
@@ -961,7 +974,7 @@ impl ProfileImporter {
 
       if config.fingerprint.is_none() && config.identity_id.is_none() {
         let temp_profile = BrowserProfile {
-          id: uuid::Uuid::new_v4(),
+          id: profile_id,
           name: new_profile_name.to_string(),
           browser: mapped.to_string(),
           version: version.clone(),
@@ -1086,16 +1099,12 @@ impl ProfileImporter {
       // the exact symptom the old layout bug produced, so it is worth a loud
       // line in the log rather than a silent success.
       log::warn!(
-        "Imported profile '{}' from '{}' carried no readable data (warnings: {:?})",
-        new_profile_name,
-        source_path.display(),
+        "Profile imported with no readable data profile={profile_id} source_browser={browser_type} warnings={:?}",
         report.warnings
       );
     } else {
       log::info!(
-        "Imported profile '{}' from '{}': {} cookies, {} passwords, {} history entries ({} unrecoverable secrets, warnings: {:?})",
-        new_profile_name,
-        source_path.display(),
+        "Profile imported profile={profile_id} source_browser={browser_type} cookies={} passwords={} history={} unrecoverable={} warnings={:?}",
         report.cookies_migrated,
         report.logins_migrated,
         report.history_entries,

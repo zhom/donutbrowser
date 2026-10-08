@@ -210,9 +210,9 @@ pub async fn resolve(profile: &BrowserProfile) -> Result<CdpTarget, ResolveError
       .await
       .map_err(|e| ResolveError::Endpoint(e.to_string()))?;
     let bearer = crate::remote_session::access_token_for_cdp().map_err(ResolveError::Endpoint)?;
-    log::info!(
-      "Driving profile '{}' through remote session {}",
-      profile.name,
+    log::debug!(
+      "Driving profile through remote session profile={} session={}",
+      profile.id,
       ShortId(&session.session_id)
     );
     return Ok(CdpTarget::Remote {
@@ -295,7 +295,7 @@ async fn local_page_ws_url(profile: &BrowserProfile, patience: Patience) -> Opti
   }
 
   if patience == Patience::WaitForLaunch {
-    log::warn!("Local CDP discovery on port {port} gave up: {last_err}");
+    log::warn!("Local CDP discovery gave up cdp_port={port} err=\"{last_err}\"");
   }
   None
 }
@@ -696,8 +696,8 @@ impl CdpTarget {
         return Err(error);
       }
       let delay = CONNECT_RETRY_BASE * 2u32.pow(attempt - 1);
-      log::warn!(
-        "CDP connect to {} failed ({error}); retrying in {}ms",
+      log::debug!(
+        "CDP connect failed target=\"{}\" attempt={attempt} retry_in_ms={} err=\"{error}\"",
         self.describe(),
         delay.as_millis()
       );
@@ -722,7 +722,7 @@ impl CdpTarget {
         let mut connection = dial_relay(ws_url, bearer).await?;
         if let Err(e) = connection.attach_to_page().await {
           log::warn!(
-            "Could not attach to a page in remote session {}: {e}",
+            "Remote session page attach failed session={} err=\"{e}\"",
             ShortId(session_id)
           );
           return Err(e);
@@ -763,7 +763,7 @@ pub async fn open_relay_socket(session_id: &str) -> Result<RelaySocket, CdpError
     Err(e) => return Err(e),
   };
 
-  log::info!("The CDP relay refused the stored access token; refreshing and retrying once");
+  log::debug!("CDP relay refused the access token, refreshing it once");
   crate::cloud_auth::CLOUD_AUTH
     .refresh_access_token()
     .await
@@ -824,7 +824,7 @@ async fn dial_relay(ws_url: &str, bearer: &str) -> Result<CdpConnection, CdpErro
     Err(e) => return Err(e),
   };
 
-  log::info!("The CDP relay refused the stored access token; refreshing and retrying once");
+  log::debug!("CDP relay refused the access token, refreshing it once");
   crate::cloud_auth::CLOUD_AUTH
     .refresh_access_token()
     .await

@@ -2,15 +2,59 @@ use super::engine::SyncEngine;
 use super::subscription::SyncWorkItem;
 use crate::events;
 use crate::log_redaction::Plain;
+use crate::log_streak::Streak;
 use crate::profile::ProfileManager;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 
 static GLOBAL_SCHEDULER: std::sync::Mutex<Option<Arc<SyncScheduler>>> = std::sync::Mutex::new(None);
+
+static SYNC_ENGINE: Streak = Streak::new(module_path!(), "Sync engine setup");
+
+/// The last error per `kind=id`, so an entity that keeps failing the same way
+/// logs once, not on every pass.
+static FAILING: LazyLock<std::sync::Mutex<HashMap<String, String>>> =
+  LazyLock::new(Default::default);
+
+/// Tombstones already reported this run. The server replays every tombstone
+/// to each new SSE connection.
+static NOTED_TOMBSTONES: LazyLock<std::sync::Mutex<HashSet<String>>> =
+  LazyLock::new(Default::default);
+
+fn log_sync_failure(kind: &str, id: &str, err: impl Display) {
+  let err = err.to_string();
+  let repeated = FAILING
+    .lock()
+    .map(|mut failing| failing.insert(format!("{kind}={id}"), err.clone()).as_ref() == Some(&err))
+    .unwrap_or(false);
+  if repeated {
+    log::debug!("Sync failed again {kind}={id} err=\"{err}\"");
+  } else {
+    log::error!("Sync failed {kind}={id} err=\"{err}\"");
+  }
+}
+
+fn log_sync_success(kind: &str, id: &str) {
+  let recovered = FAILING
+    .lock()
+    .map(|mut failing| failing.remove(&format!("{kind}={id}")).is_some())
+    .unwrap_or(false);
+  if recovered {
+    log::info!("Sync recovered {kind}={id}");
+  }
+}
+
+fn first_tombstone_notice(entity_id: &str) -> bool {
+  NOTED_TOMBSTONES
+    .lock()
+    .map(|mut noted| noted.insert(entity_id.to_string()))
+    .unwrap_or(true)
+}
 
 pub fn get_global_scheduler() -> Option<Arc<SyncScheduler>> {
   GLOBAL_SCHEDULER.lock().ok().and_then(|g| g.clone())
@@ -171,13 +215,13 @@ impl SyncScheduler {
   pub async fn mark_profile_running(&self, profile_id: &str) {
     let mut running = self.running_profiles.lock().await;
     running.insert(profile_id.to_string());
-    log::debug!("Marked profile {} as running", profile_id);
+    log::debug!("Profile marked running profile={profile_id}");
   }
 
   pub async fn mark_profile_stopped(&self, profile_id: &str) {
     let mut running = self.running_profiles.lock().await;
     running.remove(profile_id);
-    log::debug!("Marked profile {} as stopped", profile_id);
+    log::debug!("Profile marked stopped profile={profile_id}");
 
     let mut pending = self.pending_profiles.lock().await;
     if pending.contains_key(profile_id) {
@@ -189,10 +233,7 @@ impl SyncScheduler {
           queued: true,
         },
       );
-      log::debug!(
-        "Profile {} has pending sync, will execute immediately",
-        profile_id
-      );
+      log::debug!("Profile pending sync released profile={profile_id}");
     }
   }
 
@@ -209,10 +250,7 @@ impl SyncScheduler {
       .is_locked_by_another(profile_id)
       .await
     {
-      log::debug!(
-        "Profile {} is locked on another device, treating as running",
-        profile_id
-      );
+      log::debug!("Profile locked on another device, treated as running profile={profile_id}");
       return true;
     }
 
@@ -241,7 +279,7 @@ impl SyncScheduler {
         },
       );
       log::debug!(
-        "Profile {} is running, queued sync for after stop",
+        "Profile sync queued until stop profile={}",
         Plain(&profile_id)
       );
     } else {
@@ -253,7 +291,7 @@ impl SyncScheduler {
           queued: true,
         },
       );
-      log::debug!("Profile {} queued for immediate sync", Plain(&profile_id));
+      log::debug!("Profile sync queued profile={}", Plain(&profile_id));
     }
   }
 
@@ -293,14 +331,12 @@ impl SyncScheduler {
   }
 
   pub async fn sync_all_enabled_profiles(&self, _app_handle: &tauri::AppHandle) {
-    log::info!("Starting initial sync for all enabled profiles...");
-
     let profiles = {
       let profile_manager = ProfileManager::instance();
       match profile_manager.list_profiles() {
         Ok(p) => p,
         Err(e) => {
-          log::error!("Failed to list profiles for initial sync: {e}");
+          log::error!("Initial sync not queued: profile list failed err=\"{e}\"");
           return;
         }
       }
@@ -312,12 +348,12 @@ impl SyncScheduler {
       .collect();
 
     if sync_enabled_profiles.is_empty() {
-      log::debug!("No sync-enabled profiles found");
+      log::debug!("Initial sync skipped: no sync-enabled profiles");
       return;
     }
 
     log::info!(
-      "Found {} sync-enabled profiles, queueing for sync",
+      "Initial sync queued profiles={}",
       sync_enabled_profiles.len()
     );
 
@@ -335,14 +371,9 @@ impl SyncScheduler {
       }
 
       if should_wait {
-        log::info!(
-          "Profile '{}' is {} — will sync after it becomes available",
-          profile.name,
-          if is_running {
-            "running locally"
-          } else {
-            "locked by a team member"
-          }
+        log::debug!(
+          "Initial sync deferred profile={profile_id} reason={}",
+          if is_running { "running" } else { "team_locked" }
         );
       }
 
@@ -388,11 +419,11 @@ impl SyncScheduler {
         // Retired while the pipeline was still assembling it. Starting now
         // would leave a task nothing can stop, because the handle in the global
         // has already been replaced.
-        log::info!("Sync scheduler was retired before it started; not starting it");
+        log::info!("Sync scheduler not started: retired before start");
         return false;
       }
       StartDecision::AlreadyRunning => {
-        log::warn!("Sync scheduler is already running; ignoring the second start");
+        log::warn!("Sync scheduler already running, second start ignored");
         return false;
       }
       StartDecision::Start => {}
@@ -445,9 +476,7 @@ impl SyncScheduler {
                 // The subscription is gone, so no more live updates from other
                 // devices. Local changes and the timer still work, so keep
                 // ticking rather than ending the scheduler.
-                log::warn!(
-                  "Sync work channel closed; continuing on the timer without live updates"
-                );
+                log::warn!("Sync work channel closed, timer only from now");
                 work_channel_open = false;
               }
             }
@@ -503,7 +532,7 @@ impl SyncScheduler {
     for profile_id in profiles_to_sync {
       let mut in_flight = self.in_flight_profiles.lock().await;
       if in_flight.contains(&profile_id) {
-        log::debug!("Profile {} already in-flight, skipping", profile_id);
+        log::debug!("Profile sync already in flight profile={profile_id}");
         continue;
       }
       in_flight.insert(profile_id.clone());
@@ -516,7 +545,8 @@ impl SyncScheduler {
       let app = app_handle.clone();
       let in_flight = self.in_flight_profiles.clone();
       sync_set.spawn(async move {
-        log::info!("Executing queued sync for profile {}", profile_id);
+        let started = Instant::now();
+        log::debug!("Profile sync started profile={profile_id}");
         let _ = events::emit(
           "profile-sync-status",
           serde_json::json!({
@@ -542,12 +572,13 @@ impl SyncScheduler {
 
         let result = match SyncEngine::create_from_settings(&app).await {
           Ok(engine) => {
+            SYNC_ENGINE.succeeded();
             engine
               .sync_profile_with_bias(&app, &profile, super::DiffBias::Auto)
               .await
           }
           Err(e) => {
-            log::error!("Failed to create sync engine: {}", e);
+            SYNC_ENGINE.failed(e);
             Err(super::types::SyncError::NotConfigured)
           }
         };
@@ -559,7 +590,11 @@ impl SyncScheduler {
 
         match result {
           Ok(super::ProfileSyncOutcome::Completed) => {
-            log::info!("Profile {} synced successfully", profile_id);
+            log_sync_success("profile", &profile_id);
+            log::debug!(
+              "Profile sync completed profile={profile_id} elapsed_ms={}",
+              started.elapsed().as_millis()
+            );
             let _ = events::emit(
               "profile-sync-status",
               serde_json::json!({
@@ -569,10 +604,18 @@ impl SyncScheduler {
             );
           }
           Ok(super::ProfileSyncOutcome::Skipped(reason)) => {
-            log::debug!("Profile {profile_id} sync is waiting: {reason}");
+            log::debug!("Profile sync skipped profile={profile_id} reason=\"{reason}\"");
           }
           Err(e) => {
-            log::error!("Failed to sync profile {}: {}", profile_id, e);
+            // Both are logged where they happen.
+            if matches!(
+              e,
+              super::types::SyncError::Cancelled | super::types::SyncError::NotConfigured
+            ) {
+              log::debug!("Profile sync ended profile={profile_id} err=\"{e}\"");
+            } else {
+              log_sync_failure("profile", &profile_id, &e);
+            }
             let _ = events::emit(
               "profile-sync-status",
               serde_json::json!({
@@ -590,7 +633,7 @@ impl SyncScheduler {
     if !sync_set.is_empty() {
       while let Some(result) = sync_set.join_next().await {
         if let Err(e) = result {
-          log::error!("Profile sync task panicked: {e}");
+          log::error!("Profile sync task panicked err=\"{e}\"");
         }
       }
     }
@@ -609,8 +652,9 @@ impl SyncScheduler {
 
     match SyncEngine::create_from_settings(app_handle).await {
       Ok(engine) => {
+        SYNC_ENGINE.succeeded();
         for proxy_id in proxies_to_sync {
-          log::info!("Syncing proxy {}", proxy_id);
+          log::debug!("Sync started proxy={proxy_id}");
           let _ = events::emit(
             "proxy-sync-status",
             serde_json::json!({
@@ -623,6 +667,7 @@ impl SyncScheduler {
             .await
           {
             Ok(()) => {
+              log_sync_success("proxy", &proxy_id);
               let _ = events::emit(
                 "proxy-sync-status",
                 serde_json::json!({
@@ -632,7 +677,7 @@ impl SyncScheduler {
               );
             }
             Err(e) => {
-              log::error!("Failed to sync proxy {}: {}", proxy_id, e);
+              log_sync_failure("proxy", &proxy_id, &e);
               let _ = events::emit(
                 "proxy-sync-status",
                 serde_json::json!({
@@ -647,9 +692,7 @@ impl SyncScheduler {
 
         // Check if all sync work is complete after proxies finish
       }
-      Err(e) => {
-        log::error!("Failed to create sync engine: {}", e);
-      }
+      Err(e) => SYNC_ENGINE.failed(e),
     }
   }
 
@@ -666,8 +709,9 @@ impl SyncScheduler {
 
     match SyncEngine::create_from_settings(app_handle).await {
       Ok(engine) => {
+        SYNC_ENGINE.succeeded();
         for group_id in groups_to_sync {
-          log::info!("Syncing group {}", group_id);
+          log::debug!("Sync started group={group_id}");
           let _ = events::emit(
             "group-sync-status",
             serde_json::json!({
@@ -680,6 +724,7 @@ impl SyncScheduler {
             .await
           {
             Ok(()) => {
+              log_sync_success("group", &group_id);
               let _ = events::emit(
                 "group-sync-status",
                 serde_json::json!({
@@ -689,7 +734,7 @@ impl SyncScheduler {
               );
             }
             Err(e) => {
-              log::error!("Failed to sync group {}: {}", group_id, e);
+              log_sync_failure("group", &group_id, &e);
               let _ = events::emit(
                 "group-sync-status",
                 serde_json::json!({
@@ -704,9 +749,7 @@ impl SyncScheduler {
 
         // Check if all sync work is complete after groups finish
       }
-      Err(e) => {
-        log::error!("Failed to create sync engine: {}", e);
-      }
+      Err(e) => SYNC_ENGINE.failed(e),
     }
   }
 
@@ -723,8 +766,9 @@ impl SyncScheduler {
 
     match SyncEngine::create_from_settings(app_handle).await {
       Ok(engine) => {
+        SYNC_ENGINE.succeeded();
         for vpn_id in vpns_to_sync {
-          log::info!("Syncing VPN {}", vpn_id);
+          log::debug!("Sync started vpn={vpn_id}");
           let _ = events::emit(
             "vpn-sync-status",
             serde_json::json!({
@@ -734,6 +778,7 @@ impl SyncScheduler {
           );
           match engine.sync_vpn_by_id_with_handle(&vpn_id, app_handle).await {
             Ok(()) => {
+              log_sync_success("vpn", &vpn_id);
               let _ = events::emit(
                 "vpn-sync-status",
                 serde_json::json!({
@@ -743,7 +788,7 @@ impl SyncScheduler {
               );
             }
             Err(e) => {
-              log::error!("Failed to sync VPN {}: {}", vpn_id, e);
+              log_sync_failure("vpn", &vpn_id, &e);
               let _ = events::emit(
                 "vpn-sync-status",
                 serde_json::json!({
@@ -756,9 +801,7 @@ impl SyncScheduler {
           }
         }
       }
-      Err(e) => {
-        log::error!("Failed to create sync engine: {}", e);
-      }
+      Err(e) => SYNC_ENGINE.failed(e),
     }
   }
 
@@ -775,8 +818,9 @@ impl SyncScheduler {
 
     match SyncEngine::create_from_settings(app_handle).await {
       Ok(engine) => {
+        SYNC_ENGINE.succeeded();
         for ext_id in extensions_to_sync {
-          log::info!("Syncing extension {}", ext_id);
+          log::debug!("Sync started extension={ext_id}");
           let _ = events::emit(
             "extension-sync-status",
             serde_json::json!({ "id": ext_id, "status": "syncing" }),
@@ -785,12 +829,13 @@ impl SyncScheduler {
             .sync_extension_by_id_with_handle(&ext_id, app_handle)
             .await
           {
-            log::error!("Failed to sync extension {}: {}", ext_id, e);
+            log_sync_failure("extension", &ext_id, &e);
             let _ = events::emit(
               "extension-sync-status",
               serde_json::json!({ "id": ext_id, "status": "error" }),
             );
           } else {
+            log_sync_success("extension", &ext_id);
             let _ = events::emit(
               "extension-sync-status",
               serde_json::json!({ "id": ext_id, "status": "synced" }),
@@ -798,9 +843,7 @@ impl SyncScheduler {
           }
         }
       }
-      Err(e) => {
-        log::error!("Failed to create sync engine: {}", e);
-      }
+      Err(e) => SYNC_ENGINE.failed(e),
     }
   }
 
@@ -817,8 +860,9 @@ impl SyncScheduler {
 
     match SyncEngine::create_from_settings(app_handle).await {
       Ok(engine) => {
+        SYNC_ENGINE.succeeded();
         for group_id in groups_to_sync {
-          log::info!("Syncing extension group {}", group_id);
+          log::debug!("Sync started extension_group={group_id}");
           let _ = events::emit(
             "extension-sync-status",
             serde_json::json!({ "id": group_id, "status": "syncing" }),
@@ -827,12 +871,13 @@ impl SyncScheduler {
             .sync_extension_group_by_id_with_handle(&group_id, app_handle)
             .await
           {
-            log::error!("Failed to sync extension group {}: {}", group_id, e);
+            log_sync_failure("extension_group", &group_id, &e);
             let _ = events::emit(
               "extension-sync-status",
               serde_json::json!({ "id": group_id, "status": "error" }),
             );
           } else {
+            log_sync_success("extension_group", &group_id);
             let _ = events::emit(
               "extension-sync-status",
               serde_json::json!({ "id": group_id, "status": "synced" }),
@@ -840,9 +885,7 @@ impl SyncScheduler {
           }
         }
       }
-      Err(e) => {
-        log::error!("Failed to create sync engine: {}", e);
-      }
+      Err(e) => SYNC_ENGINE.failed(e),
     }
   }
 
@@ -884,27 +927,30 @@ impl SyncScheduler {
     }
 
     for (entity_type, entity_id) in tombstones {
-      log::info!("Processing tombstone for {} {}", entity_type, entity_id);
+      log::debug!("Tombstone received {entity_type}={entity_id}");
       match entity_type.as_str() {
         "profile" => {
           let profile_manager = ProfileManager::instance();
-          let local = uuid::Uuid::parse_str(&entity_id)
-            .ok()
-            .and_then(|uuid| {
-              profile_manager
-                .list_profiles()
-                .ok()?
-                .into_iter()
-                .find(|p| p.id == uuid)
-            })
-            .filter(|p| p.is_sync_enabled());
+          let found = uuid::Uuid::parse_str(&entity_id).ok().and_then(|uuid| {
+            profile_manager
+              .list_profiles()
+              .ok()?
+              .into_iter()
+              .find(|p| p.id == uuid)
+          });
 
-          let Some(local) = local else {
-            log::info!(
-              "Profile {} has a tombstone but sync is no longer enabled locally — keeping local copy",
-              entity_id
-            );
-            continue;
+          let local = match found {
+            Some(profile) if profile.is_sync_enabled() => profile,
+            Some(_) => {
+              if first_tombstone_notice(&entity_id) {
+                log::info!("Tombstone ignored, sync off locally profile={entity_id}");
+              }
+              continue;
+            }
+            None => {
+              log::debug!("Tombstone ignored, profile not on this device profile={entity_id}");
+              continue;
+            }
           };
 
           // The event can be stale. A restore from the trash, or sync switched
@@ -912,30 +958,25 @@ impl SyncScheduler {
           // the profile it named is live again. Only a tombstone that is still
           // in the cloud erases the local copy.
           let still_tombstoned = match SyncEngine::create_from_settings(app_handle).await {
-            Ok(engine) => engine.profile_tombstone_exists(&local).await,
+            Ok(engine) => {
+              SYNC_ENGINE.succeeded();
+              engine.profile_tombstone_exists(&local).await
+            }
             Err(e) => {
-              log::warn!(
-                "Could not confirm the tombstone of profile {}: {}",
-                entity_id,
-                e
-              );
-              false
+              SYNC_ENGINE.failed(e);
+              continue;
             }
           };
           if !still_tombstoned {
-            log::info!(
-              "Profile {} tombstone is no longer in the cloud — keeping local copy",
-              entity_id
-            );
+            log::info!("Tombstone stale, kept local profile profile={entity_id}");
             continue;
           }
 
-          log::info!(
-            "Profile {} was deleted remotely, deleting locally",
-            entity_id
-          );
-          if let Err(e) = profile_manager.delete_profile_local_only(&entity_id) {
-            log::warn!("Failed to delete tombstoned profile {}: {}", entity_id, e);
+          match profile_manager.delete_profile_local_only(&entity_id) {
+            Ok(_) => log::info!("Profile deleted remotely, removed locally profile={entity_id}"),
+            Err(e) => log::warn!(
+              "Remotely deleted profile not removed locally profile={entity_id} err=\"{e}\""
+            ),
           }
         }
         "proxy" => {
@@ -943,7 +984,7 @@ impl SyncScheduler {
           let proxies = proxy_manager.get_stored_proxies();
           if let Some(proxy) = proxies.iter().find(|p| p.id == entity_id) {
             if proxy.sync_enabled {
-              log::info!("Proxy {} was deleted remotely, deleting locally", entity_id);
+              log::info!("Proxy deleted remotely, removed locally proxy={entity_id}");
               let proxy_file = proxy_manager.get_proxy_file_path(&entity_id);
               if proxy_file.exists() {
                 let _ = std::fs::remove_file(&proxy_file);
@@ -958,7 +999,7 @@ impl SyncScheduler {
           let groups = group_manager.get_all_groups().unwrap_or_default();
           if let Some(group) = groups.iter().find(|g| g.id == entity_id) {
             if group.sync_enabled {
-              log::info!("Group {} was deleted remotely, deleting locally", entity_id);
+              log::info!("Group deleted remotely, removed locally group={entity_id}");
               let _ = group_manager.delete_group_internal(&entity_id);
               let _ = events::emit("groups-changed", ());
             }
@@ -968,7 +1009,7 @@ impl SyncScheduler {
           let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
           if let Ok(vpn) = storage.load_config(&entity_id) {
             if vpn.sync_enabled {
-              log::info!("VPN {} was deleted remotely, deleting locally", entity_id);
+              log::info!("VPN deleted remotely, removed locally vpn={entity_id}");
               let _ = storage.delete_config(&entity_id);
               let _ = events::emit("vpn-configs-changed", ());
             }
@@ -978,10 +1019,7 @@ impl SyncScheduler {
           let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
           if let Ok(ext) = manager.get_extension(&entity_id) {
             if ext.sync_enabled {
-              log::info!(
-                "Extension {} was deleted remotely, deleting locally",
-                entity_id
-              );
+              log::info!("Extension deleted remotely, removed locally extension={entity_id}");
               let _ = manager.delete_extension_internal(&entity_id);
               let _ = events::emit("extensions-changed", ());
             }
@@ -992,8 +1030,7 @@ impl SyncScheduler {
           if let Ok(group) = manager.get_group(&entity_id) {
             if group.sync_enabled {
               log::info!(
-                "Extension group {} was deleted remotely, deleting locally",
-                entity_id
+                "Extension group deleted remotely, removed locally extension_group={entity_id}"
               );
               let _ = manager.delete_group_internal(&entity_id);
               let _ = events::emit("extensions-changed", ());

@@ -221,7 +221,7 @@ pub fn repair_legacy_layout(user_data_dir: &Path) -> Result<bool, String> {
   let _ = os_crypt::TargetKey::ensure(user_data_dir);
 
   log::info!(
-    "Repaired legacy import layout at {} (moved profile content into {INITIAL_PROFILE_DIR}/)",
+    "Legacy import layout repaired: content moved into {INITIAL_PROFILE_DIR}/ path=\"{}\"",
     user_data_dir.display()
   );
   Ok(true)

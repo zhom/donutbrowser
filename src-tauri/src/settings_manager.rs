@@ -106,7 +106,7 @@ pub fn get_table_preferences(table_id: String) -> Result<TablePreferences, Strin
     Ok(preferences)
   };
   load().map_err(|error| {
-    log::warn!("Cannot load table preferences: {error}");
+    log::warn!("Table preferences load failed table={table_id} err=\"{error}\"");
     serde_json::json!({"code": "TABLE_PREFERENCES_LOAD_FAILED"}).to_string()
   })
 }
@@ -131,7 +131,7 @@ pub fn save_table_preferences(
     Ok(())
   };
   persist().map_err(|error| {
-    log::warn!("Cannot save table preferences: {error}");
+    log::warn!("Table preferences save failed table={table_id} err=\"{error}\"");
     serde_json::json!({"code": "TABLE_PREFERENCES_SAVE_FAILED"}).to_string()
   })
 }
@@ -372,7 +372,7 @@ impl SettingsManager {
     match serde_json::from_str::<AppSettings>(&content) {
       Ok(settings) => Ok(settings),
       Err(e) => {
-        log::warn!("Warning: Failed to parse settings file, using defaults: {e}");
+        log::warn!("Settings file unparsable; using defaults err=\"{e}\"");
         Ok(AppSettings::default())
       }
     }
@@ -701,8 +701,8 @@ pub async fn save_app_settings(
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
 
-  log::info!(
-    "[settings] Saving settings: theme={}, custom_theme_keys={}",
+  log::debug!(
+    "Settings saved theme={} custom_theme_keys={}",
     persist_settings.theme,
     persist_settings
       .custom_theme
@@ -818,24 +818,36 @@ pub async fn open_log_directory(app_handle: tauri::AppHandle) -> Result<(), Stri
 
   #[cfg(target_os = "macos")]
   {
-    std::process::Command::new("open")
+    let child = std::process::Command::new("open")
       .arg(&path)
       .spawn()
       .map_err(|e| format!("Failed to open log dir: {e}"))?;
+    log::info!(
+      "Process spawned pid={} purpose=\"reveal log dir\" tool=open",
+      child.id()
+    );
   }
   #[cfg(target_os = "windows")]
   {
-    std::process::Command::new("explorer")
+    let child = std::process::Command::new("explorer")
       .arg(&path)
       .spawn()
       .map_err(|e| format!("Failed to open log dir: {e}"))?;
+    log::info!(
+      "Process spawned pid={} purpose=\"reveal log dir\" tool=explorer",
+      child.id()
+    );
   }
   #[cfg(target_os = "linux")]
   {
-    std::process::Command::new("xdg-open")
+    let child = std::process::Command::new("xdg-open")
       .arg(&path)
       .spawn()
       .map_err(|e| format!("Failed to open log dir: {e}"))?;
+    log::info!(
+      "Process spawned pid={} purpose=\"reveal log dir\" tool=xdg-open",
+      child.id()
+    );
   }
   Ok(())
 }

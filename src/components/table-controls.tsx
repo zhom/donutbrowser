@@ -549,6 +549,12 @@ export function SortableColumnHeader<T extends RowData>({
 
 const selectionAnchors = new WeakMap<object, string>();
 
+/** Centers a selection checkbox in its cell, at any column width. Inline, it
+ * would sit on the text baseline and hug the cell's start. */
+export function TableCheckboxSlot({ children }: { children: React.ReactNode }) {
+  return <span className="flex items-center justify-center">{children}</span>;
+}
+
 export function TableSelectHeader<T extends RowData>({
   table,
 }: {
@@ -560,26 +566,28 @@ export function TableSelectHeader<T extends RowData>({
     .rows.filter((row) => row.getCanSelect());
   const selected = selectable.filter((row) => row.getIsSelected()).length;
   return (
-    <Checkbox
-      aria-label={t("common.aria.selectAll")}
-      className="relative after:absolute after:-inset-2 after:content-['']"
-      checked={
-        selected > 0 && selected === selectable.length
-          ? true
-          : selected > 0
-            ? "indeterminate"
-            : false
-      }
-      disabled={!selectable.length}
-      onCheckedChange={(checked) => {
-        selectionAnchors.delete(table);
-        table.setRowSelection(
-          checked
-            ? Object.fromEntries(selectable.map((row) => [row.id, true]))
-            : {},
-        );
-      }}
-    />
+    <TableCheckboxSlot>
+      <Checkbox
+        aria-label={t("common.aria.selectAll")}
+        className="relative after:absolute after:-inset-2 after:content-['']"
+        checked={
+          selected > 0 && selected === selectable.length
+            ? true
+            : selected > 0
+              ? "indeterminate"
+              : false
+        }
+        disabled={!selectable.length}
+        onCheckedChange={(checked) => {
+          selectionAnchors.delete(table);
+          table.setRowSelection(
+            checked
+              ? Object.fromEntries(selectable.map((row) => [row.id, true]))
+              : {},
+          );
+        }}
+      />
+    </TableCheckboxSlot>
   );
 }
 
@@ -595,45 +603,47 @@ export function TableRowCheckbox<T extends RowData>({
   const { t } = useTranslation();
   const hasSelection = table.getSelectedRowModel().rows.length > 0;
   return (
-    <span className="group relative inline-flex size-4 items-center justify-center">
-      <Checkbox
-        aria-label={t("common.aria.selectRow")}
-        checked={row.getIsSelected()}
-        disabled={!row.getCanSelect()}
-        className={cn(
-          "relative after:absolute after:-inset-2 after:content-['']",
-          icon &&
-            !hasSelection &&
-            "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+    <TableCheckboxSlot>
+      <span className="group relative flex size-4 shrink-0 items-center justify-center">
+        <Checkbox
+          aria-label={t("common.aria.selectRow")}
+          checked={row.getIsSelected()}
+          disabled={!row.getCanSelect()}
+          className={cn(
+            "relative after:absolute after:-inset-2 after:content-['']",
+            icon &&
+              !hasSelection &&
+              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+          )}
+          onClick={(event) => {
+            if (!row.getCanSelect()) return;
+            const ids = table
+              .getRowModel()
+              .rows.filter((item) => item.getCanSelect())
+              .map((item) => item.id);
+            table.setRowSelection((prev) =>
+              selectTableRange(
+                ids,
+                prev,
+                selectionAnchors.get(table) ?? null,
+                row.id,
+                !row.getIsSelected(),
+                event.shiftKey,
+              ),
+            );
+            if (!event.shiftKey) selectionAnchors.set(table, row.id);
+          }}
+        />
+        {icon && !hasSelection && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 group-hover:opacity-0 group-focus-within:opacity-0"
+          >
+            {icon}
+          </span>
         )}
-        onClick={(event) => {
-          if (!row.getCanSelect()) return;
-          const ids = table
-            .getRowModel()
-            .rows.filter((item) => item.getCanSelect())
-            .map((item) => item.id);
-          table.setRowSelection((prev) =>
-            selectTableRange(
-              ids,
-              prev,
-              selectionAnchors.get(table) ?? null,
-              row.id,
-              !row.getIsSelected(),
-              event.shiftKey,
-            ),
-          );
-          if (!event.shiftKey) selectionAnchors.set(table, row.id);
-        }}
-      />
-      {icon && !hasSelection && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 group-hover:opacity-0 group-focus-within:opacity-0"
-        >
-          {icon}
-        </span>
-      )}
-    </span>
+      </span>
+    </TableCheckboxSlot>
   );
 }
 

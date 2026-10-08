@@ -247,18 +247,57 @@ pub(crate) fn persist_browser_identity(proxy_id: &str, browser_pid: u32) -> bool
     return false;
   };
   let Some(start_time) = crate::proxy_storage::resolve_process_start_time(browser_pid) else {
-    log::warn!("Could not resolve start time for browser PID {browser_pid} (proxy {proxy_id})");
+    log::warn!(
+      "Browser start time unknown, worker owner not recorded proxy_worker={proxy_id} browser_pid={browser_pid}"
+    );
     return false;
   };
 
   cfg.browser_pid = Some(browser_pid);
   cfg.browser_pid_start_time = Some(start_time);
   if crate::proxy_storage::update_proxy_config(&cfg) {
-    log::info!("Recorded browser PID {browser_pid} on proxy config {proxy_id} for self-reaping");
+    log::debug!("Worker owner recorded proxy_worker={proxy_id} browser_pid={browser_pid}");
     true
   } else {
-    log::warn!("Failed to persist browser_pid {browser_pid} to proxy config {proxy_id}");
+    log::warn!("Worker owner write failed proxy_worker={proxy_id} browser_pid={browser_pid}");
     false
+  }
+}
+
+/// A worker as it was just before the sidecar stopped it: the sidecar's own
+/// output never reaches this log, so the stop line is written from here.
+struct WorkerSnapshot {
+  pid: Option<u32>,
+  was_running: bool,
+  profile_id: Option<String>,
+  browser_pid: Option<u32>,
+}
+
+impl WorkerSnapshot {
+  fn take(proxy_id: &str) -> Self {
+    let config = crate::proxy_storage::get_proxy_config(proxy_id);
+    let pid = config.as_ref().and_then(|config| config.pid);
+    Self {
+      pid,
+      was_running: pid.is_some_and(crate::proxy_storage::is_process_running),
+      profile_id: config.as_ref().and_then(|config| config.profile_id.clone()),
+      browser_pid: config.as_ref().and_then(|config| config.browser_pid),
+    }
+  }
+
+  fn log_stopped(&self, proxy_id: &str) {
+    let how = match self.pid {
+      None => "unknown",
+      Some(_) if !self.was_running => "already_gone",
+      Some(pid) if crate::proxy_storage::is_process_running(pid) => "still_running",
+      Some(_) => "terminated",
+    };
+    log::info!(
+      "Proxy worker stopped id={proxy_id} pid={} profile={} browser_pid={} reason=profile_stop how={how}",
+      self.pid.map(|pid| pid.to_string()).unwrap_or_else(|| "unknown".to_string()),
+      self.profile_id.as_deref().unwrap_or("none"),
+      self.browser_pid.map(|pid| pid.to_string()).unwrap_or_else(|| "none".to_string()),
+    );
   }
 }
 
@@ -333,7 +372,7 @@ impl ProxyManager {
 
     // Load stored proxies on initialization
     if let Err(e) = manager.load_stored_proxies() {
-      log::warn!("Failed to load stored proxies: {e}");
+      log::warn!("Stored proxies load failed err=\"{e}\"");
     }
 
     manager
@@ -414,11 +453,8 @@ impl ProxyManager {
     let proxies_dir = self.get_proxies_dir();
 
     if !proxies_dir.exists() {
-      log::debug!("Proxies directory does not exist: {:?}", proxies_dir);
       return Ok(()); // No proxies directory yet
     }
-
-    log::debug!("Loading stored proxies from: {:?}", proxies_dir);
 
     let mut stored_proxies = self.stored_proxies.lock().unwrap();
     let mut loaded_count = 0;
@@ -433,32 +469,30 @@ impl ProxyManager {
         match fs::read_to_string(&path) {
           Ok(content) => match serde_json::from_str::<StoredProxy>(&content) {
             Ok(proxy) => {
-              log::debug!("Loaded stored proxy: {} ({})", proxy.name, proxy.id);
+              log::debug!("Loaded stored proxy proxy={}", proxy.id);
               stored_proxies.insert(proxy.id.clone(), proxy);
               loaded_count += 1;
             }
             Err(e) => {
               log::warn!(
-                "Failed to parse proxy file {:?} as StoredProxy: {}",
-                path,
-                e
+                "Stored proxy parse failed path={} err=\"{e}\"",
+                path.display()
               );
               error_count += 1;
             }
           },
           Err(e) => {
-            log::warn!("Failed to read proxy file {:?}: {}", path, e);
+            log::warn!(
+              "Stored proxy read failed path={} err=\"{e}\"",
+              path.display()
+            );
             error_count += 1;
           }
         }
       }
     }
 
-    log::info!(
-      "Loaded {} stored proxies ({} errors)",
-      loaded_count,
-      error_count
-    );
+    log::debug!("Loaded stored proxies count={loaded_count} errors={error_count}");
     Ok(())
   }
 
@@ -517,7 +551,7 @@ impl ProxyManager {
         history.entries
       }
       Err(e) => {
-        log::warn!("Failed to parse proxy check history {path:?}: {e}");
+        log::warn!("Proxy check history parse failed proxy={proxy_id} err=\"{e}\"");
         Vec::new()
       }
     }
@@ -530,7 +564,7 @@ impl ProxyManager {
 
     let dir = self.get_proxy_history_dir();
     if let Err(e) = fs::create_dir_all(&dir) {
-      log::warn!("Failed to create the proxy check history directory: {e}");
+      log::warn!("Proxy check history dir create failed err=\"{e}\"");
       return;
     }
     match serde_json::to_string_pretty(&ProxyCheckHistory { entries }) {
@@ -541,10 +575,10 @@ impl ProxyManager {
           &self.get_proxy_history_file_path(proxy_id),
           content.as_bytes(),
         ) {
-          log::warn!("Failed to write the proxy check history: {e}");
+          log::warn!("Proxy check history write failed proxy={proxy_id} err=\"{e}\"");
         }
       }
-      Err(e) => log::warn!("Failed to serialize the proxy check history: {e}"),
+      Err(e) => log::warn!("Proxy check history serialize failed proxy={proxy_id} err=\"{e}\""),
     }
   }
 
@@ -604,12 +638,12 @@ impl ProxyManager {
     }
 
     if let Err(e) = self.save_proxy(&stored_proxy) {
-      log::warn!("Failed to save proxy: {e}");
+      log::error!("Proxy save failed proxy={} err=\"{e}\"", stored_proxy.id);
     }
 
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
     }
 
     if stored_proxy.sync_enabled {
@@ -640,10 +674,10 @@ impl ProxyManager {
       drop(stored_proxies);
 
       if let Err(e) = self.save_proxy(&updated) {
-        log::warn!("Failed to save cloud proxy: {e}");
+        log::warn!("Cloud proxy save failed err=\"{e}\"");
       }
       if let Err(e) = events::emit_empty("proxies-changed") {
-        log::error!("Failed to emit proxies-changed event: {e}");
+        log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
       }
       Ok(updated)
     } else {
@@ -668,10 +702,10 @@ impl ProxyManager {
       drop(stored_proxies);
 
       if let Err(e) = self.save_proxy(&cloud_proxy) {
-        log::warn!("Failed to save cloud proxy: {e}");
+        log::warn!("Cloud proxy save failed err=\"{e}\"");
       }
       if let Err(e) = events::emit_empty("proxies-changed") {
-        log::error!("Failed to emit proxies-changed event: {e}");
+        log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
       }
       Ok(cloud_proxy)
     }
@@ -686,10 +720,10 @@ impl ProxyManager {
 
     if removed {
       if let Err(e) = self.delete_proxy_file(CLOUD_PROXY_ID) {
-        log::warn!("Failed to delete cloud proxy file: {e}");
+        log::warn!("Cloud proxy file delete failed err=\"{e}\"");
       }
       if let Err(e) = events::emit_empty("proxies-changed") {
-        log::error!("Failed to emit proxies-changed event: {e}");
+        log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
       }
     }
   }
@@ -711,14 +745,14 @@ impl ProxyManager {
     if !removed_ids.is_empty() {
       for id in &removed_ids {
         if let Err(e) = self.delete_proxy_file(id) {
-          log::warn!("Failed to delete cloud proxy file {id}: {e}");
+          log::warn!("Cloud proxy file delete failed proxy={id} err=\"{e}\"");
         }
       }
       if let Err(e) = events::emit_empty("proxies-changed") {
-        log::error!("Failed to emit proxies-changed event: {e}");
+        log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
       }
       if let Err(e) = events::emit_empty("stored-proxies-changed") {
-        log::error!("Failed to emit stored-proxies-changed event: {e}");
+        log::warn!("Event emit failed event=stored-proxies-changed err=\"{e}\"");
       }
     }
   }
@@ -864,11 +898,11 @@ impl ProxyManager {
     }
 
     if let Err(e) = self.save_proxy(&stored_proxy) {
-      log::warn!("Failed to save location proxy: {e}");
+      log::error!("Proxy save failed proxy={} err=\"{e}\"", stored_proxy.id);
     }
 
     if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
     }
 
     Ok(stored_proxy)
@@ -931,15 +965,18 @@ impl ProxyManager {
 
       for proxy in &proxies_to_save {
         if let Err(e) = self.save_proxy(proxy) {
-          log::warn!("Failed to save updated derived proxy {}: {e}", proxy.id);
+          log::warn!("Derived proxy save failed proxy={} err=\"{e}\"", proxy.id);
         }
       }
 
       if let Err(e) = events::emit_empty("proxies-changed") {
-        log::error!("Failed to emit proxies-changed event: {e}");
+        log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
       }
 
-      log::debug!("Updated {} cloud-derived proxies", proxies_to_save.len());
+      log::debug!(
+        "Updated cloud-derived proxies count={}",
+        proxies_to_save.len()
+      );
     }
   }
 
@@ -1031,12 +1068,12 @@ impl ProxyManager {
     };
 
     if let Err(e) = self.save_proxy(&updated_proxy) {
-      log::warn!("Failed to save proxy: {e}");
+      log::error!("Proxy save failed proxy={} err=\"{e}\"", updated_proxy.id);
     }
 
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
     }
 
     if updated_proxy.sync_enabled {
@@ -1119,7 +1156,7 @@ impl ProxyManager {
     }
 
     if let Err(e) = self.delete_proxy_file(proxy_id) {
-      log::warn!("Failed to delete proxy file: {e}");
+      log::error!("Proxy file delete failed proxy={proxy_id} err=\"{e}\"");
     }
 
     // If sync was enabled, also delete from S3
@@ -1130,13 +1167,13 @@ impl ProxyManager {
         match crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
           Ok(engine) => {
             if let Err(e) = engine.delete_proxy(&proxy_id_owned).await {
-              log::warn!("Failed to delete proxy {} from sync: {}", proxy_id_owned, e);
+              log::warn!("Proxy sync delete failed proxy={proxy_id_owned} err=\"{e}\"");
             } else {
-              log::info!("Proxy {} deleted from S3 sync storage", proxy_id_owned);
+              log::info!("Proxy deleted from sync proxy={proxy_id_owned}");
             }
           }
           Err(e) => {
-            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+            log::debug!("Sync not configured, remote delete skipped err=\"{e}\"");
           }
         }
       });
@@ -1144,7 +1181,7 @@ impl ProxyManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
     }
 
     Ok(())
@@ -1301,7 +1338,7 @@ impl ProxyManager {
       Err(_) => "timed out".to_string(),
     };
 
-    log::warn!("TLS handshake with upstream proxy {addr} failed: {detail}");
+    log::warn!("Upstream TLS handshake failed err=\"{detail}\"");
     Err(
       serde_json::json!({
         "code": "PROXY_TLS_HANDSHAKE_FAILED",
@@ -1375,7 +1412,9 @@ impl ProxyManager {
         // killed mid-check the worker follows instead of idling until the
         // next app launch.
         if !persist_browser_identity(&config_id, std::process::id()) {
-          log::warn!("Failed to tag check worker {config_id} with app PID for self-expiry");
+          log::warn!(
+            "Check worker owner not recorded, it outlives an app crash proxy_worker={config_id}"
+          );
         }
         // Wrap in a timeout so the check worker doesn't stay alive indefinitely
         // if the upstream is slow or unreachable.
@@ -1390,17 +1429,20 @@ impl ProxyManager {
           ))
         });
         // Always stop the worker — even if the check failed or timed out
-        let _ = crate::proxy_runner::stop_proxy_process(&config_id).await;
+        let _ = crate::proxy_runner::stop_proxy_process_because(&config_id, "check_done").await;
         result
       }
       Err(err_msg) => {
         if xray_worker_id.is_some() {
-          log::warn!("Local proxy worker failed to start in front of Xray-core: {err_msg}");
+          log::warn!(
+            "Proxy worker start failed in front of Xray err=\"{}\"",
+            crate::log_redaction::text(&err_msg)
+          );
           Err(ip_utils::IpError::Network(err_msg))
         } else {
           log::warn!(
-            "Proxy worker failed to start ({}), falling back to direct check",
-            err_msg
+            "Proxy worker start failed, checking directly err=\"{}\"",
+            crate::log_redaction::text(&err_msg)
           );
           // reqwest cannot parse Donut's own `httpstls` scheme; without the
           // rewrite every fallback check on that type dies as "Invalid proxy"
@@ -1910,6 +1952,7 @@ impl ProxyManager {
     // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
     local_protocol: &str,
   ) -> Result<ProxySettings, String> {
+    let started = std::time::Instant::now();
     if let Some(name) = profile_id {
       // Check if we have an active proxy recorded for this profile
       let maybe_existing_id = {
@@ -2126,13 +2169,27 @@ impl ProxyManager {
         // The detached worker is already running with its config on disk, but
         // it was never registered in active_proxies — no cleanup pass could
         // ever find it, so it must be killed before this error propagates.
-        let _ = crate::proxy_runner::stop_proxy_process(&proxy_info.id).await;
+        let _ =
+          crate::proxy_runner::stop_proxy_process_because(&proxy_info.id, "start_timeout").await;
         return Err(format!(
           "Local proxy on 127.0.0.1:{} did not become ready in time",
           proxy_info.local_port
         ));
       }
     }
+
+    log::info!(
+      "Proxy worker started id={} pid={} port={} profile={} upstream={} elapsed_ms={}",
+      proxy_info.id,
+      crate::proxy_storage::get_proxy_config(&proxy_info.id)
+        .and_then(|config| config.pid)
+        .map(|pid| pid.to_string())
+        .unwrap_or_else(|| "unknown".to_string()),
+      proxy_info.local_port,
+      profile_id.unwrap_or("none"),
+      crate::log_redaction::Plain(&proxy_info.upstream_type.to_lowercase()),
+      started.elapsed().as_millis()
+    );
 
     // Store the proxy info
     {
@@ -2175,6 +2232,7 @@ impl ProxyManager {
         None => return Ok(()), // No proxy to stop
       }
     };
+    let worker = WorkerSnapshot::take(&proxy_id);
 
     // Stop the proxy using the donut-proxy binary
     let proxy_cmd = app_handle
@@ -2192,13 +2250,14 @@ impl ProxyManager {
     match proxy_cmd.output().await {
       Ok(output) if !output.status.success() => {
         log::warn!(
-          "Proxy stop error: {}",
-          String::from_utf8_lossy(&output.stderr)
+          "Proxy worker stop command failed id={proxy_id} stderr={:?}",
+          String::from_utf8_lossy(&output.stderr).trim()
         );
       }
       Ok(_) => {}
-      Err(e) => log::warn!("Failed to run donut-proxy stop: {e}"),
+      Err(e) => log::warn!("Proxy worker stop command did not run id={proxy_id} err=\"{e}\""),
     }
+    worker.log_stopped(&proxy_id);
 
     // Clear profile-to-proxy mapping if it references this proxy
     if let Some(id) = profile_id {
@@ -2212,7 +2271,7 @@ impl ProxyManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
     }
 
     Ok(())
@@ -2248,6 +2307,7 @@ impl ProxyManager {
         self.stop_proxy(app_handle, pid).await
       } else {
         // Proxy not found in active_proxies, try to stop it directly by ID
+        let worker = WorkerSnapshot::take(&proxy_id);
         let proxy_cmd = app_handle
           .shell()
           .sidecar("donut-proxy")
@@ -2261,13 +2321,14 @@ impl ProxyManager {
         match proxy_cmd.output().await {
           Ok(output) if !output.status.success() => {
             log::warn!(
-              "Proxy stop error: {}",
-              String::from_utf8_lossy(&output.stderr)
+              "Proxy worker stop command failed id={proxy_id} stderr={:?}",
+              String::from_utf8_lossy(&output.stderr).trim()
             );
           }
           Ok(_) => {}
-          Err(e) => log::warn!("Failed to run donut-proxy stop: {e}"),
+          Err(e) => log::warn!("Proxy worker stop command did not run id={proxy_id} err=\"{e}\""),
         }
+        worker.log_stopped(&proxy_id);
 
         // Clear profile-to-proxy mapping
         let mut map = self.profile_active_proxy_ids.lock().unwrap();
@@ -2275,7 +2336,7 @@ impl ProxyManager {
 
         // Emit event for reactive UI updates
         if let Err(e) = events::emit_empty("proxies-changed") {
-          log::error!("Failed to emit proxies-changed event: {e}");
+          log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
         }
 
         Ok(())
@@ -2311,8 +2372,7 @@ impl ProxyManager {
 
     if !persist_browser_identity(&proxy_id, new_pid) {
       log::warn!(
-        "Re-keyed proxy {proxy_id} to browser PID {new_pid} in memory but could not persist it; \
-         the detached worker is still watching the previous process"
+        "Worker owner not persisted, worker still watches the old browser proxy_worker={proxy_id} old_browser_pid={old_pid} browser_pid={new_pid}"
       );
     }
     Ok(())
@@ -2341,7 +2401,7 @@ impl ProxyManager {
   /// back to the newest matching config on disk: after a GUI restart the map is
   /// empty, but a browser (and its worker) launched by the PREVIOUS GUI can
   /// still be running, and that worker's owner identity must stay refreshable.
-  fn resolve_proxy_id_for_profile(&self, profile_id: &str) -> Option<String> {
+  pub(crate) fn resolve_proxy_id_for_profile(&self, profile_id: &str) -> Option<String> {
     if let Some(id) = self
       .profile_active_proxy_ids
       .lock()
@@ -2399,11 +2459,6 @@ impl ProxyManager {
           // Grace period: don't clean up proxies created in the last 120 seconds
           // This prevents race conditions during startup (increased from 60 to 120 for safety)
           if proxy_age < 120 {
-            log::debug!(
-              "Skipping cleanup of proxy {} - too new (age: {}s)",
-              config.id,
-              proxy_age
-            );
             return false;
           }
 
@@ -2412,29 +2467,14 @@ impl ProxyManager {
           if let Some(proxy_pid) = config.pid {
             // Check if proxy process is actually dead
             if !is_process_running(proxy_pid) {
-              // Proxy process is dead, clean up the config file
-              log::info!(
-                "Proxy {} process (PID {}) is dead, will clean up config",
-                config.id,
-                proxy_pid
-              );
               return true;
             }
             // Proxy process is running - leave it alone
-            log::debug!(
-              "Skipping cleanup of proxy {} - process (PID {}) is still running",
-              config.id,
-              proxy_pid
-            );
             return false;
           }
 
           // No PID in config - can't verify if process is dead
           // Be conservative: don't clean up (might be starting up or PID not set yet)
-          log::debug!(
-            "Skipping cleanup of proxy {} - no PID in config (might be starting up)",
-            config.id
-          );
           false
         })
         .collect::<Vec<_>>()
@@ -2443,8 +2483,10 @@ impl ProxyManager {
     // Clean up orphaned config files (proxy process is dead)
     for config in orphaned_configs {
       log::info!(
-        "Cleaning up orphaned proxy config: {} (proxy process is dead)",
-        config.id
+        "Proxy worker exited, record removed id={} pid={} profile={}",
+        config.id,
+        config.pid.unwrap_or_default(),
+        config.profile_id.as_deref().unwrap_or("none")
       );
       use crate::proxy_storage::delete_proxy_config;
       delete_proxy_config(&config.id);
@@ -2475,13 +2517,8 @@ impl ProxyManager {
         let proxy_age = crate::proxy_storage::proxy_config_age_secs(&config.id);
 
         if proxy_age > 300 {
-          log::info!(
-            "Killing stale profileless proxy {} (PID {}, age {}s)",
-            config.id,
-            pid,
-            proxy_age
-          );
-          let _ = crate::proxy_runner::stop_proxy_process(&config.id).await;
+          let _ =
+            crate::proxy_runner::stop_proxy_process_because(&config.id, "stale_check_worker").await;
         }
       }
     }
@@ -2578,12 +2615,6 @@ impl ProxyManager {
         };
 
         for (browser_pid, proxy_id, profile_id) in dead_browser_entries {
-          log::info!(
-            "Cleanup: browser PID {} is dead, stopping proxy worker {} (profile={:?})",
-            browser_pid,
-            proxy_id,
-            profile_id
-          );
           {
             let mut proxies = self.active_proxies.lock().unwrap();
             // Re-check the entry still maps to the same proxy_id — another
@@ -2603,7 +2634,8 @@ impl ProxyManager {
               map.remove(pid);
             }
           }
-          let _ = crate::proxy_runner::stop_proxy_process(&proxy_id).await;
+          let reason = format!("browser_exited({browser_pid})");
+          let _ = crate::proxy_runner::stop_proxy_process_because(&proxy_id, &reason).await;
         }
       }
     }
@@ -2618,9 +2650,9 @@ impl ProxyManager {
         if let Some(pid) = worker.pid {
           if !is_process_running(pid) {
             log::info!(
-              "Cleaning up orphaned VPN worker config: {} (process PID {} is dead)",
+              "VPN worker exited, record removed id={} pid={pid} vpn={}",
               worker.id,
-              pid
+              worker.vpn_id
             );
             let _ = std::fs::remove_file(&worker.config_file_path);
             delete_vpn_worker_config(&worker.id);
@@ -2638,10 +2670,6 @@ impl ProxyManager {
           .pid
           .is_some_and(|pid| !process_identity_matches(pid, worker.pid_start_time));
         if dead || unstarted_worker_is_stale(&worker) {
-          log::info!(
-            "Cleaning up orphaned Xray-core worker config: {}",
-            worker.id
-          );
           let _ = crate::xray_worker_runner::stop_xray_worker(&worker.id).await;
         }
       }
@@ -2649,7 +2677,7 @@ impl ProxyManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
     }
 
     Ok(dead_pids)

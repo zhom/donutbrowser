@@ -109,7 +109,7 @@ impl WayfernConfig {
     match self.checked_launch_args().await {
       Ok(args) => self.launch_args = args,
       Err(error) => {
-        log::warn!("Dropped imported launch arguments: {error}");
+        log::warn!("Imported launch arguments dropped err=\"{error}\"");
         self.launch_args.clear();
       }
     }
@@ -553,8 +553,8 @@ impl WayfernManager {
       screen_claim_over_host(Some(device_json), host_screen_size(app_handle))
     {
       log::warn!(
-        "Profile {} claims a {claimed_w}x{claimed_h} screen on a {host_w}x{host_h} display: its window can never fill the screen it reports, which a page can measure",
-        profile.name
+        "Claimed screen larger than the display, a page can measure the gap profile={} claimed={claimed_w}x{claimed_h} display={host_w}x{host_h}",
+        profile.id
       );
     }
   }
@@ -644,7 +644,7 @@ pub fn entitlement_cache_switch(version: &str, cache_root: &Path) -> Option<Stri
   let dir = cache_root.join("wayfern-entitlements");
   if let Err(e) = std::fs::create_dir_all(&dir) {
     log::warn!(
-      "Could not create the Wayfern entitlement cache at {}: {e}; the browser keeps its default",
+      "Entitlement cache dir create failed, browser keeps its default path={} err=\"{e}\"",
       dir.display()
     );
     return None;
@@ -765,7 +765,7 @@ pub fn persona_switch(
   let body = serde_json::to_vec(&crate::wayfern_persona::document(&fields)).ok()?;
   if let Err(e) = std::fs::write(&path, body) {
     log::warn!(
-      "Could not write the persona at {}: {e}; the browser offers no fill entries",
+      "Persona write failed, browser offers no fill entries path={} err=\"{e}\"",
       path.display()
     );
     return None;
@@ -791,7 +791,7 @@ pub fn camera_switches(version: &str, config: &WayfernConfig) -> Vec<String> {
     return Vec::new();
   };
   if !Path::new(file).is_file() {
-    log::warn!("Camera source {file} is missing; the claimed camera serves dark frames");
+    log::warn!("Camera source missing, camera serves dark frames file={file}");
     return Vec::new();
   }
   let mut switches = vec![format!("--wayfern-camera-file={file}")];
@@ -804,9 +804,7 @@ pub fn camera_switches(version: &str, config: &WayfernConfig) -> Vec<String> {
     if valid_camera_crop(crop) {
       switches.push(format!("--wayfern-camera-crop={crop}"));
     } else {
-      log::warn!(
-        "Camera crop {crop:?} is not x,y,width,height in source pixels; using the whole frame"
-      );
+      log::warn!("Camera crop is not x,y,width,height, using the whole frame crop={crop:?}");
     }
   }
   switches
@@ -865,15 +863,13 @@ pub fn widevine_switch(version: &str, data_root: &Path) -> Option<String> {
       let payload = dir.join("_platform_specific").join(platform).join(library);
       if !payload.is_file() {
         log::warn!(
-          "Widevine is provisioned at {} but {} is missing; the browser will register no CDM",
+          "Widevine library missing, browser registers no CDM dir={} missing={}",
           dir.display(),
           payload.display()
         );
       }
     }
-    None => log::warn!(
-      "Widevine does not ship for this platform; the CDM directory is passed as provisioned"
-    ),
+    None => log::warn!("Widevine does not ship for this platform, CDM dir passed as provisioned"),
   }
   Some(format!("--wayfern-widevine-cdm-dir={}", dir.display()))
 }
@@ -938,19 +934,24 @@ impl BrowserLogTap {
 
 /// Keep reading the browser's stderr for its lifetime, keeping only what it
 /// says about Wayfern. Reading it all is what keeps the pipe from filling.
-fn tap_browser_stderr(
-  stderr: tokio::process::ChildStderr,
-  tap: BrowserLogTap,
-  profile_name: String,
-) {
+/// `owner` is `key=value` text naming whose browser this is.
+fn tap_browser_stderr(stderr: tokio::process::ChildStderr, tap: BrowserLogTap, owner: String) {
   tauri::async_runtime::spawn(async move {
     use tokio::io::{AsyncBufReadExt, BufReader};
     let mut lines = BufReader::new(stderr).lines();
     while let Ok(Some(line)) = lines.next_line().await {
       if line.contains("Wayfern") || line.contains("wayfern_") {
-        log::info!(
-          "[browser {profile_name}] {}",
-          crate::log_redaction::text(&line)
+        // What the browser did with the identity explains a profile that
+        // launched without one; the rest is detail.
+        let level = if line.contains("Wayfern launch identity") {
+          log::Level::Info
+        } else {
+          log::Level::Debug
+        };
+        log::log!(
+          level,
+          "Browser said {owner} line=\"{}\"",
+          crate::log_redaction::Plain(&crate::log_redaction::text(&line))
         );
         tap.push(line);
       }
@@ -958,25 +959,39 @@ fn tap_browser_stderr(
   });
 }
 
+/// The profile id inside a profile data path (`profiles/<uuid>/profile`, or an
+/// ephemeral `<base>/<uuid>`), so a line names the profile and not the path.
+fn profile_id_in_path(path: &str) -> String {
+  Path::new(path)
+    .components()
+    .rev()
+    .filter_map(|component| component.as_os_str().to_str())
+    .find(|component| uuid::Uuid::parse_str(component).is_ok())
+    .unwrap_or("unknown")
+    .to_string()
+}
+
 pub(crate) struct HeadlessWayfern {
   child: tokio::process::Child,
   user_data_dir: PathBuf,
   page_ws_url: String,
+  label: String,
 }
 
 impl HeadlessWayfern {
+  /// `label` is `key=value` text saying what the browser is for.
   pub(crate) async fn start(
     manager: &WayfernManager,
     profile: &BrowserProfile,
     token: Option<&str>,
     label: &str,
   ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    let started = std::time::Instant::now();
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
       .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
 
     let port = WayfernManager::find_free_port().await?;
-    log::info!("Launching headless Wayfern on port {port} for {label}");
 
     let user_data_dir =
       std::env::temp_dir().join(format!("wayfern_fingerprint_{}", uuid::Uuid::new_v4()));
@@ -1037,6 +1052,7 @@ impl HeadlessWayfern {
       child,
       user_data_dir,
       page_ws_url: String::new(),
+      label: label.to_string(),
     };
 
     let targets = match manager
@@ -1053,6 +1069,12 @@ impl HeadlessWayfern {
       .into_iter()
       .find_map(|target| target.websocket_debugger_url)
       .expect("CDP is ready only when a page has a socket");
+    log::info!(
+      "Headless browser started pid={} cdp_port={port} version={} {label} elapsed_ms={}",
+      session.child.id().unwrap_or_default(),
+      crate::log_redaction::Plain(&profile.version),
+      started.elapsed().as_millis()
+    );
     Ok(session)
   }
 
@@ -1074,13 +1096,22 @@ impl HeadlessWayfern {
   pub(crate) async fn stop(mut self) {
     if let Some(pid) = self.child.id() {
       kill_browser_process(pid);
-      if tokio::time::timeout(Duration::from_secs(5), self.child.wait())
+      let how = if tokio::time::timeout(Duration::from_secs(5), self.child.wait())
         .await
         .is_err()
       {
         let _ = self.child.start_kill();
-        let _ = tokio::time::timeout(Duration::from_secs(2), self.child.wait()).await;
-      }
+        match tokio::time::timeout(Duration::from_secs(2), self.child.wait()).await {
+          Ok(_) => "killed",
+          Err(_) => "still_running",
+        }
+      } else {
+        "terminated"
+      };
+      log::info!(
+        "Headless browser stopped pid={pid} how={how} {}",
+        self.label
+      );
     }
     let _ = std::fs::remove_dir_all(&self.user_data_dir);
   }
@@ -1103,10 +1134,10 @@ pub enum StopOutcome {
 impl std::fmt::Display for StopOutcome {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(match self {
-      Self::Closed => "closed cleanly",
+      Self::Closed => "closed",
       Self::Terminated => "terminated",
       Self::Killed => "killed",
-      Self::StillRunning => "still running",
+      Self::StillRunning => "still_running",
     })
   }
 }
@@ -1240,7 +1271,7 @@ impl ProbeTransport {
   /// sidecar behind it.
   async fn shutdown(self) {
     if let Some(id) = self.donut_worker_id {
-      let _ = crate::proxy_runner::stop_proxy_process(&id).await;
+      let _ = crate::proxy_runner::stop_proxy_process_because(&id, "geo_probe_done").await;
     }
     if let Some(id) = self.xray_worker_id {
       let _ = crate::xray_worker_runner::stop_xray_worker(&id).await;
@@ -1278,7 +1309,6 @@ pub struct WayfernLaunchResult {
 }
 
 struct WayfernInstance {
-  id: String,
   process_id: Option<u32>,
   profile_path: Option<String>,
   url: Option<String>,
@@ -1833,17 +1863,20 @@ impl WayfernManager {
     let max_attempts = 120;
     let delay = Duration::from_millis(500);
 
+    let pid = child.id().unwrap_or_default();
     let mut last_error: Option<String> = None;
     for attempt in 0..max_attempts {
       if let Ok(Some(status)) = child.try_wait() {
         tokio::time::sleep(Duration::from_millis(300)).await;
         let said = log.lines().join("\n");
-        log::error!("Wayfern exited on port {port} before CDP was ready ({status})");
+        log::warn!(
+          "Browser exited before CDP was ready pid={pid} cdp_port={port} status=\"{status}\""
+        );
         return Err(early_exit_error(&said, &status).into());
       }
       match self.http_client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
-          log::info!("CDP port {port} is open after {attempt} attempts");
+          log::debug!("CDP port open pid={pid} cdp_port={port} attempts={attempt}");
           return self
             .wait_for_page_targets_while_running(port, child, log)
             .await;
@@ -1860,7 +1893,6 @@ impl WayfernManager {
     }
 
     let detail = last_error.unwrap_or_else(|| "no attempts completed".to_string());
-    log::error!("CDP not ready after {max_attempts} attempts on port {port}: {detail}");
     Err(format!("CDP not ready after {max_attempts} attempts on port {port}: {detail}").into())
   }
 
@@ -1873,9 +1905,13 @@ impl WayfernManager {
     log: &BrowserLogTap,
   ) -> Result<Vec<CdpTarget>, Box<dyn std::error::Error + Send + Sync>> {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let pid = child.id().unwrap_or_default();
     loop {
       if let Ok(Some(status)) = child.try_wait() {
         tokio::time::sleep(Duration::from_millis(300)).await;
+        log::warn!(
+          "Browser exited before a page was ready pid={pid} cdp_port={port} status=\"{status}\""
+        );
         return Err(early_exit_error(&log.lines().join("\n"), &status).into());
       }
       let detail = match self.get_cdp_targets(port).await {
@@ -2047,11 +2083,7 @@ impl WayfernManager {
             json!([&locale_str, Self::base_language(&locale_str)]),
           );
         }
-        log::info!(
-          "Applied geolocation to Wayfern fingerprint: {} ({})",
-          geo.locale.as_string(),
-          geo.timezone
-        );
+        log::debug!("Geolocation applied to fingerprint");
         true
       }
       Err(e) => {
@@ -2067,7 +2099,10 @@ impl WayfernManager {
         // stamp `geo_proxy_signature`, so the launch-time refresh sees a
         // signature mismatch and probes again through the local worker the
         // browser is about to use.
-        log::warn!("Geolocation failed; leaving the fingerprint's location ungenerated: {e}");
+        log::warn!(
+          "Geolocation failed, fingerprint location left ungenerated err=\"{}\"",
+          crate::log_redaction::text(&e.to_string())
+        );
         false
       }
     }
@@ -2276,16 +2311,15 @@ impl WayfernManager {
           }
           Err(e) => {
             log::warn!(
-              "Could not start an Xray-core worker to carry the VLESS geolocation probe ({e}); skipping the probe rather than sending it unproxied"
+              "Geolocation probe skipped, Xray worker start failed err=\"{}\"",
+              crate::log_redaction::text(&e)
             );
             ProbeTransport::default()
           }
         }
       }
       ProbeRoute::Unroutable => {
-        log::warn!(
-          "No transport here can carry the geolocation probe through this profile's upstream; skipping the probe rather than resolving this machine's own address"
-        );
+        log::warn!("Geolocation probe skipped, no transport can carry it through the upstream");
         ProbeTransport::default()
       }
     }
@@ -2314,7 +2348,8 @@ impl WayfernManager {
         // real address. `None` means "no proxied probe available", and the
         // caller skips the probe entirely rather than making it unproxied.
         log::warn!(
-          "Could not start local proxy worker for geolocation ({e}); skipping the probe rather than sending it unproxied"
+          "Geolocation probe skipped, proxy worker start failed err=\"{}\"",
+          crate::log_redaction::text(&e.to_string())
         );
         ProbeTransport {
           proxy: None,
@@ -2350,7 +2385,7 @@ impl WayfernManager {
       self,
       profile,
       wayfern_token.as_deref(),
-      &format!("generation for {}", profile.name),
+      &format!("purpose=generation profile={}", profile.id),
     )
     .await?;
     let ws_url = session.page_ws_url().to_string();
@@ -2450,7 +2485,8 @@ impl WayfernManager {
           transport.proxy.is_some(),
         ) {
           log::warn!(
-            "Skipping the geolocation probe: this profile has an upstream but no proxied probe could be built, and probing directly would write this machine's own location into the fingerprint"
+            "Geolocation probe skipped, profile has an upstream but no proxied probe profile={}",
+            profile.id
           );
           false
         } else {
@@ -2479,11 +2515,10 @@ impl WayfernManager {
           "WAYFERN_FINGERPRINT_GENERATION_FAILED",
           config.os.as_deref(),
         );
-        log::error!(
-          "Wayfern refused to {what} for profile {}: {} (browser said: {})",
-          crate::log_redaction::Plain(&profile.name),
-          coded,
-          cdp_error_message(&detail)
+        log::warn!(
+          "Fingerprint generation refused profile={} step=\"{what}\" err=\"{}\"",
+          profile.id,
+          crate::log_redaction::Plain(&cdp_error_message(&detail))
         );
         return Err(coded.into());
       }
@@ -2494,29 +2529,25 @@ impl WayfernManager {
     let fingerprint_json = serde_json::to_string(&fingerprint)
       .map_err(|e| format!("Failed to serialize fingerprint: {e}"))?;
 
-    // Report the platform the engine actually produced alongside the one that
-    // was asked for. Logging only the request made this line useless for
-    // diagnosing a fingerprint that came back as something else.
+    // The produced platform beside the requested OS: a device that came back
+    // as something else is only visible when both are on the line.
     log::info!(
-      "Generated Wayfern fingerprint for requested OS: {}, produced platform: {:?}, fields: {:?}",
-      os,
-      fingerprint.get("platform").and_then(|p| p.as_str()),
-      fingerprint
-        .as_object()
-        .map(|o| o.keys().collect::<Vec<_>>())
+      "Fingerprint generated profile={} os={} platform={} identity={} geolocation={}",
+      profile.id,
+      crate::log_redaction::Plain(os),
+      crate::log_redaction::Plain(
+        fingerprint
+          .get("platform")
+          .and_then(|p| p.as_str())
+          .unwrap_or("none")
+      ),
+      identity_id.is_some(),
+      if geolocation_applied {
+        "applied"
+      } else {
+        "skipped"
+      }
     );
-
-    // Log timezone/geolocation fields specifically for debugging
-    if let Some(obj) = fingerprint.as_object() {
-      log::info!(
-        "Generated fingerprint - timezone: {:?}, timezoneOffset: {:?}, latitude: {:?}, longitude: {:?}, language: {:?}",
-        obj.get("timezone"),
-        obj.get("timezoneOffset"),
-        obj.get("latitude"),
-        obj.get("longitude"),
-        obj.get("language")
-      );
-    }
 
     if use_identity_api && identity_id.is_none() {
       // Without the handle the stored fingerprint is not reproducible, which
@@ -2552,8 +2583,8 @@ impl WayfernManager {
       Ok(args) => args,
       Err(error) => {
         log::warn!(
-          "Launching profile {} without its custom launch arguments: {error}",
-          profile.name
+          "Custom launch arguments dropped profile={} err=\"{error}\"",
+          profile.id
         );
         let _ = crate::events::emit(
           "profile-launch-args-skipped",
@@ -2570,7 +2601,6 @@ impl WayfernManager {
       Some(p) => p,
       None => Self::find_free_port().await?,
     };
-    log::info!("Launching Wayfern on CDP port {port} (detached)");
 
     // Diagnostic: verify critical profile files and test cookie decryption
     {
@@ -2588,14 +2618,11 @@ impl WayfernManager {
         }
       };
 
-      if key_path.exists() {
-        // Length only. The contents are the profile's encryption key, and this
-        // log is the first thing a user attaches to a bug report.
-        let key_len = std::fs::metadata(&key_path).map(|m| m.len()).unwrap_or(0);
-        log::info!("Pre-launch: os_crypt_key present ({key_len} bytes)");
-      } else {
-        log::warn!("Pre-launch: os_crypt_key NOT FOUND");
-      }
+      // Length only. The contents are the profile's encryption key, and this
+      // log is the first thing a user attaches to a bug report.
+      let key_len = std::fs::metadata(&key_path).map(|m| m.len()).ok();
+      let mut cookie_counts = None;
+      let mut decryption = "not_checked";
 
       if cookies_path.exists() {
         // Try to open Cookies DB and check if encrypted cookies can be decrypted
@@ -2613,11 +2640,7 @@ impl WayfernManager {
           let total_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM cookies", [], |r| r.get(0))
             .unwrap_or(0);
-          log::info!(
-            "Pre-launch: Cookies DB has {} total cookies, {} encrypted",
-            total_count,
-            cookie_count
-          );
+          cookie_counts = Some((total_count, cookie_count));
 
           // Try decrypting one cookie using the cookie_manager
           if let Some(encryption_key) =
@@ -2628,7 +2651,6 @@ impl WayfernManager {
             ) {
               if let Ok(mut rows) = stmt.query([]) {
                 if let Ok(Some(row)) = rows.next() {
-                  let name: String = row.get(0).unwrap_or_default();
                   let host: String = row.get(1).unwrap_or_default();
                   let encrypted: Vec<u8> = row.get(2).unwrap_or_default();
                   let decrypted = crate::cookie_manager::chrome_decrypt::decrypt(
@@ -2636,25 +2658,26 @@ impl WayfernManager {
                     &host,
                     &encryption_key,
                   );
-                  match decrypted {
-                    Some(val) => log::info!(
-                      "Pre-launch: Cookie decryption SUCCEEDED for '{}' (host: {}, decrypted {} bytes)",
-                      name, host, val.len()
-                    ),
-                    None => log::error!(
-                      "Pre-launch: Cookie decryption FAILED for '{}' (host: {}, encrypted {} bytes)",
-                      name, host, encrypted.len()
-                    ),
-                  }
+                  decryption = if decrypted.is_some() { "ok" } else { "failed" };
                 }
               }
             }
           } else {
-            log::error!("Pre-launch: Failed to derive encryption key from os_crypt_key");
+            decryption = "no_key";
           }
         }
-      } else {
-        log::warn!("Pre-launch: Cookies NOT FOUND");
+      }
+
+      let (cookies, encrypted) = cookie_counts.unwrap_or_default();
+      log::debug!(
+        "Cookie store before launch profile={} os_crypt_key_bytes={key_len:?} cookies={cookies} encrypted={encrypted} decryption={decryption}",
+        profile.id
+      );
+      if encrypted > 0 && matches!(decryption, "failed" | "no_key") {
+        log::error!(
+          "Cookie decryption check failed profile={} encrypted={encrypted} reason={decryption}",
+          profile.id
+        );
       }
     }
 
@@ -2697,13 +2720,10 @@ impl WayfernManager {
       let (fit_w, fit_h) = fit_window_to_work_area((w, h), work_area.map(|area| area.size));
       let (x, y) = work_area.map_or((0, 0), |area| area.origin);
 
-      if (fit_w, fit_h) == (w, h) {
-        log::info!("Sizing Wayfern window to fingerprint dimensions: {w}x{h}");
-      } else {
-        log::info!(
-          "Sizing Wayfern window to {fit_w}x{fit_h}: the profile describes a {w}x{h} window, which does not fit this display's usable area"
-        );
-      }
+      log::debug!(
+        "Window size profile={} window={fit_w}x{fit_h} described={w}x{h}",
+        profile.id
+      );
       args.push(format!("--window-size={fit_w},{fit_h}"));
       args.push(format!("--window-position={x},{y}"));
     }
@@ -2775,7 +2795,6 @@ impl WayfernManager {
       // browser still works without the token (cross-OS fingerprinting just
       // won't be enabled for this session, and the next launch will pick it
       // up once the token arrives).
-      log::info!("Wayfern token not ready for paid user, waiting briefly...");
       for _ in 0..3 {
         tokio::time::sleep(Duration::from_secs(1)).await;
         wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
@@ -2784,10 +2803,11 @@ impl WayfernManager {
         }
       }
       if wayfern_token.is_none() {
-        log::warn!(
-          "Wayfern token still unavailable after wait; launching without it (api.donutbrowser.com may be unreachable)"
-        );
+        TOKEN_AT_LAUNCH.failed("not issued within 3s, launching without it");
       }
+    }
+    if wayfern_token.is_some() {
+      TOKEN_AT_LAUNCH.succeeded();
     }
 
     // A cross-OS claim is authorized from the `wayfernToken` PARAMETER of
@@ -2813,10 +2833,6 @@ impl WayfernManager {
       if let Some(claimed) = Self::claimed_operating_system(config, stored_device.as_ref()) {
         let host_os = crate::profile::types::get_host_os();
         if claimed != host_os.as_str() {
-          log::error!(
-            "Refusing to launch profile {}: it claims {claimed} on a {host_os} host and no Wayfern token is available",
-            profile.name
-          );
           return Err(
             crate::backend_error_with_detail("WAYFERN_CROSS_OS_REQUIRES_PLAN", claimed).into(),
           );
@@ -2830,9 +2846,9 @@ impl WayfernManager {
         .is_entitled_to_wayfern_token()
         .await
     {
-      log::error!(
-        "Refusing to launch profile {}: it stores fingerprint edits and no Wayfern token is available yet",
-        profile.name
+      log::warn!(
+        "Launch refused, fingerprint edits need a Wayfern token that is not available profile={}",
+        profile.id
       );
       return Err(crate::backend_error("WAYFERN_PLAN_CHECK_UNAVAILABLE").into());
     }
@@ -2874,8 +2890,8 @@ impl WayfernManager {
       && config.fingerprint.is_none()
     {
       log::warn!(
-        "Profile {} has an identity but no resolved timezone (or no claimed operating system); applying it over CDP after launch instead of at startup",
-        profile.name
+        "Identity has no timezone or OS, applying it over CDP after launch profile={}",
+        profile.id
       );
     }
     let identity_file = match &launch_identity {
@@ -2897,9 +2913,9 @@ impl WayfernManager {
     ) {
       Ok(()) => true,
       Err(reason) => {
-        log::info!(
-          "Session restore is off for profile {}: {reason}",
-          profile.name
+        log::debug!(
+          "Session restore off profile={} reason=\"{reason}\"",
+          profile.id
         );
         false
       }
@@ -2917,18 +2933,18 @@ impl WayfernManager {
       .filter(|value| WebRtcMode::parse(value).is_none())
     {
       log::warn!(
-        "Profile {} names an unknown WebRTC mode {unknown:?}; launching with auto",
-        profile.name
+        "Unknown WebRTC mode, launching with auto profile={} mode={unknown:?}",
+        profile.id
       );
     }
     let exit_ip = crate::fingerprint_consistency::cached_exit_ip(profile);
     let webrtc = webrtc_switches(&profile.version, webrtc_mode, exit_ip.as_deref());
     if !webrtc.is_empty() {
-      log::info!(
-        "WebRTC for profile {}: mode {}, exit IP {}",
-        profile.name,
+      log::debug!(
+        "WebRTC profile={} mode={} exit_ip_known={}",
+        profile.id,
         webrtc_mode.switch_value(),
-        exit_ip.as_deref().unwrap_or("unknown")
+        exit_ip.is_some()
       );
     }
     args.extend(webrtc);
@@ -2957,13 +2973,6 @@ impl WayfernManager {
       &profile.version,
       &crate::app_dirs::data_dir(),
     ));
-    if let Some(path) = &identity_file {
-      log::info!(
-        "Launch identity for profile {} written to {}",
-        profile.name,
-        path.display()
-      );
-    }
 
     apply_launch_args(&mut args, &custom_launch_args);
     let mut command = TokioCommand::new(&executable_path);
@@ -2974,7 +2983,6 @@ impl WayfernManager {
       .stderr(Stdio::piped());
     if let Some(ref token) = wayfern_token {
       command.env("WAYFERN_TOKEN", token);
-      log::info!("Wayfern authorization configured for browser process");
     }
 
     let mut child = command
@@ -2991,7 +2999,15 @@ impl WayfernManager {
     let process_id = child.id();
     let log_tap = BrowserLogTap::default();
     if let Some(stderr) = child.stderr.take() {
-      tap_browser_stderr(stderr, log_tap.clone(), profile.name.clone());
+      tap_browser_stderr(
+        stderr,
+        log_tap.clone(),
+        format!(
+          "profile={} pid={}",
+          profile.id,
+          process_id.unwrap_or_default()
+        ),
+      );
     }
 
     let page_targets = match self
@@ -3001,6 +3017,12 @@ impl WayfernManager {
       Ok(targets) => targets,
       Err(e) => {
         if let Some(pid) = process_id {
+          if crate::proxy_storage::is_process_running(pid) {
+            log::warn!(
+              "Browser killed during launch profile={} pid={pid} reason=cdp_not_ready",
+              profile.id
+            );
+          }
           kill_browser_process(pid);
         }
         return Err(e);
@@ -3008,7 +3030,11 @@ impl WayfernManager {
     };
     drop(child);
 
-    log::info!("Found {} page targets", page_targets.len());
+    log::debug!(
+      "Page targets ready profile={} pid={process_id:?} targets={}",
+      profile.id,
+      page_targets.len()
+    );
 
     // An identity-backed profile: the id, the user's overrides and the exit's
     // location are all the browser needs, and all the profile stores. The
@@ -3058,18 +3084,18 @@ impl WayfernManager {
               .is_entitled_to_wayfern_token()
               .await
           {
-            log::error!(
-              "Killing Wayfern (pid {process_id:?}) for profile {}: the browser dropped this profile's fingerprint edits",
-              profile.name
+            log::warn!(
+              "Browser killed during launch profile={} pid={process_id:?} reason=fingerprint_edits_dropped",
+              profile.id
             );
             if let Some(pid) = process_id {
               kill_browser_process(pid);
             }
             return Err(crate::backend_error("WAYFERN_PLAN_CHECK_UNAVAILABLE").into());
           }
-          log::info!(
-            "Launch identity confirmed for profile {}: {confirmation}",
-            profile.name
+          log::debug!(
+            "Launch identity confirmed profile={} how=\"{confirmation}\"",
+            profile.id
           );
           // The only place an identity-backed profile's screen is known: the
           // device is derived by the browser, so nothing on disk carries it.
@@ -3082,9 +3108,9 @@ impl WayfernManager {
           }
         }
         Err(reason) => {
-          log::error!(
-            "Killing Wayfern (pid {process_id:?}) for profile {}: the launch identity was not applied: {reason}",
-            profile.name
+          log::warn!(
+            "Browser killed during launch profile={} pid={process_id:?} reason=identity_not_applied",
+            profile.id
           );
           if let Some(pid) = process_id {
             kill_browser_process(pid);
@@ -3144,10 +3170,10 @@ impl WayfernManager {
       if let Some(ref token) = wayfern_token {
         params.insert("wayfernToken".to_string(), json!(token));
       }
-      log::info!(
-        "Applying Wayfern identity {} with {} override(s): {:?}",
+      log::debug!(
+        "Applying identity profile={} identity={} overrides={:?}",
+        profile.id,
         identity_id,
-        overrides.len(),
         overrides.keys().collect::<Vec<_>>()
       );
 
@@ -3165,10 +3191,12 @@ impl WayfernManager {
           {
             Ok(_) => {
               applied_ok = true;
-              log::info!("Successfully applied identity to page target");
             }
             Err(e) => {
-              log::error!("Failed to apply identity to target: {e}");
+              log::warn!(
+                "Identity apply to a page failed profile={} err=\"{e}\"",
+                profile.id
+              );
               last_apply_error = Some(e.to_string());
             }
           }
@@ -3177,9 +3205,9 @@ impl WayfernManager {
       if !applied_ok {
         let detail = last_apply_error
           .unwrap_or_else(|| "the browser exposed no page target to apply it to".to_string());
-        log::error!(
-          "Killing Wayfern (pid {process_id:?}) for profile {}: the identity was never applied: {detail}",
-          profile.name
+        log::warn!(
+          "Browser killed during launch profile={} pid={process_id:?} reason=identity_not_applied",
+          profile.id
         );
         if let Some(pid) = process_id {
           kill_browser_process(pid);
@@ -3189,10 +3217,6 @@ impl WayfernManager {
         );
       }
     } else if let Some(fingerprint_json) = &config.fingerprint {
-      log::info!(
-        "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
-        fingerprint_json.len()
-      );
       Self::warn_on_screen_over_host(fingerprint_json, profile, _app_handle);
 
       // Both stored shapes, the bare object and the legacy
@@ -3201,26 +3225,6 @@ impl WayfernManager {
       // declares no timezone is launched with none, which is exactly what the
       // gate reports to the user.
       let fingerprint_for_cdp = Self::launch_fingerprint_payload(fingerprint_json)?;
-
-      log::info!(
-        "Fingerprint prepared for CDP command, fields: {:?}",
-        fingerprint_for_cdp
-          .as_object()
-          .map(|o| o.keys().collect::<Vec<_>>())
-      );
-
-      // Log timezone and geolocation fields specifically for debugging
-      if let Some(obj) = fingerprint_for_cdp.as_object() {
-        log::info!(
-          "Timezone/Geolocation fields - timezone: {:?}, timezoneOffset: {:?}, latitude: {:?}, longitude: {:?}, language: {:?}, languages: {:?}",
-          obj.get("timezone"),
-          obj.get("timezoneOffset"),
-          obj.get("latitude"),
-          obj.get("longitude"),
-          obj.get("language"),
-          obj.get("languages")
-        );
-      }
 
       // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
       let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
@@ -3244,17 +3248,18 @@ impl WayfernManager {
 
       for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
-          log::info!("Applying fingerprint to page target");
           match self
             .send_cdp_command(ws_url, "Wayfern.setFingerprint", apply_params.clone())
             .await
           {
             Ok(_) => {
               applied_ok = true;
-              log::info!("Successfully applied fingerprint to page target");
             }
             Err(e) => {
-              log::error!("Failed to apply fingerprint to target: {e}");
+              log::warn!(
+                "Fingerprint apply to a page failed profile={} err=\"{e}\"",
+                profile.id
+              );
               last_apply_error = Some(e.to_string());
             }
           }
@@ -3268,9 +3273,9 @@ impl WayfernManager {
         // does not know about.
         let detail = last_apply_error
           .unwrap_or_else(|| "the browser exposed no page target to apply it to".to_string());
-        log::error!(
-          "Killing Wayfern (pid {process_id:?}) for profile {}: the fingerprint was never applied: {detail}",
-          profile.name
+        log::warn!(
+          "Browser killed during launch profile={} pid={process_id:?} reason=fingerprint_not_applied",
+          profile.id
         );
         if let Some(pid) = process_id {
           kill_browser_process(pid);
@@ -3284,7 +3289,10 @@ impl WayfernManager {
         );
       }
     } else {
-      log::warn!("No fingerprint found in config, browser will use default fingerprint");
+      log::warn!(
+        "No fingerprint stored, browser uses its default device profile={}",
+        profile.id
+      );
     }
 
     // Geolocation is handled internally by the browser binary.
@@ -3293,20 +3301,24 @@ impl WayfernManager {
       if restore_session {
         // The tabs the browser reopened are the user's; the URL gets a tab of
         // its own instead of replacing whichever one came first.
-        log::info!("Opening the launch URL in a new tab beside the restored session");
         if let Err(e) = self.open_url_on_port(port, url).await {
-          log::error!("Failed to open the launch URL in a new tab: {e}");
+          log::warn!(
+            "Launch URL tab open failed profile={} err=\"{}\"",
+            profile.id,
+            crate::log_redaction::text(&e.to_string())
+          );
         }
-      } else {
-        log::info!("Navigating to URL via CDP");
-        if let Some(target) = page_targets.first() {
-          if let Some(ws_url) = &target.websocket_debugger_url {
-            if let Err(e) = self
-              .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
-              .await
-            {
-              log::error!("Failed to navigate to URL: {e}");
-            }
+      } else if let Some(target) = page_targets.first() {
+        if let Some(ws_url) = &target.websocket_debugger_url {
+          if let Err(e) = self
+            .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
+            .await
+          {
+            log::warn!(
+              "Launch URL navigation failed profile={} err=\"{}\"",
+              profile.id,
+              crate::log_redaction::text(&e.to_string())
+            );
           }
         }
       }
@@ -3336,7 +3348,6 @@ impl WayfernManager {
 
     let id = uuid::Uuid::new_v4().to_string();
     let instance = WayfernInstance {
-      id: id.clone(),
       process_id,
       profile_path: Some(profile_path.to_string()),
       url: url.map(|s| s.to_string()),
@@ -3368,10 +3379,20 @@ impl WayfernManager {
     };
 
     if let Some(instance) = instance {
-      log::info!("Cleaning up Wayfern instance {}", instance.id);
       if let Some(pid) = instance.process_id {
+        let started = std::time::Instant::now();
         let outcome = self.stop_browser_process(pid, instance.cdp_port).await;
-        log::info!("Stopped Wayfern instance {id} (PID: {pid}): {outcome}");
+        let profile = profile_id_in_path(instance.profile_path.as_deref().unwrap_or_default());
+        let elapsed_ms = started.elapsed().as_millis();
+        if outcome == StopOutcome::StillRunning {
+          log::warn!(
+            "Browser stop failed, still running profile={profile} pid={pid} elapsed_ms={elapsed_ms}"
+          );
+        } else {
+          log::info!(
+            "Browser stopped profile={profile} pid={pid} how={outcome} elapsed_ms={elapsed_ms}"
+          );
+        }
       }
     }
 
@@ -3389,19 +3410,17 @@ impl WayfernManager {
     if let Some(port) = cdp_port {
       match tokio::time::timeout(Duration::from_secs(3), self.browser_close(port)).await {
         Ok(Ok(())) => {}
-        Ok(Err(e)) => log::warn!("Browser.close was not accepted on port {port}: {e}"),
-        Err(_) => log::warn!("Browser.close timed out on port {port}"),
+        Ok(Err(e)) => log::debug!("Browser.close refused pid={pid} cdp_port={port} err=\"{e}\""),
+        Err(_) => log::debug!("Browser.close timed out pid={pid} cdp_port={port}"),
       }
       if wait_for_exit(pid, Duration::from_secs(5)).await {
         return StopOutcome::Closed;
       }
-      log::warn!("Wayfern (PID {pid}) did not exit after Browser.close; terminating it");
     }
     terminate_process(pid);
     if wait_for_exit(pid, Duration::from_secs(5)).await {
       return StopOutcome::Terminated;
     }
-    log::warn!("Wayfern (PID {pid}) ignored the termination request; killing it");
     force_kill_process(pid);
     if wait_for_exit(pid, Duration::from_secs(2)).await {
       return StopOutcome::Killed;
@@ -3485,7 +3504,7 @@ impl WayfernManager {
       return Err(format!("CDP /json/new returned HTTP {}", resp.status()).into());
     }
 
-    log::info!("Opened URL in new tab via CDP");
+    log::debug!("Opened URL in new tab cdp_port={port}");
     Ok(())
   }
 
@@ -3574,9 +3593,8 @@ impl WayfernManager {
             });
           } else {
             log::info!(
-              "Wayfern process {} for profile {} is no longer running, cleaning up",
-              pid,
-              profile_path
+              "Browser exited profile={} pid={pid}",
+              profile_id_in_path(profile_path)
             );
             inner.instances.remove(&id);
             return None;
@@ -3590,16 +3608,29 @@ impl WayfernManager {
     if let Some((pid, found_profile_path, cdp_port)) =
       Self::find_wayfern_process_by_profile(&target_path)
     {
-      log::info!(
-        "Found running Wayfern process (PID: {}) for profile path via system scan",
-        pid
+      // A browser seconds old is almost always one this app is still
+      // launching: its instance is registered only once the launch finishes.
+      let age_s = crate::proxy_storage::process_start_time(pid).map(|start| {
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .map(|now| now.as_secs().saturating_sub(start))
+          .unwrap_or_default()
+      });
+      let level = if age_s.is_some_and(|age| age < 120) {
+        log::Level::Debug
+      } else {
+        log::Level::Info
+      };
+      log::log!(
+        level,
+        "Browser adopted from a running process profile={} pid={pid} cdp_port={cdp_port:?} age_s={age_s:?}",
+        profile_id_in_path(&found_profile_path)
       );
 
       let instance_id = format!("recovered_{}", pid);
       inner.instances.insert(
         instance_id.clone(),
         WayfernInstance {
-          id: instance_id.clone(),
           process_id: Some(pid),
           profile_path: Some(found_profile_path.clone()),
           url: None,
@@ -3700,7 +3731,6 @@ impl WayfernManager {
     std::fs::create_dir_all(&profile_path)?;
 
     if let Some(existing) = self.find_wayfern_by_profile(&profile_path_str).await {
-      log::info!("Stopping existing Wayfern instance for profile");
       self.stop_wayfern(&existing.id).await?;
     }
 
@@ -3742,7 +3772,7 @@ impl WayfernManager {
     }
 
     for id in dead_ids {
-      log::info!("Cleaning up dead Wayfern instance: {id}");
+      log::debug!("Removed dead browser instance id={id}");
       inner.instances.remove(&id);
     }
   }
@@ -3760,6 +3790,9 @@ fn kill_browser_process(pid: u32) {
   #[cfg(windows)]
   force_kill_process(pid);
 }
+
+static TOKEN_AT_LAUNCH: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Wayfern token at launch");
 
 static WAYFERN_MANAGER: std::sync::LazyLock<WayfernManager> =
   std::sync::LazyLock::new(WayfernManager::new);

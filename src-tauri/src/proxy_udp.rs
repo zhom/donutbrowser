@@ -91,14 +91,18 @@ pub async fn probe_udp_support(settings: &ProxySettings) -> UdpSupport {
     Ok(Ok(verdict)) => verdict,
     Ok(Err(e)) => {
       log::debug!(
-        "UDP probe of {}:{} could not complete: {e}",
+        "UDP probe inconclusive host={} port={} err=\"{e}\"",
         settings.host,
         settings.port
       );
       UdpSupport::Unknown
     }
     Err(_) => {
-      log::debug!("UDP probe of {}:{} timed out", settings.host, settings.port);
+      log::debug!(
+        "UDP probe timed out host={} port={}",
+        settings.host,
+        settings.port
+      );
       UdpSupport::Unknown
     }
   }

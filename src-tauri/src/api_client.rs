@@ -4,6 +4,22 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::log_streak::Streak;
+
+static WAYFERN_VERSION_FETCH: Streak = Streak::new(module_path!(), "Wayfern version fetch");
+static LAST_WAYFERN_VERSION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn wayfern_version_changed(version: &str) -> bool {
+  let mut last = LAST_WAYFERN_VERSION
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  if last.as_deref() == Some(version) {
+    return false;
+  }
+  *last = Some(version.to_string());
+  true
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VersionComponent {
   pub major: u32,
@@ -156,12 +172,12 @@ impl ApiClient {
 
     let content = fs::read_to_string(&cache_file).ok()?;
     if let Ok(cached) = serde_json::from_str::<CachedVersionData>(&content) {
-      log::info!("Using cached versions for {browser}");
+      log::debug!("Browser versions from cache browser={browser}");
       return Some(cached.releases);
     }
 
     if let Ok(legacy_versions) = serde_json::from_str::<Vec<String>>(&content) {
-      log::info!("Using legacy cached versions for {browser}; upgrading in-memory");
+      log::debug!("Browser versions from legacy cache browser={browser}");
       let releases: Vec<BrowserRelease> = legacy_versions
         .into_iter()
         .map(|version| BrowserRelease {
@@ -214,7 +230,10 @@ impl ApiClient {
 
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
-    log::info!("Cached {} versions for {}", releases.len(), browser);
+    log::debug!(
+      "Browser versions cached browser={browser} count={}",
+      releases.len()
+    );
     Ok(())
   }
 
@@ -246,7 +265,7 @@ impl ApiClient {
 
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
-    log::info!("Cached Wayfern version: {}", version_info.version);
+    log::debug!("Wayfern version cached version={}", version_info.version);
     Ok(())
   }
 
@@ -257,12 +276,14 @@ impl ApiClient {
   ) -> Result<WayfernVersionInfo, Box<dyn std::error::Error + Send + Sync>> {
     if !no_caching {
       if let Some(cached_version) = self.load_cached_wayfern_version() {
-        log::info!("Using cached Wayfern version: {}", cached_version.version);
+        log::debug!(
+          "Wayfern version from cache version={}",
+          cached_version.version
+        );
         return Ok(cached_version);
       }
     }
 
-    log::info!("Fetching Wayfern version from https://donutbrowser.com/wayfern.json");
     let url = "https://donutbrowser.com/wayfern.json";
 
     let mut last_err = None;
@@ -291,7 +312,7 @@ impl ApiClient {
           }
         }
         Err(e) => {
-          log::warn!("Wayfern fetch attempt {attempt}/3 failed: {e}");
+          log::debug!("Wayfern version fetch attempt failed attempt={attempt} err=\"{e}\"");
           proxy_err = crate::system_proxy::explain(&e);
           last_err = Some(e.to_string());
         }
@@ -302,19 +323,31 @@ impl ApiClient {
       }
     }
 
-    let version_info = version_info.ok_or_else(|| {
-      proxy_err.unwrap_or_else(|| {
-        format!(
-          "Failed to fetch Wayfern version after 3 attempts: {}",
-          last_err.unwrap_or_default()
-        )
-      })
-    })?;
-    log::info!("Fetched Wayfern version: {}", version_info.version);
+    let version_info = match version_info {
+      Some(info) => {
+        WAYFERN_VERSION_FETCH.succeeded();
+        info
+      }
+      None => {
+        let err = proxy_err.unwrap_or_else(|| {
+          format!(
+            "Failed to fetch Wayfern version after 3 attempts: {}",
+            last_err.unwrap_or_default()
+          )
+        });
+        WAYFERN_VERSION_FETCH.failed(&err);
+        return Err(err.into());
+      }
+    };
+    if wayfern_version_changed(&version_info.version) {
+      log::info!("Wayfern version fetched version={}", version_info.version);
+    } else {
+      log::debug!("Wayfern version fetched version={}", version_info.version);
+    }
 
     if !no_caching {
       if let Err(e) = self.save_cached_wayfern_version(&version_info) {
-        log::error!("Failed to cache Wayfern version: {e}");
+        log::warn!("Wayfern version not cached err=\"{e}\"");
       }
     }
 
@@ -368,10 +401,10 @@ impl ApiClient {
         let path = entry.path();
         if path.is_file() {
           fs::remove_file(&path)?;
-          log::info!("Removed cache file: {path:?}");
+          log::debug!("Version cache file removed path={path:?}");
         }
       }
-      log::info!("All version cache cleared successfully");
+      log::info!("Version cache cleared");
     }
 
     Ok(())

@@ -93,7 +93,7 @@ fn resolve_dir_i18n(
   let key = message_placeholder_key(value)?;
   let default_locale = manifest.get("default_locale")?.as_str()?;
   if !is_safe_locale_name(default_locale) {
-    log::warn!("Ignoring extension with a suspicious default_locale: {default_locale:?}");
+    log::warn!("Extension ignored: suspicious default_locale={default_locale:?}");
     return None;
   }
   let messages = read_json_file(

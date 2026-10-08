@@ -21,6 +21,9 @@ use crate::wayfern_cdp::{
   PerceptionStats, PickedElement, ResolveOptions, ViewportTarget, WayfernError, WayfernSession,
 };
 
+static AUTOMATION_QUOTA: crate::log_streak::Throttle =
+  crate::log_streak::Throttle::new(std::time::Duration::from_secs(60));
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpTool {
@@ -2107,7 +2110,7 @@ impl McpServer {
         ),
         None => "logged_in=false".to_string(),
       };
-      log::warn!("[mcp] Rejected '{feature}' — plan does not include it ({summary})");
+      log::warn!("MCP tool refused: plan lacks feature feature=\"{feature}\" {summary}");
       return Err(McpError {
         code: -32000,
         message: format!("{feature} is not included in this account's plan"),
@@ -2138,7 +2141,7 @@ impl McpServer {
       let mut inner = self.inner.lock().await;
       match inner.sessions.remove(session_id) {
         Some(session) => {
-          log::info!("[mcp] Session terminated: {}", ShortId(session_id));
+          log::info!("MCP session ended session={}", ShortId(session_id));
           crate::agent_console::session_ended(session_id);
           session.cached_pages
         }
@@ -2161,8 +2164,7 @@ impl McpServer {
     .is_err()
     {
       log::debug!(
-        "[mcp] Session {} ended before its element caches could be cleared; the \
-         page-side slot cap will reclaim them",
+        "MCP session element caches not cleared in time session={}",
         ShortId(session_id)
       );
     }
@@ -2181,7 +2183,7 @@ impl McpServer {
         Ok(target) => target,
         Err(e) => {
           log::debug!(
-            "[mcp] Skipped clearing an element cache on profile {profile_id}: {}",
+            "MCP element cache clear skipped profile={profile_id} err=\"{}\"",
             e.message
           );
           continue;
@@ -2209,7 +2211,7 @@ impl McpServer {
         .await
       {
         log::debug!(
-          "[mcp] Could not clear an element cache on profile {profile_id}: {}",
+          "MCP element cache clear failed profile={profile_id} err=\"{}\"",
           e.message
         );
       }
@@ -2308,9 +2310,12 @@ impl McpServer {
       if let crate::automation_rate_limiter::RateLimitOutcome::Limited { retry_after_secs } =
         crate::automation_rate_limiter::check_automation_rate_limit().await
       {
-        log::warn!(
-          "[mcp] Rejected tools/call: automation rate limit exceeded; retry in {retry_after_secs}s"
-        );
+        if let Some(dropped) = AUTOMATION_QUOTA.allow("limited") {
+          log::warn!(
+            "MCP automation rate limited retry_after_s={retry_after_secs}{}",
+            crate::log_streak::suppressed(dropped)
+          );
+        }
         return McpOutcome::RateLimited { retry_after_secs };
       }
     }
@@ -4231,7 +4236,10 @@ impl McpServer {
         else {
           break;
         };
-        log::warn!("[mcp] Session cap reached; evicting the oldest session");
+        log::warn!(
+          "MCP session cap reached, oldest evicted session={}",
+          ShortId(&oldest)
+        );
         inner.sessions.remove(&oldest);
         evicted.push(oldest);
       }
@@ -4259,7 +4267,7 @@ impl McpServer {
       "instructions": instructions
     });
 
-    log::info!("[mcp] New session initialized: {}", ShortId(&session_id));
+    log::info!("MCP session started session={}", ShortId(&session_id));
     Ok((session_id, (id, result)))
   }
 
@@ -4337,24 +4345,19 @@ impl McpServer {
       .cloned()
       .unwrap_or(serde_json::json!({}));
 
-    // Surface the call in logs so customer reports show which tools the MCP
-    // client is actually invoking (and therefore which gate any subsequent
-    // error came from). Log only the tool name and the profile_id arg —
-    // arbitrary URLs / JS / selectors can be sensitive.
+    // Log only the tool name and the profile_id arg: arbitrary URLs / JS /
+    // selectors can be sensitive.
     let profile_id = arguments
       .get("profile_id")
       .and_then(|v| v.as_str())
       .unwrap_or("<none>");
-    log::info!("[mcp] tools/call name={tool_name} profile_id={profile_id}");
 
     let started = std::time::Instant::now();
     // Refused here, at the one place every tool call passes, rather than in
     // each handler: a new path-taking tool added later inherits the rule
     // instead of having to remember it.
     if LOCAL_PATH_TOOLS.contains(&tool_name) || SECRET_EXPORT_TOOLS.contains(&tool_name) {
-      log::warn!(
-        "[mcp] Refused '{tool_name}': it takes a local filesystem path or exports stored secrets"
-      );
+      log::warn!("MCP tool refused: local paths or secrets tool={tool_name}");
       return Err(McpError {
         code: -32000,
         message: crate::backend_error("TOOL_IS_LOCAL_ONLY"),
@@ -4402,13 +4405,13 @@ impl McpServer {
     }
     match &result {
       Ok(_) => {
-        log::info!(
-          "[mcp] tools/call name={tool_name} profile_id={profile_id} -> ok ({elapsed_ms} ms)"
+        log::debug!(
+          "MCP tool call ok tool={tool_name} profile={profile_id} elapsed_ms={elapsed_ms}"
         );
       }
       Err(e) => {
         log::warn!(
-          "[mcp] tools/call name={tool_name} profile_id={profile_id} -> error code={} msg={:?} ({elapsed_ms} ms)",
+          "MCP tool call failed tool={tool_name} profile={profile_id} code={} elapsed_ms={elapsed_ms} err={:?}",
           e.code,
           e.message
         );
@@ -5283,7 +5286,7 @@ impl McpServer {
         if message.contains("PROFILE_GENERATION_LIMIT_REACHED") {
           let _ = crate::events::emit_empty("profile-generation-limit-reached");
         }
-        log::warn!("[mcp] Could not create profile '{name}': {message}");
+        log::warn!("MCP profile create failed err=\"{message}\"");
         McpError {
           code: -32000,
           message: format!("Failed to create profile: {message}"),
@@ -7567,7 +7570,7 @@ impl McpServer {
       data: None,
     })?;
     if let Err(e) = crate::events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event not emitted event=extensions-changed err=\"{e}\"");
     }
     Ok(serde_json::json!({"success": true}))
   }
@@ -9012,7 +9015,7 @@ impl McpServer {
       .map(|_| ())
       .map_err(|e| {
         log::warn!(
-          "[mcp] Could not bring profile {profile_id} to front: {}",
+          "MCP profile not brought to front profile={profile_id} err=\"{}\"",
           e.message
         );
         crate::backend_error("PROFILE_NOT_RUNNING")

@@ -159,7 +159,11 @@ fn validate_recipe(name: &str, steps: &[RecipeStep]) -> Result<(String, Vec<Reci
 }
 
 fn failure(action: &str, err: BackendFailure) -> String {
-  log::warn!("Recipe {action} failed: {} (HTTP {})", err.code, err.status);
+  log::warn!(
+    "Recipe request failed action={action} code={} status={}",
+    err.code,
+    err.status
+  );
   err.to_error_json()
 }
 

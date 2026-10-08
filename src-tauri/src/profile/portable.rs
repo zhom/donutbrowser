@@ -253,7 +253,10 @@ pub fn export_to(
         // A browser file can vanish between the walk and the read; that is not
         // a reason to fail an export of everything else.
         Err(e) => {
-          log::warn!("Skipping {} in the export: {e}", absolute.display());
+          log::warn!(
+            "Profile export skipped a file path=\"{}\" err=\"{e}\"",
+            absolute.display()
+          );
           continue;
         }
       };

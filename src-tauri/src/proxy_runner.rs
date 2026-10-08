@@ -42,7 +42,7 @@ fn prune_stale_proxy_logs(temp_dir: &Path, retain: usize) {
   for (_, path) in logs.into_iter().skip(retain) {
     if let Err(error) = std::fs::remove_file(&path) {
       log::debug!(
-        "Failed to prune stale proxy log {}: {error}",
+        "Stale proxy log prune failed path={} err=\"{error}\"",
         path.display()
       );
     }
@@ -216,7 +216,7 @@ pub(crate) async fn ensure_sidecar_version() -> Result<(), Box<dyn std::error::E
   let executable = match find_sidecar_executable("donut-proxy") {
     Ok(executable) => executable,
     Err(e) => {
-      log::error!("Failed to locate donut-proxy for version verification: {e}");
+      log::error!("donut-proxy not found for version check err=\"{e}\"");
       return Err(sidecar_version_mismatch_error());
     }
   };
@@ -234,7 +234,7 @@ pub(crate) async fn ensure_sidecar_version() -> Result<(), Box<dyn std::error::E
     Ok(output) => output,
     Err(e) => {
       log::error!(
-        "Failed to run {} for version verification: {e}",
+        "donut-proxy version check failed to run path={} err=\"{e}\"",
         executable.display()
       );
       return Err(sidecar_version_mismatch_error());
@@ -249,7 +249,7 @@ pub(crate) async fn ensure_sidecar_version() -> Result<(), Box<dyn std::error::E
   }
 
   log::error!(
-    "donut-proxy version mismatch: expected {}, got {:?}; status={}, stdout={:?}, stderr={:?}",
+    "donut-proxy version mismatch expected={} actual={:?} status=\"{}\" stdout={:?} stderr={:?}",
     expected_version,
     actual_version,
     output.status,
@@ -289,8 +289,10 @@ pub async fn start_proxy_process_with_profile(
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
   ensure_sidecar_version().await?;
 
+  let started = std::time::Instant::now();
   let id = generate_proxy_id();
   let upstream = upstream_url.unwrap_or_else(|| "DIRECT".to_string());
+  let upstream_kind = upstream_scheme(&upstream).to_string();
 
   // Get available port if not specified
   let local_port = port.unwrap_or_else(|| {
@@ -308,13 +310,6 @@ pub async fn start_proxy_process_with_profile(
     .with_record_domains(record_domains);
   save_proxy_config(&config)?;
 
-  // Log profile_id for debugging
-  if let Some(ref pid) = profile_id {
-    log::info!("Saved proxy config {} with profile_id: {}", id, pid);
-  } else {
-    log::info!("Saved proxy config {} without profile_id", id);
-  }
-
   // Spawn proxy worker process in the background using std::process::Command
   // This ensures proper process detachment on Unix systems
   let exe = find_sidecar_executable("donut-proxy")?;
@@ -322,6 +317,7 @@ pub async fn start_proxy_process_with_profile(
   let log_path = temp_dir.join(format!("donut-proxy-{id}.log"));
   let log_file = crate::app_dirs::create_owner_only(&log_path);
   prune_stale_proxy_logs(&temp_dir, RETAINED_PROXY_LOGS);
+  let spawned_pid: u32;
 
   #[cfg(unix)]
   {
@@ -341,7 +337,6 @@ pub async fn start_proxy_process_with_profile(
 
     // Always log to file for diagnostics (both debug and release builds)
     if let Ok(file) = log_file {
-      log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
     } else {
       cmd.stderr(Stdio::null());
@@ -366,6 +361,7 @@ pub async fn start_proxy_process_with_profile(
     // Spawn detached process
     let child = cmd.spawn()?;
     let pid = child.id();
+    spawned_pid = pid;
 
     // Store PID
     {
@@ -414,7 +410,6 @@ pub async fn start_proxy_process_with_profile(
 
     // Log to file for diagnostics (matching Unix behavior)
     if let Ok(file) = log_file {
-      log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
     } else {
       cmd.stderr(Stdio::null());
@@ -427,6 +422,7 @@ pub async fn start_proxy_process_with_profile(
 
     let child = cmd.spawn()?;
     let pid = child.id();
+    spawned_pid = pid;
 
     // Set high priority so the proxy is killed last under resource pressure
     unsafe {
@@ -471,7 +467,11 @@ pub async fn start_proxy_process_with_profile(
             .await
             {
               Ok(Ok(_stream)) => {
-                // Port is listening and accepting connections!
+                log::info!(
+                  "Proxy worker started id={id} pid={spawned_pid} port={port} profile={} upstream={upstream_kind} elapsed_ms={}",
+                  profile_id.as_deref().unwrap_or("none"),
+                  started.elapsed().as_millis()
+                );
                 return Ok(updated_config);
               }
               Ok(Err(_)) | Err(_) => {
@@ -499,21 +499,31 @@ pub async fn start_proxy_process_with_profile(
       // The detached worker (if it did spawn) would otherwise outlive this
       // failed start with nothing tracking it — callers only get an error
       // string, so this is the last place that can still kill it.
-      let _ = stop_proxy_process(&id).await;
+      let _ = stop_proxy_process_because(&id, "start_timeout").await;
       return Err(format!("Proxy worker failed to start in time. {detail}").into());
     }
   }
 }
 
 pub async fn stop_proxy_process(id: &str) -> Result<bool, Box<dyn std::error::Error>> {
+  stop_proxy_process_because(id, "requested").await
+}
+
+/// `reason` names why the worker is stopped, for its one stop line.
+pub(crate) async fn stop_proxy_process_because(
+  id: &str,
+  reason: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+  let config = get_proxy_config(id);
   let pid = PROXY_PROCESSES
     .lock()
     .unwrap()
     .get(id)
     .copied()
-    .or_else(|| get_proxy_config(id).and_then(|config| config.pid));
+    .or_else(|| config.as_ref().and_then(|config| config.pid));
 
   if let Some(pid) = pid {
+    let was_running = is_process_running(pid);
     // Kill the process
     #[cfg(unix)]
     {
@@ -545,10 +555,39 @@ pub async fn stop_proxy_process(id: &str) -> Result<bool, Box<dyn std::error::Er
 
     // Delete the config file
     delete_proxy_config(id);
+
+    let how = if !was_running {
+      "already_gone"
+    } else if is_process_running(pid) {
+      "still_running"
+    } else {
+      "terminated"
+    };
+    let profile = config
+      .as_ref()
+      .and_then(|config| config.profile_id.as_deref())
+      .unwrap_or("none");
+    let browser_pid = config
+      .as_ref()
+      .and_then(|config| config.browser_pid)
+      .map(|pid| pid.to_string())
+      .unwrap_or_else(|| "none".to_string());
+    log::info!(
+      "Proxy worker stopped id={id} pid={pid} profile={profile} browser_pid={browser_pid} reason={reason} how={how}"
+    );
     return Ok(true);
   }
 
   Ok(false)
+}
+
+/// The scheme of an upstream URL, never its host or credentials.
+fn upstream_scheme(upstream: &str) -> &str {
+  match upstream.split_once("://") {
+    Some((scheme, _)) => scheme,
+    None if upstream == "DIRECT" => "direct",
+    None => "unknown",
+  }
 }
 
 pub async fn stop_all_proxy_processes() -> Result<(), Box<dyn std::error::Error>> {

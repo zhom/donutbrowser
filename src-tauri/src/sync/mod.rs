@@ -83,7 +83,7 @@ pub async fn resume_subscription(app_handle: tauri::AppHandle) {
 
   if !subscription_manager.is_running() {
     if let Err(e) = subscription_manager.start(app_handle).await {
-      log::warn!("Failed to resume sync subscription: {e}");
+      log::warn!("Sync subscription resume failed err=\"{e}\"");
     }
   }
 
@@ -116,7 +116,7 @@ pub async fn start_pipeline(app_handle: tauri::AppHandle) {
 
   let mut subscription_manager = SubscriptionManager::new();
   let Some(work_rx) = subscription_manager.take_work_receiver() else {
-    log::error!("Sync pipeline has no work receiver; not starting");
+    log::error!("Sync pipeline not started: no work receiver");
     return;
   };
 
@@ -125,7 +125,7 @@ pub async fn start_pipeline(app_handle: tauri::AppHandle) {
   // restart path used to give up here, which turned a token hiccup into sync
   // being dead until the next launch.
   if let Err(e) = subscription_manager.start(app_handle.clone()).await {
-    log::warn!("Failed to start sync subscription, continuing without live updates: {e}");
+    log::warn!("Sync subscription not started, no live updates err=\"{e}\"");
   }
   if let Ok(mut guard) = GLOBAL_SUBSCRIPTION.lock() {
     *guard = Some(subscription_manager);
@@ -143,14 +143,14 @@ pub async fn start_pipeline(app_handle: tauri::AppHandle) {
   match SyncEngine::create_from_settings(&app_handle).await {
     Ok(engine) => {
       if let Err(e) = engine.check_for_missing_synced_profiles(&app_handle).await {
-        log::warn!("Failed to check for missing profiles: {e}");
+        log::warn!("Missing profile check failed err=\"{e}\"");
       }
       if let Err(e) = engine.check_for_missing_synced_entities(&app_handle).await {
-        log::warn!("Failed to check for missing entities: {e}");
+        log::warn!("Missing entity check failed err=\"{e}\"");
       }
     }
     Err(e) => {
-      log::warn!("Sync not configured, skipping missing profile check: {e}");
+      log::debug!("Missing profile check skipped err=\"{e}\"");
     }
   }
 

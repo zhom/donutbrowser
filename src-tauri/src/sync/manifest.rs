@@ -274,10 +274,7 @@ pub fn generate_manifest(
   let mut max_mtime: i64 = 0;
 
   if !profile_dir.exists() {
-    log::debug!(
-      "Profile directory doesn't exist: {}, creating empty manifest",
-      profile_dir.display()
-    );
+    log::debug!("Profile dir missing, empty manifest profile={profile_id}");
     return Ok(manifest);
   }
 
@@ -470,7 +467,7 @@ pub fn compute_diff_with_bias(
   // would appear "newer" and cause all remote files to be deleted.
   if local.files.is_empty() && !remote.files.is_empty() {
     log::info!(
-      "Local manifest is empty but remote has {} files — downloading from remote to recover",
+      "Local manifest empty, recovering from remote files={}",
       remote.files.len()
     );
     diff.files_to_download = remote.files.clone();

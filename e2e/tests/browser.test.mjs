@@ -345,9 +345,13 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
 
     // The new-profile form (which needs a downloaded browser and its release
     // types, so it renders here and not in the UI suite): session restore is
-    // on by default and the checkbox is a live control.
+    // on by default and the checkbox is a live control. It sits under the
+    // collapsed advanced options.
     await app.clickSelector('[aria-label="Profiles"]');
     await app.clickText("New");
+    await app.clickText(en.createProfile.advancedOptions, {
+      roles: ["button"],
+    });
     const restoreChecked = () =>
       app.execute(
         `return document.querySelector("#restore-session")?.getAttribute("aria-checked") ?? null;`,

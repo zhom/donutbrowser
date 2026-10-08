@@ -276,12 +276,15 @@ async fn download_archive(url: &str) -> Result<Vec<u8>, String> {
     .send()
     .await
     .map_err(|e| {
-      log::warn!("Extension download request failed: {e}");
+      log::warn!("Extension download failed err=\"{}\"", e.without_url());
       err("EXTENSION_DOWNLOAD_FAILED")
     })?;
 
   if !response.status().is_success() {
-    log::warn!("Extension download answered HTTP {}", response.status());
+    log::warn!(
+      "Extension download failed status={}",
+      response.status().as_u16()
+    );
     return Err(err("EXTENSION_DOWNLOAD_FAILED"));
   }
   // A redirect the policy stopped surfaces here as a 3xx, which
@@ -301,7 +304,10 @@ async fn download_archive(url: &str) -> Result<Vec<u8>, String> {
   let mut stream = response.bytes_stream();
   while let Some(chunk) = stream.next().await {
     let chunk = chunk.map_err(|e| {
-      log::warn!("Extension download stream failed: {e}");
+      log::warn!(
+        "Extension download stream failed err=\"{}\"",
+        e.without_url()
+      );
       err("EXTENSION_DOWNLOAD_FAILED")
     })?;
     // A server is free to lie about, or omit, Content-Length, so the ceiling

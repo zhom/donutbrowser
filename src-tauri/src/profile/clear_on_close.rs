@@ -59,7 +59,10 @@ fn remove_entry(path: &Path) {
     fs::remove_file(path)
   };
   if let Err(e) = result {
-    log::warn!("clear-on-close: failed to remove {}: {e}", path.display());
+    log::warn!(
+      "Clear-on-close removal failed path=\"{}\" err=\"{e}\"",
+      path.display()
+    );
   }
 }
 
@@ -131,13 +134,17 @@ pub async fn clear_profile_browsing_data(profile: &BrowserProfile) {
 
   let profiles_dir = crate::profile::ProfileManager::instance().get_profiles_dir();
   let user_data_dir = crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
-  let name = profile.name.clone();
+  let started = std::time::Instant::now();
 
   let cleared = tokio::task::spawn_blocking(move || clear_user_data_dir(&user_data_dir))
     .await
     .unwrap_or(0);
 
-  log::info!("clear-on-close: cleared {cleared} browsing-data entries for profile '{name}'");
+  log::info!(
+    "Browsing data cleared on close profile={} entries={cleared} elapsed_ms={}",
+    profile.id,
+    started.elapsed().as_millis()
+  );
 }
 
 #[cfg(test)]

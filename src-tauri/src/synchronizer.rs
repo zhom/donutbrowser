@@ -378,16 +378,17 @@ impl SynchronizerManager {
 
     let session_id = uuid::Uuid::new_v4().to_string();
 
-    log::info!(
-      "Synchronizer: launching leader '{}' and {} followers",
-      leader.name,
-      follower_profiles.len()
-    );
-
     // Launch leader first so it gets focus
     crate::browser_runner::launch_browser_profile(app_handle.clone(), leader.clone(), None, None)
       .await
-      .map_err(|e| format!("Failed to launch leader: {e}"))?;
+      .map_err(|e| {
+        // The launch logged its own failure; its text can carry the name.
+        log::error!(
+          "Synchronizer start failed step=launch_leader profile={}",
+          leader.id
+        );
+        format!("Failed to launch leader: {e}")
+      })?;
 
     // Launch followers in parallel batches of MAX_CONCURRENT_LAUNCHES
     for chunk in follower_profiles.chunks(MAX_CONCURRENT_LAUNCHES) {
@@ -398,14 +399,14 @@ impl SynchronizerManager {
         set.spawn(async move {
           crate::browser_runner::launch_browser_profile(ah, fp.clone(), None, None)
             .await
-            .map_err(|e| (fp.name.clone(), e.to_string()))
+            .map_err(|e| (fp.id, fp.name.clone(), e.to_string()))
         });
       }
       while let Some(result) = set.join_next().await {
         match result {
           Ok(Ok(_)) => {}
-          Ok(Err((name, e))) => {
-            log::error!("Failed to launch follower '{name}': {e}");
+          Ok(Err((id, name, e))) => {
+            log::error!("Synchronizer start failed step=launch_follower profile={id}");
             // Kill leader and all already-launched followers
             let _ =
               crate::browser_runner::kill_browser_profile(app_handle.clone(), leader.clone()).await;
@@ -416,7 +417,7 @@ impl SynchronizerManager {
             return Err(format!("Failed to launch follower '{name}': {e}"));
           }
           Err(e) => {
-            log::error!("Launch task panicked: {e}");
+            log::error!("Synchronizer start failed step=launch_task err=\"{e}\"");
             let _ =
               crate::browser_runner::kill_browser_profile(app_handle.clone(), leader.clone()).await;
             return Err(format!("Launch task panicked: {e}"));
@@ -473,10 +474,7 @@ impl SynchronizerManager {
       .chain(follower_profile_ids.iter().cloned())
       .collect();
 
-    log::info!("Synchronizer: spawning CDP listener task");
-
     tokio::spawn(async move {
-      log::info!("Synchronizer: CDP listener task started");
       if let Err(e) = Self::run_session_loop(
         ah.clone(),
         manager.clone(),
@@ -491,7 +489,10 @@ impl SynchronizerManager {
       )
       .await
       {
-        log::error!("Synchronizer session {sid} error: {e}");
+        log::error!(
+          "Synchronizer session failed session={} err=\"{e}\"",
+          ShortId(&sid)
+        );
         // Kill all profiles on error (leader + followers)
         for pid in &all_profile_ids {
           if let Ok(p) = Self::get_profile(pid) {
@@ -509,8 +510,15 @@ impl SynchronizerManager {
     match tokio::time::timeout(std::time::Duration::from_secs(90), ready_rx).await {
       Ok(Ok(Ok(()))) => Ok(info),
       Ok(Ok(Err(e))) => Err(format!("Synchronizer setup failed: {e}")),
+      // The session task logged why it ended.
       Ok(Err(_)) => Err("Synchronizer setup channel closed unexpectedly".to_string()),
-      Err(_) => Err("Synchronizer setup timed out".to_string()),
+      Err(_) => {
+        log::error!(
+          "Synchronizer start failed step=setup session={} err=\"timed out after 90s\"",
+          ShortId(&session_id)
+        );
+        Err("Synchronizer setup timed out".to_string())
+      }
     }
   }
 
@@ -568,17 +576,13 @@ impl SynchronizerManager {
     use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::Message;
 
-    log::info!("Synchronizer: run_session_loop started, waiting 1s for browsers");
+    let started = std::time::Instant::now();
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Connect to leader page-level target for reliable event capture
-    log::info!("Synchronizer: getting leader CDP port");
     let leader_profile = Self::get_profile(&leader_profile_id)?;
     let leader_port = Self::get_cdp_port(&leader_profile).await?;
-    log::info!("Synchronizer: leader CDP port = {leader_port}, getting WS URL");
     let leader_ws_url = Self::get_page_ws_url(leader_port).await?;
-
-    log::info!("Synchronizer: connecting to leader page");
 
     let (mut ws_stream, _) = connect_async(&leader_ws_url)
       .await
@@ -649,15 +653,12 @@ impl SynchronizerManager {
       )
       .await
       {
-        Ok(_) => log::info!("Synchronizer: {method} OK"),
+        Ok(_) => {}
         Err(e) => {
-          log::error!("Synchronizer: {method} FAILED: {e}");
           return Err(format!("{method} failed: {e}"));
         }
       }
     }
-
-    log::info!("Synchronizer: input capture enabled");
 
     // Get leader window size and resize all followers to match
     let leader_bounds = send_cmd(
@@ -675,7 +676,7 @@ impl SynchronizerManager {
         let width = bounds.get("width").and_then(|v| v.as_i64()).unwrap_or(0);
         let height = bounds.get("height").and_then(|v| v.as_i64()).unwrap_or(0);
         if width > 0 && height > 0 {
-          log::info!("Synchronizer: leader window size {width}x{height}, resizing followers");
+          log::debug!("Synchronizer resizing followers width={width} height={height}");
           for fid in &follower_profile_ids {
             if let Ok(fp) = Self::get_profile(fid) {
               if let Ok(port) = Self::get_cdp_port(&fp).await {
@@ -709,8 +710,6 @@ impl SynchronizerManager {
       }
     }
 
-    log::info!("Synchronizer: opening persistent connections to followers");
-
     // Open persistent WebSocket connections to each follower and create event channels.
     // Each follower gets a dedicated replay task with a long-lived WS connection.
     let mut follower_senders: HashMap<String, tokio::sync::mpsc::UnboundedSender<CapturedEvent>> =
@@ -723,7 +722,6 @@ impl SynchronizerManager {
             Ok(url) => {
               match tokio_tungstenite::connect_async(&url).await {
                 Ok((ws, _)) => {
-                  log::info!("Synchronizer: follower connected");
                   let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<CapturedEvent>();
                   follower_senders.insert(fid.clone(), tx);
 
@@ -737,29 +735,30 @@ impl SynchronizerManager {
                   });
                 }
                 Err(e) => log::warn!(
-                  "Synchronizer: failed to connect to follower {}: {e}",
-                  fp.name
+                  "Synchronizer follower not connected step=connect profile={fid} err=\"{e}\""
                 ),
               }
             }
             Err(e) => log::warn!(
-              "Synchronizer: failed to get WS URL for follower {}: {e}",
-              fp.name
+              "Synchronizer follower not connected step=ws_url profile={fid} err=\"{e}\""
             ),
           },
           Err(e) => log::warn!(
-            "Synchronizer: failed to get CDP port for follower {}: {e}",
-            fp.name
+            "Synchronizer follower not connected step=cdp_port profile={fid} err=\"{e}\""
           ),
         },
-        Err(e) => log::warn!("Synchronizer: failed to get follower profile {fid}: {e}"),
+        Err(e) => {
+          log::warn!("Synchronizer follower not connected step=profile profile={fid} err=\"{e}\"")
+        }
       }
     }
 
     log::info!(
-      "Synchronizer: {} of {} followers connected",
+      "Synchronizer session started session={} leader={leader_profile_id} leader_cdp_port={leader_port} followers_connected={}/{} elapsed_ms={}",
+      ShortId(&session_id),
       follower_senders.len(),
-      follower_profile_ids.len()
+      follower_profile_ids.len(),
+      started.elapsed().as_millis()
     );
 
     // Track when the last user interaction was captured (for suppressing click-caused nav replay)
@@ -774,11 +773,12 @@ impl SynchronizerManager {
     }
 
     // Main event loop — listen for Wayfern.inputCaptured events
+    let end_reason: String;
     loop {
       tokio::select! {
           _ = cancel_rx.changed() => {
               if *cancel_rx.borrow() {
-                  log::info!("Synchronizer session {}: cancelled", ShortId(&session_id));
+                  end_reason = "cancelled".to_string();
                   break;
               }
           }
@@ -795,7 +795,10 @@ impl SynchronizerManager {
                       // Log CDP command response errors
                       if let Some(id) = value.get("id") {
                           if let Some(error) = value.get("error") {
-                              log::warn!("Synchronizer: CDP command {id} error: {error}");
+                              log::warn!(
+                                  "Synchronizer leader CDP command failed session={} id={id} err={error}",
+                                  ShortId(&session_id)
+                              );
                           }
                       }
 
@@ -815,11 +818,11 @@ impl SynchronizerManager {
                   }
                   Some(Ok(_)) => {} // pings, binary, etc.
                   Some(Err(e)) => {
-                      log::error!("Synchronizer: leader WebSocket error: {e}");
+                      end_reason = format!("leader_ws_error err=\"{e}\"");
                       break;
                   }
                   None => {
-                      log::info!("Synchronizer: leader WebSocket closed (browser closed)");
+                      end_reason = "leader_closed".to_string();
                       break;
                   }
               }
@@ -828,10 +831,6 @@ impl SynchronizerManager {
     }
 
     // Leader closed or session cancelled — kill all followers
-    log::info!(
-      "Synchronizer session {}: stopping all followers",
-      ShortId(&session_id)
-    );
     let follower_ids: Vec<String> = {
       let inner = manager.lock().await;
       if let Some(session) = inner.sessions.get(&session_id) {
@@ -845,11 +844,22 @@ impl SynchronizerManager {
       }
     };
 
+    let followers_stopped = follower_ids.len();
     for fid in follower_ids {
       if let Ok(fp) = Self::get_profile(&fid) {
         let _ = crate::browser_runner::kill_browser_profile(app_handle.clone(), fp).await;
       }
     }
+    log::log!(
+      if end_reason.starts_with("leader_ws_error") {
+        log::Level::Warn
+      } else {
+        log::Level::Info
+      },
+      "Synchronizer session ended session={} reason={end_reason} followers_stopped={followers_stopped} duration_s={}",
+      ShortId(&session_id),
+      started.elapsed().as_secs()
+    );
 
     Ok(())
   }
@@ -876,7 +886,7 @@ impl SynchronizerManager {
           return;
         }
         if let Ok(event) = serde_json::from_value::<CapturedEvent>(params.clone()) {
-          log::info!("Synchronizer: captured {event_type}");
+          log::trace!("Synchronizer captured event={event_type}");
           Self::fan_out(gate, follower_senders, &event);
         }
       }
@@ -890,7 +900,7 @@ impl SynchronizerManager {
           if is_top {
             if let Some(url) = frame.get("url").and_then(|v| v.as_str()) {
               if !url.starts_with("about:") && !url.starts_with("chrome://") {
-                log::info!("Synchronizer: replaying address-bar navigation");
+                log::trace!("Synchronizer replaying address-bar navigation");
                 let nav_event = CapturedEvent {
                   event_type: "navigate".to_string(),
                   url: Some(url.to_string()),
@@ -926,7 +936,7 @@ impl SynchronizerManager {
     event: &CapturedEvent,
   ) {
     let Ok(gate) = gate.read() else {
-      log::warn!("Synchronizer: mirroring gate is poisoned; dropping the event");
+      log::warn!("Synchronizer mirroring gate poisoned; event dropped");
       return;
     };
     if gate.is_paused() {
@@ -1039,7 +1049,10 @@ impl SynchronizerManager {
       if let Some((method, params)) = command {
         let cmd = serde_json::json!({ "id": cmd_id, "method": method, "params": params });
         if let Err(e) = ws.send(Message::Text(cmd.to_string().into())).await {
-          log::warn!("Synchronizer: follower {follower_id} send failed: {e}");
+          log::warn!(
+            "Synchronizer follower desynced: send failed session={} profile={follower_id} err=\"{e}\"",
+            ShortId(&session_id)
+          );
           // Mark as desynced
           let mut inner = manager.lock().await;
           if let Some(session) = inner.sessions.get_mut(&session_id) {
@@ -1149,9 +1162,9 @@ impl SynchronizerManager {
     let info = session.info();
     let _ = app_handle.emit("sync-session-changed", &info);
     log::info!(
-      "Synchronizer session {}: mirroring {}",
-      ShortId(session_id),
-      if paused { "paused" } else { "resumed" }
+      "Synchronizer mirroring {} session={}",
+      if paused { "paused" } else { "resumed" },
+      ShortId(session_id)
     );
     Ok(info)
   }
@@ -1236,7 +1249,9 @@ impl SynchronizerManager {
     for (follower_id, rect) in follower_ids.iter().zip(rects) {
       match Self::place_window(follower_id, rect).await {
         Ok(()) => placed += 1,
-        Err(e) => log::warn!("Synchronizer: could not place follower {follower_id}: {e}"),
+        Err(e) => {
+          log::warn!("Synchronizer window placement failed profile={follower_id} err=\"{e}\"")
+        }
       }
     }
 
@@ -1244,7 +1259,7 @@ impl SynchronizerManager {
       return Err(serde_json::json!({ "code": "SYNC_ARRANGE_FAILED" }).to_string());
     }
     log::info!(
-      "Synchronizer session {}: placed {placed} of {} windows",
+      "Synchronizer windows arranged session={} placed={placed}/{}",
       ShortId(session_id),
       follower_ids.len()
     );

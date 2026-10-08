@@ -151,7 +151,10 @@ pub fn prune_cache_dirs(data_dir: &Path) -> Vec<PathBuf> {
     }
     match erase_dir(&dir) {
       Ok(()) => removed.push(dir),
-      Err(e) => log::warn!("Could not prune cache dir {}: {e}", dir.display()),
+      Err(e) => log::warn!(
+        "Cache dir prune failed path=\"{}\" err=\"{e}\"",
+        dir.display()
+      ),
     }
   }
   removed
@@ -202,7 +205,7 @@ pub fn move_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(()) => Ok(()),
     Err(rename_error) => {
       log::info!(
-        "Rename of {} failed ({rename_error}); copying instead",
+        "Trash move fell back to copy path=\"{}\" rename_err=\"{rename_error}\"",
         from.display()
       );
       if let Err(copy_error) = copy_dir_recursive(from, to) {
@@ -240,10 +243,9 @@ pub fn trash_profile(
   if !profile.password_protected {
     let removed = prune_cache_dirs(&source_dir.join(DATA_DIR));
     if !removed.is_empty() {
-      log::info!(
-        "Pruned {} cache director{} from profile {id} before trashing",
-        removed.len(),
-        if removed.len() == 1 { "y" } else { "ies" }
+      log::debug!(
+        "Cache dirs pruned before trashing profile={id} dirs={}",
+        removed.len()
       );
     }
   }
@@ -298,7 +300,7 @@ pub fn list_entries(trash_root: &Path) -> Vec<(BrowserProfile, TrashManifest)> {
       match read_entry(trash_root, &id) {
         Ok(found) => Some(found),
         Err(e) => {
-          log::warn!("Skipping unreadable trash entry {id}: {e}");
+          log::warn!("Trash entry unreadable, skipped entry={id} err=\"{e}\"");
           None
         }
       }
@@ -377,10 +379,7 @@ pub fn restore_profile(
   if target_dir.exists() {
     // Nothing registered lives here (a registered profile has metadata.json
     // and would have been caught above), so this is leftover garbage.
-    log::warn!(
-      "Removing stale directory {} before restoring profile {profile_id}",
-      target_dir.display()
-    );
+    log::warn!("Removing stale directory before restore profile={profile_id}");
     fs::remove_dir_all(&target_dir).map_err(err_internal)?;
   }
 
@@ -437,7 +436,7 @@ pub fn purge_expired(trash_root: &Path, now: u64, retention_days: u32) -> Vec<St
       match purge_entry(trash_root, &id) {
         Ok(()) => Some(id),
         Err(e) => {
-          log::warn!("Could not purge expired trash entry {id}: {e}");
+          log::warn!("Expired trash purge failed entry={id} err=\"{e}\"");
           None
         }
       }
@@ -475,10 +474,7 @@ pub fn start_expiry_sweeper() {
           .await
           .unwrap_or(0);
       if purged > 0 {
-        log::info!(
-          "Purged {purged} expired trash entr{}",
-          if purged == 1 { "y" } else { "ies" }
-        );
+        log::info!("Expired trash purged entries={purged}");
       }
     }
   });
@@ -524,7 +520,7 @@ pub async fn restore_trashed_profile(
           profile = current;
         }
       }
-      Err(e) => log::warn!("Restored profile {profile_id} keeps sync off: {e}"),
+      Err(e) => log::warn!("Restored profile keeps sync off profile={profile_id} err=\"{e}\""),
     }
   }
 

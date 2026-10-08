@@ -81,6 +81,10 @@ impl BlocklistMatcher {
     }
   }
 
+  pub fn domain_count(&self) -> usize {
+    self.domains.len()
+  }
+
   pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
     Self::from_file_with_mode(path, false)
   }
@@ -95,10 +99,9 @@ impl BlocklistMatcher {
       .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
       .map(|line| line.trim().to_lowercase())
       .collect();
-    log::info!(
-      "[blocklist] Loaded {} domains from {} (mode={})",
+    log::debug!(
+      "Blocklist loaded domains={} mode={} path=\"{path}\"",
       domains.len(),
-      path,
       if allowlist_mode { "allow" } else { "block" }
     );
     Ok(Self {
@@ -354,11 +357,13 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for SocksHandshakeLogger<S> {
   ) -> Poll<io::Result<usize>> {
     let result = Pin::new(&mut self.inner).poll_write(cx, buf);
     if let Poll::Ready(Ok(n)) = &result {
+      // Only the first two bytes: an RFC 1929 auth message carries the
+      // upstream username and password after them.
       log::trace!(
-        "[socks-handshake:{}] -> {} byte(s): {:02x?}",
+        "[socks-handshake:{}] -> {} byte(s), head {:02x?}",
         self.label,
         n,
-        &buf[..*n]
+        &buf[..(*n).min(2)]
       );
     }
     result
@@ -642,8 +647,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
   loop {
     if response_buffer.len() > MAX_HTTP_HEADER_BUFFER {
       log::warn!(
-        "HTTP response headers exceeded {} bytes without terminating; aborting read",
-        MAX_HTTP_HEADER_BUFFER
+        "Upstream response headers too large; read aborted limit_bytes={MAX_HTTP_HEADER_BUFFER}"
       );
       truncated = true;
       break;
@@ -680,8 +684,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
               while read_so_far < remaining {
                 if response_buffer.len() >= MAX_HTTP_RESPONSE_BUFFER {
                   log::warn!(
-                    "HTTP response body exceeded {} bytes; refusing to forward a truncated response",
-                    MAX_HTTP_RESPONSE_BUFFER
+                    "Upstream response too large; not forwarded limit_bytes={MAX_HTTP_RESPONSE_BUFFER}"
                   );
                   truncated = true;
                   break;
@@ -716,8 +719,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
               }
               if response_buffer.len() >= MAX_HTTP_RESPONSE_BUFFER {
                 log::warn!(
-                  "Chunked HTTP response exceeded {} bytes; refusing to forward a truncated response",
-                  MAX_HTTP_RESPONSE_BUFFER
+                  "Upstream chunked response too large; not forwarded limit_bytes={MAX_HTTP_RESPONSE_BUFFER}"
                 );
                 truncated = true;
                 break ChunkedState::Incomplete;
@@ -738,8 +740,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
             loop {
               if response_buffer.len() >= MAX_HTTP_RESPONSE_BUFFER {
                 log::warn!(
-                  "HTTP response exceeded {} bytes; refusing to forward a truncated response",
-                  MAX_HTTP_RESPONSE_BUFFER
+                  "Upstream response too large; not forwarded limit_bytes={MAX_HTTP_RESPONSE_BUFFER}"
                 );
                 truncated = true;
                 break;
@@ -757,7 +758,7 @@ async fn read_http_response_buffer<S: AsyncRead + Unpin>(stream: &mut S) -> Buff
         }
       }
       Err(e) => {
-        log::error!("Error reading HTTP response: {}", e);
+        warn_upstream_failure("Upstream response read failed", &e.to_string(), None);
         break;
       }
     }
@@ -785,7 +786,7 @@ async fn handle_http_via_socks4(
   let upstream = match Url::parse(upstream_url) {
     Ok(url) => url,
     Err(e) => {
-      log::error!("Failed to parse SOCKS4 proxy URL: {}", e);
+      warn_upstream_failure("SOCKS4 upstream URL invalid", &e.to_string(), None);
       let mut response = Response::new(Full::new(Bytes::from("Invalid proxy URL")));
       *response.status_mut() = StatusCode::BAD_GATEWAY;
       return Ok(response);
@@ -806,7 +807,7 @@ async fn handle_http_via_socks4(
     match tokio::time::timeout(UPSTREAM_DIAL_TIMEOUT, TcpStream::connect(&socks_addr)).await {
       Ok(Ok(stream)) => stream,
       Ok(Err(e)) => {
-        log::error!("Failed to connect to SOCKS4 proxy {}: {}", socks_addr, e);
+        warn_upstream_failure("SOCKS4 upstream connect failed", &e.to_string(), None);
         let mut response = Response::new(Full::new(Bytes::from(format!(
           "Failed to connect to SOCKS4 proxy: {}",
           e
@@ -815,7 +816,7 @@ async fn handle_http_via_socks4(
         return Ok(response);
       }
       Err(_) => {
-        log::error!("Connect to SOCKS4 proxy {} timed out", socks_addr);
+        warn_upstream_failure("SOCKS4 upstream connect failed", "timed out", None);
         let mut response =
           Response::new(Full::new(Bytes::from("Connect to SOCKS4 proxy timed out")));
         *response.status_mut() = StatusCode::GATEWAY_TIMEOUT;
@@ -840,7 +841,7 @@ async fn handle_http_via_socks4(
 
   // Send SOCKS4 CONNECT request
   if let Err(e) = socks_stream.write_all(&socks_request).await {
-    log::error!("Failed to send SOCKS4 CONNECT request: {}", e);
+    warn_upstream_failure("SOCKS4 upstream request send failed", &e.to_string(), None);
     let mut response = Response::new(Full::new(Bytes::from(format!(
       "Failed to send SOCKS4 request: {}",
       e
@@ -859,7 +860,7 @@ async fn handle_http_via_socks4(
   {
     Ok(Ok(_)) => {}
     Ok(Err(e)) => {
-      log::error!("Failed to read SOCKS4 response: {}", e);
+      warn_upstream_failure("SOCKS4 upstream reply read failed", &e.to_string(), None);
       let mut response = Response::new(Full::new(Bytes::from(format!(
         "Failed to read SOCKS4 response: {}",
         e
@@ -868,7 +869,7 @@ async fn handle_http_via_socks4(
       return Ok(response);
     }
     Err(_) => {
-      log::error!("SOCKS4 handshake response timed out");
+      warn_upstream_failure("SOCKS4 upstream reply read failed", "timed out", None);
       let mut response = Response::new(Full::new(Bytes::from(
         "SOCKS4 handshake response timed out",
       )));
@@ -879,9 +880,10 @@ async fn handle_http_via_socks4(
 
   // Check SOCKS4 response (second byte should be 0x5A for success)
   if socks_response[1] != 0x5A {
-    log::error!(
-      "SOCKS4 connection failed, response code: {}",
-      socks_response[1]
+    warn_upstream_failure(
+      "SOCKS4 upstream rejected",
+      &format!("code={:#04x}", socks_response[1]),
+      None,
     );
     let mut response = Response::new(Full::new(Bytes::from("SOCKS4 connection failed")));
     *response.status_mut() = StatusCode::BAD_GATEWAY;
@@ -947,7 +949,11 @@ async fn handle_http_via_socks4(
 
   // Send HTTP request
   if let Err(e) = socks_stream.write_all(http_request.as_bytes()).await {
-    log::error!("Failed to send HTTP request through SOCKS4: {}", e);
+    warn_upstream_failure(
+      "HTTP request send via SOCKS4 failed",
+      &e.to_string(),
+      Some(&domain),
+    );
     let mut response = Response::new(Full::new(Bytes::from(format!(
       "Failed to send HTTP request: {}",
       e
@@ -959,7 +965,11 @@ async fn handle_http_via_socks4(
   // Send body if present
   if !body_bytes.is_empty() {
     if let Err(e) = socks_stream.write_all(&body_bytes).await {
-      log::error!("Failed to send HTTP body through SOCKS4: {}", e);
+      warn_upstream_failure(
+        "HTTP body send via SOCKS4 failed",
+        &e.to_string(),
+        Some(&domain),
+      );
       let mut response = Response::new(Full::new(Bytes::from(format!(
         "Failed to send HTTP body: {}",
         e
@@ -980,7 +990,7 @@ async fn handle_http_via_socks4(
   {
     Ok(buffer) => buffer,
     Err(_) => {
-      log::error!("HTTP response via SOCKS4 timed out");
+      warn_upstream_failure("HTTP response via SOCKS4 failed", "timed out", None);
       let mut response = Response::new(Full::new(Bytes::from("Upstream response timed out")));
       *response.status_mut() = StatusCode::GATEWAY_TIMEOUT;
       return Ok(response);
@@ -990,8 +1000,10 @@ async fn handle_http_via_socks4(
   // A capped read holds only a prefix of the body. Forwarding it would hand the
   // browser a complete-looking short response, so fail the request instead.
   if buffered.truncated {
-    log::error!(
-      "HTTP response via SOCKS4 for {domain} exceeded the buffer cap; refusing to forward a truncated body"
+    warn_upstream_failure(
+      "HTTP response via SOCKS4 failed",
+      "exceeded the buffer cap; truncated body not forwarded",
+      None,
     );
     let mut response = Response::new(Full::new(Bytes::from(
       "Upstream response too large to buffer",
@@ -1026,7 +1038,11 @@ async fn handle_http_via_socks4(
     BufferedBody::AsSent => response_buffer[header_end..].to_vec(),
     BufferedBody::Dechunked(body) => body,
     BufferedBody::BrokenChunks => {
-      log::error!("Chunked HTTP response via SOCKS4 for {domain} did not decode");
+      warn_upstream_failure(
+        "HTTP response via SOCKS4 failed",
+        "chunked body did not decode",
+        None,
+      );
       let mut response = Response::new(Full::new(Bytes::from("Malformed upstream response")));
       *response.status_mut() = StatusCode::BAD_GATEWAY;
       return Ok(response);
@@ -1138,7 +1154,11 @@ async fn handle_http_via_shadowsocks(
 
   let mut response_buf = Vec::new();
   if let Err(e) = stream.read_to_end(&mut response_buf).await {
-    log::warn!("SS read error (may be partial): {e}");
+    warn_upstream_failure(
+      "Shadowsocks response read failed; forwarding what arrived",
+      &e.to_string(),
+      Some(&domain),
+    );
   }
 
   if let Some(tracker) = get_traffic_tracker() {
@@ -1172,7 +1192,11 @@ async fn handle_http_via_shadowsocks(
     match decode_chunked(raw_body, &mut cursor, &mut decoded) {
       ChunkedState::Complete => decoded,
       _ => {
-        log::error!("Chunked HTTP response via Shadowsocks for {domain} did not decode");
+        warn_upstream_failure(
+          "HTTP response via Shadowsocks failed",
+          "chunked body did not decode",
+          None,
+        );
         let mut resp = Response::new(Full::new(Bytes::from("Malformed upstream response")));
         *resp.status_mut() = StatusCode::BAD_GATEWAY;
         return Ok(resp);
@@ -1205,7 +1229,7 @@ async fn handle_http(
 
   // Block if domain is in the DNS blocklist (before any connection)
   if blocklist_matcher.is_blocked(&domain) {
-    log::debug!("[blocklist] Blocked HTTP request to {}", domain);
+    log::debug!("Blocklist blocked HTTP request host={domain}");
     let mut response = Response::new(Full::new(Bytes::from("Blocked by DNS blocklist")));
     *response.status_mut() = StatusCode::FORBIDDEN;
     return Ok(response);
@@ -1249,7 +1273,7 @@ async fn handle_http(
       match proxied_http_client(upstream) {
         Ok(c) => c,
         Err(e) => {
-          log::error!("Failed to create proxy client: {}", e);
+          warn_upstream_failure("Upstream HTTP client build failed", &e.to_string(), None);
           let mut response = Response::new(Full::new(Bytes::from(format!(
             "Proxy configuration error: {}",
             e
@@ -1318,9 +1342,13 @@ async fn handle_http(
       let body = match response.bytes().await {
         Ok(b) => b,
         Err(e) => {
-          log::warn!("Failed to read response body from {domain}: {e}");
-          let mut error_response =
-            Response::new(Full::new(Bytes::from(format!("Response body failed: {e}"))));
+          let body = format!("Response body failed: {e}");
+          warn_upstream_failure(
+            "Upstream response body read failed",
+            &e.without_url().to_string(),
+            Some(&domain),
+          );
+          let mut error_response = Response::new(Full::new(Bytes::from(body)));
           *error_response.status_mut() = StatusCode::BAD_GATEWAY;
           return Ok(error_response);
         }
@@ -1347,8 +1375,13 @@ async fn handle_http(
       Ok(hyper_response)
     }
     Err(e) => {
-      log::error!("Request failed: {}", e);
-      let mut response = Response::new(Full::new(Bytes::from(format!("Request failed: {}", e))));
+      let body = format!("Request failed: {}", e);
+      warn_upstream_failure(
+        "Upstream HTTP request failed",
+        &e.without_url().to_string(),
+        Some(&domain),
+      );
+      let mut response = Response::new(Full::new(Bytes::from(body)));
       *response.status_mut() = StatusCode::BAD_GATEWAY;
       Ok(response)
     }
@@ -1519,6 +1552,7 @@ pub async fn handle_proxy_connection(
           }
         }
 
+        let target_host = connect_target_host(&full_request);
         if let Err(e) = handle_connect_from_buffer(
           stream,
           full_request,
@@ -1528,16 +1562,11 @@ pub async fn handle_proxy_connection(
         )
         .await
         {
-          let msg = e.to_string();
-          if let Some(suppressed) = log_throttle(&msg) {
-            if suppressed > 0 {
-              log::warn!(
-                "CONNECT tunnel ended with error: {msg} ({suppressed} more suppressed in last 30s)"
-              );
-            } else {
-              log::warn!("CONNECT tunnel ended with error: {msg}");
-            }
-          }
+          warn_upstream_failure(
+            "CONNECT tunnel failed",
+            &e.to_string(),
+            target_host.as_deref(),
+          );
         }
         return;
       }
@@ -1582,27 +1611,14 @@ pub fn redacted_upstream(upstream: &str) -> String {
 }
 
 pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {
-  log::info!(
-    "Proxy worker starting, looking for config id: {}",
-    config.id
-  );
-
+  let started = std::time::Instant::now();
   // Load the config from disk to get the latest state
   let config = match crate::proxy_storage::get_proxy_config(&config.id) {
     Some(c) => c,
     None => {
-      log::error!("Config not found for id: {}", config.id);
       return Err("Config not found".into());
     }
   };
-
-  log::info!(
-    "Found config: id={}, port={:?}, upstream={}, profile_id={:?}",
-    config.id,
-    config.local_port,
-    redacted_upstream(&config.upstream_url),
-    config.profile_id
-  );
 
   // Initialize traffic tracker with profile ID if available.
   // This can be called multiple times to update the tracker.
@@ -1614,8 +1630,6 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   // Determine the bind address
   let bind_addr = SocketAddr::from(([127, 0, 0, 1], config.local_port.unwrap_or(0)));
-
-  log::info!("Attempting to bind proxy server to {}", bind_addr);
 
   // Bind to the port. Use SO_REUSEADDR so that a freshly-restarted worker
   // can bind a port that the previous worker left in TIME_WAIT, and retry
@@ -1631,11 +1645,8 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
           Err(e) if attempts < 5 => {
             attempts += 1;
             let delay = std::time::Duration::from_millis(200 * u64::from(attempts));
-            log::warn!(
-              "listen() on {} failed (attempt {}/5): {}, retrying in {}ms",
-              bind_addr,
-              attempts,
-              e,
+            log::debug!(
+              "listen() failed; retrying addr={bind_addr} attempt={attempts}/5 delay_ms={} err=\"{e}\"",
               delay.as_millis()
             );
             tokio::time::sleep(delay).await;
@@ -1647,11 +1658,8 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
         Err(e) if attempts < 5 => {
           attempts += 1;
           let delay = std::time::Duration::from_millis(200 * u64::from(attempts));
-          log::warn!(
-            "bind() on {} failed (attempt {}/5): {}, retrying in {}ms",
-            bind_addr,
-            attempts,
-            e,
+          log::debug!(
+            "bind() failed; retrying addr={bind_addr} attempt={attempts}/5 delay_ms={} err=\"{e}\"",
             delay.as_millis()
           );
           tokio::time::sleep(delay).await;
@@ -1661,8 +1669,6 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     }
   };
   let actual_port = listener.local_addr()?.port();
-
-  log::info!("Successfully bound to port {}", actual_port);
 
   // Protocol served to the browser: "socks5" (Wayfern) or "http" (default).
   let local_protocol = config.local_protocol_or_default();
@@ -1680,7 +1686,6 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   ));
 
   if !crate::proxy_storage::update_proxy_config(&updated_config) {
-    log::error!("Failed to update proxy config");
     return Err("Failed to update proxy config".into());
   }
 
@@ -1689,12 +1694,6 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   } else {
     Some(updated_config.upstream_url.clone())
   };
-
-  log::info!(
-    "Proxy server listening on 127.0.0.1:{} (ready to accept connections)",
-    actual_port
-  );
-  log::info!("Proxy server entering accept loop - process should stay alive");
 
   // Start a background task to write lightweight session snapshots for real-time updates
   // These are much smaller than full stats and can be written frequently (~100 bytes every 2 seconds)
@@ -1717,7 +1716,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
         // Write lightweight session snapshot (only current counters, ~100 bytes)
         match tracker_clone.write_session_snapshot() {
           Ok(()) => last_written = Some(snapshot),
-          Err(e) => log::debug!("Failed to write session snapshot: {}", e),
+          Err(e) => log::debug!("Session snapshot write failed err=\"{e}\""),
         }
       }
     });
@@ -1774,14 +1773,14 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
                 last_flush_time = std::time::Instant::now();
               }
               Err(e) => {
-                log::error!("Failed to flush traffic stats: {}", e);
+                warn_throttled(&format!("Traffic stats flush failed err=\"{e}\""));
               }
             }
           }
         }
       }));
       if let Err(panic) = result {
-        log::error!("Panic caught in proxy traffic flush task; continuing: {panic:?}");
+        log::error!("Traffic flush task panicked; continuing err={panic:?}");
       }
     }
   });
@@ -1806,6 +1805,14 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   {
     let watch_id = config.id.clone();
     let poll_interval = watchdog_poll_interval();
+    let exit_line = move |reason: &str, detail: String| {
+      log::info!(
+        "Worker exiting kind=proxy id={watch_id} pid={} reason={reason}{detail} uptime_s={}",
+        std::process::id(),
+        started.elapsed().as_secs()
+      );
+    };
+    let watch_id = config.id.clone();
     std::thread::spawn(move || {
       use crate::proxy_storage::SupervisorVerdict;
 
@@ -1825,20 +1832,18 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
             consecutive_misses += 1;
             if consecutive_misses >= 2 {
               let owner = cfg.as_ref().and_then(|c| c.browser_pid).unwrap_or(0);
-              log::info!("Browser PID {owner} for config {watch_id} is gone; worker exiting");
+              exit_line("owner_gone", format!(" owner_pid={owner}"));
               crate::proxy_storage::delete_proxy_config(&watch_id);
               std::process::exit(0);
             }
           }
           SupervisorVerdict::ExitNeverClaimed => {
-            log::info!(
-              "Config {watch_id} was never claimed by a browser within the launch window; worker exiting"
-            );
+            exit_line("never_claimed", String::new());
             crate::proxy_storage::delete_proxy_config(&watch_id);
             std::process::exit(0);
           }
           SupervisorVerdict::ExitConfigRemoved => {
-            log::info!("Proxy config {watch_id} was removed; worker exiting");
+            exit_line("config_removed", String::new());
             std::process::exit(0);
           }
         }
@@ -1851,13 +1856,34 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     match BlocklistMatcher::from_file_with_mode(path, config.dns_allowlist_mode) {
       Ok(m) => m,
       Err(e) => {
-        log::error!("[blocklist] Failed to load from {}: {}", path, e);
+        log::warn!("Blocklist load failed; filtering off path=\"{path}\" err=\"{e}\"");
         BlocklistMatcher::new()
       }
     }
   } else {
     BlocklistMatcher::new()
   };
+
+  log::info!(
+    "Worker started kind=proxy id={} pid={} listen=127.0.0.1:{actual_port} serve={local_protocol} upstream={} profile={} blocklist={} bypass_rules={} record_domains={} elapsed_ms={}",
+    config.id,
+    std::process::id(),
+    upstream_url
+      .as_deref()
+      .map_or_else(|| "direct".to_string(), redacted_upstream),
+    config.profile_id.as_deref().unwrap_or("-"),
+    match &config.blocklist_file {
+      Some(_) => format!(
+        "{}:{}",
+        if config.dns_allowlist_mode { "allow" } else { "block" },
+        blocklist_matcher.domain_count()
+      ),
+      None => "none".to_string(),
+    },
+    config.bypass_rules.len(),
+    config.record_domains,
+    started.elapsed().as_millis()
+  );
 
   // Bound concurrent connection handlers. A client retry-storm (e.g. a browser
   // hammering CONNECT requests while DNS is failing) must not spawn unbounded
@@ -1895,7 +1921,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
         }
       }
       Err(e) => {
-        log::error!("Error accepting connection: {:?}", e);
+        warn_throttled(&format!("Accept failed err=\"{e}\""));
         // Continue accepting connections even if one fails
         // Add a small delay to avoid busy-waiting on errors
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -1942,7 +1968,7 @@ async fn handle_connect_from_buffer(
 
   // Block if domain is in the DNS blocklist (before any connection)
   if blocklist_matcher.is_blocked(target_host) {
-    log::debug!("[blocklist] Blocked CONNECT tunnel to {}", target_host);
+    log::debug!("Blocklist blocked CONNECT host={target_host}");
     let _ = client_stream
       .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 24\r\n\r\nBlocked by DNS blocklist")
       .await;
@@ -2127,38 +2153,41 @@ async fn dial_direct(host: &str, port: u16) -> Result<TcpStream, Box<dyn std::er
   }
 }
 
-/// Rate-limit a repetitive log line keyed by `key`: returns `Some(suppressed)`
-/// when the caller should emit (first time or after a 30s window, with the
-/// count dropped since the last emit), or `None` to skip. Stops a connect/DNS
-/// storm from writing the same WARN millions of times (the line that grew
-/// worker logs to 100MB).
-pub(crate) fn log_throttle(key: &str) -> Option<u64> {
-  fn throttle_map() -> &'static Mutex<HashMap<String, (std::time::Instant, u64)>> {
-    static M: OnceLock<Mutex<HashMap<String, (std::time::Instant, u64)>>> = OnceLock::new();
-    M.get_or_init(|| Mutex::new(HashMap::new()))
-  }
-  let map = throttle_map();
-  let mut guard = map.lock().unwrap();
-  if guard.len() > 2048 {
-    guard.retain(|_, (last, _)| last.elapsed() < std::time::Duration::from_secs(60));
-  }
-  let now = std::time::Instant::now();
-  match guard.get_mut(key) {
-    Some((last, suppressed)) => {
-      if now.duration_since(*last) >= std::time::Duration::from_secs(30) {
-        let dropped = *suppressed;
-        *last = now;
-        *suppressed = 0;
-        Some(dropped)
-      } else {
-        *suppressed += 1;
-        None
-      }
-    }
-    None => {
-      guard.insert(key.to_string(), (now, 0));
-      Some(0)
-    }
+/// Host of a buffered `CONNECT host:port HTTP/1.1` request.
+fn connect_target_host(request: &[u8]) -> Option<String> {
+  let line_end = request
+    .iter()
+    .position(|&b| b == b'\r' || b == b'\n')
+    .unwrap_or(request.len());
+  let line = String::from_utf8_lossy(&request[..line_end]);
+  let target = line.split_whitespace().nth(1)?;
+  let host = match target.strip_prefix('[') {
+    Some(rest) => rest.split(']').next()?,
+    None => target.rsplit_once(':').map_or(target, |(host, _)| host),
+  };
+  (!host.is_empty()).then(|| host.to_string())
+}
+
+/// Warn about a failed tunnel or proxied request, at most once per distinct
+/// message every 30s. The target host is cut out of the message: these lines
+/// reach the file, and the file must not list the sites a profile visited.
+pub(crate) fn warn_upstream_failure(what: &str, err: &str, target_host: Option<&str>) {
+  let err = match target_host {
+    Some(host) if !host.is_empty() => err.replace(host, "<target>"),
+    _ => err.to_string(),
+  };
+  warn_throttled(&format!("{what} err=\"{err}\""));
+}
+
+/// `log::warn!` the line at most once every 30s, with the count it dropped.
+/// Stops a connect/DNS storm from writing the same line millions of times.
+pub(crate) fn warn_throttled(line: &str) {
+  static WORKER_LINES: crate::log_streak::Throttle =
+    crate::log_streak::Throttle::new(std::time::Duration::from_secs(30));
+  match WORKER_LINES.allow(line) {
+    Some(0) => log::warn!("{line}"),
+    Some(suppressed) => log::warn!("{line} suppressed_30s={suppressed}"),
+    None => {}
   }
 }
 
@@ -2250,7 +2279,8 @@ async fn connect_via_http_proxy<S: AsyncStream + 'static>(
 
   if !response_headers.starts_with("HTTP/1.1 200") && !response_headers.starts_with("HTTP/1.0 200")
   {
-    log::warn!(
+    // The caller warns with the status line; the target stays at debug.
+    log::debug!(
       "Upstream CONNECT to {}:{} via {}:{} rejected: {}",
       target_host,
       target_port,

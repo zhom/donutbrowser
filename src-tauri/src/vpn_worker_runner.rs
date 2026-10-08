@@ -225,6 +225,13 @@ pub async fn start_vpn_worker_tracked(
 
   for config in list_vpn_worker_configs() {
     if !vpn_worker_alive(&config) {
+      if let Some(pid) = config.pid {
+        log::info!(
+          "VPN worker exited, record removed id={} pid={pid} vpn={}",
+          config.id,
+          config.vpn_id
+        );
+      }
       delete_vpn_worker_config(&config.id);
     }
   }
@@ -278,6 +285,7 @@ pub async fn start_vpn_worker_tracked(
     let _ = std::fs::set_permissions(&config_file_path, std::fs::Permissions::from_mode(0o600));
   }
 
+  let started = std::time::Instant::now();
   let id = generate_vpn_worker_id();
 
   // Find an available port
@@ -319,7 +327,6 @@ pub async fn start_vpn_worker_tracked(
 
     let log_path = std::env::temp_dir().join(format!("donut-vpn-{}.log", id));
     if let Ok(file) = std::fs::File::create(&log_path) {
-      log::info!("VPN worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
     } else {
       cmd.stderr(Stdio::null());
@@ -367,7 +374,6 @@ pub async fn start_vpn_worker_tracked(
 
     let log_path = std::env::temp_dir().join(format!("donut-vpn-{}.log", id));
     if let Ok(file) = std::fs::File::create(&log_path) {
-      log::info!("VPN worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
     } else {
       cmd.stderr(Stdio::null());
@@ -390,20 +396,36 @@ pub async fn start_vpn_worker_tracked(
     drop(child);
   }
 
-  wait_for_vpn_worker_ready(&id)
-    .await
-    .map(|config| VpnWorkerStart {
-      config,
-      created: true,
-      claim: VpnLaunchClaim::take(vpn_id),
-    })
+  match wait_for_vpn_worker_ready(&id).await {
+    Ok(config) => {
+      log::info!(
+        "VPN worker started id={id} pid={} port={local_port} vpn={vpn_id} elapsed_ms={}",
+        config.pid.unwrap_or_default(),
+        started.elapsed().as_millis()
+      );
+      Ok(VpnWorkerStart {
+        config,
+        created: true,
+        claim: VpnLaunchClaim::take(vpn_id),
+      })
+    }
+    Err(e) => {
+      log::warn!(
+        "VPN worker did not become ready id={id} vpn={vpn_id} elapsed_ms={}",
+        started.elapsed().as_millis()
+      );
+      Err(e)
+    }
+  }
 }
 
 pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error>> {
   let config = get_vpn_worker_config(id);
 
   if let Some(config) = config {
+    let mut how = "no_process";
     if let Some(pid) = config.pid {
+      how = "already_gone";
       // Only a PID still pinned to the process this record was written for is
       // ours to signal. A record with no start time predates the pinning and
       // came from an earlier app run, so its PID cannot be verified either.
@@ -428,15 +450,17 @@ pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error
         }
 
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        how = if is_process_running(pid) {
+          "still_running"
+        } else {
+          "terminated"
+        };
       } else if is_process_running(pid) {
         // Whatever holds the PID now is either an unrelated process or an
         // unverifiable pre-upgrade worker; the record is forgotten instead. A
         // real worker in the second case lingers until reboot, which beats
         // terminating a stranger.
-        log::warn!(
-          "Not signalling VPN worker {id}: PID {pid} cannot be pinned to the recorded process (start time {:?}); forgetting the record",
-          config.pid_start_time
-        );
+        how = "not_signalled_pid_unverified";
       }
     }
 
@@ -444,6 +468,20 @@ pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error
     let _ = std::fs::remove_file(&config.config_file_path);
 
     delete_vpn_worker_config(id);
+    let level = if matches!(how, "still_running" | "not_signalled_pid_unverified") {
+      log::Level::Warn
+    } else {
+      log::Level::Info
+    };
+    log::log!(
+      level,
+      "VPN worker stopped id={id} pid={} vpn={} how={how}",
+      config
+        .pid
+        .map(|pid| pid.to_string())
+        .unwrap_or_else(|| "none".to_string()),
+      config.vpn_id
+    );
     return Ok(true);
   }
 

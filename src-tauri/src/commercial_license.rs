@@ -78,11 +78,11 @@ impl CommercialLicenseManager {
       .save_settings(&settings)
       .map_err(|e| format!("Failed to save settings: {e}"))?;
 
-    log::info!("First launch timestamp recorded: {now}");
+    log::info!("First launch recorded at={now}");
 
     // Emit event to notify frontend
     if let Err(e) = events::emit("first-launch-recorded", now) {
-      log::warn!("Failed to emit first-launch-recorded event: {e}");
+      log::warn!("Event not emitted event=first-launch-recorded err=\"{e}\"");
     }
 
     Ok(now)

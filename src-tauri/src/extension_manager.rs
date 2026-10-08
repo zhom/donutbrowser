@@ -756,7 +756,7 @@ impl ExtensionManager {
     fs::write(metadata_path, json)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if ext.sync_enabled {
@@ -1041,7 +1041,7 @@ impl ExtensionManager {
     fs::write(metadata_path, json)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if ext.sync_enabled {
@@ -1076,7 +1076,7 @@ impl ExtensionManager {
     self.save_groups_data(&groups_data)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if ext.sync_enabled {
@@ -1086,11 +1086,13 @@ impl ExtensionManager {
         match crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
           Ok(engine) => {
             if let Err(e) = engine.delete_extension(&ext_id).await {
-              log::warn!("Failed to delete extension {} from sync: {}", ext_id, e);
+              log::warn!("Remote extension delete failed extension={ext_id} err=\"{e}\"");
             }
           }
           Err(e) => {
-            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+            log::debug!(
+              "Remote extension delete skipped: sync not configured extension={ext_id} err=\"{e}\""
+            );
           }
         }
       });
@@ -1151,7 +1153,7 @@ impl ExtensionManager {
     self.save_groups_data(&data)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if group.sync_enabled {
@@ -1224,7 +1226,7 @@ impl ExtensionManager {
     self.save_groups_data(&data)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if updated.sync_enabled {
@@ -1279,21 +1281,21 @@ impl ExtensionManager {
           Ok(engine) => {
             if let Err(e) = engine.delete_extension_group(&group_id_owned).await {
               log::warn!(
-                "Failed to delete extension group {} from sync: {}",
-                group_id_owned,
-                e
+                "Remote extension group delete failed extension_group={group_id_owned} err=\"{e}\""
               );
             }
           }
           Err(e) => {
-            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+            log::debug!(
+              "Remote extension group delete skipped: sync not configured extension_group={group_id_owned} err=\"{e}\""
+            );
           }
         }
       });
     }
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     Ok(())
@@ -1323,7 +1325,7 @@ impl ExtensionManager {
     self.save_groups_data(&data)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if updated.sync_enabled {
@@ -1357,7 +1359,7 @@ impl ExtensionManager {
     self.save_groups_data(&data)?;
 
     if let Err(e) = events::emit_empty("extensions-changed") {
-      log::error!("Failed to emit extensions-changed event: {e}");
+      log::warn!("Event emit failed event=extensions-changed err=\"{e}\"");
     }
 
     if updated.sync_enabled {
@@ -1533,16 +1535,15 @@ impl ExtensionManager {
           let linked_path = PathBuf::from(linked);
           if !linked_path.join("manifest.json").exists() {
             log::warn!(
-              "Skipping linked extension '{}': {} is no longer an extension folder",
-              ext.name,
-              linked
+              "Linked extension skipped: folder has no manifest.json extension={} path=\"{linked}\"",
+              ext.id
             );
             continue;
           }
           if !path_is_load_extension_safe(&linked_path) {
             log::warn!(
-              "Skipping linked extension '{}': path contains a comma, which --load-extension cannot express",
-              ext.name
+              "Linked extension skipped: path has a comma --load-extension cannot express extension={}",
+              ext.id
             );
             continue;
           }
@@ -1561,7 +1562,7 @@ impl ExtensionManager {
               extension_paths.push(unpack_dir.to_string_lossy().to_string());
             }
             Err(e) => {
-              log::warn!("Failed to unpack extension '{}': {}", ext.name, e);
+              log::warn!("Extension unpack failed extension={} err=\"{e}\"", ext.id);
             }
           }
         }
@@ -1582,7 +1583,7 @@ impl ExtensionManager {
     let dir = Self::unpacked_dir_for_profile(profile_id);
     if dir.exists() {
       if let Err(e) = fs::remove_dir_all(&dir) {
-        log::warn!("Failed to clean staged extensions for profile {profile_id}: {e}");
+        log::warn!("Staged extension cleanup failed profile={profile_id} err=\"{e}\"");
       }
     }
   }

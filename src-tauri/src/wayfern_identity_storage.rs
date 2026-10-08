@@ -317,7 +317,7 @@ async fn convert_and_save(
   {
     return Err(ConversionError::Changed);
   }
-  log::info!("Stored Wayfern profile {} as an identity", stored.id);
+  log::info!("Profile stored as an identity profile={}", stored.id);
   Ok(stored)
 }
 
@@ -352,7 +352,7 @@ pub async fn convert_for_launch(profile: &BrowserProfile) -> Result<BrowserProfi
     WayfernManager::instance(),
     &current,
     token.as_deref(),
-    &format!("profile {}", current.id),
+    &format!("purpose=conversion profile={}", current.id),
   )
   .await
   .map_err(|e| wayfern_failure(&e.to_string(), "WAYFERN_FINGERPRINT_APPLY_FAILED", None))?;
@@ -389,7 +389,7 @@ fn launch_outcome(
     Ok(converted) => Ok(converted),
     Err(ConversionError::Failed(reason)) | Err(ConversionError::Deferred(reason)) => {
       log::warn!(
-        "Launching Wayfern profile {} on its stored device: {reason}",
+        "Identity conversion failed, launching on the stored device profile={} err=\"{reason}\"",
         current.id
       );
       Ok(current)
@@ -473,16 +473,16 @@ async fn run_pass() -> bool {
         WayfernManager::instance(),
         &profile,
         token.as_deref(),
-        "stored profiles",
+        "purpose=conversion_pass",
       )
       .await
       {
-        Ok(started) => session = Some((profile.version.clone(), started, alive)),
+        Ok(started) => {
+          PASS_BROWSER.succeeded(&format!("version={}", profile.version));
+          session = Some((profile.version.clone(), started, alive))
+        }
         Err(e) => {
-          log::warn!(
-            "Could not start Wayfern {} for stored profiles: {e}",
-            profile.version
-          );
+          PASS_BROWSER.failed(&format!("version={}", profile.version), e);
           deferred = true;
           continue;
         }
@@ -499,11 +499,15 @@ async fn run_pass() -> bool {
       }
       Err(ConversionError::Changed) => deferred = true,
       Err(ConversionError::Deferred(reason)) => {
-        log::info!("Stored Wayfern profile {id} is unchanged for now: {reason}");
+        log::debug!("Identity conversion deferred profile={id} reason=\"{reason}\"");
         deferred = true;
       }
       Err(ConversionError::Failed(reason)) => {
-        log::warn!("Stored Wayfern profile {id} could not be converted: {reason}");
+        if first_failure_for(&id.to_string()) {
+          log::warn!("Identity conversion failed profile={id} err=\"{reason}\"");
+        } else {
+          log::debug!("Identity conversion failed again profile={id} err=\"{reason}\"");
+        }
       }
     }
   }
@@ -514,6 +518,20 @@ async fn run_pass() -> bool {
     let _ = crate::events::emit_empty("profiles-changed");
   }
   deferred
+}
+
+static PASS_BROWSER: crate::log_streak::KeyedStreak =
+  crate::log_streak::KeyedStreak::new(module_path!(), "Headless browser for identity conversion");
+
+/// Every pass retries a profile that failed, so its warning is said once.
+fn first_failure_for(profile_id: &str) -> bool {
+  static WARNED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+  let mut warned = WARNED.lock().unwrap_or_else(|e| e.into_inner());
+  if warned.iter().any(|known| known == profile_id) {
+    return false;
+  }
+  warned.push(profile_id.to_string());
+  true
 }
 
 pub fn request_conversion_pass() {

@@ -213,14 +213,14 @@ pub async fn handle_socks5_connection(
   let _ = stream.set_nodelay(true);
 
   if let Err(e) = negotiate_method(&mut stream).await {
-    log::debug!("SOCKS5 method negotiation failed: {e}");
+    log::debug!("SOCKS5 method negotiation failed err=\"{e}\"");
     return;
   }
 
   let request = match read_request(&mut stream).await {
     Ok(r) => r,
     Err(e) => {
-      log::debug!("SOCKS5 request parse failed: {e}");
+      log::debug!("SOCKS5 request parse failed err=\"{e}\"");
       let _ = send_reply(&mut stream, REP_GENERAL_FAILURE, unspecified()).await;
       return;
     }
@@ -242,7 +242,7 @@ pub async fn handle_socks5_connection(
       handle_udp_associate(stream, upstream_url, blocklist_matcher).await;
     }
     other => {
-      log::debug!("SOCKS5 unsupported command {other:#04x}");
+      log::debug!("SOCKS5 unsupported command cmd={other:#04x}");
       let _ = send_reply(&mut stream, REP_COMMAND_NOT_SUPPORTED, unspecified()).await;
     }
   }
@@ -302,6 +302,21 @@ async fn read_request(stream: &mut TcpStream) -> std::io::Result<Socks5Request> 
     host,
     port: u16::from_be_bytes(port),
   })
+}
+
+static UDP_REFUSED_LOGGED: std::sync::atomic::AtomicBool =
+  std::sync::atomic::AtomicBool::new(false);
+static UDP_UPSTREAM_REFUSED_LOGGED: std::sync::atomic::AtomicBool =
+  std::sync::atomic::AtomicBool::new(false);
+
+/// Info the first time per worker, debug after: the browser asks again for
+/// every new UDP flow, and the answer does not change.
+fn first_time(flag: &std::sync::atomic::AtomicBool) -> log::Level {
+  if flag.swap(true, std::sync::atomic::Ordering::Relaxed) {
+    log::Level::Debug
+  } else {
+    log::Level::Info
+  }
 }
 
 /// The upstream as a log line may show it: the URL carries the proxy's
@@ -371,7 +386,7 @@ async fn handle_connect(
   blocklist_matcher: BlocklistMatcher,
 ) {
   if blocklist_matcher.is_blocked(&host) {
-    log::debug!("[blocklist] Blocked SOCKS5 CONNECT to {host}");
+    log::debug!("Blocklist blocked SOCKS5 CONNECT host={host}");
     let _ = send_reply(&mut stream, REP_NOT_ALLOWED, unspecified()).await;
     return;
   }
@@ -389,29 +404,20 @@ async fn handle_connect(
 
   // Resolve to the target stream, logging and dropping the (non-Send) dial
   // error inside the match arm so it is never held across the await below.
-  let target = match connect_to_target_via_upstream(
-    &host,
-    port,
-    upstream_url.as_deref(),
-    &bypass_matcher,
-  )
-  .await
-  {
-    Ok(t) => Some(t),
-    Err(e) => {
-      let key = format!("socks5-connect:{host}:{port}");
-      if let Some(suppressed) = crate::proxy_server::log_throttle(&key) {
-        if suppressed > 0 {
-          log::warn!(
-              "SOCKS5 CONNECT to {host}:{port} failed: {e} ({suppressed} more suppressed in last 30s)"
-            );
-        } else {
-          log::warn!("SOCKS5 CONNECT to {host}:{port} failed: {e}");
-        }
+  let target =
+    match connect_to_target_via_upstream(&host, port, upstream_url.as_deref(), &bypass_matcher)
+      .await
+    {
+      Ok(t) => Some(t),
+      Err(e) => {
+        crate::proxy_server::warn_upstream_failure(
+          "SOCKS5 CONNECT failed",
+          &e.to_string(),
+          Some(&host),
+        );
+        None
       }
-      None
-    }
-  };
+    };
 
   let Some(target) = target else {
     let _ = send_reply(&mut stream, REP_GENERAL_FAILURE, unspecified()).await;
@@ -441,8 +447,9 @@ async fn handle_udp_associate(
   let mode = udp_mode(upstream_url.as_deref());
 
   if mode == UdpMode::Refuse {
-    log::info!(
-      "SOCKS5 UDP ASSOCIATE refused: upstream ({}) cannot carry UDP without leaking; Chromium will use proxied TCP",
+    log::log!(
+      first_time(&UDP_REFUSED_LOGGED),
+      "SOCKS5 UDP ASSOCIATE refused: upstream cannot carry UDP without leaking; browser uses proxied TCP upstream={}",
       upstream_label(upstream_url.as_deref())
     );
     let _ = send_reply(&mut control, REP_COMMAND_NOT_SUPPORTED, unspecified()).await;
@@ -453,7 +460,7 @@ async fn handle_udp_associate(
   let relay = match UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await {
     Ok(s) => s,
     Err(e) => {
-      log::warn!("Failed to bind UDP relay socket: {e}");
+      crate::proxy_server::warn_throttled(&format!("UDP relay socket bind failed err=\"{e}\""));
       let _ = send_reply(&mut control, REP_GENERAL_FAILURE, unspecified()).await;
       return;
     }
@@ -461,7 +468,7 @@ async fn handle_udp_associate(
   let relay_addr = match relay.local_addr() {
     Ok(a) => a,
     Err(e) => {
-      log::warn!("Failed to read UDP relay addr: {e}");
+      crate::proxy_server::warn_throttled(&format!("UDP relay address read failed err=\"{e}\""));
       let _ = send_reply(&mut control, REP_GENERAL_FAILURE, unspecified()).await;
       return;
     }
@@ -474,7 +481,9 @@ async fn handle_udp_associate(
       let out = match UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await {
         Ok(s) => s,
         Err(e) => {
-          log::warn!("Failed to bind UDP egress socket: {e}");
+          crate::proxy_server::warn_throttled(&format!(
+            "UDP egress socket bind failed err=\"{e}\""
+          ));
           let _ = send_reply(&mut control, REP_GENERAL_FAILURE, unspecified()).await;
           return;
         }
@@ -485,7 +494,7 @@ async fn handle_udp_associate(
       {
         return;
       }
-      log::info!("SOCKS5 UDP ASSOCIATE (direct) relaying on {relay_addr}");
+      log::debug!("SOCKS5 UDP ASSOCIATE relaying mode=direct relay={relay_addr}");
       run_udp_relay_direct(control, relay, out, UdpRelayContext::new(blocklist_matcher)).await;
     }
     UdpMode::Socks5Upstream => {
@@ -495,8 +504,9 @@ async fn handle_udp_associate(
       let datagram = match associate_upstream(upstream).await {
         Ok(d) => d,
         Err(e) => {
-          log::info!(
-            "SOCKS5 upstream did not grant UDP ASSOCIATE ({e}); refusing so Chromium uses proxied TCP"
+          log::log!(
+            first_time(&UDP_UPSTREAM_REFUSED_LOGGED),
+            "SOCKS5 UDP ASSOCIATE refused: upstream did not grant UDP; browser uses proxied TCP err=\"{e}\""
           );
           let _ = send_reply(&mut control, REP_COMMAND_NOT_SUPPORTED, unspecified()).await;
           return;
@@ -508,7 +518,7 @@ async fn handle_udp_associate(
       {
         return;
       }
-      log::info!("SOCKS5 UDP ASSOCIATE (via SOCKS5 upstream) relaying on {relay_addr}");
+      log::debug!("SOCKS5 UDP ASSOCIATE relaying mode=socks5_upstream relay={relay_addr}");
       run_udp_relay_socks5(
         control,
         relay,
@@ -655,7 +665,7 @@ async fn run_udp_relay_direct(
         }
         let host = addrkind_host(&header.dst);
         if ctx.is_blocked(&host) {
-          log::debug!("[blocklist] Blocked SOCKS5 UDP datagram to {host}");
+          log::debug!("Blocklist blocked SOCKS5 UDP datagram host={host}");
           continue;
         }
         let payload = &from_client[header.data_offset..n];
@@ -716,7 +726,7 @@ async fn run_udp_relay_socks5(
         }
         let host = addrkind_host(&header.dst);
         if ctx.is_blocked(&host) {
-          log::debug!("[blocklist] Blocked SOCKS5 UDP datagram to {host}");
+          log::debug!("Blocklist blocked SOCKS5 UDP datagram host={host}");
           continue;
         }
         let peer_key = addrkind_key(&header.dst);

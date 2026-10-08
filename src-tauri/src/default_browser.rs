@@ -301,9 +301,9 @@ mod windows {
   /// alone.
   fn remove_legacy_registration(root: &RegKey) {
     match root.delete_subkey_all(LEGACY_APP_KEY) {
-      Ok(()) => log::debug!("Removed the superseded default-browser registration key"),
+      Ok(()) => log::debug!("Superseded default-browser registry key removed"),
       Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-      Err(e) => log::debug!("Could not remove the superseded registration key: {e}"),
+      Err(e) => log::debug!("Superseded default-browser registry key removal failed err=\"{e}\""),
     }
 
     for extension in [".htm", ".html"] {
@@ -319,8 +319,10 @@ mod windows {
 
       if ours {
         match key.delete_value("") {
-          Ok(()) => log::debug!("Released the {extension} association taken by an older build"),
-          Err(e) => log::debug!("Could not release the {extension} association: {e}"),
+          Ok(()) => log::debug!("Older build's file association released extension={extension}"),
+          Err(e) => log::debug!(
+            "Older build's file association release failed extension={extension} err=\"{e}\""
+          ),
         }
       }
     }

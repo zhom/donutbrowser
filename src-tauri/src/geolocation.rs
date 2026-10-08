@@ -56,7 +56,7 @@ pub fn locale_selector() -> Option<&'static LocaleSelector> {
     .get_or_init(|| match LocaleSelector::new() {
       Ok(s) => Some(s),
       Err(e) => {
-        log::warn!("Failed to build the CLDR locale selector: {e}");
+        log::warn!("CLDR locale selector build failed err=\"{e}\"");
         None
       }
     })
@@ -163,7 +163,7 @@ impl LocaleSelector {
         }
         Ok(Event::Eof) => break,
         Err(e) => {
-          log::warn!("Error parsing territory XML: {}", e);
+          log::warn!("Territory XML parse failed err=\"{e}\"");
           break;
         }
         _ => {}

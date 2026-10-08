@@ -158,7 +158,7 @@ fn save(log: &GenerationLog) {
       std::fs::rename(&tmp, &path)
     });
   if let Err(e) = written {
-    log::warn!("Could not save the profile generation window: {e}");
+    log::warn!("Profile generation window save failed err=\"{e}\"");
   }
 }
 

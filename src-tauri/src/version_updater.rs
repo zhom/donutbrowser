@@ -121,21 +121,12 @@ impl VersionUpdater {
     // 2. More than 3 hours have passed since last update
     let should_update = state.last_update_time == 0 || elapsed_secs >= update_interval_secs;
 
-    if should_update {
-      log::debug!(
-        "Background update needed: last_update={}, elapsed={}h, required={}h",
-        state.last_update_time,
-        elapsed_secs / 3600,
-        state.update_interval_hours
-      );
-    } else {
-      log::debug!(
-        "Background update not needed: last_update={}, elapsed={}h, required={}h",
-        state.last_update_time,
-        elapsed_secs / 3600,
-        state.update_interval_hours
-      );
-    }
+    log::debug!(
+      "Browser version refresh due={should_update} last_update={} elapsed_h={} interval_h={}",
+      state.last_update_time,
+      elapsed_secs / 3600,
+      state.update_interval_hours
+    );
 
     should_update
   }
@@ -145,9 +136,10 @@ impl VersionUpdater {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Always check for updates on launch
     if let Some(ref app_handle) = self.app_handle {
-      log::info!("Running startup version update...");
-
-      match self.update_all_browser_versions(app_handle).await {
+      match self
+        .update_all_browser_versions(app_handle, "startup")
+        .await
+      {
         Ok(_) => {
           // Update the persistent state after successful update
           let state = BackgroundUpdateState {
@@ -156,13 +148,11 @@ impl VersionUpdater {
           };
 
           if let Err(e) = Self::save_background_update_state(&state) {
-            log::error!("Failed to save background update state: {e}");
-          } else {
-            log::info!("Startup version update completed successfully");
+            log::warn!("Browser version refresh state save failed err=\"{e}\"");
           }
         }
         Err(e) => {
-          log::error!("Startup version update failed: {e}");
+          log::error!("Browser version refresh failed trigger=startup err=\"{e}\"");
           return Err(e);
         }
       }
@@ -176,14 +166,8 @@ impl VersionUpdater {
   pub async fn start_background_updates(
     &self,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!(
-      "Starting background version update service (checking every 5 minutes for 3-hour intervals)"
-    );
-
-    // Run initial startup check
-    if let Err(e) = self.check_and_run_startup_update().await {
-      eprintln!("Startup version update failed: {e}");
-    }
+    // Logged inside; the error is not repeated here.
+    let _ = self.check_and_run_startup_update().await;
 
     Ok(())
   }
@@ -200,14 +184,14 @@ impl VersionUpdater {
         continue;
       }
 
-      println!("Starting background version update...");
-
       // Get the updater instance for this update cycle
       let updater = get_version_updater();
       let result = {
         let updater_guard = updater.lock().await;
         if let Some(ref app_handle) = updater_guard.app_handle {
-          updater_guard.update_all_browser_versions(app_handle).await
+          updater_guard
+            .update_all_browser_versions(app_handle, "interval")
+            .await
         } else {
           Err("App handle not available for background update".into())
         }
@@ -222,13 +206,11 @@ impl VersionUpdater {
           };
 
           if let Err(e) = Self::save_background_update_state(&state) {
-            eprintln!("Failed to save background update state: {e}");
-          } else {
-            println!("Background version update completed successfully");
+            log::warn!("Browser version refresh state save failed err=\"{e}\"");
           }
         }
         Err(e) => {
-          eprintln!("Background version update failed: {e}");
+          log::error!("Browser version refresh failed trigger=interval err=\"{e}\"");
 
           // Try to emit error event if we have an app handle
           let updater_guard = updater.lock().await;
@@ -251,7 +233,9 @@ impl VersionUpdater {
   async fn update_all_browser_versions(
     &self,
     app_handle: &tauri::AppHandle,
+    trigger: &str,
   ) -> Result<Vec<BackgroundUpdateResult>, Box<dyn std::error::Error + Send + Sync>> {
+    let started = std::time::Instant::now();
     let supported_browsers = self.browser_version_manager.get_supported_browsers();
 
     // Only fetch versions for active browsers (wayfern) plus any
@@ -285,12 +269,11 @@ impl VersionUpdater {
     };
 
     if let Err(e) = events::emit("version-update-progress", &initial_progress) {
-      log::error!("Failed to emit initial progress: {e}");
+      log::warn!("Event emit failed event=version-update-progress err=\"{e}\"");
     }
 
+    let mut failures = Vec::new();
     for (index, browser) in supported_browsers.iter().enumerate() {
-      log::debug!("Updating browser versions for: {browser}");
-
       // Emit progress update for current browser
       let progress = VersionUpdateProgress {
         current_browser: browser.clone(),
@@ -302,7 +285,7 @@ impl VersionUpdater {
       };
 
       if let Err(e) = events::emit("version-update-progress", &progress) {
-        log::error!("Failed to emit progress for {browser}: {e}");
+        log::warn!("Event emit failed event=version-update-progress browser={browser} err=\"{e}\"");
       }
 
       match self.update_browser_versions(browser).await {
@@ -328,10 +311,13 @@ impl VersionUpdater {
           };
 
           if let Err(e) = events::emit("version-update-progress", &progress) {
-            log::error!("Failed to emit progress with versions for {browser}: {e}");
+            log::warn!(
+              "Event emit failed event=version-update-progress browser={browser} err=\"{e}\""
+            );
           }
         }
         Err(e) => {
+          failures.push(format!("browser={browser} {e}"));
           results.push(BackgroundUpdateResult {
             browser: browser.clone(),
             new_versions_count: 0,
@@ -354,14 +340,27 @@ impl VersionUpdater {
     };
 
     if let Err(e) = events::emit("version-update-progress", &final_progress) {
-      eprintln!("Failed to emit completion progress: {e}");
+      log::warn!("Event emit failed event=version-update-progress err=\"{e}\"");
     }
+
+    if failures.is_empty() {
+      VERSION_REFRESH_STREAK.succeeded();
+    } else {
+      VERSION_REFRESH_STREAK.failed(failures.join("; "));
+    }
+    log::log!(
+      if total_new_versions > 0 {
+        log::Level::Info
+      } else {
+        log::Level::Debug
+      },
+      "Browser version refresh trigger={trigger} browsers={total_browsers} new_versions={total_new_versions} failed={} elapsed_ms={}",
+      failures.len(),
+      started.elapsed().as_millis()
+    );
 
     // Always check for auto-updates — profiles may still be on older versions
     // even if no new versions were found in the cache this cycle
-    println!(
-      "Checking for browser auto-updates (found {total_new_versions} new versions in cache)..."
-    );
     self
       .auto_updater
       .check_for_updates_with_progress(app_handle)
@@ -384,7 +383,9 @@ impl VersionUpdater {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<BackgroundUpdateResult>, Box<dyn std::error::Error + Send + Sync>> {
-    let results = self.update_all_browser_versions(app_handle).await?;
+    let results = self
+      .update_all_browser_versions(app_handle, "manual")
+      .await?;
 
     // Update the persistent state after successful manual update
     let state = BackgroundUpdateState {
@@ -393,7 +394,7 @@ impl VersionUpdater {
     };
 
     if let Err(e) = Self::save_background_update_state(&state) {
-      log::error!("Failed to save background update state after manual update: {e}");
+      log::warn!("Browser version refresh state save failed err=\"{e}\"");
     }
 
     Ok(results)
@@ -425,6 +426,8 @@ impl VersionUpdater {
 
 // Global instance
 static VERSION_UPDATER: OnceLock<Arc<Mutex<VersionUpdater>>> = OnceLock::new();
+static VERSION_REFRESH_STREAK: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Browser version refresh");
 
 pub fn get_version_updater() -> Arc<Mutex<VersionUpdater>> {
   VERSION_UPDATER
@@ -506,7 +509,7 @@ pub async fn clear_all_version_cache_and_refetch(
     .auto_updater
     .save_auto_update_state(&final_state)
   {
-    log::warn!("Failed to re-enable browsers after cache clear: {e}");
+    log::warn!("Re-enabling browsers after cache clear failed err=\"{e}\"");
   }
 
   result?;

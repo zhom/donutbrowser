@@ -428,14 +428,17 @@ fn collect_traffic_stats() -> HashMap<String, TrafficStats> {
   for key in &dirty_keys {
     if let Some(stats) = stats_map.get(key) {
       if let Err(e) = save_traffic_stats(stats) {
-        log::warn!("Failed to save merged traffic stats: {}", e);
+        log::warn!("Merged traffic stats save failed err=\"{e}\"");
       }
     }
   }
 
   for path in files_to_delete {
     if let Err(e) = fs::remove_file(&path) {
-      log::warn!("Failed to delete old traffic stats file {:?}: {}", path, e);
+      log::warn!(
+        "Old traffic stats file delete failed path=\"{}\" err=\"{e}\"",
+        path.display()
+      );
     }
   }
 

@@ -60,6 +60,25 @@ async function tableRows(app, tableId) {
   );
 }
 
+/** Selection checkboxes, and the browser icons that stand in for them, that sit
+ * more than half a pixel off the center of their cell. */
+async function offCenterSelectionControls(app, tableSelector) {
+  return app.execute(
+    `return [...document.querySelectorAll(arguments[0] + ' :is(th, td) :is([role="checkbox"], [role="checkbox"] + [aria-hidden="true"] > svg)')]
+       .map((node) => {
+         const cell = node.closest("th, td").getBoundingClientRect();
+         const rect = node.getBoundingClientRect();
+         return {
+           control: node.getAttribute("aria-label") ?? "icon",
+           x: rect.left + rect.width / 2 - (cell.left + cell.width / 2),
+           y: rect.top + rect.height / 2 - (cell.top + cell.height / 2),
+         };
+       })
+       .filter(({ x, y }) => Math.abs(x) > 0.5 || Math.abs(y) > 0.5);`,
+    [tableSelector],
+  );
+}
+
 async function tableShiftClick(app, selector) {
   // tauri-wd 0.2.1 omits modifiers from pointer events. Send the click with
   // Shift through the native WebView; the real checkbox handler selects rows.
@@ -479,6 +498,10 @@ test("profile table filters, range selection, view settings, and keyboard edits 
       );
       assert.deepEqual(chrome.controls, ["0px", "0px", "0px"]);
       assert.equal(chrome.rowRules, 0, "rows are not divided by rules");
+      assert.deepEqual(
+        await offCenterSelectionControls(app, '[data-table-id="profiles"]'),
+        [],
+      );
       const row = (index) => `tr[data-table-row="${profiles[index].id}"]`;
       await app.clickSelector(`${row(0)} [role="checkbox"]`);
       await tableShiftClick(app, `${row(3)} [role="checkbox"]`);
@@ -502,7 +525,9 @@ test("profile table filters, range selection, view settings, and keyboard edits 
         /4/,
       );
       const searchSelector = `input[placeholder="${en.header.searchPlaceholder}"]`;
-      await app.fillSelector(searchSelector, "Table 02");
+      // Quoted: an unquoted "02" is its own term, which also prefix-matches
+      // any profile whose random id starts with 02.
+      await app.fillSelector(searchSelector, '"Table 02"');
       await app.waitFor(
         async () =>
           JSON.stringify(await tableRows(app, "profiles")) ===
@@ -745,6 +770,10 @@ test("management tables share search, filters, selection, and saved views", asyn
     await app.waitFor(
       async () => (await tableRows(app, "proxies")).length === 3,
       { description: "proxy table" },
+    );
+    assert.deepEqual(
+      await offCenterSelectionControls(app, '[data-table-id="proxies"]'),
+      [],
     );
     const proxyRowHeight = () =>
       app.execute(
@@ -2919,6 +2948,13 @@ test("the agent page guides setup, then shows agents, requests, notes, take-over
         const row = await waitPainted(`agent-profile-${profile.id}`);
         assert.match(row, /Agent UI Profile/);
         assert.match(row, /LOCATOR_NO_MATCH/);
+        assert.deepEqual(
+          await offCenterSelectionControls(
+            app,
+            '[data-testid="agent-profiles"]',
+          ),
+          [],
+        );
         await app.clickSelector(
           `[data-testid="agent-profile-${profile.id}"] [data-testid="agent-take-over"]`,
         );

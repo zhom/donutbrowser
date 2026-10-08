@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment, withApp } from "../lib/app.mjs";
@@ -351,6 +351,28 @@ test("tray labels, hide-to-tray, and confirmed quit follow the native lifecycle"
     );
     app.session = null;
     await exitingSession.close().catch(() => {});
+
+    // Agents read this file: each session opens with its facts, closes with
+    // what outlives it, and no line repeats the crate name.
+    const logDir = path.join(app.dataRoot, "logs");
+    const logText = (
+      await Promise.all(
+        (
+          await readdir(logDir)
+        )
+          .filter((name) => name.endsWith(".log"))
+          .map((name) => readFile(path.join(logDir, name), "utf8")),
+      )
+    ).join("\n");
+    assert.match(
+      logText,
+      /\[app\]\[INFO\] Donut started version=\S+ os="[^"]+" arch=\S+ pid=\d+ /,
+    );
+    assert.match(
+      logText,
+      /\[app\]\[INFO\] Donut exiting browsers=\[\] proxy_workers=\[\] vpn_workers=\[\] xray_workers=\[\]/,
+    );
+    assert.doesNotMatch(logText, /donutbrowser_lib::/);
   } catch (error) {
     await app.capture("failure");
     throw error;

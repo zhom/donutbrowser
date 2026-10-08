@@ -44,7 +44,7 @@ pub fn load() -> LaunchGatePrefs {
     return LaunchGatePrefs::default();
   };
   serde_json::from_str(&content).unwrap_or_else(|e| {
-    log::warn!("Failed to parse launch gate prefs, ignoring them: {e}");
+    log::warn!("Launch gate prefs parse failed, ignoring them err=\"{e}\"");
     LaunchGatePrefs::default()
   })
 }
@@ -53,17 +53,17 @@ fn save(prefs: &LaunchGatePrefs) {
   let path = prefs_file();
   if let Some(parent) = path.parent() {
     if let Err(e) = std::fs::create_dir_all(parent) {
-      log::warn!("Failed to create launch gate prefs dir: {e}");
+      log::warn!("Launch gate prefs dir create failed err=\"{e}\"");
       return;
     }
   }
   match serde_json::to_string_pretty(prefs) {
     Ok(json) => {
       if let Err(e) = std::fs::write(&path, json) {
-        log::warn!("Failed to write launch gate prefs: {e}");
+        log::warn!("Launch gate prefs write failed err=\"{e}\"");
       }
     }
-    Err(e) => log::warn!("Failed to serialize launch gate prefs: {e}"),
+    Err(e) => log::warn!("Launch gate prefs serialize failed err=\"{e}\""),
   }
 }
 

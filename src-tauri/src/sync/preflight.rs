@@ -88,7 +88,7 @@ pub async fn check_sync_server(server_url: &str) -> SyncServerCheck {
   let readyz = match client.get(format!("{base}/readyz")).send().await {
     Ok(response) => response,
     Err(e) => {
-      log::warn!("Sync pre-flight: {base}/readyz did not answer: {e}");
+      log::warn!("Sync preflight: readyz unreachable err=\"{e}\"");
       return check;
     }
   };
@@ -119,7 +119,7 @@ pub async fn check_sync_server(server_url: &str) -> SyncServerCheck {
     match probe_storage_endpoint(&client, &endpoint).await {
       Ok(()) => check.storage_reachable = Some(true),
       Err(e) => {
-        log::warn!("Sync pre-flight: storage endpoint {endpoint} is unreachable from here: {e}");
+        log::warn!("Sync preflight: storage endpoint unreachable endpoint={endpoint} err=\"{e}\"");
         check.storage_reachable = Some(false);
         check.storage_error = Some(e);
       }

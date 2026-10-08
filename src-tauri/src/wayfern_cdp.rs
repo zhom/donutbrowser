@@ -1118,7 +1118,7 @@ pub mod vellum {
     fn drop(&mut self) {
       if !self.released {
         log::warn!(
-          "[vellum] pointer {} dropped without release; the browser frees it with the session",
+          "Vellum pointer dropped without release, the browser frees it with the session pointer={}",
           self.id
         );
       }
@@ -1310,14 +1310,16 @@ pub mod vellum {
       Ok(value) => {
         if let Err(e) = released {
           log::warn!(
-            "[vellum] pointer {pointer_id} could not be released after a completed gesture: {e}"
+            "Vellum pointer release failed after a completed gesture pointer={pointer_id} err=\"{e}\""
           );
         }
         Ok(value)
       }
       Err(e) => {
         if let Err(release_error) = released {
-          log::warn!("[vellum] pointer {pointer_id} could not be released after a failed gesture: {release_error}");
+          log::warn!(
+            "Vellum pointer release failed after a failed gesture pointer={pointer_id} err=\"{release_error}\""
+          );
         }
         Err(e)
       }

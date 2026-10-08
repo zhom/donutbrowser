@@ -2565,7 +2565,7 @@ export function ProfilesDataTable({
               sideOffset={4}
               horizontalOffset={8}
             >
-              <span className="inline-flex items-center">
+              <span className="block">
                 <TableRowCheckbox
                   table={table}
                   row={row}

@@ -295,7 +295,7 @@ impl VpnTunnel for WireGuardTunnel {
     self.connected.store(true, Ordering::Release);
     self.connected_at = Some(Utc::now().timestamp());
 
-    log::info!("[vpn] WireGuard tunnel {} connected", self.vpn_id);
+    log::info!("WireGuard tunnel connected vpn={}", self.vpn_id);
 
     Ok(())
   }
@@ -310,7 +310,7 @@ impl VpnTunnel for WireGuardTunnel {
     self.socket = None;
     self.connected_at = None;
 
-    log::info!("[vpn] WireGuard tunnel {} disconnected", self.vpn_id);
+    log::info!("WireGuard tunnel disconnected vpn={}", self.vpn_id);
 
     Ok(())
   }

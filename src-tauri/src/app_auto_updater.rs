@@ -171,153 +171,175 @@ impl AppAutoUpdater {
   pub async fn check_for_updates(
     &self,
   ) -> Result<Option<AppUpdateInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    self.check(false).await
+  }
+
+  /// Runs one check and writes its one result line: at info when the outcome
+  /// differs from the previous check (or the person asked), else at debug.
+  async fn check(
+    &self,
+    manual: bool,
+  ) -> Result<Option<AppUpdateInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    let started = std::time::Instant::now();
     let current_version = Self::get_current_version();
+    let channel = if Self::is_nightly_build() {
+      "nightly"
+    } else {
+      "stable"
+    };
+    let releases = match self.fetch_app_releases().await {
+      Ok(releases) => {
+        APP_UPDATE_CHECK_STREAK.succeeded();
+        releases
+      }
+      Err(e) => {
+        APP_UPDATE_CHECK_STREAK.failed(&e);
+        return Err(e);
+      }
+    };
+    let (update, latest, result) = self.evaluate_releases(&releases, current_version.clone());
+
+    let outcome = format!("{latest} {result}");
+    let changed = APP_UPDATE_LAST_OUTCOME
+      .lock()
+      .map(|mut last| last.replace(outcome.clone()) != Some(outcome))
+      .unwrap_or(true);
+    let level = if changed || manual {
+      log::Level::Info
+    } else {
+      log::Level::Debug
+    };
+    log::log!(
+      level,
+      "App update check current={current_version} latest={latest} channel={channel} result={result} manual={manual} elapsed_ms={}",
+      started.elapsed().as_millis()
+    );
+    Ok(update)
+  }
+
+  /// Picks the newest release of this build's channel and decides what the
+  /// check found. Returns the update, the latest tag (`-` when none) and a
+  /// `key=value` result fragment for the log line.
+  fn evaluate_releases(
+    &self,
+    releases: &[AppRelease],
+    current_version: String,
+  ) -> (Option<AppUpdateInfo>, String, String) {
     let is_nightly = Self::is_nightly_build();
-
-    log::info!("=== App Update Check ===");
-    log::info!("Current version: {current_version}");
-    log::info!("Is nightly build: {is_nightly}");
-    log::info!("STABLE_RELEASE env: {:?}", option_env!("STABLE_RELEASE"));
-
-    let releases = self.fetch_app_releases().await?;
-    log::info!("Fetched {} releases from GitHub", releases.len());
-
-    // Filter releases based on build type
     let filtered_releases: Vec<&AppRelease> = if is_nightly {
-      // For nightly builds, look for nightly releases
-      let nightly_releases: Vec<&AppRelease> = releases
+      releases
         .iter()
         .filter(|release| release.tag_name.starts_with("nightly-"))
-        .collect();
-      log::info!("Found {} nightly releases", nightly_releases.len());
-      nightly_releases
+        .collect()
     } else {
-      // For stable builds, look for stable releases (semver format)
-      let stable_releases: Vec<&AppRelease> = releases
+      releases
         .iter()
         .filter(|release| release.tag_name.starts_with('v'))
-        .collect();
-      log::info!("Found {} stable releases", stable_releases.len());
-      stable_releases
+        .collect()
     };
 
-    if filtered_releases.is_empty() {
-      log::info!("No releases found for build type (nightly: {is_nightly})");
-      return Ok(None);
+    let Some(latest_release) = filtered_releases.first().copied() else {
+      return (
+        None,
+        "-".to_string(),
+        format!("no_releases fetched={}", releases.len()),
+      );
+    };
+    let latest = latest_release.tag_name.clone();
+
+    if !self.should_update(&current_version, &latest_release.tag_name, is_nightly) {
+      return (None, latest, "none".to_string());
     }
 
-    // Get the latest release
-    let latest_release = filtered_releases[0];
-    log::info!(
-      "Latest release: {} ({})",
-      latest_release.tag_name,
-      latest_release.name
+    let release_page_url = format!(
+      "https://github.com/zhom/donutbrowser/releases/tag/{}",
+      latest_release.tag_name
     );
 
-    // Check if we need to update
-    if self.should_update(&current_version, &latest_release.tag_name, is_nightly) {
-      log::info!("Update available!");
+    let download_url = self.get_download_url_for_platform(&latest_release.assets);
+    let asset = download_url
+      .as_deref()
+      .and_then(|url| url.rsplit('/').next())
+      .unwrap_or("-")
+      .to_string();
 
-      // Build the release page URL
-      let release_page_url = format!(
-        "https://github.com/zhom/donutbrowser/releases/tag/{}",
-        latest_release.tag_name
+    // Locate the release's checksums file and the chosen asset's
+    // GitHub-computed digest for post-download verification.
+    let checksums_url = Self::find_checksums_url(&latest_release.assets);
+    let asset_digest = download_url.as_deref().and_then(|url| {
+      latest_release
+        .assets
+        .iter()
+        .find(|a| a.browser_download_url == url)
+        .and_then(|a| a.digest.clone())
+    });
+
+    // Both release workflows upload SHA256SUMS.txt only after every platform
+    // build finishes, so a release without it is still being assembled (or
+    // its pipeline broke). Downloading now is guaranteed to fail closed, so
+    // treat the release as not ready and retry on a later check instead of
+    // surfacing an error for a healthy in-progress release. Applies only to
+    // the auto-download path — manual/repo notifications don't download.
+    let auto_download_possible = download_url.is_some();
+    #[cfg(target_os = "linux")]
+    let auto_download_possible = auto_download_possible && !self.is_repo_configured();
+    if auto_download_possible && checksums_url.is_none() {
+      return (
+        None,
+        latest,
+        format!("not_ready missing={}", Self::CHECKSUMS_ASSET_NAME),
       );
-
-      // Find the appropriate asset for current platform
-      let download_url = self.get_download_url_for_platform(&latest_release.assets);
-
-      // Locate the release's checksums file and the chosen asset's
-      // GitHub-computed digest for post-download verification.
-      let checksums_url = Self::find_checksums_url(&latest_release.assets);
-      let asset_digest = download_url.as_deref().and_then(|url| {
-        latest_release
-          .assets
-          .iter()
-          .find(|a| a.browser_download_url == url)
-          .and_then(|a| a.digest.clone())
-      });
-
-      // Both release workflows upload SHA256SUMS.txt only after every platform
-      // build finishes, so a release without it is still being assembled (or
-      // its pipeline broke). Downloading now is guaranteed to fail closed, so
-      // treat the release as not ready and retry on a later check instead of
-      // surfacing an error for a healthy in-progress release. Applies only to
-      // the auto-download path — manual/repo notifications don't download.
-      let auto_download_possible = download_url.is_some();
-      #[cfg(target_os = "linux")]
-      let auto_download_possible = auto_download_possible && !self.is_repo_configured();
-      if auto_download_possible && checksums_url.is_none() {
-        log::info!(
-          "Release {} has no {} yet; treating as not ready for auto-update",
-          latest_release.tag_name,
-          Self::CHECKSUMS_ASSET_NAME
-        );
-        return Ok(None);
-      }
-
-      // On Linux, when a package repo is configured, notify users to update via
-      // their package manager instead of auto-downloading from GitHub.
-      #[cfg(target_os = "linux")]
-      {
-        let repo_update = self.is_repo_configured();
-        let manual_update_required = download_url.is_none() || repo_update;
-        let update_info = AppUpdateInfo {
-          current_version,
-          new_version: latest_release.tag_name.clone(),
-          release_notes: latest_release.body.clone(),
-          download_url: download_url.unwrap_or_else(|| release_page_url.clone()),
-          is_nightly,
-          published_at: latest_release.published_at.clone(),
-          manual_update_required,
-          release_page_url: Some(release_page_url),
-          repo_update,
-          checksums_url,
-          asset_digest,
-        };
-
-        log::info!(
-          "Update info prepared: {} -> {} (manual_update_required: {}, repo_update: {})",
-          update_info.current_version,
-          update_info.new_version,
-          update_info.manual_update_required,
-          update_info.repo_update
-        );
-        return Ok(Some(update_info));
-      }
-
-      #[cfg(not(target_os = "linux"))]
-      {
-        if let Some(url) = download_url {
-          let update_info = AppUpdateInfo {
-            current_version,
-            new_version: latest_release.tag_name.clone(),
-            release_notes: latest_release.body.clone(),
-            download_url: url,
-            is_nightly,
-            published_at: latest_release.published_at.clone(),
-            manual_update_required: false,
-            release_page_url: Some(release_page_url),
-            repo_update: false,
-            checksums_url,
-            asset_digest,
-          };
-
-          log::info!(
-            "Update info prepared: {} -> {}",
-            update_info.current_version,
-            update_info.new_version
-          );
-          return Ok(Some(update_info));
-        } else {
-          log::info!("No suitable download asset found for current platform");
-        }
-      }
-    } else {
-      log::info!("No update needed");
     }
 
-    Ok(None)
+    // On Linux, when a package repo is configured, notify users to update via
+    // their package manager instead of auto-downloading from GitHub.
+    #[cfg(target_os = "linux")]
+    {
+      let repo_update = self.is_repo_configured();
+      let manual_update_required = download_url.is_none() || repo_update;
+      let update_info = AppUpdateInfo {
+        current_version,
+        new_version: latest_release.tag_name.clone(),
+        release_notes: latest_release.body.clone(),
+        download_url: download_url.unwrap_or_else(|| release_page_url.clone()),
+        is_nightly,
+        published_at: latest_release.published_at.clone(),
+        manual_update_required,
+        release_page_url: Some(release_page_url),
+        repo_update,
+        checksums_url,
+        asset_digest,
+      };
+      let result = format!(
+        "available asset={asset} manual_update_required={manual_update_required} repo_update={repo_update}"
+      );
+      (Some(update_info), latest, result)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+      let Some(url) = download_url else {
+        return (None, latest, "no_asset".to_string());
+      };
+      let update_info = AppUpdateInfo {
+        current_version,
+        new_version: latest_release.tag_name.clone(),
+        release_notes: latest_release.body.clone(),
+        download_url: url,
+        is_nightly,
+        published_at: latest_release.published_at.clone(),
+        manual_update_required: false,
+        release_page_url: Some(release_page_url),
+        repo_update: false,
+        checksums_url,
+        asset_digest,
+      };
+      (
+        Some(update_info),
+        latest,
+        format!("available asset={asset}"),
+      )
+    }
   }
 
   /// Fetch app releases from GitHub
@@ -346,10 +368,6 @@ impl AppAutoUpdater {
       return false;
     }
 
-    log::info!(
-      "Comparing versions: current={current_version}, new={new_version}, is_nightly={is_nightly}"
-    );
-
     if is_nightly {
       // For nightly builds, always update if there's a newer nightly
       if let (Some(current_hash), Some(new_hash)) = (
@@ -357,22 +375,17 @@ impl AppAutoUpdater {
         new_version.strip_prefix("nightly-"),
       ) {
         // Different commit hashes mean we should update
-        let should_update = new_hash != current_hash;
-        log::info!("Nightly comparison: current_hash={current_hash}, new_hash={new_hash}, should_update={should_update}");
-        return should_update;
+        return new_hash != current_hash;
       }
 
       // If current version doesn't have nightly prefix but we're in nightly mode,
       // this could be a dev build or stable build upgrading to nightly
       if !current_version.starts_with("nightly-") {
-        log::info!("Upgrading from non-nightly to nightly: {new_version}");
         return true;
       }
     } else {
       // For stable builds, use semantic versioning comparison
-      let should_update = self.is_version_newer(new_version, current_version);
-      log::info!("Stable comparison: {new_version} > {current_version} = {should_update}");
-      return should_update;
+      return self.is_version_newer(new_version, current_version);
     }
 
     false
@@ -439,7 +452,6 @@ impl AppAutoUpdater {
     };
 
     let exe_path_str = exe_path.to_string_lossy();
-    log::info!("Detecting installation method for: {exe_path_str}");
 
     // Check if installed via package manager by querying package databases
     if let Some(exe_name) = exe_path.file_name().and_then(|n| n.to_str()) {
@@ -450,7 +462,6 @@ impl AppAutoUpdater {
         if output.status.success() {
           let stdout = String::from_utf8_lossy(&output.stdout);
           if !stdout.trim().is_empty() && !stdout.contains("no path found") {
-            log::info!("Found DEB package owning the executable");
             return LinuxInstallationMethod::Deb;
           }
         }
@@ -461,7 +472,6 @@ impl AppAutoUpdater {
         if output.status.success() {
           let stdout = String::from_utf8_lossy(&output.stdout);
           if !stdout.trim().is_empty() && !stdout.contains("not owned") {
-            log::info!("Found RPM package owning the executable");
             return LinuxInstallationMethod::Rpm;
           }
         }
@@ -476,7 +486,6 @@ impl AppAutoUpdater {
           if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if !stdout.trim().is_empty() && stdout.contains(exe_name) {
-              log::info!("Found RPM package via {rpm_cmd}");
               return LinuxInstallationMethod::Rpm;
             }
           }
@@ -487,7 +496,6 @@ impl AppAutoUpdater {
     // Check installation location to infer method
     if exe_path_str.starts_with("/usr/bin/") || exe_path_str.starts_with("/usr/local/bin/") {
       // Likely installed via package manager or system-wide installation
-      log::info!("Executable in system directory, assuming package installation");
 
       // Try to determine which package system is available
       if Command::new("dpkg").arg("--version").output().is_ok() {
@@ -499,11 +507,9 @@ impl AppAutoUpdater {
       return LinuxInstallationMethod::Manual;
     } else if exe_path_str.contains("/.local/") || exe_path_str.starts_with("/home/") {
       // User-local installation
-      log::info!("Executable in user directory, assuming manual installation");
       return LinuxInstallationMethod::Manual;
     }
 
-    log::info!("Could not determine installation method");
     LinuxInstallationMethod::Unknown
   }
 
@@ -547,13 +553,11 @@ impl AppAutoUpdater {
       "unknown"
     };
 
-    log::info!("Looking for platform-specific asset for arch: {arch}");
-
     #[cfg(target_os = "linux")]
     {
       // If we're running from an AppImage, disable auto-updates for safety
       if self.is_running_from_appimage() {
-        log::info!("Running from AppImage - auto-updates disabled for safety");
+        log::debug!("No auto-update asset: running from an AppImage");
         return None;
       }
     }
@@ -575,7 +579,6 @@ impl AppAutoUpdater {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-      log::info!("Unsupported platform for auto-update");
       None
     }
   }
@@ -591,7 +594,10 @@ impl AppAutoUpdater {
           || asset.name.contains(&format!("-{arch}-"))
           || asset.name.contains(&format!("_{arch}-")))
       {
-        log::info!("Found exact architecture match: {}", asset.name);
+        log::debug!(
+          "Asset picked asset={} rule=\"exact architecture match\"",
+          asset.name
+        );
         return Some(asset.browser_download_url.clone());
       }
     }
@@ -602,7 +608,7 @@ impl AppAutoUpdater {
         if asset.name.contains(".dmg")
           && (asset.name.contains("x86_64") || asset.name.contains("x86-64"))
         {
-          log::info!("Found x86_64 variant: {}", asset.name);
+          log::debug!("Asset picked asset={} rule=\"x86_64 variant\"", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -614,7 +620,7 @@ impl AppAutoUpdater {
         if asset.name.contains(".dmg")
           && (asset.name.contains("arm64") || asset.name.contains("aarch64"))
         {
-          log::info!("Found arm64 variant: {}", asset.name);
+          log::debug!("Asset picked asset={} rule=\"arm64 variant\"", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -627,7 +633,7 @@ impl AppAutoUpdater {
           || asset.name.to_lowercase().contains("darwin")
           || !asset.name.contains(".app.tar.gz"))
       {
-        log::info!("Found fallback DMG: {}", asset.name);
+        log::debug!("Asset picked asset={} rule=\"fallback DMG\"", asset.name);
         return Some(asset.browser_download_url.clone());
       }
     }
@@ -650,7 +656,10 @@ impl AppAutoUpdater {
             || asset.name.contains(&format!("-{arch}-"))
             || asset.name.contains(&format!("_{arch}-")))
         {
-          log::info!("Found Windows {ext} with exact arch match: {}", asset.name);
+          log::debug!(
+            "Asset picked asset={} rule=\"Windows {ext} with exact arch match\"",
+            asset.name
+          );
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -661,7 +670,10 @@ impl AppAutoUpdater {
           if asset.name.to_lowercase().ends_with(&format!(".{ext}"))
             && (asset.name.contains("x86_64") || asset.name.contains("x86-64"))
           {
-            log::info!("Found Windows {ext} with x86_64 variant: {}", asset.name);
+            log::debug!(
+              "Asset picked asset={} rule=\"Windows {ext} with x86_64 variant\"",
+              asset.name
+            );
             return Some(asset.browser_download_url.clone());
           }
         }
@@ -674,7 +686,10 @@ impl AppAutoUpdater {
             || asset.name.to_lowercase().contains("win32")
             || asset.name.to_lowercase().contains("win64"))
         {
-          log::info!("Found Windows {ext} fallback: {}", asset.name);
+          log::debug!(
+            "Asset picked asset={} rule=\"Windows {ext} fallback\"",
+            asset.name
+          );
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -687,7 +702,7 @@ impl AppAutoUpdater {
   fn get_linux_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
     // Detect installation method to prioritize appropriate formats
     let installation_method = self.detect_linux_installation_method();
-    log::info!("Detected Linux installation method: {installation_method:?}");
+    log::debug!("Linux install detected method={installation_method:?}");
 
     // Priority order based on installation method
     let extensions = match installation_method {
@@ -695,7 +710,6 @@ impl AppAutoUpdater {
       LinuxInstallationMethod::Rpm => vec!["rpm", "tar.gz"],
       LinuxInstallationMethod::AppImage => {
         // AppImages should not auto-update for safety
-        log::info!("AppImage installation detected - auto-updates disabled");
         return None;
       }
       LinuxInstallationMethod::Manual | LinuxInstallationMethod::Unknown => {
@@ -714,7 +728,10 @@ impl AppAutoUpdater {
             || asset.name.contains(&format!("-{arch}-"))
             || asset.name.contains(&format!("_{arch}-")))
         {
-          log::info!("Found Linux {ext} with exact arch match: {}", asset.name);
+          log::debug!(
+            "Asset picked asset={} rule=\"Linux {ext} with exact arch match\"",
+            asset.name
+          );
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -728,7 +745,10 @@ impl AppAutoUpdater {
               || asset.name.contains("x86-64")
               || asset.name.contains("amd64"))
           {
-            log::info!("Found Linux {ext} with x86_64 variant: {}", asset.name);
+            log::debug!(
+              "Asset picked asset={} rule=\"Linux {ext} with x86_64 variant\"",
+              asset.name
+            );
             return Some(asset.browser_download_url.clone());
           }
         }
@@ -741,7 +761,10 @@ impl AppAutoUpdater {
           if asset_name_lower.ends_with(&format!(".{ext}"))
             && (asset.name.contains("arm64") || asset.name.contains("aarch64"))
           {
-            log::info!("Found Linux {ext} with arm64 variant: {}", asset.name);
+            log::debug!(
+              "Asset picked asset={} rule=\"Linux {ext} with arm64 variant\"",
+              asset.name
+            );
             return Some(asset.browser_download_url.clone());
           }
         }
@@ -755,7 +778,10 @@ impl AppAutoUpdater {
             || asset_name_lower.contains("ubuntu")
             || asset_name_lower.contains("debian"))
         {
-          log::info!("Found Linux {ext} fallback: {}", asset.name);
+          log::debug!(
+            "Asset picked asset={} rule=\"Linux {ext} fallback\"",
+            asset.name
+          );
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -794,9 +820,9 @@ impl AppAutoUpdater {
 
     let Some(checksums_url) = update_info.checksums_url.as_deref() else {
       log::warn!(
-        "No {} asset on release {}",
-        Self::CHECKSUMS_ASSET_NAME,
-        update_info.new_version
+        "App update checksums missing version={} asset={}",
+        update_info.new_version,
+        Self::CHECKSUMS_ASSET_NAME
       );
       return Err(unavailable());
     };
@@ -810,11 +836,18 @@ impl AppAutoUpdater {
     {
       Ok(response) if response.status().is_success() => response,
       Ok(response) => {
-        log::warn!("Checksums file request failed: HTTP {}", response.status());
+        log::warn!(
+          "App update checksums fetch failed version={} status={}",
+          update_info.new_version,
+          response.status().as_u16()
+        );
         return Err(unavailable());
       }
       Err(e) => {
-        log::warn!("Checksums file request failed: {e}");
+        log::warn!(
+          "App update checksums fetch failed version={} err=\"{e}\"",
+          update_info.new_version
+        );
         return Err(unavailable());
       }
     };
@@ -822,14 +855,17 @@ impl AppAutoUpdater {
     let checksums_text = match response.text().await {
       Ok(text) => text,
       Err(e) => {
-        log::warn!("Failed to read checksums file: {e}");
+        log::warn!(
+          "App update checksums read failed version={} err=\"{e}\"",
+          update_info.new_version
+        );
         return Err(unavailable());
       }
     };
 
     let Some(expected) = crate::checksum::find_checksum_for_file(&checksums_text, filename) else {
       log::warn!(
-        "No checksum entry for {filename} in {}",
+        "App update checksum entry missing file={filename} in={}",
         Self::CHECKSUMS_ASSET_NAME
       );
       return Err(unavailable());
@@ -860,8 +896,9 @@ impl AppAutoUpdater {
     }
 
     if mismatch {
-      log::error!(
-        "Checksum mismatch for {filename}: expected {expected}, got {actual} (asset digest: {asset_digest:?})"
+      log::warn!(
+        "App update checksum mismatch file={filename} expected={expected} actual={actual} asset_digest={}",
+        asset_digest.unwrap_or("-")
       );
       let _ = fs::remove_file(file_path);
       return Err(
@@ -874,7 +911,7 @@ impl AppAutoUpdater {
       );
     }
 
-    log::info!("Checksum verified for {filename}: {actual}");
+    log::debug!("App update checksum verified file={filename} sha256={actual}");
     Ok(())
   }
 
@@ -898,8 +935,6 @@ impl AppAutoUpdater {
       return Err(format!("Download failed with status: {}", response.status()).into());
     }
 
-    let total_size = response.content_length().unwrap_or(0);
-    log::info!("Silent download size: {} bytes", total_size);
     let raw_file = fs::File::create(&file_path)?;
     let mut file = std::io::BufWriter::with_capacity(8 * 1024 * 1024, raw_file);
     let mut stream = response.bytes_stream();
@@ -910,8 +945,6 @@ impl AppAutoUpdater {
       file.write_all(&chunk)?;
     }
     std::io::Write::flush(&mut file)?;
-
-    log::info!("Silent download completed: {}", file_path.display());
     Ok(file_path)
   }
 
@@ -921,8 +954,37 @@ impl AppAutoUpdater {
     _app_handle: &tauri::AppHandle,
     update_info: &AppUpdateInfo,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Starting background update download and install");
+    let started = std::time::Instant::now();
+    let mut stage = "checksums";
+    match self.download_and_prepare(update_info, &mut stage).await {
+      Ok((asset, bytes, result)) => {
+        log::info!(
+          "App update ready from={} to={} asset={asset} bytes={bytes} result={result} elapsed_ms={}",
+          update_info.current_version,
+          update_info.new_version,
+          started.elapsed().as_millis()
+        );
+        let _ = events::emit("app-update-ready", update_info.new_version.clone());
+        Ok(())
+      }
+      Err(e) => {
+        log::error!(
+          "App update failed from={} to={} stage={stage} elapsed_ms={} err=\"{e}\"",
+          update_info.current_version,
+          update_info.new_version,
+          started.elapsed().as_millis()
+        );
+        Err(e)
+      }
+    }
+  }
 
+  /// Returns the asset name, its size and what was done with it.
+  async fn download_and_prepare(
+    &self,
+    update_info: &AppUpdateInfo,
+    stage: &mut &'static str,
+  ) -> Result<(String, u64, &'static str), Box<dyn std::error::Error + Send + Sync>> {
     let temp_dir = std::env::temp_dir().join("donut_app_update");
     fs::create_dir_all(&temp_dir)?;
 
@@ -937,13 +999,13 @@ impl AppAutoUpdater {
     // rejected before the multi-hundred-MB download, not after.
     let expected_sha256 = self.fetch_expected_checksum(update_info, &filename).await?;
 
-    log::info!("Downloading update");
-
+    *stage = "download";
     let download_path = self
       .download_update_silent(&update_info.download_url, &temp_dir, &filename)
       .await?;
+    let bytes = fs::metadata(&download_path).map(|m| m.len()).unwrap_or(0);
 
-    log::info!("Verifying update checksum...");
+    *stage = "verify";
     Self::verify_update_checksum(
       &download_path,
       &filename,
@@ -951,7 +1013,7 @@ impl AppAutoUpdater {
       update_info.asset_digest.as_deref(),
     )?;
 
-    log::info!("Extracting update...");
+    *stage = "extract";
     let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
 
     // On Windows, MSI/EXE installers close the running app, so running them now
@@ -965,29 +1027,22 @@ impl AppAutoUpdater {
         .unwrap_or("")
         .to_lowercase();
       if ext == "msi" || ext == "exe" {
-        log::info!("Deferring Windows installer execution until user-initiated restart");
         *PENDING_INSTALLER_PATH.lock().unwrap() = Some(extracted_app_path);
-      } else {
-        log::info!("Installing update (overwriting binary)...");
-        self.install_update(&extracted_app_path).await?;
-        log::info!("Cleaning up temporary files...");
-        let _ = fs::remove_dir_all(&temp_dir);
+        return Ok((filename, bytes, "installer_deferred_to_restart"));
       }
+      *stage = "install";
+      self.install_update(&extracted_app_path).await?;
+      let _ = fs::remove_dir_all(&temp_dir);
+      Ok((filename, bytes, "installed"))
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-      log::info!("Installing update (overwriting binary)...");
+      *stage = "install";
       self.install_update(&extracted_app_path).await?;
-      log::info!("Cleaning up temporary files...");
       let _ = fs::remove_dir_all(&temp_dir);
+      Ok((filename, bytes, "installed"))
     }
-
-    log::info!("Update ready, emitting app-update-ready event");
-
-    let _ = events::emit("app-update-ready", update_info.new_version.clone());
-
-    Ok(())
   }
 
   /// Extract the update using the extraction module
@@ -1138,13 +1193,14 @@ impl AppAutoUpdater {
         }
       };
       if needs_quarantine_removal {
-        let _ = Command::new("xattr")
-          .args([
+        let _ = output_logged(
+          Command::new("xattr").args([
             "-dr",
             "com.apple.quarantine",
             current_app_path.to_str().unwrap(),
-          ])
-          .output();
+          ]),
+          "clear quarantine on updated app",
+        );
       }
 
       // Clean up backup after successful installation
@@ -1154,14 +1210,15 @@ impl AppAutoUpdater {
       if let Some(parent_dir) = current_app_path.parent() {
         let old_app_path = parent_dir.join("Donut Browser.app");
         if old_app_path.exists() && old_app_path != current_app_path {
-          log::info!(
-            "Removing old 'Donut Browser.app' from: {}",
-            old_app_path.display()
-          );
-          if let Err(e) = fs::remove_dir_all(&old_app_path) {
-            log::warn!("Warning: Failed to remove old 'Donut Browser.app': {e}");
-          } else {
-            log::info!("Successfully removed old 'Donut Browser.app'");
+          match fs::remove_dir_all(&old_app_path) {
+            Ok(()) => log::info!(
+              "Removed pre-rename app bundle path=\"{}\"",
+              old_app_path.display()
+            ),
+            Err(e) => log::warn!(
+              "Pre-rename app bundle removal failed path=\"{}\" err=\"{e}\"",
+              old_app_path.display()
+            ),
           }
         }
       }
@@ -1176,13 +1233,8 @@ impl AppAutoUpdater {
         .and_then(|ext| ext.to_str())
         .unwrap_or("");
 
-      log::info!("Installing Windows update with extension: {extension}");
-
       match extension {
         "msi" => {
-          // Install MSI silently with enhanced error handling
-          log::info!("Running MSI installer: {}", installer_path.display());
-
           let mut cmd = Command::new("msiexec");
           cmd.args([
             "/i",
@@ -1198,43 +1250,30 @@ impl AppAutoUpdater {
           const CREATE_NO_WINDOW: u32 = 0x08000000;
           cmd.creation_flags(CREATE_NO_WINDOW);
 
-          let output = cmd.output()?;
+          let output = output_logged(&mut cmd, "msi update installer")?;
 
           if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             let exit_code = output.status.code().unwrap_or(-1);
 
-            // Try to read the log file for more details
             let log_path = format!("{}.log", installer_path.to_str().unwrap());
             let log_content = fs::read_to_string(&log_path).unwrap_or_default();
-
-            log::info!("MSI installation failed with exit code: {exit_code}");
-            log::info!("Error output: {error_msg}");
-            if !log_content.is_empty() {
-              log::info!(
-                "Log file content (last 500 chars): {}",
-                log_content
-                  .chars()
-                  .rev()
-                  .take(500)
-                  .collect::<String>()
-                  .chars()
-                  .rev()
-                  .collect::<String>()
-              );
-            }
+            let log_tail = log_content
+              .chars()
+              .rev()
+              .take(500)
+              .collect::<String>()
+              .chars()
+              .rev()
+              .collect::<String>();
+            log::warn!("MSI install log tail code={exit_code} tail={log_tail:?}");
 
             return Err(
               format!("MSI installation failed (exit code {exit_code}): {error_msg}").into(),
             );
           }
-
-          log::info!("MSI installation completed successfully");
         }
         "exe" => {
-          // Run exe installer silently with multiple fallback options
-          log::info!("Running EXE installer: {}", installer_path.display());
-
           // Try NSIS silent flag first (most common for Tauri)
           let mut success = false;
           let mut last_error = String::new();
@@ -1248,15 +1287,11 @@ impl AppAutoUpdater {
           ];
 
           for args in nsis_args {
-            log::info!("Trying installer with args: {:?}", args);
-            let output = Command::new(installer_path).args(&args).output();
+            let purpose = format!("exe update installer args={}", args.join(" "));
+            let output = output_logged(Command::new(installer_path).args(&args), &purpose);
 
             match output {
               Ok(output) if output.status.success() => {
-                log::info!(
-                  "EXE installation completed successfully with args: {:?}",
-                  args
-                );
                 success = true;
                 break;
               }
@@ -1267,15 +1302,9 @@ impl AppAutoUpdater {
                   output.status.code().unwrap_or(-1),
                   error_msg
                 );
-                log::info!("Installer failed with args {:?}: {}", args, last_error);
               }
               Err(e) => {
                 last_error = format!("Failed to execute installer: {e}");
-                log::info!(
-                  "Failed to execute installer with args {:?}: {}",
-                  args,
-                  last_error
-                );
               }
             }
           }
@@ -1291,8 +1320,6 @@ impl AppAutoUpdater {
         }
         "zip" => {
           // Handle ZIP files by extracting and replacing the current executable
-          log::info!("Handling ZIP update: {}", installer_path.display());
-
           let temp_extract_dir = installer_path.parent().unwrap().join("extracted");
           fs::create_dir_all(&temp_extract_dir)?;
 
@@ -1337,8 +1364,6 @@ impl AppAutoUpdater {
 
           // Clean up
           let _ = fs::remove_dir_all(&temp_extract_dir);
-
-          log::info!("ZIP update completed successfully");
         }
         _ => {
           return Err(format!("Unsupported installer format: {extension}").into());
@@ -1354,8 +1379,6 @@ impl AppAutoUpdater {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("");
-
-      log::info!("Installing Linux update: {}", installer_path.display());
 
       // Handle compound extensions like .tar.gz
       if file_name.ends_with(".tar.gz") {
@@ -1387,7 +1410,6 @@ impl AppAutoUpdater {
     &self,
     deb_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Installing DEB package: {}", deb_path.display());
     Self::install_linux_package_with_privileges(deb_path, "dpkg", "-i")
   }
 
@@ -1397,7 +1419,6 @@ impl AppAutoUpdater {
     &self,
     rpm_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Installing RPM package: {}", rpm_path.display());
     Self::install_linux_package_with_privileges(rpm_path, "rpm", "-Uvh")
   }
 
@@ -1414,12 +1435,11 @@ impl AppAutoUpdater {
     let pkg = pkg_path.to_str().unwrap_or_default();
 
     // 1. Try pkexec (graphical PolicyKit prompt)
-    if let Ok(status) = Command::new("pkexec")
-      .args([install_cmd, install_arg, pkg])
-      .status()
-    {
+    if let Ok(status) = status_logged(
+      Command::new("pkexec").args([install_cmd, install_arg, pkg]),
+      &format!("{install_cmd} update package via pkexec"),
+    ) {
       if status.success() {
-        log::info!("Installed {pkg} with pkexec");
         return Ok(());
       }
     }
@@ -1427,18 +1447,16 @@ impl AppAutoUpdater {
     // 2. Try graphical password dialog → sudo -S
     if let Some(password) = Self::get_password_graphically() {
       if Self::install_with_sudo_stdin(pkg_path, &password, install_cmd, install_arg) {
-        log::info!("Installed {pkg} with graphical sudo");
         return Ok(());
       }
     }
 
     // 3. Terminal sudo fallback
-    if let Ok(status) = Command::new("sudo")
-      .args([install_cmd, install_arg, pkg])
-      .status()
-    {
+    if let Ok(status) = status_logged(
+      Command::new("sudo").args([install_cmd, install_arg, pkg]),
+      &format!("{install_cmd} update package via sudo"),
+    ) {
       if status.success() {
-        log::info!("Installed {pkg} with sudo");
         return Ok(());
       }
     }
@@ -1506,10 +1524,19 @@ impl AppAutoUpdater {
 
     match child {
       Ok(mut child) => {
+        let pid = child.id();
+        log::info!(
+          "Process spawned pid={pid} purpose=\"{install_cmd} update package via sudo -S\""
+        );
         if let Some(mut stdin) = child.stdin.take() {
           let _ = writeln!(stdin, "{password}");
         }
-        child.wait().map(|s| s.success()).unwrap_or(false)
+        let status = child.wait();
+        log::info!(
+          "Process exited pid={pid} purpose=\"{install_cmd} update package via sudo -S\" code={}",
+          status.as_ref().map_or("wait_failed".to_string(), exit_code)
+        );
+        status.map(|s| s.success()).unwrap_or(false)
       }
       Err(_) => false,
     }
@@ -1521,8 +1548,6 @@ impl AppAutoUpdater {
     &self,
     appimage_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Installing AppImage: {}", appimage_path.display());
-
     // This function should not be called for AppImages since we disable auto-updates for them
     // But if it somehow gets called, we'll handle it safely
 
@@ -1548,14 +1573,13 @@ impl AppAutoUpdater {
     fs::copy(&current_appimage, &backup_path)?;
 
     // Make new AppImage executable
-    let _ = Command::new("chmod")
-      .args(["+x", appimage_path.to_str().unwrap()])
-      .output();
+    let _ = output_logged(
+      Command::new("chmod").args(["+x", appimage_path.to_str().unwrap()]),
+      "chmod updated AppImage",
+    );
 
     // Replace the AppImage
     fs::copy(appimage_path, &current_appimage)?;
-
-    log::info!("AppImage replacement completed successfully");
     Ok(())
   }
 
@@ -1565,8 +1589,6 @@ impl AppAutoUpdater {
     &self,
     tarball_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Installing tarball: {}", tarball_path.display());
-
     let current_exe = self.get_current_app_path()?;
     let temp_extract_dir = tarball_path.parent().unwrap().join("extracted");
     fs::create_dir_all(&temp_extract_dir)?;
@@ -1620,14 +1642,13 @@ impl AppAutoUpdater {
     fs::copy(&new_exe_path, &current_exe)?;
 
     // Make sure it's executable
-    let _ = Command::new("chmod")
-      .args(["+x", current_exe.to_str().unwrap()])
-      .output();
+    let _ = output_logged(
+      Command::new("chmod").args(["+x", current_exe.to_str().unwrap()]),
+      "chmod updated binary",
+    );
 
     // Clean up
     let _ = fs::remove_dir_all(&temp_extract_dir);
-
-    log::info!("Tarball installation completed successfully");
     Ok(())
   }
 
@@ -1673,7 +1694,7 @@ impl AppAutoUpdater {
     let profiles = match crate::profile::ProfileManager::instance().list_profiles() {
       Ok(profiles) => profiles,
       Err(e) => {
-        log::error!("Failed to inspect running profiles before app update: {e}");
+        log::error!("App update preparation failed step=list_profiles err=\"{e}\"");
         return Err(
           serde_json::json!({
             "code": "UPDATE_PREPARATION_FAILED"
@@ -1726,7 +1747,7 @@ impl AppAutoUpdater {
 
     for result in proxy_results.into_iter().chain(vpn_results) {
       if let Err(e) = result {
-        log::warn!("Failed to stop a network worker before app update: {e}");
+        log::warn!("Worker stop before app update failed err=\"{e}\"");
       }
     }
 
@@ -1744,10 +1765,7 @@ impl AppAutoUpdater {
       .into_iter()
       .filter(|pid| crate::proxy_storage::is_process_running(*pid))
       .collect();
-    log::error!(
-      "App update aborted because donut-proxy worker PIDs are still running: {:?}",
-      remaining
-    );
+    log::error!("App update aborted: workers still running pids={remaining:?}");
     Err(
       serde_json::json!({
         "code": "UPDATE_PREPARATION_FAILED"
@@ -1806,7 +1824,11 @@ rm "{}"
       use std::os::unix::process::CommandExt;
       cmd.process_group(0);
 
-      let _child = cmd.spawn()?;
+      let child = cmd.spawn()?;
+      log::info!(
+        "Process spawned pid={} purpose=\"relaunch after exit\" waits_for_pid={current_pid}",
+        child.id()
+      );
 
       // Give the script a moment to start
       tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -1872,12 +1894,6 @@ rm "{}"
         let file_w = encode_wide(&file);
         let params_w = encode_wide(&parameters);
 
-        log::info!(
-          "Running installer via ShellExecuteW: {:?} {:?}",
-          file,
-          parameters
-        );
-
         // Take the binding from the `windows` crate rather than writing the
         // declaration here. A hand-written one is what put the wrong width on
         // `SendMessageTimeoutA`'s out-parameter in `default_browser.rs`, and
@@ -1907,6 +1923,11 @@ rm "{}"
         if code <= 32 {
           return Err(format!("ShellExecuteW failed with code {code}").into());
         }
+        log::info!(
+          "Update installer launched via ShellExecuteW file={:?} params={:?}; exiting so it can replace the app",
+          file,
+          parameters
+        );
       } else {
         // No pending installer — just restart the app. Use a minimal
         // detached process to relaunch after we exit.
@@ -1928,10 +1949,14 @@ rm "{}"
 
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let _child = Command::new("cmd")
+        let child = Command::new("cmd")
           .args(["/C", script_path.to_str().unwrap()])
           .creation_flags(CREATE_NO_WINDOW)
           .spawn()?;
+        log::info!(
+          "Process spawned pid={} purpose=\"relaunch after exit\" waits_for_pid={current_pid}",
+          child.id()
+        );
       }
 
       tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -1985,7 +2010,11 @@ rm "{}"
       use std::os::unix::process::CommandExt;
       cmd.process_group(0);
 
-      let _child = cmd.spawn()?;
+      let child = cmd.spawn()?;
+      log::info!(
+        "Process spawned pid={} purpose=\"relaunch after exit\" waits_for_pid={current_pid}",
+        child.id()
+      );
 
       // Give the script a moment to start
       tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -2009,12 +2038,12 @@ pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
   if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
-    log::info!("E2E: skipping automatic app update check");
+    log::debug!("App update check skipped reason=e2e");
     return Ok(None);
   }
 
   if crate::app_dirs::is_portable() {
-    log::info!("App auto-updates disabled in portable mode");
+    log::debug!("App update check skipped reason=portable");
     return Ok(None);
   }
   // The disable_auto_updates setting controls app self-updates only
@@ -2023,7 +2052,7 @@ pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
     .map(|s| s.disable_auto_updates)
     .unwrap_or(false);
   if disabled {
-    log::info!("App auto-updates disabled by user setting");
+    log::debug!("App update check skipped reason=disabled_by_setting");
     return Ok(None);
   }
 
@@ -2070,14 +2099,13 @@ pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, Str
   if crate::e2e_automation_enabled()
     && std::env::var_os("DONUT_E2E_DISABLE_STARTUP_NETWORK").is_some()
   {
-    log::info!("E2E: skipping manual app update check");
+    log::debug!("App update check skipped reason=e2e manual=true");
     return Ok(None);
   }
 
-  log::info!("Manual app update check triggered");
   let updater = AppAutoUpdater::instance();
   updater
-    .check_for_updates()
+    .check(true)
     .await
     .map_err(|e| format!("Failed to check for app updates: {e}"))
 }
@@ -2085,6 +2113,51 @@ pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, Str
 // Global singleton instance
 static APP_AUTO_UPDATER: std::sync::LazyLock<AppAutoUpdater> =
   std::sync::LazyLock::new(AppAutoUpdater::new);
+static APP_UPDATE_CHECK_STREAK: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "App update check");
+/// `<latest> <result>` of the previous check, so an unchanged outcome logs at debug.
+static APP_UPDATE_LAST_OUTCOME: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn exit_code(status: &std::process::ExitStatus) -> String {
+  status
+    .code()
+    .map_or_else(|| "signal".to_string(), |code| code.to_string())
+}
+
+/// `Command::output`, with the spawn and the exit logged by pid.
+fn output_logged(cmd: &mut Command, purpose: &str) -> std::io::Result<std::process::Output> {
+  let started = std::time::Instant::now();
+  let child = cmd
+    .stdin(std::process::Stdio::null())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+  let pid = child.id();
+  log::info!("Process spawned pid={pid} purpose=\"{purpose}\"");
+  let output = child.wait_with_output()?;
+  log::info!(
+    "Process exited pid={pid} purpose=\"{purpose}\" code={} elapsed_ms={}",
+    exit_code(&output.status),
+    started.elapsed().as_millis()
+  );
+  Ok(output)
+}
+
+/// `Command::status`, with the spawn and the exit logged by pid.
+#[cfg(target_os = "linux")]
+fn status_logged(cmd: &mut Command, purpose: &str) -> std::io::Result<std::process::ExitStatus> {
+  let started = std::time::Instant::now();
+  let mut child = cmd.spawn()?;
+  let pid = child.id();
+  log::info!("Process spawned pid={pid} purpose=\"{purpose}\"");
+  let status = child.wait()?;
+  log::info!(
+    "Process exited pid={pid} purpose=\"{purpose}\" code={} elapsed_ms={}",
+    exit_code(&status),
+    started.elapsed().as_millis()
+  );
+  Ok(status)
+}
 /// The Windows installer that runs on the next user-initiated restart.
 #[cfg(target_os = "windows")]
 static PENDING_INSTALLER_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);

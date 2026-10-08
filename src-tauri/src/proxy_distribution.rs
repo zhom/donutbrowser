@@ -158,7 +158,7 @@ pub async fn apply_pairs(
         .into_iter()
         .find(|profile| profile.id.to_string() == pair.profile_id),
       Err(e) => {
-        log::warn!("Could not list profiles while distributing proxies: {e}");
+        log::warn!("Proxy distribution could not list profiles err=\"{e}\"");
         None
       }
     };

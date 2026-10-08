@@ -346,16 +346,11 @@ impl BlocklistManager {
     // refused it: the outage this replaced was one CDN answering 403 for a
     // reason that had nothing to do with the user, and falling back would have
     // made it invisible.
+    let started = std::time::Instant::now();
     let mut body: Option<String> = None;
     let mut failures: Vec<String> = Vec::new();
 
     for url in &urls {
-      log::info!(
-        "[dns-blocklist] Fetching {} from {}",
-        level.display_name(),
-        url
-      );
-
       let response = match HTTP_CLIENT.get(url).send().await {
         Ok(response) => response,
         Err(e) => {
@@ -371,18 +366,6 @@ impl BlocklistManager {
 
       match response.text().await {
         Ok(text) => {
-          if failures.is_empty() {
-            log::info!("[dns-blocklist] {} fetched", level.display_name());
-          } else {
-            // Worth saying out loud: the primary source is down and somebody
-            // should know before the backup goes too.
-            log::warn!(
-              "[dns-blocklist] {} came from a fallback source after {} failure(s): {}",
-              level.display_name(),
-              failures.len(),
-              failures.join("; ")
-            );
-          }
           body = Some(text);
           break;
         }
@@ -407,10 +390,25 @@ impl BlocklistManager {
       .lines()
       .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
       .count();
-    log::info!(
-      "[dns-blocklist] Cached {} ({} domains)",
-      level.display_name(),
-      entry_count
+    // A fallback is worth a warning: the primary source is down and somebody
+    // should know before the backup goes too.
+    let log_level = if failures.is_empty() {
+      log::Level::Info
+    } else {
+      log::Level::Warn
+    };
+    log::log!(
+      log_level,
+      "Blocklist fetched level={} domains={entry_count} source={}/{} elapsed_ms={}{}",
+      level.as_str(),
+      failures.len() + 1,
+      urls.len(),
+      started.elapsed().as_millis(),
+      if failures.is_empty() {
+        String::new()
+      } else {
+        format!(" failed_sources=\"{}\"", failures.join("; "))
+      }
     );
 
     Ok(path)
@@ -461,22 +459,25 @@ impl BlocklistManager {
     } else {
       // Fetch every source concurrently. Sequential awaits make this the sum of
       // all source latencies, and it runs on the blocking profile-launch path.
+      // Custom sources are the person's own URLs: the log names them by
+      // position and host only.
       let fetches = config.sources.iter().map(|source| async move {
         match HTTP_CLIENT.get(source).send().await {
           Ok(resp) if resp.status().is_success() => resp
             .text()
             .await
-            .map_err(|e| format!("custom source {source} body read failed: {e}")),
-          Ok(resp) => Err(format!(
-            "custom source {source} returned HTTP {}",
-            resp.status()
-          )),
-          Err(e) => Err(format!("custom source {source} failed: {e}")),
+            .map_err(|e| format!("body read failed: {}", e.without_url())),
+          Ok(resp) => Err(format!("status={}", resp.status().as_u16())),
+          Err(e) => Err(e.without_url().to_string()),
         }
       });
 
       let mut source_failures = 0usize;
-      for result in futures_util::future::join_all(fetches).await {
+      for (index, result) in futures_util::future::join_all(fetches)
+        .await
+        .into_iter()
+        .enumerate()
+      {
         match result {
           Ok(body) => {
             for line in body.lines() {
@@ -486,7 +487,13 @@ impl BlocklistManager {
             }
           }
           Err(e) => {
-            log::warn!("[dns-blocklist] {e}");
+            let host = config
+              .sources
+              .get(index)
+              .and_then(|source| url::Url::parse(source).ok())
+              .and_then(|url| url.host_str().map(str::to_string))
+              .unwrap_or_else(|| "-".to_string());
+            log::warn!("Custom blocklist source failed source={index} host={host} err=\"{e}\"");
             source_failures += 1;
           }
         }
@@ -509,12 +516,12 @@ impl BlocklistManager {
               }
             }
             log::warn!(
-              "[dns-blocklist] {source_failures} custom source(s) failed; retained {} domain(s) from the cached list",
+              "Custom blocklist kept cached domains for failed sources failed={source_failures} retained={}",
               domains.len().saturating_sub(before)
             );
           }
           Err(_) => log::warn!(
-            "[dns-blocklist] {source_failures} custom source(s) failed and no cached list exists; custom filtering is incomplete"
+            "Custom blocklist incomplete: sources failed and no cached list exists failed={source_failures}"
           ),
         }
       }
@@ -546,20 +553,21 @@ impl BlocklistManager {
       .map_err(|e| format!("Failed to rename custom blocklist: {e}"))?;
 
     log::info!(
-      "[dns-blocklist] Compiled custom blocklist ({} domains)",
-      domains.len()
+      "Custom blocklist compiled domains={} sources={} allowlist_mode={}",
+      domains.len(),
+      config.sources.len(),
+      config.allowlist_mode
     );
     Ok(path)
   }
 
   pub async fn refresh_all_stale(&self) {
+    let mut any_failed = false;
     for &level in BlocklistLevel::all_downloadable() {
       if !Self::is_cache_fresh(level) {
         if let Err(e) = Self::fetch_blocklist(level).await {
-          log::error!(
-            "[dns-blocklist] Failed to refresh {}: {e}",
-            level.display_name()
-          );
+          any_failed = true;
+          REFRESH_STREAK.failed(format!("level={} {e}", level.as_str()));
           let _ = crate::events::emit(
             "dns-blocklist-refresh-failed",
             serde_json::json!({
@@ -570,11 +578,14 @@ impl BlocklistManager {
         }
       }
     }
+    if !any_failed {
+      REFRESH_STREAK.succeeded();
+    }
     // Recompile the custom list too so its sources track upstream changes.
     let config = CustomDnsConfig::load();
     if !config.sources.is_empty() || !config.block_domains.is_empty() {
       if let Err(e) = Self::compile_custom_blocklist().await {
-        log::error!("[dns-blocklist] Failed to recompile custom list: {e}");
+        log::warn!("Custom blocklist recompile failed err=\"{e}\"");
       }
     }
   }
@@ -629,6 +640,8 @@ impl BlocklistManager {
 }
 
 static BLOCKLIST_MANAGER: BlocklistManager = BlocklistManager;
+static REFRESH_STREAK: crate::log_streak::Streak =
+  crate::log_streak::Streak::new(module_path!(), "Blocklist refresh");
 
 // Tauri commands
 

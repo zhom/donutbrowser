@@ -262,7 +262,7 @@ impl TargetKey {
       // truncated write). Replacing it is safe only because import always
       // re-encrypts into whatever key we end up with.
       log::warn!(
-        "Replacing unusable {KEY_FILE_NAME} ({} bytes) at {}",
+        "Replacing unusable {KEY_FILE_NAME} bytes={} path=\"{}\"",
         existing.len(),
         key_file.display()
       );

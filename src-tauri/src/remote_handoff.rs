@@ -138,8 +138,8 @@ fn load_from_disk() -> Store {
       // Losing the file means losing the gate, so say so loudly rather than
       // starting empty and quietly permitting a launch over pending work.
       log::error!(
-        "Could not read {}: {e}. Profiles with unsynced remote work will not be gated until \
-         the next session event.",
+        "Remote handoff store unreadable; unsynced remote work is not gated until the next \
+         session event path=\"{}\" err=\"{e}\"",
         path.display()
       );
       Store::new()
@@ -151,17 +151,23 @@ fn persist(store: &Store) {
   let path = store_path();
   if let Some(parent) = path.parent() {
     if let Err(e) = std::fs::create_dir_all(parent) {
-      log::warn!("Could not create {}: {e}", parent.display());
+      log::warn!(
+        "Remote handoff store dir create failed path=\"{}\" err=\"{e}\"",
+        parent.display()
+      );
       return;
     }
   }
   match serde_json::to_vec_pretty(store) {
     Ok(bytes) => {
       if let Err(e) = crate::app_dirs::write_owner_only(&path, &bytes) {
-        log::warn!("Could not write {}: {e}", path.display());
+        log::warn!(
+          "Remote handoff store write failed path=\"{}\" err=\"{e}\"",
+          path.display()
+        );
       }
     }
-    Err(e) => log::warn!("Could not encode the remote handoff store: {e}"),
+    Err(e) => log::warn!("Remote handoff store encode failed err=\"{e}\""),
   }
 }
 
@@ -355,8 +361,7 @@ pub fn reconcile(live_session_ids: &std::collections::HashSet<String>) -> Vec<St
       .collect();
     for (profile_id, session_id) in stale {
       log::info!(
-        "Remote session {} for profile {profile_id} ended while this machine was not \
-         watching; its work is still in cloud storage",
+        "Remote session ended unobserved; work awaits pull profile={profile_id} session={}",
         ShortId(&session_id)
       );
       store.insert(
@@ -446,17 +451,25 @@ where
   E: Fn() -> bool,
 {
   let mut attempt = 0u32;
+  let mut tries = 0u32;
+  let mut failures = 0u32;
   while let Some(session_id) = worker.pending_session() {
     let profile_id = &worker.profile_id;
+    tries = tries.saturating_add(1);
     match pull().await {
       Ok(outcome) if outcome.is_completed() => {
-        log::info!("Pulled remote session work for profile {profile_id}");
+        log::info!(
+          "Remote session work pulled profile={profile_id} session={} tries={tries} failures={failures}",
+          ShortId(&session_id)
+        );
         clear_pending(profile_id, &session_id);
         attempt = 0;
+        tries = 0;
+        failures = 0;
         continue;
       }
       Ok(crate::sync::ProfileSyncOutcome::Skipped(reason)) => {
-        log::debug!("Post-session pull for profile {profile_id} is waiting: {reason}");
+        log::debug!("Post-session pull waiting profile={profile_id} reason=\"{reason}\"");
       }
       Ok(_) => unreachable!("is_completed covers every completed outcome"),
       Err(e) => {
@@ -464,7 +477,17 @@ where
           clear_pending(profile_id, &session_id);
           continue;
         }
-        log::warn!("Post-session pull for profile {profile_id} failed: {e}");
+        failures = failures.saturating_add(1);
+        // Retried with backoff; only the first failure of a run is a warning.
+        let level = if failures == 1 {
+          log::Level::Warn
+        } else {
+          log::Level::Debug
+        };
+        log::log!(
+          level,
+          "Post-session pull failed; retrying profile={profile_id} failures={failures} err=\"{e}\""
+        );
       }
     }
     if worker.pending_session().is_none() {

@@ -87,12 +87,14 @@ pub fn recover_source_keys(
       match macos_keychain_password(brand) {
         Ok(Some(password)) => {
           keyring.v10 = Some(CryptoKey::Aes128Cbc(derive_key(&password, MAC_ITERATIONS)));
-          log::info!("Recovered os_crypt password for '{brand} Safe Storage'");
+          log::info!("Import key recovered source=keychain item=\"{brand} Safe Storage\"");
           break;
         }
         Ok(None) => continue,
         Err(e) => {
-          log::warn!("Keychain lookup for '{brand} Safe Storage' failed: {e}");
+          log::warn!(
+            "Import key lookup failed source=keychain item=\"{brand} Safe Storage\" err=\"{e}\""
+          );
           break;
         }
       }
@@ -106,7 +108,7 @@ pub fn recover_source_keys(
       match windows_local_state_key(dir) {
         Ok(Some(key)) => keyring.v10 = Some(CryptoKey::Aes256Gcm(key)),
         Ok(None) => {}
-        Err(e) => log::warn!("DPAPI key recovery failed: {e}"),
+        Err(e) => log::warn!("Import key lookup failed source=dpapi err=\"{e}\""),
       }
       if windows_has_app_bound_key(dir) {
         // Recorded up front: the cookie store will be full of `v20` records
@@ -132,12 +134,14 @@ pub fn recover_source_keys(
             &password,
             POSIX_ITERATIONS,
           )));
-          log::info!("Recovered os_crypt secret for '{brand} Safe Storage'");
+          log::info!("Import key recovered source=secret_service item=\"{brand} Safe Storage\"");
           break;
         }
         Ok(None) => continue,
         Err(e) => {
-          log::warn!("Secret service lookup for '{brand} Safe Storage' failed: {e}");
+          log::warn!(
+            "Import key lookup failed source=secret_service item=\"{brand} Safe Storage\" err=\"{e}\""
+          );
           break;
         }
       }

@@ -51,7 +51,7 @@ fn scan_donut_extensions(profile: &BrowserProfile, out: &mut Vec<DetectedVpnExte
     return;
   };
   let Ok(manager) = crate::extension_manager::EXTENSION_MANAGER.lock() else {
-    log::warn!("VPN extension scan: extension manager lock poisoned, skipping managed extensions");
+    log::warn!("VPN extension scan skipped managed extensions: extension manager lock poisoned");
     return;
   };
   let Ok(group) = manager.get_group(group_id) else {

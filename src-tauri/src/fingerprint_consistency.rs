@@ -429,7 +429,10 @@ pub async fn probe_and_check_consistency(
     // exit IP). Skip rather than warn on an unknown location — the same
     // database gates fingerprint geo, so there's nothing to disagree with.
     Err(e) => {
-      log::debug!("Consistency check: could not geolocate exit IP: {e}");
+      log::debug!(
+        "Consistency check skipped, exit not geolocated err=\"{}\"",
+        crate::log_redaction::text(&e.to_string())
+      );
       Ok(ConsistencyResult::skip())
     }
   }
@@ -456,7 +459,10 @@ pub async fn probe_direct_and_check(profile: &BrowserProfile) -> Result<Consiste
       Some(exit_ip),
     )),
     Err(e) => {
-      log::debug!("Consistency check: could not geolocate direct exit IP: {e}");
+      log::debug!(
+        "Consistency check skipped, direct exit not geolocated err=\"{}\"",
+        crate::log_redaction::text(&e.to_string())
+      );
       Ok(ConsistencyResult::skip())
     }
   }

@@ -80,7 +80,10 @@ fn open_rw(path: &Path) -> Option<Connection> {
   match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE) {
     Ok(conn) => Some(conn),
     Err(e) => {
-      log::warn!("Could not open {} for re-encryption: {e}", path.display());
+      log::warn!(
+        "Import store open failed path=\"{}\" err=\"{e}\"",
+        path.display()
+      );
       None
     }
   }

@@ -597,13 +597,13 @@ pub fn sync_profile(profile: &BrowserProfile) -> Result<bool, String> {
 /// browser process exists and while the profile is provably not running.
 pub fn sync_for_launch(profile: &BrowserProfile) {
   match sync_profile(profile) {
-    Ok(true) => log::info!("Wrote group bookmarks into profile {}", profile.name),
+    Ok(true) => log::info!("Group bookmarks written profile={}", profile.id),
     Ok(false) => {}
     // Never blocks a launch. The browser opening without today's shared
     // bookmarks is a smaller failure than the browser not opening.
     Err(e) => log::warn!(
-      "Could not write group bookmarks for profile {}: {e}",
-      profile.name
+      "Group bookmarks write failed profile={} err=\"{e}\"",
+      profile.id
     ),
   }
 }

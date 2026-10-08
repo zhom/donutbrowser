@@ -112,8 +112,8 @@ async fn release_attempt(profile_id: &str) -> Option<Duration> {
       ReleaseStep::Retry => Some(Duration::ZERO),
       ReleaseStep::GiveUp => {
         log::warn!(
-          "Profile lock release for {profile_id} was refused ({})",
-          response.status()
+          "Profile lock release refused profile={profile_id} status={}",
+          response.status().as_u16()
         );
         None
       }
@@ -121,7 +121,7 @@ async fn release_attempt(profile_id: &str) -> Option<Duration> {
     Err(AuthorizedError::SignedOut) => None,
     Err(AuthorizedError::RateLimited(wait)) => Some(wait),
     Err(AuthorizedError::Transport(e)) => {
-      log::debug!("Profile lock release for {profile_id} failed: {e}");
+      log::debug!("Profile lock release attempt failed profile={profile_id} err=\"{e}\"");
       Some(Duration::ZERO)
     }
   }
@@ -131,7 +131,7 @@ async fn release_with_retry(profile_id: String, mut pending: Option<Duration>) {
   let mut attempt = 0;
   while let Some(wait) = pending {
     let Some(delay) = release_retry_delay(attempt) else {
-      log::warn!("Could not release the profile lock for {profile_id}");
+      log::warn!("Profile lock release gave up after retries profile={profile_id}");
       return;
     };
     attempt += 1;
@@ -169,22 +169,21 @@ impl ProfileLockManager {
   }
 
   pub async fn connect(&self) {
-    log::info!("Connecting profile lock manager");
-
     {
       let mut c = self.connected.lock().await;
       *c = true;
     }
 
-    if let Err(e) = self.fetch_locks().await {
-      log::warn!("Failed to fetch initial profile locks: {e}");
+    match self.fetch_locks().await {
+      Ok(_) => log::info!("Profile lock manager connected"),
+      Err(e) => log::warn!("Profile lock manager connected, initial lock fetch failed err=\"{e}\""),
     }
 
     self.start_heartbeat_loop().await;
   }
 
   pub async fn disconnect(&self) {
-    log::info!("Disconnecting profile lock manager");
+    log::info!("Profile lock manager disconnected");
 
     {
       let mut handle = self.heartbeat_handle.lock().await;
@@ -251,19 +250,22 @@ impl ProfileLockManager {
       .await
       .map_err(|e| {
         self.note_failure(&e);
-        log::warn!("Failed to acquire profile lock for {profile_id}: {e}");
+        log::warn!("Profile lock not acquired profile={profile_id} err=\"{e}\"");
         crate::backend_error("PROFILE_LOCK_UNAVAILABLE")
       })?;
 
     if !response.status().is_success() {
       let status = response.status();
       let body = response.text().await.unwrap_or_default();
-      log::warn!("Profile lock acquisition for {profile_id} failed ({status}): {body}");
+      log::warn!(
+        "Profile lock not acquired profile={profile_id} status={} err=\"{body}\"",
+        status.as_u16()
+      );
       return Err(crate::backend_error("PROFILE_LOCK_UNAVAILABLE"));
     }
 
     let result: AcquireLockResponse = response.json().await.map_err(|e| {
-      log::warn!("Could not parse the profile lock response for {profile_id}: {e}");
+      log::warn!("Profile lock response unparsable profile={profile_id} err=\"{e}\"");
       crate::backend_error("PROFILE_LOCK_UNAVAILABLE")
     })?;
 
@@ -331,7 +333,10 @@ impl ProfileLockManager {
       .await
       .is_err()
     {
-      log::warn!("Timed out releasing profile locks");
+      log::warn!(
+        "Profile lock release timed out limit_ms={}",
+        limit.as_millis()
+      );
     }
   }
 
@@ -406,9 +411,9 @@ impl ProfileLockManager {
       return;
     }
     if crate::browser_runner::browser_is_running_for(profile_id) {
-      log::warn!("Profile lock for {profile_id} was not renewed; taking it again");
+      log::warn!("Profile lock lost while running, taking it again profile={profile_id}");
       if let Err(e) = self.acquire_lock(profile_id).await {
-        log::warn!("Could not take the profile lock for {profile_id} again: {e}");
+        log::warn!("Profile lock not taken again profile={profile_id} err=\"{e}\"");
         self.forget(profile_id).await;
         emit_lock_change(Some(profile_id), "released");
       }
@@ -445,7 +450,7 @@ impl ProfileLockManager {
             Ok(Renewal::Refreshed) => {}
             Ok(Renewal::Lost) => PROFILE_LOCK.recover_lost_lock(&profile_id).await,
             Ok(Renewal::Failed) => {
-              log::debug!("Profile lock heartbeat for {profile_id} was not accepted");
+              log::debug!("Profile lock heartbeat not accepted profile={profile_id}");
             }
             Err(AuthorizedError::SignedOut) => {
               signed_out = true;
@@ -453,7 +458,7 @@ impl ProfileLockManager {
             }
             Err(e) => {
               PROFILE_LOCK.note_failure(&e);
-              log::debug!("Profile lock heartbeat for {profile_id} failed: {e}");
+              log::debug!("Profile lock heartbeat failed profile={profile_id} err=\"{e}\"");
               if PROFILE_LOCK.is_paused() {
                 break;
               }
@@ -467,7 +472,7 @@ impl ProfileLockManager {
 
         // Refresh lock state from server
         if let Err(e) = PROFILE_LOCK.fetch_locks().await {
-          log::debug!("Failed to refresh profile locks: {e}");
+          log::debug!("Profile lock refresh failed err=\"{e}\"");
         }
       }
     });
@@ -495,7 +500,7 @@ fn lock_conflict_error(
   if holder.is_some_and(|id| id.contains(VM_HOLDER_SEPARATOR)) {
     // The user's own remote session. Saying "in use by you@example.com" here,
     // which is what the raw backend message did, reads as a bug.
-    log::info!("Profile {profile_id} is held by a remote session");
+    log::info!("Profile lock held by a remote session profile={profile_id}");
     return crate::backend_error("PROFILE_RUNNING_REMOTELY");
   }
   match holder_email {
