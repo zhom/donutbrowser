@@ -57,6 +57,7 @@ donutbrowser/
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── agent_console.rs         # The person's side of connected MCP agents: activity, questions, notes, take-over, pause
 │   │   ├── recipes.rs               # Thin client for cloud recipes; storage and replay stay in the cloud
+│   │   ├── feedback.rs              # Feedback to the Donut team from the dialog and the send_feedback MCP tool, optional redacted logs
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
 │   │   ├── xray/                    # Xray share links (VLESS, VMess, Trojan, Hysteria2): parse, export, client config
@@ -316,8 +317,8 @@ and are mapped in `scene-for.tsx`; the dialog is
   snapshot: profile fields, groups, extension groups, team, Cookie Bot
   enrolments and the sync server come from data `page.tsx` has loaded; API,
   remote control, fingerprint gate, proxy check history, default
-  browser, trash and agent runs are read by `use-tips.ts` through existing
-  commands, and only for the tips still in the running. An unknown fact
+  browser, trash, agent runs and sent feedback are read by `use-tips.ts`
+  through existing commands, and only for the tips still in the running. An unknown fact
   never hides a tip. The command palette and import tips have no signal.
 - Plan tips carry `requires`; they are listed only when the signed-in plan
   grants the capability. The paid welcome opens once per account when the

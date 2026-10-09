@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
+import http from "node:http";
 import path from "node:path";
 import test from "node:test";
 import Color from "color";
@@ -4233,4 +4234,257 @@ test("the create dialog warns a free user who creates quickly and holds a capped
     },
     { seedDownloadedBrowser: true },
   );
+});
+
+/** Stands in for the cloud feedback route and keeps every request it gets. */
+async function feedbackCaptureServer() {
+  const received = [];
+  let status = 201;
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      received.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body: body ? JSON.parse(body) : null,
+      });
+      response.writeHead(status, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify(
+          status < 300
+            ? {
+                id: `fb-${received.length}`,
+                createdAt: new Date().toISOString(),
+              }
+            : { statusCode: status, message: "Too Many Requests" },
+        ),
+      );
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    received,
+    url: `http://127.0.0.1:${server.address().port}/api/feedback`,
+    respondWith(next) {
+      status = next;
+    },
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+const FEEDBACK_DIALOG = '[data-dialog="feedback"]';
+const MOD = process.platform === "darwin" ? { meta: true } : { ctrl: true };
+
+function feedbackLogsSwitch(app) {
+  return app.execute(
+    `return document.querySelector('[data-slot="feedback-include-logs"]')?.dataset.state ?? null;`,
+  );
+}
+
+function feedbackMessage(app) {
+  return app.execute(
+    `return document.querySelector('[data-slot="feedback-message"]')?.value ?? null;`,
+  );
+}
+
+test("feedback goes from the More menu to the team, with the logs the person previewed", async () => {
+  const capture = await feedbackCaptureServer();
+  try {
+    await withApp(
+      "ui-feedback",
+      async (app) => {
+        // Refused before anything leaves the machine.
+        assert.match(
+          await app.invokeError("send_feedback", {
+            kind: "bug",
+            message: "   ",
+            includeLogs: false,
+            email: null,
+            locale: "en",
+          }),
+          /FEEDBACK_MESSAGE_EMPTY/,
+        );
+        assert.match(
+          await app.invokeError("send_feedback", {
+            kind: "idea",
+            message: "More themes",
+            includeLogs: false,
+            email: "not-an-address",
+            locale: "en",
+          }),
+          /FEEDBACK_EMAIL_INVALID/,
+        );
+        assert.equal(capture.received.length, 0);
+        await app.waitFor(
+          async () =>
+            (await app.invoke("preview_feedback_logs")).includes(
+              "Donut started",
+            ),
+          { description: "this session's log in the excerpt" },
+        );
+
+        await app.clickSelector(`[aria-label="${en.rail.more.label}"]`);
+        await app.clickSelector('[data-slot="rail-open-feedback"]');
+        await app.waitFor(
+          () =>
+            app.execute(
+              `return Boolean(document.querySelector(arguments[0]));`,
+              [FEEDBACK_DIALOG],
+            ),
+          { description: "the feedback dialog" },
+        );
+        assert.equal(
+          await app.execute(`return document.activeElement?.dataset?.slot;`),
+          "feedback-message",
+          "the message box has focus at once",
+        );
+        assert.equal(
+          await app.execute(
+            `return document.querySelector('[data-slot="feedback-send"]').disabled;`,
+          ),
+          true,
+          "nothing to send yet",
+        );
+
+        await app.capture("feedback-open");
+
+        // A bug brings the logs; an idea does not, until the person decides.
+        assert.equal(await feedbackLogsSwitch(app), "checked");
+        await app.clickSelector(
+          '[data-slot="feedback-kind"][data-kind="idea"]',
+        );
+        assert.equal(await feedbackLogsSwitch(app), "unchecked");
+        assert.equal(
+          await app.execute(
+            `return document.querySelector('[data-slot="feedback-message"]').placeholder;`,
+          ),
+          en.feedback.kinds.idea.placeholder,
+        );
+        await app.clickSelector('[data-slot="feedback-kind"][data-kind="bug"]');
+        assert.equal(await feedbackLogsSwitch(app), "checked");
+
+        await app.clickSelector('[data-slot="feedback-preview-logs"]');
+        await app.waitFor(
+          () =>
+            app.execute(
+              `return document.querySelector('[data-slot="feedback-logs-preview"]')?.value.includes("Donut started") ?? false;`,
+            ),
+          { description: "the log preview" },
+        );
+
+        await app.fillSelector(
+          '[data-slot="feedback-message"]',
+          "The proxy check never finishes",
+        );
+        await app.fillSelector(
+          '[data-slot="feedback-email"]',
+          "me@example.com",
+        );
+        await app.capture("feedback-compose");
+        await app.clickSelector('[data-slot="feedback-send"]');
+        await app.waitFor(
+          () =>
+            app.execute(
+              `return Boolean(document.querySelector('[data-slot="feedback-sent"]'));`,
+            ),
+          { description: "the thank-you view" },
+        );
+        assert.ok(await app.visibleTextIncludes(en.feedback.success.title));
+        assert.ok(
+          await app.visibleTextIncludes(
+            en.feedback.success.reply.replace("{{email}}", "me@example.com"),
+          ),
+        );
+        await app.capture("feedback-sent");
+
+        assert.equal(capture.received.length, 1);
+        const [sent] = capture.received;
+        assert.equal(sent.method, "POST");
+        assert.equal(sent.url, "/api/feedback");
+        assert.equal(
+          sent.headers.authorization,
+          undefined,
+          "signed out, so no account",
+        );
+        assert.equal(sent.body.kind, "bug");
+        assert.equal(sent.body.source, "person");
+        assert.equal(sent.body.message, "The proxy check never finishes");
+        assert.equal(sent.body.email, "me@example.com");
+        assert.equal(sent.body.locale, "en");
+        assert.equal(typeof sent.body.appVersion, "string");
+        assert.ok(sent.body.logs.includes("Donut started"));
+
+        await app.clickSelector('[data-slot="feedback-sent"] button');
+        await app.waitFor(
+          async () =>
+            (await app.execute(
+              `return Boolean(document.querySelector(arguments[0]));`,
+              [FEEDBACK_DIALOG],
+            )) === false,
+          { description: "the dialog closed" },
+        );
+        await app.waitFor(
+          async () =>
+            (await app.invoke("get_app_settings")).feedback_sent_at > 0,
+          { description: "the sent feedback remembered for the tips" },
+        );
+
+        // The chord opens a fresh dialog: a sent draft does not come back.
+        await app.pressShortcut({ ...MOD, shift: true, key: "f" });
+        await app.waitFor(async () => (await feedbackMessage(app)) === "", {
+          description: "an empty dialog from the keyboard",
+        });
+
+        // A refusal keeps the draft and says why.
+        capture.respondWith(429);
+        await app.clickSelector(
+          '[data-slot="feedback-kind"][data-kind="idea"]',
+        );
+        await app.fillSelector(
+          '[data-slot="feedback-message"]',
+          "Dark tray icon",
+        );
+        await app.pressShortcut({ ...MOD, key: "\uE007" });
+        await app.waitForText(en.backendErrors.feedbackRateLimited);
+        assert.equal(await feedbackMessage(app), "Dark tray icon");
+        assert.equal(capture.received.length, 2);
+        assert.equal(capture.received[1].body.kind, "idea");
+        assert.equal(
+          capture.received[1].body.logs,
+          undefined,
+          "an idea was sent without logs",
+        );
+
+        // Closing keeps the unsent draft. The feedback tip leads back to it.
+        await app.pressShortcut({ key: "Escape" });
+        await app.waitFor(
+          async () =>
+            (await app.execute(
+              `return Boolean(document.querySelector(arguments[0]));`,
+              [FEEDBACK_DIALOG],
+            )) === false,
+          { description: "the dialog closed with a draft" },
+        );
+        await openTipsFromRail(app);
+        await app.clickSelector(
+          '[data-slot="tips-list-item"][data-tip-id="feedback"]',
+        );
+        assert.ok(await app.visibleTextIncludes(en.tips.items.feedback.title));
+        await app.capture("feedback-tip");
+        await app.clickSelector('[data-slot="tip-action"]');
+        await app.waitFor(
+          async () => (await feedbackMessage(app)) === "Dark tray icon",
+          { description: "the draft back in the dialog from the tip" },
+        );
+      },
+      { extraEnv: { DONUT_E2E_FEEDBACK_URL: capture.url } },
+    );
+  } finally {
+    await capture.close();
+  }
 });

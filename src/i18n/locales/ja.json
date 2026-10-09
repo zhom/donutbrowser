@@ -2419,7 +2419,14 @@
     "wayfernLaunchArgsLimit": "起動引数は {{count}} 個まで、1 つあたり {{length}} 文字までにしてください。",
     "tablePreferencesInvalid": "テーブル設定が無効です。",
     "tablePreferencesLoadFailed": "テーブル設定を読み込めませんでした。再試行してください。",
-    "tablePreferencesSaveFailed": "テーブル設定を保存できませんでした。再試行してください。"
+    "tablePreferencesSaveFailed": "テーブル設定を保存できませんでした。再試行してください。",
+    "feedbackMessageEmpty": "先にメッセージを入力してください。",
+    "feedbackMessageTooLong": "メッセージが長すぎます。上限は {{max}} 文字です。",
+    "feedbackEmailInvalid": "このメールアドレスは正しくないようです。",
+    "feedbackInvalid": "フィードバックを受け付けられませんでした。メッセージを確認して、もう一度お試しください。",
+    "feedbackRateLimited": "短時間に多くのフィードバックが送信されました。数分後にもう一度お試しください。",
+    "feedbackSendFailed": "フィードバックを送信できませんでした。しばらくしてからもう一度お試しください。",
+    "feedbackLogsUnreadable": "ログを読み込めませんでした。「最近のログを添付」をオフにして、もう一度送信してください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2438,7 +2445,9 @@
       "trash": "ゴミ箱",
       "trashHint": "削除したプロファイルを復元",
       "tips": "ヒント",
-      "tipsHint": "機能の使い方"
+      "tipsHint": "機能の使い方",
+      "feedback": "フィードバックを送信",
+      "feedbackHint": "不具合の報告やアイデアの共有"
     },
     "network": "ネットワーク",
     "integrations": "連携",
@@ -2557,7 +2566,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "ゴミ箱へ移動",
     "goAgent": "エージェントへ移動",
-    "openTips": "ヒントを開く"
+    "openTips": "ヒントを開く",
+    "sendFeedback": "フィードバックを送信"
   },
   "closeConfirm": {
     "title": "Donut Browser を閉じますか？",
@@ -3290,7 +3300,9 @@
       "noteSeenAt": "{{time}} に既読",
       "noteSeen": "既読",
       "joined": "{{agent}} が参加しました",
-      "left": "{{agent}} が退出しました"
+      "left": "{{agent}} が退出しました",
+      "feedbackSent": "が Donut チームにフィードバックを送信しました",
+      "feedbackLogs": "ログ添付あり"
     },
     "composer": {
       "label": "エージェントへのメモ",
@@ -3570,6 +3582,12 @@
         "title": "donutbrowser.com からこのデスクトップを操作",
         "body": "リモートコントロールを有効にすると、ウェブサイト上のエージェントが送信方向のブリッジ経由でこのマシンのプロファイルにアクセスできます。「連携」で有効にしてください。",
         "action": "連携を開く"
+      },
+      "feedback": {
+        "label": "フィードバック",
+        "title": "次に直すべきことをチームに伝える",
+        "body": "不具合や足りない機能はありませんか？「その他」メニューからフィードバックを送れます。スイッチ 1 つでログを添付でき、何が起きたかをチームが正確に把握できます。",
+        "action": "フィードバックを送信"
       }
     }
   },
@@ -3613,5 +3631,52 @@
     "noTags": "タグなし",
     "noProxy": "プロキシなし",
     "encrypted": "暗号化"
+  },
+  "feedback": {
+    "title": "フィードバックを送信",
+    "description": "Donut チームにご意見をお聞かせください。すべてのメッセージに目を通しています。",
+    "kindLabel": "フィードバックの種類",
+    "kinds": {
+      "bug": {
+        "label": "不具合",
+        "placeholder": "何が起きて、本来はどうなるべきでしたか？再現手順があると助かります。"
+      },
+      "idea": {
+        "label": "アイデア",
+        "placeholder": "Donut がどうなれば、もっと使いやすくなりますか？"
+      },
+      "praise": {
+        "label": "称賛",
+        "placeholder": "気に入っている点を教えてください。チームの励みになります。"
+      },
+      "other": {
+        "label": "その他",
+        "placeholder": "どんなことでもお聞かせください。"
+      }
+    },
+    "messageLabel": "メッセージ",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "最近のログを添付",
+      "description": "ログは不具合の調査に役立ちます。メールアドレス、IP アドレス、Web アドレス、シークレットは事前に削除されます。",
+      "preview": "ログを確認",
+      "loading": "ログを読み込んでいます…",
+      "empty": "まだログはありません。"
+    },
+    "email": {
+      "label": "返信用メールアドレス",
+      "optional": "任意",
+      "placeholder": "you@example.com",
+      "signedIn": "返信は {{email}} に届きます。"
+    },
+    "included": "あわせて送信: Donut {{version}}、{{os}} {{arch}}",
+    "send": "送信",
+    "success": {
+      "title": "ありがとうございます！",
+      "body": "フィードバックは Donut チームに届きました。",
+      "bodyWithLogs": "フィードバックとログは Donut チームに届きました。",
+      "reply": "詳細が必要な場合は {{email}} にご連絡します。",
+      "done": "完了"
+    }
   }
 }

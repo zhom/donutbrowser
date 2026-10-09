@@ -2419,7 +2419,14 @@
     "wayfernLaunchArgsLimit": "Use at most {{count}} launch arguments, each up to {{length}} characters.",
     "tablePreferencesInvalid": "These table settings are invalid.",
     "tablePreferencesLoadFailed": "Could not load the table settings. Try again.",
-    "tablePreferencesSaveFailed": "Could not save the table settings. Try again."
+    "tablePreferencesSaveFailed": "Could not save the table settings. Try again.",
+    "feedbackMessageEmpty": "Write a message first.",
+    "feedbackMessageTooLong": "The message is too long. The limit is {{max}} characters.",
+    "feedbackEmailInvalid": "This email address does not look right.",
+    "feedbackInvalid": "The feedback was not accepted. Check the message and try again.",
+    "feedbackRateLimited": "You sent a lot of feedback in a short time. Try again in a few minutes.",
+    "feedbackSendFailed": "The feedback could not be sent. Try again later.",
+    "feedbackLogsUnreadable": "The logs could not be read. Turn off \"Include recent logs\" and send again."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2438,7 +2445,9 @@
       "trash": "Trash",
       "trashHint": "Restore deleted profiles",
       "tips": "Tips",
-      "tipsHint": "Feature walkthroughs"
+      "tipsHint": "Feature walkthroughs",
+      "feedback": "Send feedback",
+      "feedbackHint": "Report a bug or share an idea"
     },
     "network": "Network",
     "integrations": "Integrations",
@@ -2557,7 +2566,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Go to Trash",
     "goAgent": "Go to Agent",
-    "openTips": "Open tips"
+    "openTips": "Open tips",
+    "sendFeedback": "Send feedback"
   },
   "closeConfirm": {
     "title": "Close Donut Browser?",
@@ -3290,7 +3300,9 @@
       "noteSeenAt": "Seen at {{time}}",
       "noteSeen": "Seen",
       "joined": "{{agent}} joined",
-      "left": "{{agent}} left"
+      "left": "{{agent}} left",
+      "feedbackSent": "sent feedback to the Donut team",
+      "feedbackLogs": "Logs attached"
     },
     "composer": {
       "label": "Note for your agent",
@@ -3570,6 +3582,12 @@
         "title": "Drive this desktop from donutbrowser.com",
         "body": "With remote control on, agents on the website reach this machine's profiles over an outbound bridge. Turn it on under Integrations.",
         "action": "Open Integrations"
+      },
+      "feedback": {
+        "label": "Feedback",
+        "title": "Tell the team what to fix next",
+        "body": "Something broken or missing? Send feedback from the More menu. One switch attaches your logs, so the team sees exactly what went wrong.",
+        "action": "Send feedback"
       }
     }
   },
@@ -3613,5 +3631,52 @@
     "noTags": "No tags",
     "noProxy": "No proxy",
     "encrypted": "Encrypted"
+  },
+  "feedback": {
+    "title": "Send feedback",
+    "description": "Tell the Donut team what is on your mind. We read every message.",
+    "kindLabel": "Type of feedback",
+    "kinds": {
+      "bug": {
+        "label": "Bug",
+        "placeholder": "What happened, and what did you expect? Steps to repeat it help a lot."
+      },
+      "idea": {
+        "label": "Idea",
+        "placeholder": "What would make Donut better for you?"
+      },
+      "praise": {
+        "label": "Praise",
+        "placeholder": "What do you like? The team will be glad to hear it."
+      },
+      "other": {
+        "label": "Other",
+        "placeholder": "Tell us anything."
+      }
+    },
+    "messageLabel": "Message",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Include recent logs",
+      "description": "Logs help us find bugs. Email addresses, IP addresses, web addresses and secrets are removed first.",
+      "preview": "Preview logs",
+      "loading": "Reading logs…",
+      "empty": "There are no logs yet."
+    },
+    "email": {
+      "label": "Email for a reply",
+      "optional": "Optional",
+      "placeholder": "you@example.com",
+      "signedIn": "Replies go to {{email}}."
+    },
+    "included": "Also sent: Donut {{version}}, {{os}} {{arch}}",
+    "send": "Send",
+    "success": {
+      "title": "Thank you!",
+      "body": "Your feedback is with the Donut team.",
+      "bodyWithLogs": "Your feedback and logs are with the Donut team.",
+      "reply": "If we need more details, we will write to {{email}}.",
+      "done": "Done"
+    }
   }
 }

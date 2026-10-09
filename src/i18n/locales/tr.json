@@ -2419,7 +2419,14 @@
     "wayfernLaunchArgsLimit": "En fazla {{count}} başlatma argümanı kullanın; her biri en fazla {{length}} karakter olsun.",
     "tablePreferencesInvalid": "Bu tablo ayarları geçersiz.",
     "tablePreferencesLoadFailed": "Tablo ayarları yüklenemedi. Tekrar deneyin.",
-    "tablePreferencesSaveFailed": "Tablo ayarları kaydedilemedi. Tekrar deneyin."
+    "tablePreferencesSaveFailed": "Tablo ayarları kaydedilemedi. Tekrar deneyin.",
+    "feedbackMessageEmpty": "Önce bir mesaj yazın.",
+    "feedbackMessageTooLong": "Mesaj çok uzun. Sınır {{max}} karakter.",
+    "feedbackEmailInvalid": "Bu e-posta adresi doğru görünmüyor.",
+    "feedbackInvalid": "Geri bildirim kabul edilmedi. Mesajı kontrol edip tekrar deneyin.",
+    "feedbackRateLimited": "Kısa sürede çok fazla geri bildirim gönderdiniz. Birkaç dakika sonra tekrar deneyin.",
+    "feedbackSendFailed": "Geri bildirim gönderilemedi. Daha sonra tekrar deneyin.",
+    "feedbackLogsUnreadable": "Günlükler okunamadı. \"Son günlükleri ekle\" seçeneğini kapatıp tekrar gönderin."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2438,7 +2445,9 @@
       "trash": "Çöp Kutusu",
       "trashHint": "Silinen profilleri geri yükle",
       "tips": "İpuçları",
-      "tipsHint": "Özellik turları"
+      "tipsHint": "Özellik turları",
+      "feedback": "Geri bildirim gönder",
+      "feedbackHint": "Hata bildirin veya fikir paylaşın"
     },
     "network": "Ağ",
     "integrations": "Entegrasyonlar",
@@ -2557,7 +2566,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Çöp Kutusuna git",
     "goAgent": "Ajan'a git",
-    "openTips": "İpuçlarını aç"
+    "openTips": "İpuçlarını aç",
+    "sendFeedback": "Geri bildirim gönder"
   },
   "closeConfirm": {
     "title": "Donut Browser kapatılsın mı?",
@@ -3290,7 +3300,9 @@
       "noteSeenAt": "{{time}} saatinde görüldü",
       "noteSeen": "Görüldü",
       "joined": "{{agent}} katıldı",
-      "left": "{{agent}} ayrıldı"
+      "left": "{{agent}} ayrıldı",
+      "feedbackSent": "Donut ekibine geri bildirim gönderdi",
+      "feedbackLogs": "Günlükler eklendi"
     },
     "composer": {
       "label": "Ajanınız için not",
@@ -3570,6 +3582,12 @@
         "title": "Bu masaüstünü donutbrowser.com'dan yönetin",
         "body": "Uzaktan denetim açıkken web sitesindeki ajanlar bu makinenin profillerine giden yönlü bir köprü üzerinden ulaşır. Entegrasyonlar'dan açın.",
         "action": "Entegrasyonları aç"
+      },
+      "feedback": {
+        "label": "Geri bildirim",
+        "title": "Ekibe sırada neyin düzeltileceğini söyleyin",
+        "body": "Bir şey bozuk mu ya da eksik mi? Diğer menüsünden geri bildirim gönderin. Tek bir anahtar günlüklerinizi ekler, böylece ekip neyin ters gittiğini tam olarak görür.",
+        "action": "Geri bildirim gönder"
       }
     }
   },
@@ -3613,5 +3631,52 @@
     "noTags": "Etiket yok",
     "noProxy": "Proxy yok",
     "encrypted": "Şifreli"
+  },
+  "feedback": {
+    "title": "Geri bildirim gönder",
+    "description": "Donut ekibine düşüncelerinizi anlatın. Her mesajı okuyoruz.",
+    "kindLabel": "Geri bildirim türü",
+    "kinds": {
+      "bug": {
+        "label": "Hata",
+        "placeholder": "Ne oldu ve ne bekliyordunuz? Tekrarlama adımları çok yardımcı olur."
+      },
+      "idea": {
+        "label": "Fikir",
+        "placeholder": "Donut'u sizin için ne daha iyi yapardı?"
+      },
+      "praise": {
+        "label": "Övgü",
+        "placeholder": "Neyi seviyorsunuz? Ekip bunu duymaktan mutlu olur."
+      },
+      "other": {
+        "label": "Diğer",
+        "placeholder": "Bize her şeyi yazabilirsiniz."
+      }
+    },
+    "messageLabel": "Mesaj",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Son günlükleri ekle",
+      "description": "Günlükler hataları bulmamıza yardım eder. E-posta adresleri, IP adresleri, web adresleri ve gizli bilgiler önceden kaldırılır.",
+      "preview": "Günlükleri gör",
+      "loading": "Günlükler okunuyor…",
+      "empty": "Henüz günlük yok."
+    },
+    "email": {
+      "label": "Yanıt için e-posta",
+      "optional": "İsteğe bağlı",
+      "placeholder": "siz@example.com",
+      "signedIn": "Yanıtlar {{email}} adresine gider."
+    },
+    "included": "Ayrıca gönderilir: Donut {{version}}, {{os}} {{arch}}",
+    "send": "Gönder",
+    "success": {
+      "title": "Teşekkürler!",
+      "body": "Geri bildiriminiz Donut ekibine ulaştı.",
+      "bodyWithLogs": "Geri bildiriminiz ve günlükleriniz Donut ekibine ulaştı.",
+      "reply": "Daha fazla ayrıntıya ihtiyacımız olursa {{email}} adresine yazarız.",
+      "done": "Tamam"
+    }
   }
 }

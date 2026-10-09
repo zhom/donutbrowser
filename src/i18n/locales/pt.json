@@ -2429,7 +2429,14 @@
     "wayfernLaunchArgsLimit": "Use no máximo {{count}} argumentos de inicialização, com até {{length}} caracteres cada.",
     "tablePreferencesInvalid": "Estas configurações da tabela são inválidas.",
     "tablePreferencesLoadFailed": "Não foi possível carregar as configurações da tabela. Tente novamente.",
-    "tablePreferencesSaveFailed": "Não foi possível salvar as configurações da tabela. Tente novamente."
+    "tablePreferencesSaveFailed": "Não foi possível salvar as configurações da tabela. Tente novamente.",
+    "feedbackMessageEmpty": "Escreva uma mensagem primeiro.",
+    "feedbackMessageTooLong": "A mensagem é longa demais. O limite é de {{max}} caracteres.",
+    "feedbackEmailInvalid": "Este endereço de e-mail não parece correto.",
+    "feedbackInvalid": "O feedback não foi aceito. Verifique a mensagem e tente novamente.",
+    "feedbackRateLimited": "Você enviou muito feedback em pouco tempo. Tente novamente em alguns minutos.",
+    "feedbackSendFailed": "Não foi possível enviar o feedback. Tente novamente mais tarde.",
+    "feedbackLogsUnreadable": "Não foi possível ler os logs. Desative \"Incluir logs recentes\" e envie novamente."
   },
   "rail": {
     "profiles": "Perfis",
@@ -2448,7 +2455,9 @@
       "trash": "Lixeira",
       "trashHint": "Restaurar perfis excluídos",
       "tips": "Dicas",
-      "tipsHint": "Passo a passo dos recursos"
+      "tipsHint": "Passo a passo dos recursos",
+      "feedback": "Enviar feedback",
+      "feedbackHint": "Relatar um erro ou compartilhar uma ideia"
     },
     "network": "Rede",
     "integrations": "Integrações",
@@ -2567,7 +2576,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Ir para a Lixeira",
     "goAgent": "Ir para Agente",
-    "openTips": "Abrir dicas"
+    "openTips": "Abrir dicas",
+    "sendFeedback": "Enviar feedback"
   },
   "closeConfirm": {
     "title": "Fechar Donut Browser?",
@@ -3323,7 +3333,9 @@
       "noteSeenAt": "Vista às {{time}}",
       "noteSeen": "Vista",
       "joined": "{{agent}} entrou",
-      "left": "{{agent}} saiu"
+      "left": "{{agent}} saiu",
+      "feedbackSent": "enviou feedback à equipe do Donut",
+      "feedbackLogs": "Logs anexados"
     },
     "composer": {
       "label": "Nota para o seu agente",
@@ -3603,6 +3615,12 @@
         "title": "Controle este computador pelo donutbrowser.com",
         "body": "Com o controle remoto ativado, os agentes do site alcançam os perfis desta máquina por uma ponte de saída. Ative-o em Integrações.",
         "action": "Abrir Integrações"
+      },
+      "feedback": {
+        "label": "Feedback",
+        "title": "Diga à equipe o que corrigir a seguir",
+        "body": "Algo quebrado ou faltando? Envie feedback pelo menu Mais. Um botão anexa seus logs, para a equipe ver exatamente o que deu errado.",
+        "action": "Enviar feedback"
       }
     }
   },
@@ -3646,5 +3664,52 @@
     "noTags": "Sem etiquetas",
     "noProxy": "Sem proxy",
     "encrypted": "Criptografado"
+  },
+  "feedback": {
+    "title": "Enviar feedback",
+    "description": "Conte à equipe do Donut o que você pensa. Lemos todas as mensagens.",
+    "kindLabel": "Tipo de feedback",
+    "kinds": {
+      "bug": {
+        "label": "Erro",
+        "placeholder": "O que aconteceu e o que você esperava? Os passos para reproduzir ajudam muito."
+      },
+      "idea": {
+        "label": "Ideia",
+        "placeholder": "O que deixaria o Donut melhor para você?"
+      },
+      "praise": {
+        "label": "Elogio",
+        "placeholder": "Do que você gosta? A equipe vai adorar saber."
+      },
+      "other": {
+        "label": "Outro",
+        "placeholder": "Conte o que quiser."
+      }
+    },
+    "messageLabel": "Mensagem",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Incluir logs recentes",
+      "description": "Os logs nos ajudam a encontrar erros. Endereços de e-mail, endereços IP, endereços web e segredos são removidos antes.",
+      "preview": "Ver logs",
+      "loading": "Lendo os logs…",
+      "empty": "Ainda não há logs."
+    },
+    "email": {
+      "label": "E-mail para resposta",
+      "optional": "Opcional",
+      "placeholder": "voce@example.com",
+      "signedIn": "As respostas vão para {{email}}."
+    },
+    "included": "Também enviado: Donut {{version}}, {{os}} {{arch}}",
+    "send": "Enviar",
+    "success": {
+      "title": "Obrigado!",
+      "body": "Seu feedback chegou à equipe do Donut.",
+      "bodyWithLogs": "Seu feedback e seus logs chegaram à equipe do Donut.",
+      "reply": "Se precisarmos de mais detalhes, escreveremos para {{email}}.",
+      "done": "Concluir"
+    }
   }
 }

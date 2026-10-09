@@ -7,6 +7,7 @@ import {
   ConsistencyScene,
   DnsScene,
   ExtensionsScene,
+  FeedbackScene,
   GroupsScene,
   ImportScene,
   LinkRouteScene,
@@ -55,6 +56,8 @@ export function TipScene({ id }: { id: TipId }) {
       return <ApiScene variant="api" />;
     case "importProfiles":
       return <ImportScene />;
+    case "feedback":
+      return <FeedbackScene />;
     case "cloudBackup":
       return <CloudSyncScene />;
     case "cookieBot":

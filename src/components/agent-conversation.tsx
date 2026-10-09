@@ -9,6 +9,8 @@ import {
   LuChevronsUpDown,
   LuHand,
   LuMessageCircleQuestion,
+  LuMessageSquareHeart,
+  LuPaperclip,
   LuSend,
   LuUndo2,
 } from "react-icons/lu";
@@ -497,6 +499,44 @@ function ThreadEntry({
         )}
         <span className="ml-auto shrink-0">{time}</span>
       </p>
+    );
+  }
+
+  if (item.kind === "feedback") {
+    return (
+      <div className="flex max-w-[85%] flex-col gap-1">
+        <span className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {nameOf(item.session_id)}
+          </span>
+          <span>{t("agent.thread.feedbackSent")}</span>
+          <span aria-hidden="true">·</span>
+          {time}
+        </span>
+        <div className="flex items-start gap-2 rounded-xl bg-foreground/5 px-3 py-2 text-sm text-foreground">
+          <LuMessageSquareHeart
+            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="break-words whitespace-pre-wrap">{item.text}</p>
+            {item.feedback && (
+              <span className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+                <span>{t(`feedback.kinds.${item.feedback.kind}.label`)}</span>
+                {item.feedback.logs && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="inline-flex items-center gap-1">
+                      <LuPaperclip className="size-3" aria-hidden="true" />
+                      {t("agent.thread.feedbackLogs")}
+                    </span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
 

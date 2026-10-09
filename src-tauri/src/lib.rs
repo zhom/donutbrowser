@@ -91,6 +91,7 @@ mod ephemeral_dirs;
 mod extension_fetch;
 mod extension_manager;
 mod extraction;
+mod feedback;
 mod fingerprint_consistency;
 mod fs_secure;
 mod geoip_downloader;
@@ -3543,6 +3544,8 @@ pub fn run_with_builder(
       cookie_bot::create_cookie_bot_user_template,
       cookie_bot::update_cookie_bot_user_template,
       cookie_bot::delete_cookie_bot_user_template,
+      feedback::send_feedback,
+      feedback::preview_feedback_logs,
       recipes::get_agent_recipes,
       recipes::create_agent_recipe,
       recipes::update_agent_recipe,

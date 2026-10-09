@@ -743,3 +743,88 @@ export function ImportScene() {
     </Scene>
   );
 }
+
+const FEEDBACK_ARC = travel(
+  bezier(
+    { x: 116, y: 64 },
+    { x: 150, y: 10 },
+    { x: 214, y: 10 },
+    { x: 250, y: 62 },
+    16,
+  ),
+  0.5,
+  0.78,
+);
+
+/** A message is written, the logs clip on, and it flies to the Donut team. */
+export function FeedbackScene() {
+  const { kf, tr } = useScene(5);
+  return (
+    <Scene>
+      <Window x={16} y={30} width={104} height={100} lines={0} />
+      <path
+        d="M30 60 h72 a6 6 0 0 1 6 6 v26 a6 6 0 0 1 -6 6 h-52 l-10 8 v-8 h-10 a6 6 0 0 1 -6 -6 v-26 a6 6 0 0 1 6 -6 z"
+        className="text-foreground"
+      />
+      {[52, 40, 28].map((width, index) => (
+        <motion.path
+          key={width}
+          d={`M36 ${70 + index * 9} h${width}`}
+          strokeWidth={2}
+          className="text-foreground"
+          initial={false}
+          animate={{ pathLength: kf([0, 0, 1, 1]) }}
+          transition={tr([0, 0.06 + index * 0.1, 0.15 + index * 0.1, 1], {
+            ease: "linear",
+          })}
+        />
+      ))}
+      <motion.g
+        initial={false}
+        animate={{ opacity: kf([0, 0, 1, 1]), y: kf([8, 8, 0, 0]) }}
+        transition={tr([0, 0.36, 0.46, 1])}
+      >
+        <rect
+          x={92}
+          y={88}
+          width={22}
+          height={28}
+          rx={3}
+          className="fill-background"
+        />
+        <path d="M97 96 h12 M97 102 h12 M97 108 h7" />
+      </motion.g>
+      <path d="M126 58 C154 14 210 14 238 56" strokeDasharray="2 5" />
+      <motion.g
+        initial={false}
+        animate={{ opacity: kf([0, 0, 1, 1, 0, 0]) }}
+        transition={tr([0, 0.48, 0.5, 0.76, 0.8, 1])}
+      >
+        <motion.g
+          className="text-foreground"
+          initial={false}
+          animate={{ x: kf(FEEDBACK_ARC.cx), y: kf(FEEDBACK_ARC.cy) }}
+          transition={tr(FEEDBACK_ARC.times, { ease: "linear" })}
+        >
+          <path d="M-7 1 L8 -6 L3 8 L0 2 Z M0 2 L8 -6" />
+        </motion.g>
+      </motion.g>
+      <motion.g
+        className="text-foreground"
+        initial={false}
+        animate={{ scale: kf([1, 1, 1.12, 1, 1]) }}
+        transition={tr([0, 0.78, 0.84, 0.9, 1])}
+      >
+        <circle cx={263} cy={84} r={18} />
+        <circle cx={263} cy={84} r={7} />
+      </motion.g>
+      <Check
+        x={286}
+        y={50}
+        className="text-success-text"
+        animate={{ pathLength: kf([0, 0, 1, 1]) }}
+        transition={tr([0, 0.82, 0.92, 1])}
+      />
+    </Scene>
+  );
+}

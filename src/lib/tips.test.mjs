@@ -192,6 +192,7 @@ test("a tip for a feature already in use is skipped", () => {
     "defaultBrowser",
   ]);
   assert.deepEqual(skipped({ ...IDLE, trashUsed: true }), ["trash"]);
+  assert.deepEqual(skipped({ ...IDLE, feedbackSent: true }), ["feedback"]);
   assert.deepEqual(skipped({ ...IDLE, apiEnabled: true }), [
     "localApi",
     "automation",

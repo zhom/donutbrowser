@@ -2429,7 +2429,14 @@
     "wayfernLaunchArgsLimit": "Utilisez au maximum {{count}} arguments de lancement, de {{length}} caractères chacun au plus.",
     "tablePreferencesInvalid": "Ces paramètres du tableau sont invalides.",
     "tablePreferencesLoadFailed": "Impossible de charger les paramètres du tableau. Réessayez.",
-    "tablePreferencesSaveFailed": "Impossible d’enregistrer les paramètres du tableau. Réessayez."
+    "tablePreferencesSaveFailed": "Impossible d’enregistrer les paramètres du tableau. Réessayez.",
+    "feedbackMessageEmpty": "Écrivez d'abord un message.",
+    "feedbackMessageTooLong": "Le message est trop long. La limite est de {{max}} caractères.",
+    "feedbackEmailInvalid": "Cette adresse e-mail ne semble pas correcte.",
+    "feedbackInvalid": "L'avis n'a pas été accepté. Vérifiez le message et réessayez.",
+    "feedbackRateLimited": "Vous avez envoyé beaucoup d'avis en peu de temps. Réessayez dans quelques minutes.",
+    "feedbackSendFailed": "L'avis n'a pas pu être envoyé. Réessayez plus tard.",
+    "feedbackLogsUnreadable": "Les journaux n'ont pas pu être lus. Désactivez « Joindre les journaux récents » et renvoyez."
   },
   "rail": {
     "profiles": "Profils",
@@ -2448,7 +2455,9 @@
       "trash": "Corbeille",
       "trashHint": "Restaurer des profils supprimés",
       "tips": "Astuces",
-      "tipsHint": "Découverte des fonctions"
+      "tipsHint": "Découverte des fonctions",
+      "feedback": "Envoyer un avis",
+      "feedbackHint": "Signaler un bug ou partager une idée"
     },
     "network": "Réseau",
     "integrations": "Intégrations",
@@ -2567,7 +2576,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Aller à la Corbeille",
     "goAgent": "Aller à Agent",
-    "openTips": "Ouvrir les astuces"
+    "openTips": "Ouvrir les astuces",
+    "sendFeedback": "Envoyer un avis"
   },
   "closeConfirm": {
     "title": "Fermer Donut Browser ?",
@@ -3323,7 +3333,9 @@
       "noteSeenAt": "Vue à {{time}}",
       "noteSeen": "Vue",
       "joined": "{{agent}} a rejoint la conversation",
-      "left": "{{agent}} est parti"
+      "left": "{{agent}} est parti",
+      "feedbackSent": "a envoyé un avis à l'équipe Donut",
+      "feedbackLogs": "Journaux joints"
     },
     "composer": {
       "label": "Note pour votre agent",
@@ -3603,6 +3615,12 @@
         "title": "Pilotez ce poste depuis donutbrowser.com",
         "body": "Avec le contrôle à distance activé, les agents du site web atteignent les profils de cette machine par un pont sortant. Activez-le dans Intégrations.",
         "action": "Ouvrir Intégrations"
+      },
+      "feedback": {
+        "label": "Avis",
+        "title": "Dites à l'équipe quoi corriger ensuite",
+        "body": "Quelque chose ne marche pas ou vous manque ? Envoyez un avis depuis le menu Plus. Un interrupteur joint vos journaux, pour que l'équipe voie exactement ce qui s'est passé.",
+        "action": "Envoyer un avis"
       }
     }
   },
@@ -3646,5 +3664,52 @@
     "noTags": "Aucune étiquette",
     "noProxy": "Aucun proxy",
     "encrypted": "Chiffré"
+  },
+  "feedback": {
+    "title": "Envoyer un avis",
+    "description": "Dites à l'équipe Donut ce que vous en pensez. Nous lisons chaque message.",
+    "kindLabel": "Type d'avis",
+    "kinds": {
+      "bug": {
+        "label": "Bug",
+        "placeholder": "Que s'est-il passé, et à quoi vous attendiez-vous ? Les étapes pour le reproduire aident beaucoup."
+      },
+      "idea": {
+        "label": "Idée",
+        "placeholder": "Qu'est-ce qui rendrait Donut meilleur pour vous ?"
+      },
+      "praise": {
+        "label": "Compliment",
+        "placeholder": "Qu'est-ce qui vous plaît ? L'équipe sera ravie de le lire."
+      },
+      "other": {
+        "label": "Autre",
+        "placeholder": "Dites-nous ce que vous voulez."
+      }
+    },
+    "messageLabel": "Message",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Joindre les journaux récents",
+      "description": "Les journaux nous aident à trouver les bugs. Les adresses e-mail, adresses IP, adresses web et secrets sont retirés avant l'envoi.",
+      "preview": "Voir les journaux",
+      "loading": "Lecture des journaux…",
+      "empty": "Il n'y a pas encore de journaux."
+    },
+    "email": {
+      "label": "E-mail pour la réponse",
+      "optional": "Facultatif",
+      "placeholder": "vous@example.com",
+      "signedIn": "Les réponses iront à {{email}}."
+    },
+    "included": "Envoyé aussi : Donut {{version}}, {{os}} {{arch}}",
+    "send": "Envoyer",
+    "success": {
+      "title": "Merci !",
+      "body": "Votre avis est bien arrivé chez l'équipe Donut.",
+      "bodyWithLogs": "Votre avis et vos journaux sont bien arrivés chez l'équipe Donut.",
+      "reply": "Si nous avons besoin de détails, nous vous écrirons à {{email}}.",
+      "done": "Terminé"
+    }
   }
 }

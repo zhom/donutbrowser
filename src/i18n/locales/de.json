@@ -2419,7 +2419,14 @@
     "wayfernLaunchArgsLimit": "Verwende höchstens {{count}} Startargumente mit jeweils bis zu {{length}} Zeichen.",
     "tablePreferencesInvalid": "Diese Tabelleneinstellungen sind ungültig.",
     "tablePreferencesLoadFailed": "Die Tabelleneinstellungen konnten nicht geladen werden. Versuchen Sie es erneut.",
-    "tablePreferencesSaveFailed": "Die Tabelleneinstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut."
+    "tablePreferencesSaveFailed": "Die Tabelleneinstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut.",
+    "feedbackMessageEmpty": "Schreiben Sie zuerst eine Nachricht.",
+    "feedbackMessageTooLong": "Die Nachricht ist zu lang. Das Limit liegt bei {{max}} Zeichen.",
+    "feedbackEmailInvalid": "Diese E-Mail-Adresse sieht nicht richtig aus.",
+    "feedbackInvalid": "Das Feedback wurde nicht angenommen. Prüfen Sie die Nachricht und versuchen Sie es erneut.",
+    "feedbackRateLimited": "Sie haben in kurzer Zeit viel Feedback gesendet. Versuchen Sie es in ein paar Minuten erneut.",
+    "feedbackSendFailed": "Das Feedback konnte nicht gesendet werden. Versuchen Sie es später erneut.",
+    "feedbackLogsUnreadable": "Die Protokolle konnten nicht gelesen werden. Schalten Sie „Aktuelle Protokolle anhängen“ aus und senden Sie erneut."
   },
   "rail": {
     "profiles": "Profile",
@@ -2438,7 +2445,9 @@
       "trash": "Papierkorb",
       "trashHint": "Gelöschte Profile wiederherstellen",
       "tips": "Tipps",
-      "tipsHint": "Funktionen Schritt für Schritt"
+      "tipsHint": "Funktionen Schritt für Schritt",
+      "feedback": "Feedback senden",
+      "feedbackHint": "Fehler melden oder Idee teilen"
     },
     "network": "Netzwerk",
     "integrations": "Integrationen",
@@ -2557,7 +2566,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Zum Papierkorb wechseln",
     "goAgent": "Zu „Agent“ wechseln",
-    "openTips": "Tipps öffnen"
+    "openTips": "Tipps öffnen",
+    "sendFeedback": "Feedback senden"
   },
   "closeConfirm": {
     "title": "Donut Browser schließen?",
@@ -3290,7 +3300,9 @@
       "noteSeenAt": "Gesehen um {{time}}",
       "noteSeen": "Gesehen",
       "joined": "{{agent}} ist beigetreten",
-      "left": "{{agent}} hat die Sitzung verlassen"
+      "left": "{{agent}} hat die Sitzung verlassen",
+      "feedbackSent": "hat dem Donut-Team Feedback gesendet",
+      "feedbackLogs": "Protokolle angehängt"
     },
     "composer": {
       "label": "Notiz für Ihren Agenten",
@@ -3570,6 +3582,12 @@
         "title": "Diesen Desktop von donutbrowser.com aus steuern",
         "body": "Bei aktivierter Fernsteuerung erreichen Agenten auf der Website die Profile dieses Rechners über eine ausgehende Verbindung. Aktivieren Sie sie unter „Integrationen“.",
         "action": "Integrationen öffnen"
+      },
+      "feedback": {
+        "label": "Feedback",
+        "title": "Sagen Sie dem Team, was als Nächstes besser werden soll",
+        "body": "Funktioniert etwas nicht oder fehlt etwas? Senden Sie Feedback über das Menü „Mehr“. Ein Schalter hängt Ihre Protokolle an, damit das Team genau sieht, was schiefging.",
+        "action": "Feedback senden"
       }
     }
   },
@@ -3613,5 +3631,52 @@
     "noTags": "Keine Tags",
     "noProxy": "Kein Proxy",
     "encrypted": "Verschlüsselt"
+  },
+  "feedback": {
+    "title": "Feedback senden",
+    "description": "Sagen Sie dem Donut-Team, was Sie beschäftigt. Wir lesen jede Nachricht.",
+    "kindLabel": "Art des Feedbacks",
+    "kinds": {
+      "bug": {
+        "label": "Fehler",
+        "placeholder": "Was ist passiert, und was haben Sie erwartet? Schritte zum Nachstellen helfen sehr."
+      },
+      "idea": {
+        "label": "Idee",
+        "placeholder": "Was würde Donut für Sie besser machen?"
+      },
+      "praise": {
+        "label": "Lob",
+        "placeholder": "Was gefällt Ihnen? Das Team freut sich darüber."
+      },
+      "other": {
+        "label": "Sonstiges",
+        "placeholder": "Schreiben Sie uns, was Sie möchten."
+      }
+    },
+    "messageLabel": "Nachricht",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Aktuelle Protokolle anhängen",
+      "description": "Protokolle helfen uns, Fehler zu finden. E-Mail-Adressen, IP-Adressen, Webadressen und Geheimnisse werden vorher entfernt.",
+      "preview": "Protokolle ansehen",
+      "loading": "Protokolle werden gelesen…",
+      "empty": "Es gibt noch keine Protokolle."
+    },
+    "email": {
+      "label": "E-Mail für eine Antwort",
+      "optional": "Optional",
+      "placeholder": "sie@example.com",
+      "signedIn": "Antworten gehen an {{email}}."
+    },
+    "included": "Wird mitgesendet: Donut {{version}}, {{os}} {{arch}}",
+    "send": "Senden",
+    "success": {
+      "title": "Vielen Dank!",
+      "body": "Ihr Feedback ist beim Donut-Team angekommen.",
+      "bodyWithLogs": "Ihr Feedback und Ihre Protokolle sind beim Donut-Team angekommen.",
+      "reply": "Wenn wir mehr Details brauchen, schreiben wir an {{email}}.",
+      "done": "Fertig"
+    }
   }
 }

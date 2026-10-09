@@ -45,7 +45,8 @@ export type AgentThreadKind =
   | "note"
   | "progress"
   | "joined"
-  | "left";
+  | "left"
+  | "feedback";
 
 export type AgentThreadState =
   | "open"
@@ -70,7 +71,11 @@ export interface AgentThreadItem {
   delivered_to: string[];
   done: number | null;
   total: number | null;
+  /** Set on a `feedback` item: what the agent sent to the Donut team. */
+  feedback: { kind: FeedbackKind; logs: boolean } | null;
 }
+
+export type FeedbackKind = "bug" | "idea" | "praise" | "other";
 
 export interface AgentHold {
   profile_id: string;

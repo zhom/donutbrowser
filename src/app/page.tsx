@@ -22,6 +22,7 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { DeviceCodeVerifyDialog } from "@/components/device-code-verify-dialog";
 import { ExtensionGroupAssignmentDialog } from "@/components/extension-group-assignment-dialog";
 import { ExtensionManagementDialog } from "@/components/extension-management-dialog";
+import { FeedbackDialog } from "@/components/feedback-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
 import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
@@ -529,6 +530,7 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   // Pre-launch gate. Requests queue instead of overwriting a single resolver:
   // a bulk run enqueues one per profile, and every waiter must settle or the
   // Promise.allSettled below it never resolves and the bulk spinner sticks.
@@ -666,6 +668,9 @@ export default function Home() {
         case "palette":
           setCommandPaletteOpen(true);
           break;
+        case "feedback":
+          setFeedbackDialogOpen(true);
+          break;
       }
     },
     [closeTips, handleRailNavigate],
@@ -679,6 +684,9 @@ export default function Home() {
           break;
         case "openTips":
           openTips();
+          break;
+        case "sendFeedback":
+          setFeedbackDialogOpen(true);
           break;
         case "openShortcuts":
           handleRailNavigate("shortcuts");
@@ -2319,6 +2327,9 @@ export default function Home() {
               setAboutDialogOpen(true);
             }}
             onOpenTips={() => openTips()}
+            onOpenFeedback={() => {
+              setFeedbackDialogOpen(true);
+            }}
             cookieBotRunning={Object.keys(cookieBotLiveSessions).length > 0}
             agentRequests={agentConsole.openRequests.length}
           />
@@ -2600,6 +2611,14 @@ export default function Home() {
           onClose={() => {
             setAboutDialogOpen(false);
           }}
+        />
+
+        <FeedbackDialog
+          isOpen={feedbackDialogOpen}
+          onClose={() => {
+            setFeedbackDialogOpen(false);
+          }}
+          accountEmail={cloudUser?.email ?? null}
         />
 
         <PreLaunchGateDialog

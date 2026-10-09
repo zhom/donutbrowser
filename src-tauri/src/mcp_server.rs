@@ -124,7 +124,7 @@ pub struct McpRequest {
 
 const PROTOCOL_VERSION: &str = "2025-11-25";
 
-const INITIALIZE_INSTRUCTIONS: &str = "Donut Browser MCP server. Use tools/list to discover the browser tools. A person watches your work in Donut: call get_human_updates when you start and between steps, report_progress during longer jobs, ask_human when you are unsure, and request_human_help when a page needs a person. A call refused with AGENT_PAUSED or PROFILE_HELD_BY_HUMAN means the person is in control; do not retry it until get_human_updates shows the pause or hold is gone.";
+const INITIALIZE_INSTRUCTIONS: &str = "Donut Browser MCP server. Use tools/list to discover the browser tools. A person watches your work in Donut: call get_human_updates when you start and between steps, report_progress during longer jobs, ask_human when you are unsure, and request_human_help when a page needs a person. When a Donut tool fails in a way you cannot explain, or you need something it cannot do, tell the Donut team with send_feedback. A call refused with AGENT_PAUSED or PROFILE_HELD_BY_HUMAN means the person is in control; do not retry it until get_human_updates shows the pause or hold is gone.";
 
 const PLAN_WITHOUT_AUTOMATION: &str = " This account's plan does not include browser automation: tools that launch, drive or read a browser are refused with PLAN_REQUIRED. Managing profiles, groups, proxies, VPNs and extensions works.";
 
@@ -4163,6 +4163,23 @@ impl McpServer {
           "required": ["message"]
         }),
       },
+      McpTool {
+        name: "send_feedback".to_string(),
+        description: "Send feedback about Donut Browser to the Donut team: a tool that failed or behaved unexpectedly, a capability you needed and did not find, a confusing result, or something that worked well. Say what you tried, what happened, and what you expected. Set include_logs to attach the recent app logs, which help with bugs and never contain profile names, visited URLs or credentials. The person at this computer sees what you sent. Returns {sent: true, feedback_id}.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "message": { "type": "string", "description": "The feedback (at most 5000 characters)" },
+            "kind": {
+              "type": "string",
+              "enum": ["bug", "idea", "praise", "other"],
+              "description": "bug for something broken, idea for something missing, praise for something that worked well (default: other)"
+            },
+            "include_logs": { "type": "boolean", "description": "Attach the recent app logs (default: false)" }
+          },
+          "required": ["message"]
+        }),
+      },
     ]
   }
 
@@ -4434,6 +4451,7 @@ impl McpServer {
         Self::json_content(&crate::agent_console::human_updates(caller.session))
       }
       "report_progress" => Self::handle_report_progress(caller, arguments),
+      "send_feedback" => self.handle_send_feedback(caller, arguments).await,
       "list_profiles" => self.handle_list_profiles().await,
       "get_profile" => self.handle_get_profile(arguments).await,
       "run_profile" => {
@@ -8790,6 +8808,7 @@ impl McpServer {
   /// Reads and the human channel keep working while agents are paused.
   fn is_passive_tool(tool_name: &str) -> bool {
     crate::agent_console::HUMAN_TOOLS.contains(&tool_name)
+      || tool_name == "send_feedback"
       || ((tool_name.starts_with("list_") || tool_name.starts_with("get_"))
         && !Self::is_automation_tool(tool_name))
   }
@@ -9002,6 +9021,111 @@ impl McpServer {
       .map(str::to_string);
     crate::agent_console::report_progress(caller.session, message, done, total, profile_id);
     Self::json_content(&serde_json::json!({ "ok": true }))
+  }
+
+  async fn handle_send_feedback(
+    &self,
+    caller: McpCaller<'_>,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    use crate::feedback::{FeedbackKind, FeedbackSource, MAX_MESSAGE_CHARS};
+
+    let message = arguments
+      .get("message")
+      .and_then(serde_json::Value::as_str)
+      .map(str::trim)
+      .filter(|message| !message.is_empty())
+      .ok_or_else(|| Self::invalid_argument("message is required"))?;
+    if message.chars().count() > MAX_MESSAGE_CHARS {
+      return Err(Self::invalid_argument(format!(
+        "message is longer than {MAX_MESSAGE_CHARS} characters"
+      )));
+    }
+    let kind = match arguments.get("kind") {
+      None | Some(serde_json::Value::Null) => FeedbackKind::Other,
+      Some(value) => value
+        .as_str()
+        .and_then(FeedbackKind::parse)
+        .ok_or_else(|| Self::invalid_argument("kind must be bug, idea, praise or other"))?,
+    };
+    let include_logs = arguments
+      .get("include_logs")
+      .and_then(serde_json::Value::as_bool)
+      .unwrap_or(false);
+
+    if !crate::feedback::agent_send_allowed() {
+      return Err(McpError {
+        code: -32000,
+        message: "Too much feedback was sent in the last hour. Try again later.".to_string(),
+        data: Some(serde_json::json!({ "code": "FEEDBACK_RATE_LIMITED" })),
+      });
+    }
+
+    let logs = if include_logs {
+      let app_handle = self.inner.lock().await.app_handle.clone();
+      match app_handle {
+        Some(handle) => Some(
+          crate::feedback::log_excerpt(crate::app_dirs::log_dir(&handle))
+            .await
+            .map_err(|_| McpError {
+              code: -32000,
+              message: "The app logs could not be read. Send the feedback without include_logs."
+                .to_string(),
+              data: Some(serde_json::json!({ "code": "FEEDBACK_LOGS_UNREADABLE" })),
+            })?,
+        ),
+        None => None,
+      }
+    } else {
+      None
+    };
+    let logs_attached = logs.as_ref().is_some_and(|logs| !logs.is_empty());
+
+    let (agent_client, recent_calls) = crate::agent_console::feedback_context(caller.session);
+    let receipt = crate::feedback::send(crate::feedback::Feedback {
+      kind,
+      source: FeedbackSource::Agent,
+      message: message.to_string(),
+      email: None,
+      locale: None,
+      logs,
+      agent_client,
+      context: (!recent_calls.is_empty())
+        .then(|| serde_json::json!({ "recentCalls": recent_calls })),
+    })
+    .await
+    .map_err(|error| {
+      let code = serde_json::from_str::<serde_json::Value>(&error)
+        .ok()
+        .and_then(|value| {
+          value
+            .get("code")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        })
+        .unwrap_or_else(|| "FEEDBACK_SEND_FAILED".to_string());
+      let message = match code.as_str() {
+        "FEEDBACK_RATE_LIMITED" => {
+          "The Donut team's server refused more feedback for now. Try again later."
+        }
+        "CLOUD_UNREACHABLE" | "SYSTEM_PROXY_UNREACHABLE" => {
+          "The Donut team's server could not be reached. Try again later."
+        }
+        _ => "The feedback could not be sent. Try again later.",
+      };
+      McpError {
+        code: -32000,
+        message: message.to_string(),
+        data: Some(serde_json::json!({ "code": code })),
+      }
+    })?;
+
+    crate::agent_console::feedback_sent(caller.session, kind.as_str(), message, logs_attached);
+    Self::json_content(&serde_json::json!({
+      "sent": true,
+      "feedback_id": receipt.id,
+      "logs_attached": logs_attached,
+    }))
   }
 
   pub(crate) async fn bring_profile_to_front(&self, profile_id: &str) -> Result<(), String> {
@@ -9682,7 +9806,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      92,
+      93,
       "the tool list is a published contract; update this number deliberately"
     );
 
@@ -12128,5 +12252,83 @@ mod tests {
     crate::agent_console::dismiss_agent_request(help)
       .await
       .unwrap();
+  }
+
+  #[tokio::test]
+  async fn send_feedback_checks_its_arguments_and_shows_the_person_what_was_sent() {
+    let server = McpServer::new();
+    server.mark_engine_ready_for_tests();
+    let send = |session: &str, id: u64, arguments: serde_json::Value| {
+      let server = &server;
+      let session = session.to_string();
+      async move {
+        let body = serde_json::json!({
+          "jsonrpc": "2.0",
+          "id": id,
+          "method": "tools/call",
+          "params": { "name": "send_feedback", "arguments": arguments }
+        })
+        .to_string();
+        match server.handle_message(Some(&session), body.as_bytes()).await {
+          McpOutcome::Body { body, .. } => body,
+          _ => panic!("expected an answer"),
+        }
+      }
+    };
+
+    let init = serde_json::json!({
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": { "protocolVersion": "2025-06-18", "clientInfo": { "name": "Feedback Agent", "version": "1.2" } }
+    })
+    .to_string();
+    let McpOutcome::Body {
+      body: init,
+      new_session_id: Some(session),
+    } = server.handle_message(None, init.as_bytes()).await
+    else {
+      panic!("initialize opens a session");
+    };
+    assert!(init["result"]["instructions"]
+      .as_str()
+      .unwrap()
+      .contains("send_feedback"));
+
+    for (id, arguments) in [
+      (2, serde_json::json!({})),
+      (3, serde_json::json!({ "message": "   " })),
+      (
+        4,
+        serde_json::json!({ "message": "ok", "kind": "complaint" }),
+      ),
+      (
+        5,
+        serde_json::json!({ "message": "x".repeat(crate::feedback::MAX_MESSAGE_CHARS + 1) }),
+      ),
+    ] {
+      let refused = send(&session, id, arguments).await;
+      assert_eq!(
+        refused["error"]["data"]["code"], "INVALID_ARGUMENT",
+        "{refused}"
+      );
+    }
+    assert!(McpServer::is_passive_tool("send_feedback"));
+
+    let (client, calls) = crate::agent_console::feedback_context(Some(&session));
+    assert_eq!(client.as_deref(), Some("Feedback Agent 1.2"));
+    assert!(calls.iter().all(|call| call.get("arguments").is_none()));
+
+    crate::agent_console::feedback_sent(Some(&session), "bug", "navigate hangs", true);
+    let thread = crate::agent_console::snapshot().await.thread;
+    let item = thread
+      .iter()
+      .rev()
+      .find(|item| item.session_id.as_deref() == Some(session.as_str()))
+      .expect("the person sees the feedback");
+    assert_eq!(item.kind, crate::agent_console::ThreadKind::Feedback);
+    assert_eq!(item.text, "navigate hangs");
+    let feedback = item.feedback.as_ref().unwrap();
+    assert_eq!((feedback.kind.as_str(), feedback.logs), ("bug", true));
   }
 }

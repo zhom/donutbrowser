@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, create_dir_all};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
@@ -217,6 +217,10 @@ pub struct AppSettings {
   /// same wait.
   #[serde(default)]
   pub tips_next_auto_show_at: Option<u64>,
+  /// Unix seconds when the person last sent feedback from the app. Only the
+  /// feedback command writes it; the feedback tip is not offered once set.
+  #[serde(default)]
+  pub feedback_sent_at: Option<u64>,
   /// Cloud user ids that have had the paid-plan welcome.
   #[serde(default)]
   pub paid_welcome_seen_for: Vec<String>,
@@ -303,6 +307,7 @@ impl Default for AppSettings {
       tips_seen: Vec::new(),
       tips_last_auto_shown_at: None,
       tips_next_auto_show_at: None,
+      feedback_sent_at: None,
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
       require_route_for_launch: false,
@@ -692,6 +697,7 @@ pub async fn save_app_settings(
       settings.window_resize_warning_dismissed = current.window_resize_warning_dismissed;
       settings.mcp_remote_enabled = current.mcp_remote_enabled;
       settings.mcp_remote_key_id = current.mcp_remote_key_id;
+      settings.feedback_sent_at = current.feedback_sent_at;
     }
   } else {
     settings.mcp_remote_enabled = false;
@@ -735,37 +741,27 @@ pub async fn save_app_settings(
   Ok(settings)
 }
 
-/// Read the most recent N log files concatenated into a single string,
-/// suitable for paste-into-issue-tracker. Newest entries appear LAST so the
-/// reader sees fresh context at the bottom of the buffer. Capped at 5 MB to
-/// keep clipboard payloads sane.
-#[tauri::command]
-pub async fn read_log_files(app_handle: tauri::AppHandle) -> Result<String, String> {
-  let dir = crate::app_dirs::log_dir(&app_handle);
-  if !dir.exists() {
-    return Err("Log directory does not exist yet".to_string());
-  }
+const TRUNCATED_MARK: &str = "[…truncated — older content elided…]\n";
 
-  let mut entries: Vec<(std::path::PathBuf, std::time::SystemTime)> = std::fs::read_dir(&dir)
-    .map_err(|e| format!("Failed to read log dir: {e}"))?
-    .filter_map(|r| r.ok())
-    .filter_map(|e| {
-      let p = e.path();
-      let m = e.metadata().ok()?.modified().ok()?;
-      let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
-      if p.is_file() && (ext == "log" || ext == "txt") {
-        Some((p, m))
-      } else {
-        None
-      }
+/// The newest log files, redacted, each under a `===== name =====` header and
+/// in chronological order so the freshest lines are at the bottom. At most
+/// `max_bytes`: the oldest file that only fits in part keeps its last whole
+/// lines.
+pub(crate) fn recent_logs(dir: &Path, max_bytes: usize) -> std::io::Result<String> {
+  let mut entries: Vec<(PathBuf, std::time::SystemTime)> = std::fs::read_dir(dir)?
+    .filter_map(Result::ok)
+    .filter_map(|entry| {
+      let path = entry.path();
+      let modified = entry.metadata().ok()?.modified().ok()?;
+      let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+      (path.is_file() && (ext == "log" || ext == "txt")).then_some((path, modified))
     })
     .collect();
+  entries.sort_by_key(|(_, modified)| std::cmp::Reverse(*modified));
 
-  entries.sort_by_key(|(_, m)| *m);
-
-  const MAX_BYTES: usize = 5 * 1024 * 1024;
-  let mut out = String::with_capacity(64 * 1024);
-  for (path, _) in entries.iter().rev() {
+  let mut sections = Vec::new();
+  let mut used = 0;
+  for (path, _) in entries {
     let header = format!(
       "===== {} =====\n",
       path
@@ -773,38 +769,51 @@ pub async fn read_log_files(app_handle: tauri::AppHandle) -> Result<String, Stri
         .and_then(|name| name.to_str())
         .unwrap_or("log")
     );
-    if out.len() + header.len() >= MAX_BYTES {
+    let Ok(raw) = std::fs::read(&path) else {
+      continue;
+    };
+    let mut content = crate::log_redaction::text(&String::from_utf8_lossy(&raw));
+    if !content.ends_with('\n') {
+      content.push('\n');
+    }
+    let room = max_bytes.saturating_sub(used + header.len());
+    if content.len() > room {
+      let tail = last_lines(&content, room.saturating_sub(TRUNCATED_MARK.len()));
+      if !tail.is_empty() {
+        sections.push(format!("{header}{TRUNCATED_MARK}{tail}"));
+      }
       break;
     }
-    out.push_str(&header);
-    if let Ok(content) = std::fs::read_to_string(path) {
-      let take = MAX_BYTES.saturating_sub(out.len());
-      if take == 0 {
-        break;
-      }
-      if content.len() > take {
-        // Tail truncation — keep the END of older files so newest data is preserved.
-        out.push_str("[…truncated — older content elided…]\n");
-        out.push_str(&content[content.len() - take + 64..]);
-      } else {
-        out.push_str(&content);
-      }
-      if !out.ends_with('\n') {
-        out.push('\n');
-      }
-    }
+    used += header.len() + content.len();
+    sections.push(format!("{header}{content}"));
   }
-
-  // Reverse the per-file order so chronological newest is at the bottom.
-  // (We pushed newest-first above to budget the tail; flip now.)
-  let mut sections: Vec<&str> = out.split("===== ").filter(|s| !s.is_empty()).collect();
   sections.reverse();
-  let final_out = sections
-    .into_iter()
-    .map(|s| format!("===== {s}"))
-    .collect::<String>();
+  Ok(sections.concat())
+}
 
-  Ok(crate::log_redaction::text(&final_out))
+/// The whole lines at the end of `text` that fit in `max_bytes`.
+fn last_lines(text: &str, max_bytes: usize) -> &str {
+  if text.len() <= max_bytes {
+    return text;
+  }
+  let start = text.len() - max_bytes;
+  // A newline byte is always a character boundary, so this never splits one.
+  match text.as_bytes()[start..].iter().position(|&b| b == b'\n') {
+    Some(offset) => &text[start + offset + 1..],
+    None => "",
+  }
+}
+
+/// Read the most recent log files concatenated into a single string,
+/// suitable for paste-into-issue-tracker. Capped at 5 MB to keep clipboard
+/// payloads sane.
+#[tauri::command]
+pub async fn read_log_files(app_handle: tauri::AppHandle) -> Result<String, String> {
+  let dir = crate::app_dirs::log_dir(&app_handle);
+  if !dir.exists() {
+    return Err("Log directory does not exist yet".to_string());
+  }
+  recent_logs(&dir, 5 * 1024 * 1024).map_err(|e| format!("Failed to read log dir: {e}"))
 }
 
 /// Reveal the log directory in the OS file manager.
@@ -1118,6 +1127,22 @@ pub async fn mark_tip_seen(tip_id: String, auto: bool) -> Result<TipsState, Stri
   Ok(TipsState::of(&settings, now))
 }
 
+/// Remember that the person has sent feedback, so the feedback tip is not
+/// offered again.
+pub(crate) fn note_feedback_sent() {
+  let _serial = TIPS_WRITE
+    .lock()
+    .unwrap_or_else(|poisoned| poisoned.into_inner());
+  let manager = SettingsManager::instance();
+  let saved = manager.load_settings().and_then(|mut settings| {
+    settings.feedback_sent_at = Some(unix_now());
+    manager.save_settings(&settings)
+  });
+  if let Err(e) = saved {
+    log::warn!("Feedback sent time not saved err=\"{e}\"");
+  }
+}
+
 #[tauri::command]
 pub async fn set_tips_auto_show(enabled: bool) -> Result<TipsState, String> {
   let _serial = TIPS_WRITE
@@ -1427,6 +1452,7 @@ mod tests {
       tips_seen: Vec::new(),
       tips_last_auto_shown_at: None,
       tips_next_auto_show_at: None,
+      feedback_sent_at: None,
       paid_welcome_seen_for: Vec::new(),
       cloud_plan_memory: std::collections::HashMap::new(),
       require_route_for_launch: true,
@@ -1616,5 +1642,66 @@ mod tests {
         .ends_with("table_sorting.json"),
       "Sorting file should end with table_sorting.json"
     );
+  }
+
+  fn write_log(dir: &Path, name: &str, body: &[u8], age_secs: u64) {
+    let path = dir.join(name);
+    std::fs::write(&path, body).unwrap();
+    let modified = std::time::SystemTime::now() - std::time::Duration::from_secs(age_secs);
+    std::fs::File::options()
+      .write(true)
+      .open(&path)
+      .unwrap()
+      .set_modified(modified)
+      .unwrap();
+  }
+
+  #[test]
+  fn recent_logs_put_the_newest_file_last_and_redact_it() {
+    let dir = TempDir::new().unwrap();
+    write_log(dir.path(), "DonutBrowser_old.log", b"old line\n", 600);
+    write_log(
+      dir.path(),
+      "DonutBrowser.log",
+      b"new line user=me@example.com",
+      0,
+    );
+    write_log(dir.path(), "notes.json", b"skipped", 0);
+
+    let logs = recent_logs(dir.path(), 1024).unwrap();
+    assert_eq!(
+      logs,
+      "===== DonutBrowser_old.log =====\nold line\n===== DonutBrowser.log =====\nnew line user=<redacted-email>\n"
+    );
+  }
+
+  #[test]
+  fn recent_logs_keep_whole_lines_within_the_budget() {
+    let dir = TempDir::new().unwrap();
+    let mut old = Vec::new();
+    for i in 0..200 {
+      old.extend_from_slice(format!("older é line {i}\n").as_bytes());
+    }
+    old.extend_from_slice(&[0xff, 0xfe, b'\n']);
+    write_log(dir.path(), "a.log", &old, 600);
+    write_log(dir.path(), "b.log", b"newest\n", 0);
+
+    let logs = recent_logs(dir.path(), 400).unwrap();
+    assert!(logs.len() <= 400, "{} bytes", logs.len());
+    assert!(logs.ends_with("===== b.log =====\nnewest\n"), "{logs}");
+    let older = logs
+      .strip_prefix("===== a.log =====\n[…truncated — older content elided…]\n")
+      .expect("the older file is cut, not dropped");
+    assert!(older.lines().all(|line| line.starts_with("older é line ")
+      || line == "\u{fffd}\u{fffd}"
+      || line.starts_with("=====")
+      || line == "newest"));
+  }
+
+  #[test]
+  fn recent_logs_of_an_empty_directory_are_empty() {
+    let dir = TempDir::new().unwrap();
+    assert_eq!(recent_logs(dir.path(), 1024).unwrap(), "");
+    assert!(recent_logs(&dir.path().join("missing"), 1024).is_err());
   }
 }

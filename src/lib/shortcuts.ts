@@ -32,6 +32,7 @@ export type ShortcutId =
   | "openPalette"
   | "openShortcuts"
   | "openTips"
+  | "sendFeedback"
   | "importProfile"
   | "goProfiles"
   | "goProxies"
@@ -66,6 +67,15 @@ export const SHORTCUTS: ShortcutDef[] = [
     labelKey: "shortcuts.openTips",
     group: "actions",
     key: "h",
+    mod: true,
+    shift: true,
+  },
+  {
+    // Mod+Shift+F, "feedback". Plain Mod+F stays free for find.
+    id: "sendFeedback",
+    labelKey: "shortcuts.sendFeedback",
+    group: "actions",
+    key: "f",
     mod: true,
     shift: true,
   },

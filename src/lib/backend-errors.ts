@@ -199,6 +199,13 @@ export type BackendErrorCode =
   | "AGENT_NOTE_EMPTY"
   | "AGENT_TEXT_TOO_LONG"
   | "AGENT_SESSION_NOT_FOUND"
+  | "FEEDBACK_MESSAGE_EMPTY"
+  | "FEEDBACK_MESSAGE_TOO_LONG"
+  | "FEEDBACK_EMAIL_INVALID"
+  | "FEEDBACK_INVALID"
+  | "FEEDBACK_RATE_LIMITED"
+  | "FEEDBACK_SEND_FAILED"
+  | "FEEDBACK_LOGS_UNREADABLE"
   | "FINGERPRINT_EXIT_MISMATCH"
   // The launch refuses instead of opening a window on an unmanaged device: a
   // silent fallback would leave the user browsing a random fingerprint while
@@ -746,6 +753,22 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "AGENT_SESSION_NOT_FOUND":
       return t("backendErrors.agentSessionNotFound");
+    case "FEEDBACK_MESSAGE_EMPTY":
+      return t("backendErrors.feedbackMessageEmpty");
+    case "FEEDBACK_MESSAGE_TOO_LONG":
+      return t("backendErrors.feedbackMessageTooLong", {
+        max: parsed.params?.max ?? "5000",
+      });
+    case "FEEDBACK_EMAIL_INVALID":
+      return t("backendErrors.feedbackEmailInvalid");
+    case "FEEDBACK_INVALID":
+      return t("backendErrors.feedbackInvalid");
+    case "FEEDBACK_RATE_LIMITED":
+      return t("backendErrors.feedbackRateLimited");
+    case "FEEDBACK_SEND_FAILED":
+      return t("backendErrors.feedbackSendFailed");
+    case "FEEDBACK_LOGS_UNREADABLE":
+      return t("backendErrors.feedbackLogsUnreadable");
     // The launch gate's block. The dialog renders the mismatch detail from
     // `params` itself; this string is the fallback for anywhere that only has
     // room for one sentence.

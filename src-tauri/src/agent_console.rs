@@ -87,6 +87,7 @@ pub enum ThreadKind {
   Progress,
   Joined,
   Left,
+  Feedback,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -115,8 +116,16 @@ pub struct AgentThreadItem {
   pub delivered_to: Vec<String>,
   pub done: Option<u64>,
   pub total: Option<u64>,
+  /// Set on a `feedback` item: what the agent sent to the Donut team.
+  pub feedback: Option<ThreadFeedback>,
   #[serde(skip)]
   outcome_seen: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ThreadFeedback {
+  pub kind: String,
+  pub logs: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -293,6 +302,7 @@ fn thread_item(kind: ThreadKind, at: u64) -> AgentThreadItem {
     delivered_to: Vec::new(),
     done: None,
     total: None,
+    feedback: None,
     outcome_seen: false,
   }
 }
@@ -762,6 +772,64 @@ pub fn report_progress(
   if let Some(session) = session {
     emit(EVENT_SESSION, &session);
   }
+  emit(EVENT_THREAD, &item);
+}
+
+/// How many of a session's latest calls go with its feedback.
+const FEEDBACK_RECENT_CALLS: usize = 20;
+
+/// What feedback from this session carries about the agent: its client name
+/// and version, and its latest calls (tool, error code and time only, never
+/// the arguments).
+pub fn feedback_context(session_id: Option<&str>) -> (Option<String>, Vec<serde_json::Value>) {
+  let state = console();
+  let client = session_id
+    .and_then(|sid| state.sessions.get(sid))
+    .and_then(|session| {
+      let name = session.client_name.as_deref()?;
+      Some(match session.client_version.as_deref() {
+        Some(version) => format!("{name} {version}"),
+        None => name.to_string(),
+      })
+    });
+  let owner = session_id.map(str::to_string);
+  let mut calls: Vec<serde_json::Value> = state
+    .activity
+    .iter()
+    .rev()
+    .filter(|entry| entry.session_id == owner)
+    .take(FEEDBACK_RECENT_CALLS)
+    .map(|entry| {
+      serde_json::json!({
+        "tool": entry.tool,
+        "errorCode": entry.error_code,
+        "durationMs": entry.duration_ms,
+        "at": entry.at,
+      })
+    })
+    .collect();
+  calls.reverse();
+  (client, calls)
+}
+
+/// Show the person that an agent sent feedback to the Donut team.
+pub fn feedback_sent(session_id: Option<&str>, kind: &str, message: &str, logs: bool) {
+  let now = now_ms();
+  let item = {
+    let mut state = console();
+    let mut item = thread_item(ThreadKind::Feedback, now);
+    item.id = state.next_id();
+    item.session_id = session_id.map(str::to_string);
+    item.text = message.chars().take(MAX_TEXT_CHARS).collect();
+    item.feedback = Some(ThreadFeedback {
+      kind: kind.to_string(),
+      logs,
+    });
+    if let Some(session) = session_id.and_then(|sid| state.sessions.get_mut(sid)) {
+      session.last_seen_at = now;
+    }
+    state.push_thread(item)
+  };
   emit(EVENT_THREAD, &item);
 }
 

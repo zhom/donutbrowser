@@ -2419,7 +2419,14 @@
     "wayfernLaunchArgsLimit": "最多使用 {{count}} 个启动参数，每个最多 {{length}} 个字符。",
     "tablePreferencesInvalid": "这些表格设置无效。",
     "tablePreferencesLoadFailed": "无法加载表格设置。请重试。",
-    "tablePreferencesSaveFailed": "无法保存表格设置。请重试。"
+    "tablePreferencesSaveFailed": "无法保存表格设置。请重试。",
+    "feedbackMessageEmpty": "请先写一条消息。",
+    "feedbackMessageTooLong": "消息太长。上限为 {{max}} 个字符。",
+    "feedbackEmailInvalid": "这个邮箱地址似乎不正确。",
+    "feedbackInvalid": "反馈未被接受。请检查消息后重试。",
+    "feedbackRateLimited": "你在短时间内发送了大量反馈。请几分钟后再试。",
+    "feedbackSendFailed": "无法发送反馈。请稍后再试。",
+    "feedbackLogsUnreadable": "无法读取日志。请关闭“附上最近的日志”后重新发送。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2438,7 +2445,9 @@
       "trash": "回收站",
       "trashHint": "恢复已删除的配置文件",
       "tips": "小贴士",
-      "tipsHint": "功能演示"
+      "tipsHint": "功能演示",
+      "feedback": "发送反馈",
+      "feedbackHint": "报告问题或分享想法"
     },
     "network": "网络",
     "integrations": "集成",
@@ -2557,7 +2566,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "前往回收站",
     "goAgent": "前往智能体",
-    "openTips": "打开小贴士"
+    "openTips": "打开小贴士",
+    "sendFeedback": "发送反馈"
   },
   "closeConfirm": {
     "title": "关闭 Donut Browser？",
@@ -3290,7 +3300,9 @@
       "noteSeenAt": "已于 {{time}} 查看",
       "noteSeen": "已查看",
       "joined": "{{agent}} 已加入",
-      "left": "{{agent}} 已离开"
+      "left": "{{agent}} 已离开",
+      "feedbackSent": "向 Donut 团队发送了反馈",
+      "feedbackLogs": "已附日志"
     },
     "composer": {
       "label": "给智能体的备注",
@@ -3570,6 +3582,12 @@
         "title": "从 donutbrowser.com 控制这台电脑",
         "body": "开启远程控制后，网站上的智能体可通过出站桥接访问这台电脑的配置文件。在“集成”中开启。",
         "action": "打开集成"
+      },
+      "feedback": {
+        "label": "反馈",
+        "title": "告诉团队下一步该修什么",
+        "body": "有东西坏了或缺少功能？从“更多”菜单发送反馈。只需一个开关即可附上日志，让团队准确看到出了什么问题。",
+        "action": "发送反馈"
       }
     }
   },
@@ -3613,5 +3631,52 @@
     "noTags": "无标签",
     "noProxy": "无代理",
     "encrypted": "已加密"
+  },
+  "feedback": {
+    "title": "发送反馈",
+    "description": "告诉 Donut 团队你的想法。我们会阅读每一条消息。",
+    "kindLabel": "反馈类型",
+    "kinds": {
+      "bug": {
+        "label": "问题",
+        "placeholder": "发生了什么？你原本期望的结果是什么？提供复现步骤会很有帮助。"
+      },
+      "idea": {
+        "label": "建议",
+        "placeholder": "怎样能让 Donut 更好用？"
+      },
+      "praise": {
+        "label": "称赞",
+        "placeholder": "你喜欢哪些地方？团队会很高兴听到。"
+      },
+      "other": {
+        "label": "其他",
+        "placeholder": "想说什么都可以。"
+      }
+    },
+    "messageLabel": "消息",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "附上最近的日志",
+      "description": "日志可以帮助我们找到问题。发送前会移除电子邮件地址、IP 地址、网址和密钥。",
+      "preview": "查看日志",
+      "loading": "正在读取日志…",
+      "empty": "暂无日志。"
+    },
+    "email": {
+      "label": "用于回复的邮箱",
+      "optional": "可选",
+      "placeholder": "you@example.com",
+      "signedIn": "回复将发送到 {{email}}。"
+    },
+    "included": "同时发送：Donut {{version}}，{{os}} {{arch}}",
+    "send": "发送",
+    "success": {
+      "title": "谢谢！",
+      "body": "你的反馈已送达 Donut 团队。",
+      "bodyWithLogs": "你的反馈和日志已送达 Donut 团队。",
+      "reply": "如需更多细节，我们会写信到 {{email}}。",
+      "done": "完成"
+    }
   }
 }

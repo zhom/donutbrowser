@@ -20,7 +20,8 @@ export type TipRequirement = Extract<
 export type TipAction =
   | { kind: "page"; page: AppPage }
   | { kind: "settings"; section: string }
-  | { kind: "palette" };
+  | { kind: "palette" }
+  | { kind: "feedback" };
 
 export type TipId =
   | "dnsBlocklist"
@@ -36,6 +37,7 @@ export type TipId =
   | "trash"
   | "localApi"
   | "importProfiles"
+  | "feedback"
   | "cloudBackup"
   | "cookieBot"
   | "crossOs"
@@ -80,6 +82,8 @@ export interface FeatureUsage {
   trashUsed?: boolean;
   /** An agent has connected over remote control during this app session. */
   agentUsed?: boolean;
+  /** The person has sent feedback from the app. */
+  feedbackSent?: boolean;
 }
 
 export interface TipDefinition {
@@ -181,6 +185,11 @@ export const TIPS: readonly TipDefinition[] = [
     inUse: (usage) => usage.apiEnabled === true,
   },
   { id: "importProfiles", action: { kind: "page", page: "import" } },
+  {
+    id: "feedback",
+    action: { kind: "feedback" },
+    inUse: (usage) => usage.feedbackSent === true,
+  },
   {
     id: "cloudBackup",
     action: { kind: "page", page: "account" },

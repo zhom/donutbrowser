@@ -2429,7 +2429,14 @@
     "wayfernLaunchArgsLimit": "Usa como máximo {{count}} argumentos de inicio, de hasta {{length}} caracteres cada uno.",
     "tablePreferencesInvalid": "La configuración de la tabla no es válida.",
     "tablePreferencesLoadFailed": "No se pudo cargar la configuración de la tabla. Inténtalo de nuevo.",
-    "tablePreferencesSaveFailed": "No se pudo guardar la configuración de la tabla. Inténtalo de nuevo."
+    "tablePreferencesSaveFailed": "No se pudo guardar la configuración de la tabla. Inténtalo de nuevo.",
+    "feedbackMessageEmpty": "Escribe un mensaje primero.",
+    "feedbackMessageTooLong": "El mensaje es demasiado largo. El límite es de {{max}} caracteres.",
+    "feedbackEmailInvalid": "Esta dirección de correo no parece correcta.",
+    "feedbackInvalid": "Los comentarios no se aceptaron. Revisa el mensaje e inténtalo de nuevo.",
+    "feedbackRateLimited": "Enviaste muchos comentarios en poco tiempo. Inténtalo de nuevo en unos minutos.",
+    "feedbackSendFailed": "No se pudieron enviar los comentarios. Inténtalo más tarde.",
+    "feedbackLogsUnreadable": "No se pudieron leer los registros. Desactiva «Incluir registros recientes» y envía de nuevo."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2448,7 +2455,9 @@
       "trash": "Papelera",
       "trashHint": "Restaurar perfiles eliminados",
       "tips": "Consejos",
-      "tipsHint": "Recorridos por las funciones"
+      "tipsHint": "Recorridos por las funciones",
+      "feedback": "Enviar comentarios",
+      "feedbackHint": "Informa de un error o comparte una idea"
     },
     "network": "Red",
     "integrations": "Integraciones",
@@ -2567,7 +2576,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Ir a la Papelera",
     "goAgent": "Ir a Agente",
-    "openTips": "Abrir consejos"
+    "openTips": "Abrir consejos",
+    "sendFeedback": "Enviar comentarios"
   },
   "closeConfirm": {
     "title": "¿Cerrar Donut Browser?",
@@ -3323,7 +3333,9 @@
       "noteSeenAt": "Vista a las {{time}}",
       "noteSeen": "Vista",
       "joined": "{{agent}} se unió",
-      "left": "{{agent}} se fue"
+      "left": "{{agent}} se fue",
+      "feedbackSent": "envió comentarios al equipo de Donut",
+      "feedbackLogs": "Registros adjuntos"
     },
     "composer": {
       "label": "Nota para tu agente",
@@ -3603,6 +3615,12 @@
         "title": "Controla este equipo desde donutbrowser.com",
         "body": "Con el control remoto activado, los agentes del sitio web llegan a los perfiles de esta máquina a través de un puente saliente. Actívalo en Integraciones.",
         "action": "Abrir Integraciones"
+      },
+      "feedback": {
+        "label": "Comentarios",
+        "title": "Dile al equipo qué arreglar después",
+        "body": "¿Algo falla o echas algo en falta? Envía comentarios desde el menú Más. Un interruptor adjunta tus registros para que el equipo vea exactamente qué salió mal.",
+        "action": "Enviar comentarios"
       }
     }
   },
@@ -3646,5 +3664,52 @@
     "noTags": "Sin etiquetas",
     "noProxy": "Sin proxy",
     "encrypted": "Cifrado"
+  },
+  "feedback": {
+    "title": "Enviar comentarios",
+    "description": "Cuéntale al equipo de Donut lo que piensas. Leemos todos los mensajes.",
+    "kindLabel": "Tipo de comentario",
+    "kinds": {
+      "bug": {
+        "label": "Error",
+        "placeholder": "¿Qué pasó y qué esperabas? Los pasos para reproducirlo ayudan mucho."
+      },
+      "idea": {
+        "label": "Idea",
+        "placeholder": "¿Qué haría que Donut fuera mejor para ti?"
+      },
+      "praise": {
+        "label": "Elogio",
+        "placeholder": "¿Qué te gusta? Al equipo le encantará leerlo."
+      },
+      "other": {
+        "label": "Otro",
+        "placeholder": "Cuéntanos lo que quieras."
+      }
+    },
+    "messageLabel": "Mensaje",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Incluir registros recientes",
+      "description": "Los registros nos ayudan a encontrar errores. Antes se eliminan las direcciones de correo, las direcciones IP, las direcciones web y los secretos.",
+      "preview": "Ver registros",
+      "loading": "Leyendo registros…",
+      "empty": "Todavía no hay registros."
+    },
+    "email": {
+      "label": "Correo para responderte",
+      "optional": "Opcional",
+      "placeholder": "tu@example.com",
+      "signedIn": "Las respuestas irán a {{email}}."
+    },
+    "included": "También se envía: Donut {{version}}, {{os}} {{arch}}",
+    "send": "Enviar",
+    "success": {
+      "title": "¡Gracias!",
+      "body": "Tus comentarios ya están con el equipo de Donut.",
+      "bodyWithLogs": "Tus comentarios y registros ya están con el equipo de Donut.",
+      "reply": "Si necesitamos más detalles, te escribiremos a {{email}}.",
+      "done": "Listo"
+    }
   }
 }

@@ -337,6 +337,11 @@ export const commandCoverage = {
       "recipes::delete_agent_recipe",
     ],
   },
+  feedback: {
+    suite: "ui",
+    level: "integration",
+    commands: ["feedback::send_feedback", "feedback::preview_feedback_logs"],
+  },
   agentConsole: {
     suite: "integrations",
     level: "integration",

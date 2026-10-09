@@ -43,6 +43,7 @@ interface UsageSettings {
   api_enabled?: boolean;
   mcp_remote_enabled?: boolean;
   fingerprint_gate_disabled?: boolean;
+  feedback_sent_at?: number | null;
 }
 
 /** A slow read must not hold the tip back for long. */
@@ -96,7 +97,13 @@ async function loadFeatureUsage(
   const wants = (...ids: TipId[]) => ids.some((id) => candidates.has(id));
   const [settings, proxyChecked, isDefaultBrowser, trashUsed, agentUsed] =
     await Promise.all([
-      wants("localApi", "automation", "remoteControl", "fingerprintGate")
+      wants(
+        "localApi",
+        "automation",
+        "remoteControl",
+        "fingerprintGate",
+        "feedback",
+      )
         ? known(invoke<UsageSettings>("get_app_settings"))
         : undefined,
       wants("proxyCheck") ? known(anyProxyChecked(source.proxyIds)) : undefined,
@@ -131,6 +138,8 @@ async function loadFeatureUsage(
     isDefaultBrowser,
     trashUsed,
     agentUsed,
+    feedbackSent:
+      settings === undefined ? undefined : settings.feedback_sent_at != null,
   };
 }
 

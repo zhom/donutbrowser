@@ -2419,7 +2419,14 @@
     "wayfernLaunchArgsLimit": "Dùng tối đa {{count}} tham số khởi chạy, mỗi tham số tối đa {{length}} ký tự.",
     "tablePreferencesInvalid": "Cài đặt bảng không hợp lệ.",
     "tablePreferencesLoadFailed": "Không thể tải cài đặt bảng. Hãy thử lại.",
-    "tablePreferencesSaveFailed": "Không thể lưu cài đặt bảng. Hãy thử lại."
+    "tablePreferencesSaveFailed": "Không thể lưu cài đặt bảng. Hãy thử lại.",
+    "feedbackMessageEmpty": "Hãy viết tin nhắn trước.",
+    "feedbackMessageTooLong": "Tin nhắn quá dài. Giới hạn là {{max}} ký tự.",
+    "feedbackEmailInvalid": "Địa chỉ email này có vẻ không đúng.",
+    "feedbackInvalid": "Phản hồi không được chấp nhận. Hãy kiểm tra tin nhắn và thử lại.",
+    "feedbackRateLimited": "Bạn đã gửi nhiều phản hồi trong thời gian ngắn. Hãy thử lại sau vài phút.",
+    "feedbackSendFailed": "Không thể gửi phản hồi. Hãy thử lại sau.",
+    "feedbackLogsUnreadable": "Không thể đọc nhật ký. Hãy tắt \"Đính kèm nhật ký gần đây\" rồi gửi lại."
   },
   "rail": {
     "profiles": "Profile",
@@ -2438,7 +2445,9 @@
       "trash": "Thùng rác",
       "trashHint": "Khôi phục hồ sơ đã xóa",
       "tips": "Mẹo",
-      "tipsHint": "Hướng dẫn tính năng"
+      "tipsHint": "Hướng dẫn tính năng",
+      "feedback": "Gửi phản hồi",
+      "feedbackHint": "Báo lỗi hoặc chia sẻ ý tưởng"
     },
     "network": "Mạng",
     "integrations": "Tích hợp",
@@ -2557,7 +2566,8 @@
     "goCookieBot": "Cookie Bot",
     "goTrash": "Đi tới Thùng rác",
     "goAgent": "Đến Tác nhân",
-    "openTips": "Mở mẹo"
+    "openTips": "Mở mẹo",
+    "sendFeedback": "Gửi phản hồi"
   },
   "closeConfirm": {
     "title": "Đóng Donut Browser?",
@@ -3290,7 +3300,9 @@
       "noteSeenAt": "Đã xem lúc {{time}}",
       "noteSeen": "Đã xem",
       "joined": "{{agent}} đã tham gia",
-      "left": "{{agent}} đã rời đi"
+      "left": "{{agent}} đã rời đi",
+      "feedbackSent": "đã gửi phản hồi cho đội ngũ Donut",
+      "feedbackLogs": "Đã đính kèm nhật ký"
     },
     "composer": {
       "label": "Ghi chú cho tác nhân",
@@ -3570,6 +3582,12 @@
         "title": "Điều khiển máy này từ donutbrowser.com",
         "body": "Khi bật điều khiển từ xa, các tác nhân trên trang web tiếp cận hồ sơ của máy này qua một cầu nối đi ra. Bật trong Tích hợp.",
         "action": "Mở Tích hợp"
+      },
+      "feedback": {
+        "label": "Phản hồi",
+        "title": "Cho đội ngũ biết nên sửa gì tiếp theo",
+        "body": "Có gì bị hỏng hoặc còn thiếu? Gửi phản hồi từ menu Thêm. Chỉ một công tắc là đính kèm nhật ký, để đội ngũ thấy chính xác điều gì đã sai.",
+        "action": "Gửi phản hồi"
       }
     }
   },
@@ -3613,5 +3631,52 @@
     "noTags": "Không có thẻ",
     "noProxy": "Không có proxy",
     "encrypted": "Đã mã hóa"
+  },
+  "feedback": {
+    "title": "Gửi phản hồi",
+    "description": "Hãy cho đội ngũ Donut biết bạn nghĩ gì. Chúng tôi đọc mọi tin nhắn.",
+    "kindLabel": "Loại phản hồi",
+    "kinds": {
+      "bug": {
+        "label": "Lỗi",
+        "placeholder": "Chuyện gì đã xảy ra, và bạn mong đợi điều gì? Các bước tái hiện lỗi sẽ giúp ích rất nhiều."
+      },
+      "idea": {
+        "label": "Ý tưởng",
+        "placeholder": "Điều gì sẽ giúp Donut tốt hơn cho bạn?"
+      },
+      "praise": {
+        "label": "Lời khen",
+        "placeholder": "Bạn thích điều gì? Đội ngũ sẽ rất vui khi đọc được."
+      },
+      "other": {
+        "label": "Khác",
+        "placeholder": "Hãy cho chúng tôi biết bất cứ điều gì."
+      }
+    },
+    "messageLabel": "Tin nhắn",
+    "counter": "{{count}} / {{max}}",
+    "logs": {
+      "label": "Đính kèm nhật ký gần đây",
+      "description": "Nhật ký giúp chúng tôi tìm lỗi. Địa chỉ email, địa chỉ IP, địa chỉ web và thông tin bí mật được xóa trước.",
+      "preview": "Xem nhật ký",
+      "loading": "Đang đọc nhật ký…",
+      "empty": "Chưa có nhật ký nào."
+    },
+    "email": {
+      "label": "Email để nhận phản hồi",
+      "optional": "Không bắt buộc",
+      "placeholder": "ban@example.com",
+      "signedIn": "Phản hồi sẽ được gửi tới {{email}}."
+    },
+    "included": "Cũng được gửi: Donut {{version}}, {{os}} {{arch}}",
+    "send": "Gửi",
+    "success": {
+      "title": "Cảm ơn bạn!",
+      "body": "Phản hồi của bạn đã đến đội ngũ Donut.",
+      "bodyWithLogs": "Phản hồi và nhật ký của bạn đã đến đội ngũ Donut.",
+      "reply": "Nếu cần thêm chi tiết, chúng tôi sẽ viết thư tới {{email}}.",
+      "done": "Xong"
+    }
   }
 }

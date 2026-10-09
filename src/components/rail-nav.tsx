@@ -13,6 +13,7 @@ import {
   LuInfo,
   LuKeyboard,
   LuLightbulb,
+  LuMessageSquareHeart,
   LuPlug,
   LuPuzzle,
   LuTrash2,
@@ -221,6 +222,7 @@ interface RailNavProps {
   onOpenAbout: () => void;
   /** Opens the feature tips catalog. */
   onOpenTips: () => void;
+  onOpenFeedback: () => void;
   /**
    * A remote session is running right now. The Cookie Bot item carries a dot so
    * the state is legible from every other page — an overnight job you cannot
@@ -297,6 +299,7 @@ export function RailNav({
   onNavigate,
   onOpenAbout,
   onOpenTips,
+  onOpenFeedback,
   cookieBotRunning = false,
   agentRequests = 0,
 }: RailNavProps) {
@@ -534,6 +537,28 @@ export function RailNav({
                 </span>
                 <span className="truncate text-[10px] text-muted-foreground">
                   {t("rail.more.tipsHint")}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-slot="rail-open-feedback"
+              onClick={() => {
+                setMoreOpen(false);
+                onOpenFeedback();
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent hover:text-accent-foreground"
+            >
+              <span className="grid size-5 shrink-0 place-items-center text-muted-foreground">
+                <LuMessageSquareHeart className="size-3" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-xs font-medium text-foreground">
+                  {t("rail.more.feedback")}
+                </span>
+                <span className="truncate text-[10px] text-muted-foreground">
+                  {t("rail.more.feedbackHint")}
                 </span>
               </span>
             </button>
