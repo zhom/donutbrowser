@@ -1,6 +1,27 @@
 # Changelog
 
 
+## v0.33.0 (2026-10-09)
+
+### Features
+
+- add ability to provide feedback
+
+### Refactoring
+
+- better logs
+
+### Maintenance
+
+- chore: ci
+- chore: version bump
+- chore: update flake.nix for v0.32.0 [skip ci] (#647)
+
+### Other
+
+- style: cleanup
+
+
 ## v0.32.0 (2026-10-07)
 
 ### Features
