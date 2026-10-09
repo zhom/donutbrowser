@@ -652,6 +652,47 @@ pub fn entitlement_cache_switch(version: &str, cache_root: &Path) -> Option<Stri
   Some(format!("--wayfern-entitlement-cache-dir={}", dir.display()))
 }
 
+// Kernel drivers of virtual machine and server display adapters. Their render
+// nodes have no 3D hardware Chromium's GPU process can keep alive. Some kernels
+// parent a virtio GPU's node to the PCI function, so its driver reads as
+// `virtio-pci` rather than `virtio_gpu`.
+const VIRTUAL_DRM_DRIVERS: &[&str] = &[
+  "ast",
+  "bochs-drm",
+  "cirrus",
+  "cirrus-qemu",
+  "hyperv_drm",
+  "mgag200",
+  "qxl",
+  "simple-framebuffer",
+  "vboxvideo",
+  "virtio-pci",
+  "virtio_gpu",
+  "vkms",
+];
+
+/// Chromium's default GL backend needs a hardware DRM render node. Without one
+/// (a VNC or remote desktop on a machine with no GPU, or a virtual machine's
+/// display adapter) the GPU process dies and the page area of a window
+/// composites as transparent, so such a host renders through SwiftShader
+/// instead, which also keeps WebGL available. A node whose driver cannot be
+/// read counts as hardware.
+pub fn software_gl_switch(dri_dir: &Path, sys_drm_dir: &Path) -> Option<&'static str> {
+  let has_hardware_render_node = std::fs::read_dir(dri_dir).is_ok_and(|entries| {
+    entries.flatten().any(|entry| {
+      let name = entry.file_name();
+      let name = name.to_string_lossy();
+      name.starts_with("renderD")
+        && !std::fs::read_link(sys_drm_dir.join(&*name).join("device/driver")).is_ok_and(|driver| {
+          driver
+            .file_name()
+            .is_some_and(|driver| VIRTUAL_DRM_DRIVERS.contains(&&*driver.to_string_lossy()))
+        })
+    })
+  });
+  (!has_hardware_render_node).then_some("--use-angle=swiftshader")
+}
+
 pub fn cdp_error_message(detail: &str) -> String {
   if let Some((_, rest)) = detail.split_once("CDP error: ") {
     if let Ok(error) = serde_json::from_str::<serde_json::Value>(rest.trim()) {
@@ -2713,6 +2754,10 @@ impl WayfernManager {
       args.push("--no-sandbox".to_string());
       args.push("--disable-setuid-sandbox".to_string());
       args.push("--disable-dev-shm-usage".to_string());
+      if let Some(switch) = software_gl_switch(Path::new("/dev/dri"), Path::new("/sys/class/drm")) {
+        log::info!("No hardware GPU render node: Wayfern renders through SwiftShader");
+        args.push(switch.to_string());
+      }
     }
 
     if ephemeral {
@@ -4532,6 +4577,56 @@ mod tests {
       expected.is_dir(),
       "the directory exists before the browser starts"
     );
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn a_host_without_a_hardware_render_node_renders_through_swiftshader() {
+    let root = tempfile::tempdir().unwrap();
+    let dri = root.path().join("dri");
+    let sys = root.path().join("sys");
+    let set_driver = |node: &str, driver: &str| {
+      let device = sys.join(node).join("device");
+      std::fs::create_dir_all(&device).unwrap();
+      let _ = std::fs::remove_file(device.join("driver"));
+      std::os::unix::fs::symlink(
+        root.path().join("bus/drivers").join(driver),
+        device.join("driver"),
+      )
+      .unwrap();
+    };
+    assert_eq!(
+      software_gl_switch(&dri, &sys),
+      Some("--use-angle=swiftshader"),
+      "no /dev/dri at all"
+    );
+    std::fs::create_dir(&dri).unwrap();
+    std::fs::write(dri.join("card0"), "").unwrap();
+    assert_eq!(
+      software_gl_switch(&dri, &sys),
+      Some("--use-angle=swiftshader"),
+      "a display card without a render node"
+    );
+    std::fs::write(dri.join("renderD128"), "").unwrap();
+    assert_eq!(
+      software_gl_switch(&dri, &sys),
+      None,
+      "a render node whose driver is unknown"
+    );
+    set_driver("renderD128", "virtio_gpu");
+    assert_eq!(
+      software_gl_switch(&dri, &sys),
+      Some("--use-angle=swiftshader"),
+      "a virtual machine's display adapter"
+    );
+    set_driver("renderD128", "virtio-pci");
+    assert_eq!(
+      software_gl_switch(&dri, &sys),
+      Some("--use-angle=swiftshader"),
+      "a virtio GPU whose node hangs off the PCI function"
+    );
+    set_driver("renderD128", "amdgpu");
+    assert_eq!(software_gl_switch(&dri, &sys), None, "a real GPU");
   }
 
   #[test]
