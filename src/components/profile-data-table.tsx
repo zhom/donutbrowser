@@ -19,7 +19,6 @@ import { emit, listen } from "@tauri-apps/api/event";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import {
   LuArrowDown,
@@ -128,6 +127,7 @@ import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import {
   getBrowserDisplayName,
   getOSDisplayName,
+  getOSIcon,
   getProfileIcon,
   isCrossOsProfile,
 } from "@/lib/browser-utils";
@@ -2543,13 +2543,7 @@ export function ProfilesDataTable({
           const profile = row.original;
           const crossOs = isCrossOsProfile(profile);
           const os = profile.host_os || profile.wayfern_config?.os || "";
-          const Icon = crossOs
-            ? os === "macos"
-              ? FaApple
-              : os === "windows"
-                ? FaWindows
-                : FaLinux
-            : getProfileIcon(profile);
+          const Icon = crossOs ? getOSIcon(os) : getProfileIcon(profile);
           const message = crossOs
             ? t("crossOs.viewOnly", { os: getOSDisplayName(os) })
             : meta.runningProfiles.has(profile.id)

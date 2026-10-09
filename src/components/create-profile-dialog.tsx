@@ -52,6 +52,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ProBadge } from "@/components/ui/pro-badge";
 import {
   Select,
   SelectContent,
@@ -69,12 +70,15 @@ import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useInputModality } from "@/hooks/use-input-modality";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
+import { getOSDisplayName, getOSIcon } from "@/lib/browser-utils";
 import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { BrowserReleaseTypes, WayfernConfig, WayfernOS } from "@/types";
 
 const PASSWORD_MIN_LEN = 8;
+
+const OS_OPTIONS: WayfernOS[] = ["windows", "macos", "linux", "android", "ios"];
 
 const getCurrentOS = (): WayfernOS => {
   if (typeof navigator === "undefined") return "linux";
@@ -125,6 +129,9 @@ export function CreateProfileDialog({
   const proxyListboxId = useId();
   const proxyLabelId = useId();
   const proxyValueId = useId();
+  const osListboxId = useId();
+  const osLabelId = useId();
+  const osValueId = useId();
   const advancedOptionsId = useId();
   const reduceMotion = useReducedMotion() ?? false;
   const inputModality = useInputModality();
@@ -132,6 +139,7 @@ export function CreateProfileDialog({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
   const [proxyPopoverOpen, setProxyPopoverOpen] = useState(false);
+  const [osPopoverOpen, setOsPopoverOpen] = useState(false);
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [dnsBlocklist, setDnsBlocklist] = useState("");
   const [launchHook, setLaunchHook] = useState("");
@@ -271,6 +279,10 @@ export function CreateProfileDialog({
   const proxyLabel = selectedVpn
     ? `WG — ${selectedVpn.name}`
     : (selectedProxy?.name ?? t("createProfile.proxy.noProxy"));
+  const hostOs = getCurrentOS();
+  const selectedOs = wayfernConfig.os ?? hostOs;
+  const crossOs = selectedOs !== hostOs;
+  const SelectedOsIcon = getOSIcon(selectedOs);
 
   const clearPassword = () => {
     setEnablePassword(false);
@@ -285,6 +297,7 @@ export function CreateProfileDialog({
     setAdvancedOpen(false);
     setSelectedProxyId(undefined);
     setProxyPopoverOpen(false);
+    setOsPopoverOpen(false);
     setShowProxyForm(false);
     setDnsBlocklist("");
     setLaunchHook("");
@@ -417,38 +430,115 @@ export function CreateProfileDialog({
           data-slot="profile-create-fields"
           className="-mx-1 flex min-h-0 flex-col gap-3 overflow-y-auto px-1 pt-1 pb-2"
         >
-          <motion.label
-            htmlFor="profile-name"
-            className="flex cursor-text items-center gap-2.5 rounded-xl bg-foreground/4 p-2 transition-[background-color,box-shadow] duration-150 focus-within:bg-foreground/6 focus-within:ring-2 focus-within:ring-foreground/10 hover:bg-foreground/5"
+          <motion.div
+            data-slot="profile-name-field"
+            className="flex items-center gap-2 rounded-xl bg-foreground/4 p-2 transition-[background-color,box-shadow] duration-150 focus-within:bg-foreground/6 focus-within:ring-2 focus-within:ring-foreground/10 hover:bg-foreground/5"
             {...rise(0)}
           >
-            <ProfileGlyph
-              seed={profileName}
-              routed={!!selectedProxyId}
-              locked={enablePassword}
-              ephemeral={ephemeral}
-              busy={isCreating}
-            />
-            <span className="sr-only">{t("createProfile.profileName")}</span>
-            <Input
-              id="profile-name"
-              variant="bare"
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              value={profileName}
-              onChange={(event) => setProfileName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  void handleCreate();
-                }
-              }}
-              placeholder={t("createProfile.profileNamePlaceholder")}
-              disabled={isCreating}
-              className="h-9 text-base font-medium md:text-base"
-            />
-          </motion.label>
+            <label
+              htmlFor="profile-name"
+              className="flex min-w-0 flex-1 cursor-text items-center gap-2.5"
+            >
+              <ProfileGlyph
+                seed={profileName}
+                routed={!!selectedProxyId}
+                locked={enablePassword}
+                ephemeral={ephemeral}
+                busy={isCreating}
+              />
+              <span className="sr-only">{t("createProfile.profileName")}</span>
+              <Input
+                id="profile-name"
+                variant="bare"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void handleCreate();
+                  }
+                }}
+                placeholder={t("createProfile.profileNamePlaceholder")}
+                disabled={isCreating}
+                className="h-9 text-base font-medium md:text-base"
+              />
+            </label>
+            <span id={osLabelId} className="sr-only">
+              {t("fingerprint.osLabel")}
+            </span>
+            <Popover open={osPopoverOpen} onOpenChange={setOsPopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  id="profile-os"
+                  type="button"
+                  role="combobox"
+                  aria-expanded={osPopoverOpen}
+                  aria-controls={osListboxId}
+                  aria-labelledby={`${osLabelId} ${osValueId}`}
+                  className={cn(optionPill(crossOs), "shrink-0")}
+                  disabled={isCreating}
+                >
+                  <PillIcon on={crossOs} animate={animateEntry}>
+                    <SelectedOsIcon />
+                  </PillIcon>
+                  <PillLabel
+                    id={osValueId}
+                    label={getOSDisplayName(selectedOs)}
+                    animate={animateEntry}
+                  />
+                  <LuChevronDown
+                    className={cn(
+                      "-mr-0.5 opacity-60 transition-transform duration-200 motion-reduce:transition-none",
+                      osPopoverOpen && "rotate-180",
+                    )}
+                    aria-hidden="true"
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-0" align="end" sideOffset={6}>
+                <Command>
+                  <CommandList id={osListboxId}>
+                    <CommandGroup>
+                      {OS_OPTIONS.map((os) => {
+                        const locked = os !== hostOs && !crossOsUnlocked;
+                        const Icon = getOSIcon(os);
+                        return (
+                          <CommandItem
+                            key={os}
+                            value={os}
+                            disabled={locked}
+                            onSelect={() => {
+                              updateWayfernConfig("os", os);
+                              setOsPopoverOpen(false);
+                            }}
+                          >
+                            <LuCheck
+                              className={cn(
+                                "size-4 shrink-0",
+                                selectedOs === os ? "opacity-100" : "opacity-0",
+                              )}
+                              aria-hidden="true"
+                            />
+                            <Icon
+                              className="size-3.5 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">
+                              {getOSDisplayName(os)}
+                            </span>
+                            {locked && <ProBadge className="ml-auto" />}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </motion.div>
 
           <motion.div
             className="flex flex-wrap items-center gap-1.5"
@@ -688,6 +778,20 @@ export function CreateProfileDialog({
             </motion.div>
           )}
 
+          {crossOs && (
+            <motion.p
+              role="status"
+              className={cn(STATUS_CLASS, "items-start")}
+              {...reveal}
+            >
+              <LuTriangleAlert
+                className="mt-0.5 size-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              {t("fingerprint.crossOsWarning")}
+            </motion.p>
+          )}
+
           {downloading ? (
             <motion.p role="status" className={STATUS_CLASS} {...reveal}>
               <LuLoaderCircle
@@ -920,6 +1024,7 @@ export function CreateProfileDialog({
                       readOnly={isCreating}
                       crossOsUnlocked={crossOsUnlocked}
                       limitedMode={!crossOsUnlocked}
+                      osPicker={false}
                       profileVersion={creatableVersion}
                       profileBrowser="wayfern"
                     />

@@ -176,6 +176,8 @@ interface WayfernConfigFormProps {
   readOnly?: boolean;
   crossOsUnlocked?: boolean;
   limitedMode?: boolean;
+  /** False when the caller shows its own operating system picker. */
+  osPicker?: boolean;
   profileVersion?: string;
   profileBrowser?: string;
   /// The saved profile whose persona is edited here. Absent while a profile is
@@ -275,6 +277,7 @@ export function WayfernConfigForm({
   readOnly = false,
   crossOsUnlocked = false,
   limitedMode = false,
+  osPicker = true,
   profileVersion,
   profileBrowser,
   profileId,
@@ -428,60 +431,65 @@ export function WayfernConfigForm({
    * whereas their absence is the truth. */
   const isIdentityDerived = config.identity_id != null;
 
+  const generateButton = profileVersion && (!isCreating || crossOsUnlocked) && (
+    <LoadingButton
+      isLoading={isGeneratingFingerprint}
+      onClick={handleRegenerateClick}
+      disabled={readOnly}
+      variant="outline"
+      size="sm"
+    >
+      {isCreating
+        ? t("fingerprint.generateFingerprint")
+        : t("fingerprint.regenerateFingerprint")}
+    </LoadingButton>
+  );
+
   const renderAdvancedForm = () => (
     <div className="space-y-6">
-      {/* Operating System Selection */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>{t("fingerprint.osLabel")}</Label>
-          {profileVersion && (!isCreating || crossOsUnlocked) && (
-            <LoadingButton
-              isLoading={isGeneratingFingerprint}
-              onClick={handleRegenerateClick}
-              disabled={readOnly}
-              variant="outline"
-              size="sm"
-            >
-              {isCreating
-                ? t("fingerprint.generateFingerprint")
-                : t("fingerprint.regenerateFingerprint")}
-            </LoadingButton>
+      {!osPicker ? (
+        generateButton && <div className="flex">{generateButton}</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label>{t("fingerprint.osLabel")}</Label>
+            {generateButton}
+          </div>
+          <Select
+            value={selectedOS}
+            onValueChange={(value: WayfernOS) => {
+              onConfigChange("os", value);
+            }}
+            disabled={readOnly}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={t("fingerprint.selectOSPlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              {(
+                ["windows", "macos", "linux", "android", "ios"] as WayfernOS[]
+              ).map((os) => {
+                const isDisabled = os !== currentOS && !crossOsUnlocked;
+                return (
+                  <SelectItem key={os} value={os} disabled={isDisabled}>
+                    <span className="flex items-center gap-2">
+                      {osLabels[os]}
+                      {isDisabled && <ProBadge />}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {selectedOS !== currentOS && crossOsUnlocked && (
+            <Alert className="mt-2">
+              <AlertDescription>
+                {t("fingerprint.crossOsWarning")}
+              </AlertDescription>
+            </Alert>
           )}
         </div>
-        <Select
-          value={selectedOS}
-          onValueChange={(value: WayfernOS) => {
-            onConfigChange("os", value);
-          }}
-          disabled={readOnly}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder={t("fingerprint.selectOSPlaceholder")} />
-          </SelectTrigger>
-          <SelectContent>
-            {(
-              ["windows", "macos", "linux", "android", "ios"] as WayfernOS[]
-            ).map((os) => {
-              const isDisabled = os !== currentOS && !crossOsUnlocked;
-              return (
-                <SelectItem key={os} value={os} disabled={isDisabled}>
-                  <span className="flex items-center gap-2">
-                    {osLabels[os]}
-                    {isDisabled && <ProBadge />}
-                  </span>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
-        {selectedOS !== currentOS && crossOsUnlocked && (
-          <Alert className="mt-2">
-            <AlertDescription>
-              {t("fingerprint.crossOsWarning")}
-            </AlertDescription>
-          </Alert>
-        )}
-      </div>
+      )}
 
       {/* Randomize Fingerprint Option */}
       <div className="space-y-3 rounded-lg bg-foreground/4 p-4">

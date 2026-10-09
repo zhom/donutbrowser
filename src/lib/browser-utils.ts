@@ -6,12 +6,16 @@ import { SiBrave, SiOpera, SiVivaldi } from "react-icons/si";
  */
 
 import {
+  FaAndroid,
+  FaApple,
   FaChrome,
   FaEdge,
   FaExclamationTriangle,
   FaFire,
   FaFirefox,
+  FaLinux,
   FaSafari,
+  FaWindows,
 } from "react-icons/fa";
 import { LuLock } from "react-icons/lu";
 import { getCurrentOS } from "@/lib/platform";
@@ -103,7 +107,25 @@ export function getOSDisplayName(os: string): string {
       return "Windows";
     case "linux":
       return "Linux";
+    case "android":
+      return "Android";
+    case "ios":
+      return "iOS";
     default:
       return os;
+  }
+}
+
+export function getOSIcon(os: string) {
+  switch (os) {
+    case "macos":
+    case "ios":
+      return FaApple;
+    case "windows":
+      return FaWindows;
+    case "android":
+      return FaAndroid;
+    default:
+      return FaLinux;
   }
 }

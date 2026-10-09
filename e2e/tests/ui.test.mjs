@@ -194,6 +194,50 @@ test("profile creation stays compact and saves basic, protected, and ephemeral p
         en.createProfile.proxy.noProxy,
       ]);
       await app.capture("profile-create-compact-wide");
+      // The device's operating system is chosen on the dialog itself. Without
+      // a plan that includes cross-OS fingerprints, only this computer's
+      // system can be picked.
+      const hostOs =
+        { darwin: "macOS", win32: "Windows" }[process.platform] ?? "Linux";
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-os').textContent.trim();`,
+        ),
+        hostOs,
+      );
+      await app.clickSelector("#profile-os");
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelectorAll('[cmdk-item]').length;`,
+          ),
+        { description: "operating system options" },
+      );
+      const osOptions = await app.execute(`
+      return [...document.querySelectorAll('[cmdk-item]')].map((item) => ({
+        text: item.textContent.trim(),
+        disabled: item.getAttribute('aria-disabled') === 'true',
+      }));
+    `);
+      assert.equal(osOptions.length, 5, JSON.stringify(osOptions));
+      assert.deepEqual(
+        osOptions.filter((option) => !option.disabled).map((o) => o.text),
+        [hostOs],
+      );
+      assert.ok(
+        osOptions
+          .filter((option) => option.disabled)
+          .every((option) => option.text.endsWith("PRO")),
+        JSON.stringify(osOptions),
+      );
+      await app.pressShortcut({ key: "Escape" });
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return !document.querySelector('[cmdk-item]') && Boolean(document.querySelector('#profile-name'));`,
+          ),
+        { description: "the OS menu to close and the dialog to stay" },
+      );
       // Adding a route is part of the route list, and stays there when the
       // search finds nothing.
       await app.clickSelector("#profile-proxy");
@@ -1350,7 +1394,7 @@ test("soft table and creation surfaces stay quiet and readable in every theme", 
         const colors = await paintedColors(app, {
           off: ["#ephemeral"],
           on: ["#enable-password"],
-          name: ['label[for="profile-name"]'],
+          name: ['[data-slot="profile-name-field"]'],
           password: ["#profile-password"],
         });
         assertQuietTint(colors.off, colors.page, 1.35, `${theme.id} option`);
