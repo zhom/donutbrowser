@@ -289,10 +289,8 @@ pub async fn start_proxy_process_with_profile(
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
   ensure_sidecar_version().await?;
 
-  let started = std::time::Instant::now();
   let id = generate_proxy_id();
   let upstream = upstream_url.unwrap_or_else(|| "DIRECT".to_string());
-  let upstream_kind = upstream_scheme(&upstream).to_string();
 
   // Get available port if not specified
   let local_port = port.unwrap_or_else(|| {
@@ -310,12 +308,51 @@ pub async fn start_proxy_process_with_profile(
     .with_record_domains(record_domains);
   save_proxy_config(&config)?;
 
+  spawn_proxy_worker(&config, false).await
+}
+
+/// Restart only a dead worker whose browser is still alive. Keep its full
+/// route and listening port: the running browser cannot use a new port.
+pub async fn recover_proxy_process(
+  id: &str,
+) -> Result<Option<ProxyConfig>, Box<dyn std::error::Error>> {
+  let Some(config) = get_proxy_config(id) else {
+    return Ok(None);
+  };
+  if !proxy_needs_recovery(&config) {
+    return Ok(None);
+  }
+  ensure_sidecar_version().await?;
+  spawn_proxy_worker(&config, true).await.map(Some)
+}
+
+pub(crate) fn proxy_needs_recovery(config: &ProxyConfig) -> bool {
+  config.profile_id.is_some()
+    && config.local_port.is_some_and(|port| port != 0)
+    && config.pid.is_some_and(|pid| !is_process_running(pid))
+    && crate::proxy_storage::browser_owner_is_alive(config)
+}
+
+async fn spawn_proxy_worker(
+  config: &ProxyConfig,
+  recovering: bool,
+) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
+  let started = std::time::Instant::now();
+  let id = config.id.clone();
+  let profile_id = config.profile_id.as_deref().unwrap_or("none");
+  let upstream_kind = upstream_scheme(&config.upstream_url);
+
   // Spawn proxy worker process in the background using std::process::Command
   // This ensures proper process detachment on Unix systems
   let exe = find_sidecar_executable("donut-proxy")?;
   let temp_dir = std::env::temp_dir();
   let log_path = temp_dir.join(format!("donut-proxy-{id}.log"));
-  let log_file = crate::app_dirs::create_owner_only(&log_path);
+  let log_file = if recovering && log_path.exists() {
+    crate::app_dirs::restrict_to_owner(&log_path);
+    std::fs::OpenOptions::new().append(true).open(&log_path)
+  } else {
+    crate::app_dirs::create_owner_only(&log_path)
+  };
   prune_stale_proxy_logs(&temp_dir, RETAINED_PROXY_LOGS);
   let spawned_pid: u32;
 
@@ -369,8 +406,7 @@ pub async fn start_proxy_process_with_profile(
       processes.insert(id.clone(), pid);
     }
 
-    // Don't wait for the child - it's detached
-    drop(child);
+    watch_proxy_exit(child, id.clone());
   }
 
   #[cfg(windows)]
@@ -438,7 +474,7 @@ pub async fn start_proxy_process_with_profile(
       processes.insert(id.clone(), pid);
     }
 
-    drop(child);
+    watch_proxy_exit(child, id.clone());
   }
 
   // Give the process a moment to start up before checking
@@ -454,7 +490,7 @@ pub async fn start_proxy_process_with_profile(
     // Use shorter sleep for faster startup
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    if let Some(updated_config) = get_proxy_config(&id) {
+    if let Some(updated_config) = get_proxy_config(&id).filter(|c| c.pid == Some(spawned_pid)) {
       // Check if local_url is set (worker has bound and updated config)
       if let Some(ref local_url) = updated_config.local_url {
         if !local_url.is_empty() {
@@ -469,7 +505,7 @@ pub async fn start_proxy_process_with_profile(
               Ok(Ok(_stream)) => {
                 log::info!(
                   "Proxy worker started id={id} pid={spawned_pid} port={port} profile={} upstream={upstream_kind} elapsed_ms={}",
-                  profile_id.as_deref().unwrap_or("none"),
+                  profile_id,
                   started.elapsed().as_millis()
                 );
                 return Ok(updated_config);
@@ -499,10 +535,20 @@ pub async fn start_proxy_process_with_profile(
       // The detached worker (if it did spawn) would otherwise outlive this
       // failed start with nothing tracking it — callers only get an error
       // string, so this is the last place that can still kill it.
-      let _ = stop_proxy_process_because(&id, "start_timeout").await;
+      let _ = stop_proxy_process_inner(&id, "start_timeout", !recovering).await;
       return Err(format!("Proxy worker failed to start in time. {detail}").into());
     }
   }
+}
+
+fn watch_proxy_exit(mut child: std::process::Child, id: String) {
+  let pid = child.id();
+  // A recovered worker is a child of the long-lived GUI. Reap it off the
+  // runtime so repeated failures do not leave zombies until the GUI exits.
+  std::thread::spawn(move || match child.wait() {
+    Ok(status) => log::info!("Proxy worker exited id={id} pid={pid} status=\"{status}\""),
+    Err(error) => log::warn!("Proxy worker wait failed id={id} pid={pid} err=\"{error}\""),
+  });
 }
 
 pub async fn stop_proxy_process(id: &str) -> Result<bool, Box<dyn std::error::Error>> {
@@ -513,6 +559,14 @@ pub async fn stop_proxy_process(id: &str) -> Result<bool, Box<dyn std::error::Er
 pub(crate) async fn stop_proxy_process_because(
   id: &str,
   reason: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+  stop_proxy_process_inner(id, reason, true).await
+}
+
+async fn stop_proxy_process_inner(
+  id: &str,
+  reason: &str,
+  remove_config: bool,
 ) -> Result<bool, Box<dyn std::error::Error>> {
   let config = get_proxy_config(id);
   let pid = PROXY_PROCESSES
@@ -554,7 +608,9 @@ pub(crate) async fn stop_proxy_process_because(
     }
 
     // Delete the config file
-    delete_proxy_config(id);
+    if remove_config {
+      delete_proxy_config(id);
+    }
 
     let how = if !was_running {
       "already_gone"

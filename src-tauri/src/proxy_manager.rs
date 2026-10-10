@@ -13,6 +13,9 @@ use crate::browser::ProxySettings;
 use crate::events;
 use crate::ip_utils;
 
+static PROXY_RECOVERY: crate::log_streak::KeyedStreak =
+  crate::log_streak::KeyedStreak::new(module_path!(), "Proxy worker recovery");
+
 // Export data format for JSON export
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyExportData {
@@ -358,6 +361,8 @@ pub struct ProxyManager {
   // We only reap a worker after it has been missed in N consecutive scans —
   // a single sysinfo blip under load shouldn't kill a still-running worker.
   dead_browser_misses: Mutex<HashMap<u32, u8>>,
+  // A requested stop must not race a recovery that starts the worker again.
+  worker_lifecycle: tokio::sync::Mutex<()>,
 }
 
 impl ProxyManager {
@@ -368,6 +373,7 @@ impl ProxyManager {
       profile_active_proxy_ids: Mutex::new(HashMap::new()),
       stored_proxies: Mutex::new(HashMap::new()),
       dead_browser_misses: Mutex::new(HashMap::new()),
+      worker_lifecycle: tokio::sync::Mutex::new(()),
     };
 
     // Load stored proxies on initialization
@@ -1952,6 +1958,7 @@ impl ProxyManager {
     // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
     local_protocol: &str,
   ) -> Result<ProxySettings, String> {
+    let _lifecycle = self.worker_lifecycle.lock().await;
     let started = std::time::Instant::now();
     if let Some(name) = profile_id {
       // Check if we have an active proxy recorded for this profile
@@ -2225,6 +2232,15 @@ impl ProxyManager {
     app_handle: tauri::AppHandle,
     browser_pid: u32,
   ) -> Result<(), String> {
+    let _lifecycle = self.worker_lifecycle.lock().await;
+    self.stop_proxy_inner(app_handle, browser_pid).await
+  }
+
+  async fn stop_proxy_inner(
+    &self,
+    app_handle: tauri::AppHandle,
+    browser_pid: u32,
+  ) -> Result<(), String> {
     let (proxy_id, profile_id): (String, Option<String>) = {
       let mut proxies = self.active_proxies.lock().unwrap();
       match proxies.remove(&browser_pid) {
@@ -2283,11 +2299,8 @@ impl ProxyManager {
     app_handle: tauri::AppHandle,
     profile_id: &str,
   ) -> Result<(), String> {
-    // Find the proxy ID for this profile
-    let proxy_id = {
-      let map = self.profile_active_proxy_ids.lock().unwrap();
-      map.get(profile_id).cloned()
-    };
+    let _lifecycle = self.worker_lifecycle.lock().await;
+    let proxy_id = self.resolve_proxy_id_for_profile(profile_id);
 
     if let Some(proxy_id) = proxy_id {
       // Find the PID for this proxy
@@ -2304,7 +2317,7 @@ impl ProxyManager {
 
       if let Some(pid) = pid {
         // Use the existing stop_proxy method
-        self.stop_proxy(app_handle, pid).await
+        self.stop_proxy_inner(app_handle, pid).await
       } else {
         // Proxy not found in active_proxies, try to stop it directly by ID
         let worker = WorkerSnapshot::take(&proxy_id);
@@ -2420,21 +2433,42 @@ impl ProxyManager {
       .map(|config| config.id)
   }
 
-  // Clean up proxies for dead browser processes
-  // Only clean up orphaned config files where the proxy process itself is dead
+  // Restore routes for live browsers before removing dead worker records.
   pub async fn cleanup_dead_proxies(
     &self,
     _app_handle: tauri::AppHandle,
   ) -> Result<Vec<u32>, String> {
-    // Don't stop proxies for dead browser processes - let them run indefinitely
-    // The proxy processes are idle and don't consume CPU when not in use
-    // Only clean up config files where the proxy process itself is dead (see below)
+    let _lifecycle = self.worker_lifecycle.lock().await;
     let dead_pids: Vec<u32> = Vec::new();
 
-    // Clean up orphaned proxy configs (only where proxy process is definitely dead)
-    // IMPORTANT: Only clean up configs where the proxy process itself is dead
-    // If the proxy process is running (even if idle), leave it alone
-    // The user doesn't care if proxy processes run indefinitely as long as they're not consuming CPU
+    // Read disk as well as the in-memory map. A browser and its route can
+    // outlive the GUI, so a fresh GUI has no active_proxies entry for them.
+    let mut recovering_ids = std::collections::HashSet::new();
+    for config in crate::proxy_storage::list_proxy_configs() {
+      if !crate::proxy_runner::proxy_needs_recovery(&config) {
+        continue;
+      }
+      recovering_ids.insert(config.id.clone());
+      let key = format!(
+        "profile={} proxy_worker={}",
+        config.profile_id.as_deref().unwrap_or("none"),
+        config.id
+      );
+      match crate::proxy_runner::recover_proxy_process(&config.id).await {
+        Ok(Some(recovered)) => {
+          PROXY_RECOVERY.succeeded(&key);
+          log::info!(
+            "Proxy worker recovered {key} old_pid={} pid={} port={}",
+            config.pid.unwrap_or_default(),
+            recovered.pid.unwrap_or_default(),
+            recovered.local_port.unwrap_or_default()
+          );
+        }
+        Ok(None) => {}
+        Err(error) => PROXY_RECOVERY.failed(&key, error),
+      }
+    }
+
     let orphaned_configs = {
       use crate::proxy_storage::{is_process_running, list_proxy_configs};
 
@@ -2447,6 +2481,10 @@ impl ProxyManager {
       all_configs
         .into_iter()
         .filter(|config| {
+          // Keep a failed recovery's route so the next pass can retry it.
+          if recovering_ids.contains(&config.id) {
+            return false;
+          }
           // If proxy is tracked in active_proxies, it's definitely not orphaned
           if tracked_proxy_ids.contains(&config.id) {
             return false;

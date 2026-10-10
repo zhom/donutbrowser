@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1038,6 +1039,49 @@ async function waitForCondition(check, description, timeoutMs = 30_000) {
   throw new Error(`Timed out after ${timeoutMs}ms waiting for ${description}`);
 }
 
+async function assertWorkerRoute(port) {
+  const target = new URL(fixtureUrl);
+  const socket = net.createConnection({ host: "127.0.0.1", port });
+  socket.setTimeout(5_000, () =>
+    socket.destroy(new Error("Proxy request timed out")),
+  );
+  const chunks = socket[Symbol.asyncIterator]();
+  let buffered = Buffer.alloc(0);
+  const read = async (length) => {
+    while (buffered.length < length) {
+      const { value, done } = await chunks.next();
+      assert.equal(done, false, "Proxy closed before its reply");
+      buffered = Buffer.concat([buffered, value]);
+    }
+    const value = buffered.subarray(0, length);
+    buffered = buffered.subarray(length);
+    return value;
+  };
+  try {
+    socket.write(Buffer.from([5, 1, 0]));
+    assert.deepEqual(await read(2), Buffer.from([5, 0]));
+    const host = Buffer.from(target.hostname);
+    const targetPort = Number(target.port || 80);
+    socket.write(
+      Buffer.concat([
+        Buffer.from([5, 1, 0, 3, host.length]),
+        host,
+        Buffer.from([targetPort >> 8, targetPort & 255]),
+      ]),
+    );
+    assert.deepEqual(await read(4), Buffer.from([5, 0, 0, 1]));
+    await read(6);
+    socket.write(
+      `GET /worker-recovery HTTP/1.1\r\nHost: ${target.host}\r\nConnection: close\r\n\r\n`,
+    );
+    const response = [buffered];
+    for await (const chunk of chunks) response.push(chunk);
+    assert.match(Buffer.concat(response).toString(), /^HTTP\/1\.1 200 /);
+  } finally {
+    socket.destroy();
+  }
+}
+
 /// Launch a real profile and return it together with the worker serving it,
 /// asserting the worker is pinned to that exact browser process.
 async function launchWithWorker(app, version, name) {
@@ -1077,7 +1121,7 @@ async function launchWithWorker(app, version, name) {
 // recorded a verified owner identity it just kept running and users killed it
 // by hand. Phase one covers closing the browser; phase two covers the reported
 // order (app closed first, so nothing is left to reap anything).
-test("a proxy worker dies with its browser, with and without the app running", async () => {
+test("a proxy worker recovers for a live browser and dies with its browser", async () => {
   assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
   const localWayfernVersion = cachedFixtureVersion(
     process.env.DONUT_E2E_PROJECT_ROOT,
@@ -1106,6 +1150,41 @@ test("a proxy worker dies with its browser, with and without the app running", a
     // Phase one: the app is up, the browser goes away.
     const first = await launchWithWorker(app, prepared.version, "Worker Reap");
     strays.add(first.browserPid).add(first.workerPid);
+    let worker = (await readWorkerConfigs(app)).find(
+      (config) => config.id === first.workerId,
+    );
+    await assertWorkerRoute(worker.local_port);
+    for (const afterRestart of [false, true]) {
+      if (afterRestart) await app.restart();
+      process.kill(worker.pid, "SIGKILL");
+      await waitForCondition(
+        () => !processExists(worker.pid),
+        "failed worker to exit",
+      );
+      const recovered = await app.waitFor(
+        async () => {
+          const current = (await readWorkerConfigs(app)).find(
+            (config) => config.id === worker.id,
+          );
+          return current?.pid !== worker.pid && processExists(current?.pid)
+            ? current
+            : false;
+        },
+        {
+          timeoutMs: 45_000,
+          description: "automatic proxy recovery on the original port",
+        },
+      );
+      strays.add(recovered.pid);
+      assert.deepEqual(recovered, { ...worker, pid: recovered.pid });
+      assert.ok(
+        processExists(first.browserPid),
+        "recovery must keep the browser running",
+      );
+      await assertWorkerRoute(worker.local_port);
+      worker = recovered;
+    }
+    first.workerPid = worker.pid;
     process.kill(first.browserPid, "SIGKILL");
     await waitForCondition(
       () => !processExists(first.browserPid),

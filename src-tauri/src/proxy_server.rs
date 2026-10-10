@@ -1612,6 +1612,7 @@ pub fn redacted_upstream(upstream: &str) -> String {
 
 pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {
   let started = std::time::Instant::now();
+  let connection_limit = worker_connection_limit();
   // Load the config from disk to get the latest state
   let config = match crate::proxy_storage::get_proxy_config(&config.id) {
     Some(c) => c,
@@ -1865,7 +1866,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   };
 
   log::info!(
-    "Worker started kind=proxy id={} pid={} listen=127.0.0.1:{actual_port} serve={local_protocol} upstream={} profile={} blocklist={} bypass_rules={} record_domains={} elapsed_ms={}",
+    "Worker started kind=proxy id={} pid={} listen=127.0.0.1:{actual_port} serve={local_protocol} upstream={} profile={} blocklist={} bypass_rules={} record_domains={} connections={connection_limit} elapsed_ms={}",
     config.id,
     std::process::id(),
     upstream_url
@@ -1885,26 +1886,19 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     started.elapsed().as_millis()
   );
 
-  // Bound concurrent connection handlers. A client retry-storm (e.g. a browser
-  // hammering CONNECT requests while DNS is failing) must not spawn unbounded
-  // tasks,
-  // each of which parks a Tokio blocking thread inside getaddrinfo — that is
-  // what exhausted the resolver pool and pegged the CPU on long-lived workers.
-  // A real browser never approaches this ceiling; waiting for a permit
-  // backpressures a storm instead of amplifying it.
-  let conn_semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
+  let conn_semaphore = Arc::new(tokio::sync::Semaphore::new(connection_limit));
 
   // Keep the runtime alive with an infinite loop
   // This ensures the process doesn't exit even if there are no active connections
   loop {
+    // Reserve the full connection budget before opening another descriptor.
+    let permit = conn_semaphore
+      .clone()
+      .acquire_owned()
+      .await
+      .expect("connection semaphore is never closed");
     match listener.accept().await {
       Ok((stream, _peer_addr)) => {
-        // The semaphore is never closed, so acquire cannot fail.
-        let permit = conn_semaphore
-          .clone()
-          .acquire_owned()
-          .await
-          .expect("connection semaphore is never closed");
         let upstream = upstream_url.clone();
         let matcher = bypass_matcher.clone();
         let blocker = blocklist_matcher.clone();
@@ -2035,6 +2029,46 @@ fn watchdog_poll_interval() -> std::time::Duration {
 /// client retry-storm from spawning unbounded tasks (each of which parks a
 /// Tokio blocking thread inside getaddrinfo).
 const MAX_CONCURRENT_CONNECTIONS: usize = 512;
+
+#[cfg(unix)]
+fn connections_for_descriptor_limit(limit: u64) -> usize {
+  // A SOCKS5 UDP relay uses four sockets, plus temporary resolver sockets.
+  // Keep room for the runtime, logs, traffic files, and owner checks.
+  const RESERVED: u64 = 64;
+  const PER_CONNECTION: u64 = 6;
+  ((limit.saturating_sub(RESERVED) / PER_CONNECTION).clamp(1, MAX_CONCURRENT_CONNECTIONS as u64))
+    as usize
+}
+
+fn worker_connection_limit() -> usize {
+  #[cfg(unix)]
+  {
+    let mut limit = libc::rlimit {
+      rlim_cur: 0,
+      rlim_max: 0,
+    };
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+      return connections_for_descriptor_limit(256);
+    }
+    // macOS GUI children normally inherit a soft limit of 256. Request room
+    // for the connection cap without changing the hard limit or the host.
+    let requested = limit.rlim_max.min(4096);
+    if limit.rlim_cur < requested {
+      let raised = libc::rlimit {
+        rlim_cur: requested,
+        rlim_max: limit.rlim_max,
+      };
+      if unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &raised) } == 0 {
+        limit = raised;
+      }
+    }
+    connections_for_descriptor_limit(limit.rlim_cur)
+  }
+  #[cfg(not(unix))]
+  {
+    MAX_CONCURRENT_CONNECTIONS
+  }
+}
 
 /// Connect timeout for the direct (no-upstream) dial path. Bounds a wedged
 /// `getaddrinfo` so a broken resolver can't park a blocking thread for the
@@ -2547,6 +2581,22 @@ pub(crate) async fn tunnel_streams(
 mod tests {
   use super::*;
   use std::io::Write;
+
+  #[test]
+  #[cfg(unix)]
+  fn connection_budget_leaves_room_for_dns_and_worker_files() {
+    assert_eq!(connections_for_descriptor_limit(128), 10);
+    assert_eq!(connections_for_descriptor_limit(256), 32);
+    assert_eq!(
+      connections_for_descriptor_limit(4096),
+      MAX_CONCURRENT_CONNECTIONS
+    );
+    assert_eq!(
+      connections_for_descriptor_limit(u64::MAX),
+      MAX_CONCURRENT_CONNECTIONS
+    );
+    assert_eq!(connections_for_descriptor_limit(32), 1);
+  }
 
   /// Build an upstream URL with `urlencoding::encode`-d user/pass,
   /// mirroring what `proxy_manager::build_proxy_url` actually emits

@@ -109,6 +109,207 @@ struct ProxyWorkerProcess {
   config_id: String,
 }
 
+#[tokio::test]
+#[serial]
+#[cfg(unix)]
+async fn test_worker_connection_pressure_respects_its_descriptor_limit(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  use donutbrowser_lib::proxy_storage::{
+    generate_proxy_id, get_proxy_config, save_proxy_config, ProxyConfig,
+  };
+  use std::os::unix::process::CommandExt;
+
+  let isolated_root = tempfile::tempdir()?;
+  let _data_root = EnvironmentRestore::set_path("DONUTBROWSER_DATA_ROOT", isolated_root.path());
+  let binary_path = setup_test().await?;
+  let id = generate_proxy_id();
+  let config = ProxyConfig::new(id.clone(), "DIRECT".to_string(), Some(0))
+    .with_local_protocol(Some("socks5".to_string()));
+  save_proxy_config(&config).map_err(|error| error.to_string())?;
+  let log_path = isolated_root.path().join("worker.log");
+  let mut command = std::process::Command::new(binary_path);
+  command
+    .args(["proxy-worker", "start", "--id", &id])
+    .stdout(std::process::Stdio::null())
+    .stderr(std::fs::File::create(&log_path)?);
+  unsafe {
+    command.pre_exec(|| {
+      let limit = libc::rlimit {
+        rlim_cur: 128,
+        rlim_max: 128,
+      };
+      if libc::setrlimit(libc::RLIMIT_NOFILE, &limit) != 0 {
+        return Err(std::io::Error::last_os_error());
+      }
+      Ok(())
+    });
+  }
+  let _worker = ProxyWorkerProcess {
+    child: command.spawn()?,
+    config_id: id.clone(),
+  };
+  let ready = tokio::time::timeout(Duration::from_secs(10), async {
+    loop {
+      if let Some(ready) = get_proxy_config(&id).filter(|config| config.local_url.is_some()) {
+        break ready;
+      }
+      sleep(Duration::from_millis(20)).await;
+    }
+  })
+  .await?;
+  let port = ready.local_port.unwrap();
+  let mut clients = Vec::new();
+  // Fill the descriptor limit without exceeding macOS's 128-entry listen
+  // backlog: queued connections must wait outside the worker's descriptor set.
+  for index in 0..128 {
+    let mut stream = tokio::time::timeout(
+      Duration::from_secs(5),
+      TcpStream::connect(("127.0.0.1", port)),
+    )
+    .await
+    .map_err(|error| format!("queued connection {index}: {error}"))??;
+    stream.write_all(&[5, 1, 0]).await?;
+    clients.push(stream);
+  }
+  let mut greeting = [0; 2];
+  tokio::time::timeout(Duration::from_secs(5), clients[0].read_exact(&mut greeting)).await??;
+  assert_eq!(greeting, [5, 0]);
+  sleep(Duration::from_millis(500)).await;
+  drop(clients);
+  let log = std::fs::read_to_string(log_path)?;
+  assert!(
+    !log.contains("Too many open files"),
+    "worker exhausted its descriptors: {log}"
+  );
+  assert!(
+    log.contains("connections=10"),
+    "worker must use its actual hard limit"
+  );
+
+  let (target_port, target) = start_mock_http_server("AFTER-CONNECTION-PRESSURE").await;
+  let response = reqwest::Client::builder()
+    .proxy(reqwest::Proxy::all(ready.local_url.as_ref().unwrap())?)
+    .timeout(Duration::from_secs(5))
+    .build()?
+    .get(format!("http://127.0.0.1:{target_port}/"))
+    .send()
+    .await?;
+  assert_eq!(response.text().await?, "AFTER-CONNECTION-PRESSURE");
+  target.abort();
+  Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_dead_worker_recovers_its_route_and_retries_an_occupied_port(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  use donutbrowser_lib::proxy_runner::recover_proxy_process;
+  use donutbrowser_lib::proxy_storage::{
+    generate_proxy_id, get_proxy_config, process_start_time, save_proxy_config, ProxyConfig,
+  };
+
+  let isolated_root = tempfile::tempdir()?;
+  let _data_root = EnvironmentRestore::set_path("DONUTBROWSER_DATA_ROOT", isolated_root.path());
+  let binary_path = setup_test().await?;
+  let mut tracker = ProxyTestTracker::new(binary_path.clone());
+  let (upstream_port, upstream) = start_mock_http_server("RECOVERED-UPSTREAM").await;
+  let blocklist = isolated_root.path().join("allowlist.txt");
+  std::fs::write(&blocklist, "recovery.invalid\n")?;
+  let id = generate_proxy_id();
+  let mut config = ProxyConfig::new(
+    id.clone(),
+    format!("http://user:password@127.0.0.1:{upstream_port}"),
+    Some(0),
+  )
+  .with_profile_id(Some("recovery-test".to_string()))
+  .with_bypass_rules(vec!["bypass.invalid".to_string()])
+  .with_blocklist_file(Some(blocklist.to_string_lossy().to_string()))
+  .with_dns_allowlist_mode(true)
+  .with_local_protocol(Some("http".to_string()))
+  .with_record_domains(false);
+  config.browser_pid = Some(std::process::id());
+  config.browser_pid_start_time = process_start_time(std::process::id());
+  config.ignore_proxy_certificate = Some(true);
+  save_proxy_config(&config).map_err(|error| error.to_string())?;
+  tracker.track_proxy(id.clone());
+  let mut worker = ProxyWorkerProcess {
+    child: std::process::Command::new(&binary_path)
+      .args(["proxy-worker", "start", "--id", &id])
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()?,
+    config_id: id.clone(),
+  };
+  let original = tokio::time::timeout(Duration::from_secs(10), async {
+    loop {
+      if let Some(ready) = get_proxy_config(&id).filter(|config| config.local_url.is_some()) {
+        break ready;
+      }
+      sleep(Duration::from_millis(20)).await;
+    }
+  })
+  .await?;
+  assert!(recover_proxy_process(&id)
+    .await
+    .map_err(|error| error.to_string())?
+    .is_none());
+  worker.child.kill()?;
+  worker.child.wait()?;
+
+  let mut wrong_owner = original.clone();
+  wrong_owner.browser_pid_start_time = Some(1);
+  save_proxy_config(&wrong_owner).map_err(|error| error.to_string())?;
+  assert!(recover_proxy_process(&id)
+    .await
+    .map_err(|error| error.to_string())?
+    .is_none());
+  save_proxy_config(&original).map_err(|error| error.to_string())?;
+
+  let port = original.local_port.unwrap();
+  let occupied = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+  assert!(recover_proxy_process(&id).await.is_err());
+  assert!(
+    get_proxy_config(&id).is_some(),
+    "a failed restart must keep its route"
+  );
+  drop(occupied);
+
+  let recovered = recover_proxy_process(&id)
+    .await
+    .map_err(|error| error.to_string())?
+    .expect("worker recovered");
+  assert_ne!(recovered.pid, original.pid);
+  let mut expected = original.clone();
+  expected.pid = recovered.pid;
+  assert_eq!(
+    serde_json::to_value(&recovered)?,
+    serde_json::to_value(expected)?
+  );
+
+  let client = reqwest::Client::builder()
+    .proxy(reqwest::Proxy::all(recovered.local_url.as_ref().unwrap())?)
+    .timeout(Duration::from_secs(5))
+    .build()?;
+  let response = client.get("http://recovery.invalid/").send().await?;
+  assert_eq!(response.text().await?, "RECOVERED-UPSTREAM");
+  assert_eq!(
+    client.get("http://blocked.invalid/").send().await?.status(),
+    reqwest::StatusCode::FORBIDDEN
+  );
+
+  let stopped = TestUtils::execute_command(&binary_path, &["proxy", "stop", "--id", &id]).await?;
+  assert!(stopped.status.success());
+  assert!(
+    recover_proxy_process(&id)
+      .await
+      .map_err(|error| error.to_string())?
+      .is_none(),
+    "a requested stop must stay stopped"
+  );
+  upstream.abort();
+  Ok(())
+}
+
 impl Drop for ProxyWorkerProcess {
   fn drop(&mut self) {
     let _ = self.child.kill();
