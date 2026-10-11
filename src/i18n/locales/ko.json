@@ -1512,7 +1512,8 @@
       "activity": "활동",
       "launchHook": "실행 후크",
       "transfer": "전송",
-      "startPages": "시작 페이지"
+      "startPages": "시작 페이지",
+      "twoFactor": "2FA 코드"
     },
     "sectionDesc": {
       "fingerprint": "이 프로필이 핑거프린팅 스크립트에 어떻게 표시되는지 구성합니다.",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "Donut에서 실행할 때마다 마지막 세션 대신 여는 페이지입니다. 한 줄에 하나씩 입력하세요. 자체 URL이 있는 실행은 그 URL만 엽니다.",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "2FA 코드",
+    "toolDescription": "2FA 키를 붙여 넣으면 현재 코드를 보여 줍니다. Donut은 키를 저장하지 않습니다.",
+    "keyLabel": "2FA 키",
+    "keyPlaceholder": "비밀 키 또는 otpauth:// 링크",
+    "expiresIn": "{{seconds}}초 후 변경",
+    "copied": "코드를 복사했습니다",
+    "sectionDescription": "이 프로필이 로그인하는 계정의 코드입니다. 키는 이 기기에 암호화되어 남으며, 동기화, 내보내기, API 제공은 절대 되지 않습니다.",
+    "empty": "아직 2FA 키가 없습니다.",
+    "labelPlaceholder": "계정 (선택 사항)",
+    "add": "2FA 키 추가",
+    "delete": "2FA 키 삭제",
+    "deleteTitle": "\"{{label}}\"의 2FA 키를 삭제할까요?",
+    "deleteDescription": "먼저 키 사본을 다른 곳에 보관하세요. 그렇지 않으면 계정에 접근하지 못할 수 있습니다."
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "공급자가 30초 안에 IP 변경에 응답하지 않았습니다.",
     "proxyRotationUnreachable": "공급자의 IP 변경 링크에 연결할 수 없습니다.",
     "startUrlInvalid": "\"{{url}}\"은(는) 웹 페이지가 아닙니다. 시작 페이지는 http:// 또는 https:// 주소여야 합니다.",
-    "startUrlsTooMany": "프로필 하나에 시작 페이지는 최대 20개까지 가능합니다."
+    "startUrlsTooMany": "프로필 하나에 시작 페이지는 최대 20개까지 가능합니다.",
+    "totpKeyInvalid": "2FA 키가 아닙니다. 사이트에 표시된 비밀 키나 otpauth:// 링크를 붙여 넣으세요.",
+    "totpLabelTooLong": "라벨은 최대 60자까지 가능합니다.",
+    "totpLimitReached": "프로필 하나에 2FA 키는 최대 50개까지 저장할 수 있습니다.",
+    "totpEntryNotFound": "이 2FA 키는 더 이상 존재하지 않습니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -2635,7 +2655,8 @@
     "goTrash": "휴지통으로 이동",
     "goAgent": "에이전트로 이동",
     "openTips": "팁 열기",
-    "sendFeedback": "피드백 보내기"
+    "sendFeedback": "피드백 보내기",
+    "openTotp": "키로 2FA 코드 보기"
   },
   "closeConfirm": {
     "title": "Donut Browser를 닫으시겠습니까?",

@@ -1512,7 +1512,8 @@
       "activity": "Etkinlik",
       "launchHook": "Başlatma kancası",
       "transfer": "Aktarım",
-      "startPages": "Başlangıç sayfaları"
+      "startPages": "Başlangıç sayfaları",
+      "twoFactor": "2FA kodları"
     },
     "sectionDesc": {
       "fingerprint": "Bu profilin parmak izi tarama betiklerine nasıl görüneceğini yapılandırın.",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "Donut'tan her başlatmada son oturum yerine açılan sayfalar, satır başına bir tane. Kendi URL'si olan bir çalıştırma yalnızca o URL'yi açar.",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "2FA kodu",
+    "toolDescription": "Geçerli kodu görmek için bir 2FA anahtarı yapıştırın. Donut anahtarı saklamaz.",
+    "keyLabel": "2FA anahtarı",
+    "keyPlaceholder": "Gizli anahtar veya otpauth:// bağlantısı",
+    "expiresIn": "{{seconds}} sn sonra değişir",
+    "copied": "Kod kopyalandı",
+    "sectionDescription": "Bu profilin oturum açtığı hesapların kodları. Anahtarlar bu cihazda şifreli kalır. Asla eşitlenmez, dışa aktarılmaz veya API'ye verilmez.",
+    "empty": "Henüz 2FA anahtarı yok.",
+    "labelPlaceholder": "Hesap (isteğe bağlı)",
+    "add": "2FA anahtarı ekle",
+    "delete": "2FA anahtarını sil",
+    "deleteTitle": "\"{{label}}\" için 2FA anahtarı silinsin mi?",
+    "deleteDescription": "Önce anahtarın bir kopyasını başka bir yerde saklayın, yoksa hesaba erişimi kaybedebilirsiniz."
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "Sağlayıcı IP değişikliğine 30 saniye içinde yanıt vermedi.",
     "proxyRotationUnreachable": "Donut, sağlayıcının IP değiştirme bağlantısına ulaşamadı.",
     "startUrlInvalid": "\"{{url}}\" bir web sayfası değil. Başlangıç sayfaları http:// veya https:// adresleri olmalıdır.",
-    "startUrlsTooMany": "Bir profilde en fazla 20 başlangıç sayfası olabilir."
+    "startUrlsTooMany": "Bir profilde en fazla 20 başlangıç sayfası olabilir.",
+    "totpKeyInvalid": "Bu bir 2FA anahtarı değil. Sitenin gösterdiği gizli anahtarı veya otpauth:// bağlantısını yapıştırın.",
+    "totpLabelTooLong": "Etiket en fazla 60 karakter olabilir.",
+    "totpLimitReached": "Bir profil en fazla 50 2FA anahtarı saklayabilir.",
+    "totpEntryNotFound": "Bu 2FA anahtarı artık yok."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2635,7 +2655,8 @@
     "goTrash": "Çöp Kutusuna git",
     "goAgent": "Ajan'a git",
     "openTips": "İpuçlarını aç",
-    "sendFeedback": "Geri bildirim gönder"
+    "sendFeedback": "Geri bildirim gönder",
+    "openTotp": "Anahtardan 2FA kodu"
   },
   "closeConfirm": {
     "title": "Donut Browser kapatılsın mı?",

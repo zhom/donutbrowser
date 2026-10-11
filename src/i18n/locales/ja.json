@@ -1512,7 +1512,8 @@
       "activity": "アクティビティ",
       "launchHook": "起動フック",
       "transfer": "転送",
-      "startPages": "スタートページ"
+      "startPages": "スタートページ",
+      "twoFactor": "2FA コード"
     },
     "sectionDesc": {
       "fingerprint": "フィンガープリント対策スクリプトに対するこのプロファイルの表示を設定します。",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "Donut から起動するたびに前回のセッションの代わりに開くページです。1 行に 1 つ入力します。独自の URL を指定した実行では、その URL だけが開きます。",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "2FA コード",
+    "toolDescription": "2FA キーを貼り付けると現在のコードを表示します。Donut はキーを保存しません。",
+    "keyLabel": "2FA キー",
+    "keyPlaceholder": "シークレットキーまたは otpauth:// リンク",
+    "expiresIn": "あと {{seconds}} 秒で更新",
+    "copied": "コードをコピーしました",
+    "sectionDescription": "このプロファイルがログインするアカウントのコードです。キーはこのデバイスに暗号化して保存され、同期、エクスポート、API への提供は一切されません。",
+    "empty": "2FA キーはまだありません。",
+    "labelPlaceholder": "アカウント (任意)",
+    "add": "2FA キーを追加",
+    "delete": "2FA キーを削除",
+    "deleteTitle": "「{{label}}」の 2FA キーを削除しますか？",
+    "deleteDescription": "先にキーのコピーを別の場所に保管してください。保管しないとアカウントにアクセスできなくなる場合があります。"
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "プロバイダーが 30 秒以内に IP 変更に応答しませんでした。",
     "proxyRotationUnreachable": "プロバイダーの IP 変更リンクに接続できませんでした。",
     "startUrlInvalid": "「{{url}}」はウェブページではありません。スタートページは http:// または https:// のアドレスにしてください。",
-    "startUrlsTooMany": "1 つのプロファイルに設定できるスタートページは 20 件までです。"
+    "startUrlsTooMany": "1 つのプロファイルに設定できるスタートページは 20 件までです。",
+    "totpKeyInvalid": "2FA キーではありません。サイトに表示されるシークレットキーまたは otpauth:// リンクを貼り付けてください。",
+    "totpLabelTooLong": "ラベルは 60 文字以内にしてください。",
+    "totpLimitReached": "1 つのプロファイルに保存できる 2FA キーは 50 個までです。",
+    "totpEntryNotFound": "この 2FA キーはもう存在しません。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2635,7 +2655,8 @@
     "goTrash": "ゴミ箱へ移動",
     "goAgent": "エージェントへ移動",
     "openTips": "ヒントを開く",
-    "sendFeedback": "フィードバックを送信"
+    "sendFeedback": "フィードバックを送信",
+    "openTotp": "キーから 2FA コードを表示"
   },
   "closeConfirm": {
     "title": "Donut Browser を閉じますか？",

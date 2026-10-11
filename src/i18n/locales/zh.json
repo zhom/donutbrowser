@@ -1512,7 +1512,8 @@
       "activity": "活动",
       "launchHook": "启动钩子",
       "transfer": "迁移",
-      "startPages": "启动页"
+      "startPages": "启动页",
+      "twoFactor": "2FA 验证码"
     },
     "sectionDesc": {
       "fingerprint": "配置此配置文件如何对指纹脚本显示。",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "每次从 Donut 启动时打开的页面，每行一个，代替上次会话。带有自身 URL 的运行只打开该 URL。",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "2FA 验证码",
+    "toolDescription": "粘贴 2FA 密钥即可查看当前验证码。Donut 不保存该密钥。",
+    "keyLabel": "2FA 密钥",
+    "keyPlaceholder": "密钥或 otpauth:// 链接",
+    "expiresIn": "{{seconds}} 秒后更新",
+    "copied": "验证码已复制",
+    "sectionDescription": "此配置文件所登录账号的验证码。密钥加密保存在本设备上，绝不会同步、导出或提供给 API。",
+    "empty": "还没有 2FA 密钥。",
+    "labelPlaceholder": "账号（可选）",
+    "add": "添加 2FA 密钥",
+    "delete": "删除 2FA 密钥",
+    "deleteTitle": "删除“{{label}}”的 2FA 密钥？",
+    "deleteDescription": "请先在其他地方保存密钥副本，否则可能无法再访问该账号。"
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "服务商在 30 秒内未响应更换 IP。",
     "proxyRotationUnreachable": "Donut 无法访问服务商的更换 IP 链接。",
     "startUrlInvalid": "“{{url}}”不是网页。启动页必须是 http:// 或 https:// 地址。",
-    "startUrlsTooMany": "一个配置文件最多可以有 20 个启动页。"
+    "startUrlsTooMany": "一个配置文件最多可以有 20 个启动页。",
+    "totpKeyInvalid": "这不是 2FA 密钥。请粘贴网站显示的密钥或 otpauth:// 链接。",
+    "totpLabelTooLong": "标签最多 60 个字符。",
+    "totpLimitReached": "一个配置文件最多保存 50 个 2FA 密钥。",
+    "totpEntryNotFound": "此 2FA 密钥已不存在。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2635,7 +2655,8 @@
     "goTrash": "前往回收站",
     "goAgent": "前往智能体",
     "openTips": "打开小贴士",
-    "sendFeedback": "发送反馈"
+    "sendFeedback": "发送反馈",
+    "openTotp": "由密钥生成 2FA 验证码"
   },
   "closeConfirm": {
     "title": "关闭 Donut Browser？",

@@ -114,6 +114,7 @@ mod profile_import;
 mod profile_importer;
 mod profile_statuses;
 mod profile_templates;
+mod profile_totp;
 mod proxy_distribution;
 mod proxy_manager;
 mod proxy_rotation;
@@ -152,6 +153,7 @@ mod mcp_remote;
 mod mcp_server;
 mod tag_manager;
 mod team_lock;
+mod totp;
 mod vault;
 mod version_updater;
 pub mod vpn;
@@ -3340,6 +3342,11 @@ pub fn run_with_builder(
       profile_statuses::update_profile_status,
       profile_statuses::delete_profile_status,
       profile_statuses::set_profiles_status,
+      totp::generate_totp_code,
+      profile_totp::list_profile_totp,
+      profile_totp::add_profile_totp,
+      profile_totp::delete_profile_totp,
+      profile_totp::get_profile_totp_codes,
       proxy_rotation::set_proxy_rotation_url,
       proxy_rotation::rotate_proxy_ip,
       proxy_rotation::rotate_proxy_ips,

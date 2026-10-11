@@ -37,6 +37,10 @@ export type BackendErrorCode =
   | "PROXY_ROTATION_FAILED"
   | "START_URL_INVALID"
   | "START_URLS_TOO_MANY"
+  | "TOTP_KEY_INVALID"
+  | "TOTP_LABEL_TOO_LONG"
+  | "TOTP_LIMIT_REACHED"
+  | "TOTP_ENTRY_NOT_FOUND"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -401,6 +405,14 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "START_URLS_TOO_MANY":
       return t("backendErrors.startUrlsTooMany");
+    case "TOTP_KEY_INVALID":
+      return t("backendErrors.totpKeyInvalid");
+    case "TOTP_LABEL_TOO_LONG":
+      return t("backendErrors.totpLabelTooLong");
+    case "TOTP_LIMIT_REACHED":
+      return t("backendErrors.totpLimitReached");
+    case "TOTP_ENTRY_NOT_FOUND":
+      return t("backendErrors.totpEntryNotFound");
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

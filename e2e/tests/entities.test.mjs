@@ -1354,6 +1354,97 @@ test("cookie import/copy/export, profile encryption, and traffic-stat read/clear
   });
 });
 
+test("2FA keys stay sealed on this device, hand out codes, and go with their profile", async () => {
+  await withApp("entities-two-factor", async (app) => {
+    const secret = "JBSWY3DPEHPK3PXP";
+    const quick = await app.invoke("generate_totp_code", {
+      key: ` ${secret.toLowerCase()} `,
+    });
+    assert.match(quick.code, /^\d{6}$/);
+    assert.equal(quick.valid_until % 30, 0);
+    assert.match(
+      await app.invokeError("generate_totp_code", { key: "not a key" }),
+      /TOTP_KEY_INVALID/,
+    );
+
+    const profile = await createProfile(app, "Two Factor Profile");
+    assert.match(
+      await app.invokeError("add_profile_totp", {
+        profileId: profile.id,
+        label: "",
+        key: "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP&counter=1",
+      }),
+      /TOTP_KEY_INVALID/,
+    );
+    const entry = await app.invoke("add_profile_totp", {
+      profileId: profile.id,
+      label: "",
+      key: `otpauth://totp/Shop:alice@example.com?secret=${secret}&issuer=Shop&digits=8`,
+    });
+    assert.equal(entry.label, "Shop", "the issuer names an unlabelled key");
+    assert.equal(entry.account, "alice@example.com");
+    assert.equal(entry.digits, 8);
+    const listed = await app.invoke("list_profile_totp", {
+      profileId: profile.id,
+    });
+    assert.equal(listed.length, 1);
+    assert.ok(
+      !JSON.stringify(listed).includes(secret),
+      "the window never receives the key",
+    );
+    const codes = await app.invoke("get_profile_totp_codes", {
+      profileId: profile.id,
+    });
+    assert.equal(codes[0].id, entry.id);
+    assert.match(codes[0].code, /^\d{8}$/);
+
+    const sealed = path.join(app.dataRoot, "data", "totp", `${profile.id}.dat`);
+    const onDisk = await readFile(sealed);
+    assert.ok(
+      !onDisk.toString("latin1").includes(secret) &&
+        !onDisk.toString("latin1").includes("alice"),
+      "the key file is sealed",
+    );
+    const metadata = await readFile(
+      path.join(app.dataRoot, "data", "profiles", profile.id, "metadata.json"),
+      "utf8",
+    );
+    assert.ok(
+      !metadata.includes(secret),
+      "profile metadata, which syncs, has no key",
+    );
+
+    await app.invoke("delete_profile_totp", {
+      profileId: profile.id,
+      entryId: entry.id,
+    });
+    assert.deepEqual(
+      await app.invoke("list_profile_totp", { profileId: profile.id }),
+      [],
+    );
+    assert.match(
+      await app.invokeError("delete_profile_totp", {
+        profileId: profile.id,
+        entryId: entry.id,
+      }),
+      /TOTP_ENTRY_NOT_FOUND/,
+    );
+
+    await app.invoke("add_profile_totp", {
+      profileId: profile.id,
+      label: "Mail",
+      key: secret,
+    });
+    assert.ok(existsSync(sealed));
+    await app.invoke("delete_profile", { profileId: profile.id });
+    await app.invoke("purge_trashed_profile", { profileId: profile.id });
+    assert.ok(
+      !existsSync(sealed),
+      "a purged profile takes its 2FA keys with it",
+    );
+  });
+});
+
 test("deleted profiles land in the trash and come back intact on restore", async () => {
   await withApp("entities-trash", async (app) => {
     assert.deepEqual(await app.invoke("list_trashed_profiles"), []);

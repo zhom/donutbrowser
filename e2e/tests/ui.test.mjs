@@ -4275,6 +4275,57 @@ test("the start pages section saves one page per line and reports a bad page", a
   });
 });
 
+test("2FA codes come from a pasted key and from a profile's saved keys", async () => {
+  await withApp("ui-two-factor", async (app) => {
+    const profile = await createUiProfile(app, "Profile Two Factor");
+    await app.waitForText(profile.name);
+
+    await app.pressShortcut({
+      key: "o",
+      shift: true,
+      ...(process.platform === "darwin" ? { meta: true } : { ctrl: true }),
+    });
+    await app.waitForText(en.totp.toolDescription);
+    await app.fillSelector("#totp-tool-key", "JBSWY3DPEHPK3PXP");
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return /^\\d{3} \\d{3}$/.test(document.querySelector('[data-slot="totp-tool-dialog"] [data-slot="totp-code"] span')?.textContent ?? "");`,
+        ),
+      { description: "a code from the pasted key" },
+    );
+    await app.capture("totp-tool");
+    await dismissSurface(app);
+
+    await app.clickSelector(
+      `[data-slot="profile-inspect-trigger"][data-profile-id="${profile.id}"]`,
+    );
+    await app.clickSelector(
+      '[data-slot="profile-info-section"][data-section="twoFactor"]',
+    );
+    await app.waitForText(en.totp.empty);
+    await app.fillSelector(
+      '[data-slot="profile-totp-key"]',
+      "otpauth://totp/Mail:bob?secret=JBSWY3DPEHPK3PXP&issuer=Mail",
+    );
+    await app.clickText(en.totp.add, { roles: ["button"] });
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelectorAll('[data-slot="profile-totp-entry"] [data-slot="totp-code"]').length === 1;`,
+        ),
+      { description: "the saved key shows a live code" },
+    );
+    await app.capture("profile-totp-section");
+    assert.equal(
+      (await app.invoke("list_profile_totp", { profileId: profile.id }))[0]
+        .label,
+      "Mail",
+    );
+    await app.clickSelector('[data-slot="profile-info-close"]');
+  });
+});
+
 test("the profile network section saves, refuses and clears a DNS server", async () => {
   await withApp("ui-dns-server", async (app) => {
     const profile = await createUiProfile(app, "Profile DNS Server");

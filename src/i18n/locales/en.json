@@ -1512,7 +1512,8 @@
       "activity": "Activity",
       "launchHook": "Launch hook",
       "transfer": "Transfer",
-      "startPages": "Start pages"
+      "startPages": "Start pages",
+      "twoFactor": "2FA codes"
     },
     "sectionDesc": {
       "fingerprint": "Configure how this profile appears to fingerprinting scripts.",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "Pages that every launch from Donut opens, one per line, instead of the last session. A run with its own URL opens only that URL.",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "2FA code",
+    "toolDescription": "Paste a 2FA key to see its current code. Donut does not keep the key.",
+    "keyLabel": "2FA key",
+    "keyPlaceholder": "Secret key or otpauth:// link",
+    "expiresIn": "Changes in {{seconds}} s",
+    "copied": "Code copied",
+    "sectionDescription": "Codes for the accounts this profile signs in to. The keys stay on this device, encrypted. They are never synced, exported or given to the API.",
+    "empty": "No 2FA keys yet.",
+    "labelPlaceholder": "Account (optional)",
+    "add": "Add 2FA key",
+    "delete": "Delete 2FA key",
+    "deleteTitle": "Delete the 2FA key for \"{{label}}\"?",
+    "deleteDescription": "Keep a copy of the key somewhere else first, or you can lose access to the account."
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "The provider did not answer the IP change within 30 seconds.",
     "proxyRotationUnreachable": "Donut could not reach the provider's change IP link.",
     "startUrlInvalid": "\"{{url}}\" is not a web page. Start pages must be http:// or https:// addresses.",
-    "startUrlsTooMany": "A profile can have at most 20 start pages."
+    "startUrlsTooMany": "A profile can have at most 20 start pages.",
+    "totpKeyInvalid": "This is not a 2FA key. Paste the secret key or the otpauth:// link that the site shows.",
+    "totpLabelTooLong": "A label can have at most 60 characters.",
+    "totpLimitReached": "A profile can keep at most 50 2FA keys.",
+    "totpEntryNotFound": "This 2FA key no longer exists."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2635,7 +2655,8 @@
     "goTrash": "Go to Trash",
     "goAgent": "Go to Agent",
     "openTips": "Open tips",
-    "sendFeedback": "Send feedback"
+    "sendFeedback": "Send feedback",
+    "openTotp": "2FA code from a key"
   },
   "closeConfirm": {
     "title": "Close Donut Browser?",

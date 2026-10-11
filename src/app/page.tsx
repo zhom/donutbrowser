@@ -57,6 +57,7 @@ import { SynchronizerPanel } from "@/components/synchronizer-panel";
 import { TableFilterControls } from "@/components/table-controls";
 import { ThankYouDialog } from "@/components/thank-you-dialog";
 import { TipsDialog } from "@/components/tips-dialog";
+import { TotpToolDialog } from "@/components/totp-code";
 import { TrashPage } from "@/components/trash-page";
 import { WayfernConfigDialog } from "@/components/wayfern-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
@@ -449,6 +450,7 @@ export default function Home() {
     "api" | "remote"
   >("api");
   const [cookieBotDialogOpen, setCookieBotDialogOpen] = useState(false);
+  const [totpToolOpen, setTotpToolOpen] = useState(false);
   const [cookieBotInitialTab, setCookieBotInitialTab] =
     useState<CookieBotTab>("overview");
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
@@ -776,6 +778,9 @@ export default function Home() {
           break;
         case "goTrash":
           handleRailNavigate("trash");
+          break;
+        case "openTotp":
+          setTotpToolOpen(true);
           break;
       }
     },
@@ -2512,6 +2517,11 @@ export default function Home() {
                 subPage={currentPage === "import"}
               />
             )}
+
+            <TotpToolDialog
+              isOpen={totpToolOpen}
+              onClose={() => setTotpToolOpen(false)}
+            />
 
             {cookieBotDialogOpen && (
               <CookieBotPage

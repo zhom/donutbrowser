@@ -1519,7 +1519,8 @@
       "activity": "Atividade",
       "launchHook": "Hook de inicialização",
       "transfer": "Transferência",
-      "startPages": "Páginas iniciais"
+      "startPages": "Páginas iniciais",
+      "twoFactor": "Códigos 2FA"
     },
     "sectionDesc": {
       "fingerprint": "Configure como este perfil aparece para scripts de fingerprinting.",
@@ -1765,6 +1766,21 @@
   "startPages": {
     "description": "Páginas que cada inicialização pelo Donut abre, uma por linha, em vez da última sessão. Uma execução com URL própria abre só essa URL.",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "Código 2FA",
+    "toolDescription": "Cole uma chave 2FA para ver o código atual. O Donut não guarda a chave.",
+    "keyLabel": "Chave 2FA",
+    "keyPlaceholder": "Chave secreta ou link otpauth://",
+    "expiresIn": "Muda em {{seconds}} s",
+    "copied": "Código copiado",
+    "sectionDescription": "Códigos das contas em que este perfil entra. As chaves ficam criptografadas neste dispositivo. Nunca são sincronizadas, exportadas ou dadas à API.",
+    "empty": "Ainda não há chaves 2FA.",
+    "labelPlaceholder": "Conta (opcional)",
+    "add": "Adicionar chave 2FA",
+    "delete": "Excluir chave 2FA",
+    "deleteTitle": "Excluir a chave 2FA de \"{{label}}\"?",
+    "deleteDescription": "Guarde antes uma cópia da chave em outro lugar, ou você pode perder o acesso à conta."
   },
   "vpns": {
     "form": {
@@ -2505,7 +2521,11 @@
     "proxyRotationTimeout": "O provedor não respondeu à troca de IP em 30 segundos.",
     "proxyRotationUnreachable": "O Donut não conseguiu acessar o link de troca de IP do provedor.",
     "startUrlInvalid": "\"{{url}}\" não é uma página da web. As páginas iniciais precisam ser endereços http:// ou https://.",
-    "startUrlsTooMany": "Um perfil pode ter no máximo 20 páginas iniciais."
+    "startUrlsTooMany": "Um perfil pode ter no máximo 20 páginas iniciais.",
+    "totpKeyInvalid": "Isto não é uma chave 2FA. Cole a chave secreta ou o link otpauth:// que o site mostra.",
+    "totpLabelTooLong": "Um rótulo pode ter no máximo 60 caracteres.",
+    "totpLimitReached": "Um perfil pode guardar no máximo 50 chaves 2FA.",
+    "totpEntryNotFound": "Esta chave 2FA não existe mais."
   },
   "rail": {
     "profiles": "Perfis",
@@ -2646,7 +2666,8 @@
     "goTrash": "Ir para a Lixeira",
     "goAgent": "Ir para Agente",
     "openTips": "Abrir dicas",
-    "sendFeedback": "Enviar feedback"
+    "sendFeedback": "Enviar feedback",
+    "openTotp": "Código 2FA a partir de uma chave"
   },
   "closeConfirm": {
     "title": "Fechar Donut Browser?",

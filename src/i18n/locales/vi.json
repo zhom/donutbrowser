@@ -1512,7 +1512,8 @@
       "activity": "Hoạt động",
       "launchHook": "Hook khởi chạy",
       "transfer": "Chuyển",
-      "startPages": "Trang khởi động"
+      "startPages": "Trang khởi động",
+      "twoFactor": "Mã 2FA"
     },
     "sectionDesc": {
       "fingerprint": "Cấu hình cách profile này hiển thị với các script vân tay.",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "Các trang mà mỗi lần khởi chạy từ Donut sẽ mở thay cho phiên trước, mỗi dòng một trang. Lần chạy có URL riêng chỉ mở URL đó.",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "Mã 2FA",
+    "toolDescription": "Dán khóa 2FA để xem mã hiện tại. Donut không lưu khóa.",
+    "keyLabel": "Khóa 2FA",
+    "keyPlaceholder": "Khóa bí mật hoặc liên kết otpauth://",
+    "expiresIn": "Đổi sau {{seconds}} giây",
+    "copied": "Đã sao chép mã",
+    "sectionDescription": "Mã của các tài khoản mà profile này đăng nhập. Khóa được mã hóa và chỉ lưu trên thiết bị này. Khóa không bao giờ được đồng bộ, xuất ra hay cung cấp cho API.",
+    "empty": "Chưa có khóa 2FA nào.",
+    "labelPlaceholder": "Tài khoản (không bắt buộc)",
+    "add": "Thêm khóa 2FA",
+    "delete": "Xóa khóa 2FA",
+    "deleteTitle": "Xóa khóa 2FA của \"{{label}}\"?",
+    "deleteDescription": "Hãy lưu một bản sao khóa ở nơi khác trước, nếu không bạn có thể mất quyền truy cập tài khoản."
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "Nhà cung cấp không phản hồi yêu cầu đổi IP trong 30 giây.",
     "proxyRotationUnreachable": "Donut không thể truy cập liên kết đổi IP của nhà cung cấp.",
     "startUrlInvalid": "\"{{url}}\" không phải là trang web. Trang khởi động phải là địa chỉ http:// hoặc https://.",
-    "startUrlsTooMany": "Mỗi profile có tối đa 20 trang khởi động."
+    "startUrlsTooMany": "Mỗi profile có tối đa 20 trang khởi động.",
+    "totpKeyInvalid": "Đây không phải khóa 2FA. Hãy dán khóa bí mật hoặc liên kết otpauth:// mà trang web hiển thị.",
+    "totpLabelTooLong": "Nhãn tối đa 60 ký tự.",
+    "totpLimitReached": "Mỗi profile lưu tối đa 50 khóa 2FA.",
+    "totpEntryNotFound": "Khóa 2FA này không còn tồn tại."
   },
   "rail": {
     "profiles": "Profile",
@@ -2635,7 +2655,8 @@
     "goTrash": "Đi tới Thùng rác",
     "goAgent": "Đến Tác nhân",
     "openTips": "Mở mẹo",
-    "sendFeedback": "Gửi phản hồi"
+    "sendFeedback": "Gửi phản hồi",
+    "openTotp": "Mã 2FA từ khóa"
   },
   "closeConfirm": {
     "title": "Đóng Donut Browser?",

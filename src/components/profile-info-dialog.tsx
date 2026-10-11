@@ -25,6 +25,7 @@ import {
   LuGroup,
   LuHouse,
   LuKey,
+  LuKeyRound,
   LuLink,
   LuLock,
   LuLockOpen,
@@ -47,6 +48,7 @@ import { ProfileLaunchActivity } from "@/components/profile-launch-activity";
 import { ProfileMetadataCard } from "@/components/profile-metadata-card";
 import { ExportProfileSection } from "@/components/profile-transfer";
 import { SharedFingerprintConfigForm } from "@/components/shared-fingerprint-config-form";
+import { ProfileTotpSection } from "@/components/totp-code";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Button } from "@/components/ui/button";
 import {
@@ -971,6 +973,7 @@ type ProfileSection =
   | "automation"
   | "transfer"
   | "security"
+  | "twoFactor"
   | "delete";
 
 function ProfileInfoLayout({
@@ -1134,6 +1137,11 @@ function ProfileInfoLayout({
       id: "security",
       icon: <LuKey className="size-3.5" />,
       label: t("profileInfo.sections.security"),
+    },
+    {
+      id: "twoFactor",
+      icon: <LuKeyRound className="size-3.5" />,
+      label: t("profileInfo.sections.twoFactor"),
     },
   ];
   const section = sidebarItems.some(
@@ -1486,6 +1494,16 @@ function ProfileInfoLayout({
               isRunning={isRunning}
               t={t}
             />
+          )}
+
+          {section === "twoFactor" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <LuKeyRound className="size-4" />
+                {t("profileInfo.sections.twoFactor")}
+              </div>
+              <ProfileTotpSection profileId={profile.id} />
+            </div>
           )}
         </div>
       </div>

@@ -33,6 +33,7 @@ export type ShortcutId =
   | "openShortcuts"
   | "openTips"
   | "sendFeedback"
+  | "openTotp"
   | "importProfile"
   | "goProfiles"
   | "goProxies"
@@ -76,6 +77,14 @@ export const SHORTCUTS: ShortcutDef[] = [
     labelKey: "shortcuts.sendFeedback",
     group: "actions",
     key: "f",
+    mod: true,
+    shift: true,
+  },
+  {
+    id: "openTotp",
+    labelKey: "shortcuts.openTotp",
+    group: "actions",
+    key: "o",
     mod: true,
     shift: true,
   },

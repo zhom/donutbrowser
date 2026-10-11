@@ -1512,7 +1512,8 @@
       "activity": "Aktivität",
       "launchHook": "Start-Hook",
       "transfer": "Übertragung",
-      "startPages": "Startseiten"
+      "startPages": "Startseiten",
+      "twoFactor": "2FA-Codes"
     },
     "sectionDesc": {
       "fingerprint": "Legen Sie fest, wie dieses Profil für Fingerprinting-Skripte erscheint.",
@@ -1758,6 +1759,21 @@
   "startPages": {
     "description": "Seiten, die jeder Start aus Donut öffnet, eine pro Zeile, statt der letzten Sitzung. Ein Lauf mit eigener URL öffnet nur diese URL.",
     "placeholder": "https://mail.example.com\nhttps://shop.example.com"
+  },
+  "totp": {
+    "toolTitle": "2FA-Code",
+    "toolDescription": "Fügen Sie einen 2FA-Schlüssel ein, um den aktuellen Code zu sehen. Donut speichert den Schlüssel nicht.",
+    "keyLabel": "2FA-Schlüssel",
+    "keyPlaceholder": "Geheimer Schlüssel oder otpauth://-Link",
+    "expiresIn": "Wechselt in {{seconds}} s",
+    "copied": "Code kopiert",
+    "sectionDescription": "Codes für die Konten, bei denen sich dieses Profil anmeldet. Die Schlüssel bleiben verschlüsselt auf diesem Gerät. Sie werden nie synchronisiert, exportiert oder an die API gegeben.",
+    "empty": "Noch keine 2FA-Schlüssel.",
+    "labelPlaceholder": "Konto (optional)",
+    "add": "2FA-Schlüssel hinzufügen",
+    "delete": "2FA-Schlüssel löschen",
+    "deleteTitle": "2FA-Schlüssel für „{{label}}“ löschen?",
+    "deleteDescription": "Bewahren Sie zuerst eine Kopie des Schlüssels an anderer Stelle auf, sonst können Sie den Zugang zum Konto verlieren."
   },
   "vpns": {
     "form": {
@@ -2494,7 +2510,11 @@
     "proxyRotationTimeout": "Der Anbieter hat innerhalb von 30 Sekunden nicht auf den IP-Wechsel geantwortet.",
     "proxyRotationUnreachable": "Donut konnte den Link zum IP-Wechsel des Anbieters nicht erreichen.",
     "startUrlInvalid": "„{{url}}“ ist keine Webseite. Startseiten müssen http://- oder https://-Adressen sein.",
-    "startUrlsTooMany": "Ein Profil kann höchstens 20 Startseiten haben."
+    "startUrlsTooMany": "Ein Profil kann höchstens 20 Startseiten haben.",
+    "totpKeyInvalid": "Das ist kein 2FA-Schlüssel. Fügen Sie den geheimen Schlüssel oder den otpauth://-Link ein, den die Website zeigt.",
+    "totpLabelTooLong": "Eine Bezeichnung darf höchstens 60 Zeichen haben.",
+    "totpLimitReached": "Ein Profil kann höchstens 50 2FA-Schlüssel speichern.",
+    "totpEntryNotFound": "Dieser 2FA-Schlüssel existiert nicht mehr."
   },
   "rail": {
     "profiles": "Profile",
@@ -2635,7 +2655,8 @@
     "goTrash": "Zum Papierkorb wechseln",
     "goAgent": "Zu „Agent“ wechseln",
     "openTips": "Tipps öffnen",
-    "sendFeedback": "Feedback senden"
+    "sendFeedback": "Feedback senden",
+    "openTotp": "2FA-Code aus einem Schlüssel"
   },
   "closeConfirm": {
     "title": "Donut Browser schließen?",

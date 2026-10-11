@@ -929,6 +929,8 @@ impl ProfileManager {
     crate::launch_gate_prefs::forget_profile(profile_id);
     // Per-domain traffic history is zero-overwritten on removal.
     crate::traffic_stats::delete_traffic_stats(profile_id);
+    // Device-only 2FA keys for the profile's accounts.
+    crate::profile_totp::forget_profile(profile_id);
   }
 
   /// Bookkeeping after one or more profiles left the live list.
