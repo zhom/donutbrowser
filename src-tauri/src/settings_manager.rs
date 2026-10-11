@@ -239,6 +239,9 @@ pub struct AppSettings {
   /// byte counts only, so nothing on disk lists where a profile went.
   #[serde(default = "default_record_traffic_domains")]
   pub record_traffic_domains: bool,
+  /// Soft interface sounds for presses, toggles and results.
+  #[serde(default = "default_ui_sounds")]
+  pub ui_sounds: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -268,6 +271,10 @@ fn default_trash_retention_days() -> u32 {
 }
 
 fn default_record_traffic_domains() -> bool {
+  true
+}
+
+fn default_ui_sounds() -> bool {
   true
 }
 
@@ -313,6 +320,7 @@ impl Default for AppSettings {
       require_route_for_launch: false,
       trash_retention_days: DEFAULT_TRASH_RETENTION_DAYS,
       record_traffic_domains: true,
+      ui_sounds: true,
     }
   }
 }
@@ -1458,6 +1466,7 @@ mod tests {
       require_route_for_launch: true,
       trash_retention_days: 7,
       record_traffic_domains: false,
+      ui_sounds: false,
     };
 
     let save_result = manager.save_settings(&test_settings);
@@ -1478,6 +1487,7 @@ mod tests {
     assert!(loaded_settings.require_route_for_launch);
     assert_eq!(loaded_settings.trash_retention_days, 7);
     assert!(!loaded_settings.record_traffic_domains);
+    assert!(!loaded_settings.ui_sounds);
   }
 
   #[test]
@@ -1486,6 +1496,7 @@ mod tests {
     assert!(!settings.require_route_for_launch);
     assert_eq!(settings.trash_retention_days, DEFAULT_TRASH_RETENTION_DAYS);
     assert!(settings.record_traffic_domains);
+    assert!(settings.ui_sounds, "sounds are on until turned off");
   }
 
   #[test]

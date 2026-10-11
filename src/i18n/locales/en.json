@@ -121,7 +121,9 @@
       "yourOwn": "Your Own",
       "light": "Light",
       "dark": "Dark",
-      "system": "System"
+      "system": "System",
+      "sounds": "Interface sounds",
+      "soundsDescription": "Soft, quiet sounds when you press a button, flip a switch, or when an action succeeds or fails."
     },
     "language": {
       "title": "Language",

@@ -2279,6 +2279,24 @@ test("first-run onboarding stays recoverable, responsive, and platform-aware", a
   );
 });
 
+test("interface sounds turn on and off in Appearance and stay as saved", async () => {
+  await withApp("ui-sounds-setting", async (app) => {
+    const sounds = async () => (await app.invoke("get_app_settings")).ui_sounds;
+    assert.equal(await sounds(), false, "the harness keeps the suite silent");
+    await app.clickSelector('[aria-label="Settings"]');
+    await app.waitForText(en.settings.appearance.soundsDescription);
+    const toggle = `[role="switch"][aria-label="${en.settings.appearance.sounds}"]`;
+    await app.clickSelector(toggle);
+    await saveSettings(app);
+    assert.equal(await sounds(), true);
+    await app.clickSelector(toggle);
+    await saveSettings(app);
+    assert.equal(await sounds(), false);
+    await app.restart();
+    assert.equal(await sounds(), false, "the choice survives a restart");
+  });
+});
+
 test("predefined theme remains rendered across navigation and restart", async () => {
   await withApp("ui-theme-predefined", async (app) => {
     await app.clickSelector('[aria-label="Settings"]');

@@ -121,7 +121,9 @@
       "yourOwn": "Của riêng bạn",
       "light": "Sáng",
       "dark": "Tối",
-      "system": "Theo hệ thống"
+      "system": "Theo hệ thống",
+      "sounds": "Âm thanh giao diện",
+      "soundsDescription": "Âm thanh nhỏ, nhẹ khi bạn nhấn nút, bật tắt công tắc, hoặc khi một thao tác thành công hay thất bại."
     },
     "language": {
       "title": "Ngôn ngữ",

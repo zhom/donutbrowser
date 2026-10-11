@@ -156,6 +156,9 @@ export class AppSession {
             // A tip opening by itself mid-test is a modal nobody asked for;
             // the tips suite turns it back on for the one session that wants it.
             tips_auto_show: false,
+            // Hundreds of scripted clicks must not play through the speakers
+            // of the machine running the suite.
+            ui_sounds: false,
             ...this.settings,
           },
           null,

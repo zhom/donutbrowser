@@ -121,7 +121,9 @@
       "yourOwn": "직접 설정",
       "light": "라이트",
       "dark": "다크",
-      "system": "시스템"
+      "system": "시스템",
+      "sounds": "인터페이스 소리",
+      "soundsDescription": "버튼을 누르거나 스위치를 전환하거나 작업이 성공 또는 실패할 때 작고 부드러운 소리를 냅니다."
     },
     "language": {
       "title": "언어",

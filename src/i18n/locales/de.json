@@ -121,7 +121,9 @@
       "yourOwn": "Eigenes",
       "light": "Hell",
       "dark": "Dunkel",
-      "system": "System"
+      "system": "System",
+      "sounds": "Oberflächenklänge",
+      "soundsDescription": "Leise, sanfte Klänge, wenn Sie eine Schaltfläche drücken, einen Schalter umlegen oder eine Aktion gelingt oder fehlschlägt."
     },
     "language": {
       "title": "Sprache",

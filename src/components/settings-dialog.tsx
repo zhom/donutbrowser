@@ -68,6 +68,7 @@ import {
   withThemeTransition,
 } from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { setUiSoundsEnabled } from "@/lib/ui-sounds";
 import { cn } from "@/lib/utils";
 import type { SetDefaultBrowserOutcome } from "@/types";
 import { RippleButton } from "./ui/ripple";
@@ -86,6 +87,7 @@ interface AppSettings {
   require_route_for_launch?: boolean;
   trash_retention_days?: number;
   record_traffic_domains?: boolean;
+  ui_sounds?: boolean;
 }
 
 /** The retention choices offered, in days. 0 turns the trash off. */
@@ -573,6 +575,7 @@ export function SettingsDialog({
 
       // Update settings with any generated tokens
       setSettings(savedSettings);
+      setUiSoundsEnabled(savedSettings.ui_sounds ?? true);
       settingsToSave = savedSettings;
       setOriginalSettings(savedSettings);
       originalSettingsRef.current = savedSettings;
@@ -846,6 +849,9 @@ export function SettingsDialog({
     ...((settings.record_traffic_domains ?? true) !==
     (originalSettings.record_traffic_domains ?? true)
       ? [t("settings.privacy.recordSites")]
+      : []),
+    ...((settings.ui_sounds ?? true) !== (originalSettings.ui_sounds ?? true)
+      ? [t("settings.appearance.sounds")]
       : []),
     ...((settings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS) !==
     (originalSettings.trash_retention_days ?? DEFAULT_TRASH_RETENTION_DAYS)
@@ -1239,6 +1245,25 @@ export function SettingsDialog({
                     </div>
                   </div>
                 )}
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      {t("settings.appearance.sounds")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("settings.appearance.soundsDescription")}
+                    </span>
+                  </div>
+                  <AnimatedSwitch
+                    data-slot="settings-ui-sounds"
+                    aria-label={t("settings.appearance.sounds")}
+                    checked={settings.ui_sounds ?? true}
+                    onCheckedChange={(v) => {
+                      updateSetting("ui_sounds", v === true);
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Language Section */}

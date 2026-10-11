@@ -121,7 +121,9 @@
       "yourOwn": "自定义",
       "light": "浅色",
       "dark": "深色",
-      "system": "跟随系统"
+      "system": "跟随系统",
+      "sounds": "界面音效",
+      "soundsDescription": "按下按钮、切换开关，或操作成功或失败时，播放轻柔安静的声音。"
     },
     "language": {
       "title": "语言",

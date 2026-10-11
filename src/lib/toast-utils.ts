@@ -3,6 +3,7 @@ import React from "react";
 import { type ExternalToast, toast as sonnerToast } from "sonner";
 import { UnifiedToast } from "@/components/custom-toast";
 import i18n from "@/i18n";
+import { playUiSound } from "@/lib/ui-sounds";
 
 interface BaseToastProps {
   id?: string;
@@ -201,6 +202,7 @@ export function showSuccessToast(
     duration?: number;
   },
 ) {
+  playUiSound("success");
   return showToast({
     type: "success",
     title,
@@ -216,6 +218,7 @@ export function showErrorToast(
     duration?: number;
   },
 ) {
+  playUiSound("error");
   return showToast({
     type: "error",
     title,

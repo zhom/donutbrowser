@@ -121,7 +121,9 @@
       "yourOwn": "Le vôtre",
       "light": "Clair",
       "dark": "Sombre",
-      "system": "Système"
+      "system": "Système",
+      "sounds": "Sons de l'interface",
+      "soundsDescription": "Des sons doux et discrets quand vous appuyez sur un bouton, basculez un interrupteur, ou quand une action réussit ou échoue."
     },
     "language": {
       "title": "Langue",

@@ -121,7 +121,9 @@
       "yourOwn": "Seu Próprio",
       "light": "Claro",
       "dark": "Escuro",
-      "system": "Sistema"
+      "system": "Sistema",
+      "sounds": "Sons da interface",
+      "soundsDescription": "Sons suaves e baixos ao pressionar um botão, mudar uma chave ou quando uma ação dá certo ou falha."
     },
     "language": {
       "title": "Idioma",

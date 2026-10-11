@@ -121,7 +121,9 @@
       "yourOwn": "Tu Propio",
       "light": "Claro",
       "dark": "Oscuro",
-      "system": "Sistema"
+      "system": "Sistema",
+      "sounds": "Sonidos de la interfaz",
+      "soundsDescription": "Sonidos suaves y bajos al pulsar un botón, cambiar un interruptor o cuando una acción sale bien o falla."
     },
     "language": {
       "title": "Idioma",

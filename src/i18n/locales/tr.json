@@ -121,7 +121,9 @@
       "yourOwn": "Kendi Temanız",
       "light": "Açık",
       "dark": "Koyu",
-      "system": "Sistem"
+      "system": "Sistem",
+      "sounds": "Arayüz sesleri",
+      "soundsDescription": "Bir düğmeye bastığınızda, bir anahtarı değiştirdiğinizde veya bir işlem başarılı olduğunda ya da başarısız olduğunda yumuşak ve sessiz sesler."
     },
     "language": {
       "title": "Dil",
