@@ -1518,7 +1518,8 @@
       "delete": "Supprimer le profil",
       "activity": "Activité",
       "launchHook": "Hook de lancement",
-      "transfer": "Transfert"
+      "transfer": "Transfert",
+      "startPages": "Pages de démarrage"
     },
     "sectionDesc": {
       "fingerprint": "Configurez l’apparence de ce profil pour les scripts de fingerprinting.",
@@ -1760,6 +1761,10 @@
     "delete": "Supprimer le statut",
     "deleteTitle": "Supprimer « {{name}} » ?",
     "deleteDescription": "Les profils ayant ce statut n'auront plus de statut. Cette action est irréversible."
+  },
+  "startPages": {
+    "description": "Pages que chaque lancement depuis Donut ouvre, une par ligne, à la place de la dernière session. Une exécution avec sa propre URL n'ouvre que cette URL.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2498,7 +2503,9 @@
     "proxyRotationUrlMissing": "Ce proxy n'a pas de lien de changement d'IP. Ajoutez-en un en modifiant le proxy.",
     "proxyRotationFailed": "Le fournisseur a refusé le changement d'IP (HTTP {{status}}).",
     "proxyRotationTimeout": "Le fournisseur n'a pas répondu au changement d'IP en 30 secondes.",
-    "proxyRotationUnreachable": "Donut n'a pas pu joindre le lien de changement d'IP du fournisseur."
+    "proxyRotationUnreachable": "Donut n'a pas pu joindre le lien de changement d'IP du fournisseur.",
+    "startUrlInvalid": "« {{url}} » n'est pas une page web. Les pages de démarrage doivent être des adresses http:// ou https://.",
+    "startUrlsTooMany": "Un profil peut avoir au plus 20 pages de démarrage."
   },
   "rail": {
     "profiles": "Profils",

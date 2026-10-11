@@ -1463,6 +1463,27 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Takes effect at the next launch, like every launch setting.
+  pub fn update_profile_start_urls(
+    &self,
+    profile_id: &str,
+    start_urls: Vec<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let start_urls = checked_start_urls(start_urls)?;
+    let mut profile = self.find_profile(profile_id)?;
+    if profile.start_urls == start_urls {
+      return Ok(profile);
+    }
+    profile.start_urls = start_urls;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+    self.save_profile(&profile)?;
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
+    }
+    Ok(profile)
+  }
+
   /// Give the listed profiles one status, or none. A running profile can
   /// take a status: it is a label, not a launch setting.
   pub fn set_profiles_status(
@@ -2506,6 +2527,72 @@ mod tests {
     let result_none = super::validate_launch_hook(None).unwrap();
     assert!(result_none.is_none());
   }
+
+  #[test]
+  fn start_pages_are_tidied_and_limited_to_web_pages() {
+    assert_eq!(
+      super::checked_start_urls(vec![
+        " https://mail.example/inbox ".to_string(),
+        "".to_string(),
+        "shop.example".to_string(),
+      ])
+      .unwrap(),
+      ["https://mail.example/inbox", "https://shop.example/"]
+    );
+    for bad in [
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "chrome://settings",
+      "https://",
+      "a b.example",
+    ] {
+      let err = super::checked_start_urls(vec![bad.to_string()]).unwrap_err();
+      assert!(err.contains("START_URL_INVALID"), "{bad}: {err}");
+    }
+    let many = (0..21).map(|i| format!("https://{i}.example/")).collect();
+    assert!(super::checked_start_urls(many)
+      .unwrap_err()
+      .contains("START_URLS_TOO_MANY"));
+  }
+}
+
+const MAX_START_URLS: usize = 20;
+const MAX_START_URL_CHARS: usize = 2000;
+
+/// The start pages to store: trimmed, blanks dropped, a bare host given
+/// `https://`, and only http(s) pages, which is all a launch may open.
+pub fn checked_start_urls(urls: Vec<String>) -> Result<Vec<String>, String> {
+  let urls: Vec<String> = urls
+    .into_iter()
+    .map(|url| url.trim().to_string())
+    .filter(|url| !url.is_empty())
+    .collect();
+  if urls.len() > MAX_START_URLS {
+    return Err(crate::backend_error("START_URLS_TOO_MANY"));
+  }
+  urls
+    .into_iter()
+    .map(|raw| {
+      let candidate = if raw.contains("://") {
+        raw.clone()
+      } else {
+        format!("https://{raw}")
+      };
+      match url::Url::parse(&candidate) {
+        Ok(url)
+          if matches!(url.scheme(), "http" | "https")
+            && url.host_str().is_some()
+            && candidate.chars().count() <= MAX_START_URL_CHARS
+            && !candidate.chars().any(char::is_whitespace) =>
+        {
+          Ok(url.to_string())
+        }
+        _ => Err(
+          serde_json::json!({ "code": "START_URL_INVALID", "params": { "url": raw } }).to_string(),
+        ),
+      }
+    })
+    .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2684,6 +2771,16 @@ pub fn update_profile_dns_blocklist(
 }
 
 #[tauri::command]
+pub fn update_profile_start_urls(
+  profile_id: String,
+  start_urls: Vec<String>,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_start_urls(&profile_id, start_urls)
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to update start pages"))
+}
+
+#[tauri::command]
 pub fn update_profile_dns_server(
   profile_id: String,
   dns_server: Option<String>,
@@ -2733,7 +2830,10 @@ pub async fn create_browser_profile_new(
   dns_blocklist: Option<String>,
   dns_server: Option<String>,
   launch_hook: Option<String>,
+  start_urls: Option<Vec<String>>,
 ) -> Result<BrowserProfile, String> {
+  // Checked before anything is created, so a bad page leaves nothing behind.
+  let start_urls = start_urls.map(checked_start_urls).transpose()?;
   let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
 
   if !crate::cloud_auth::CLOUD_AUTH
@@ -2749,7 +2849,7 @@ pub async fn create_browser_profile_new(
 
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
-  create_browser_profile_with_group(
+  let profile = create_browser_profile_with_group(
     app_handle,
     name,
     browser_type.as_str().to_string(),
@@ -2764,7 +2864,13 @@ pub async fn create_browser_profile_new(
     dns_server,
     launch_hook,
   )
-  .await
+  .await?;
+  match start_urls.filter(|urls| !urls.is_empty()) {
+    Some(urls) => ProfileManager::instance()
+      .update_profile_start_urls(&profile.id.to_string(), urls)
+      .map_err(|e| crate::wrap_backend_error(e, "Failed to save start pages")),
+    None => Ok(profile),
+  }
 }
 
 #[tauri::command]

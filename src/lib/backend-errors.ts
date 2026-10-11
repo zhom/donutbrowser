@@ -35,6 +35,8 @@ export type BackendErrorCode =
   | "PROXY_ROTATION_TIMEOUT"
   | "PROXY_ROTATION_UNREACHABLE"
   | "PROXY_ROTATION_FAILED"
+  | "START_URL_INVALID"
+  | "START_URLS_TOO_MANY"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -393,6 +395,12 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.proxyRotationFailed", {
         status: parsed.params?.status ?? "",
       });
+    case "START_URL_INVALID":
+      return t("backendErrors.startUrlInvalid", {
+        url: parsed.params?.url ?? "",
+      });
+    case "START_URLS_TOO_MANY":
+      return t("backendErrors.startUrlsTooMany");
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

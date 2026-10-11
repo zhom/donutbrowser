@@ -1753,6 +1753,107 @@ test("a payload profile an older version stored launches and is stored as an ide
   }
 });
 
+test("start pages open on a launch from the app, and a given URL replaces them", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const app = appFromEnvironment("browser-start-pages", {
+    seedVersionCache:
+      cachedFixtureVersion(process.env.DONUT_E2E_PROJECT_ROOT) ?? false,
+    wayfernTermsAccepted: false,
+  });
+  let browserPid;
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    await app.invoke("accept_wayfern_terms");
+    const profile = await createRealProfile(
+      app,
+      prepared.version,
+      "Start Pages",
+    );
+    const one = `${fixtureUrl}/start-page-one`;
+    const two = `${fixtureUrl}/start-page-two`;
+    const withPages = await app.invoke("update_profile_start_urls", {
+      profileId: profile.id,
+      startUrls: [one, " ", two],
+    });
+    assert.deepEqual(withPages.start_urls, [one, two]);
+
+    const openPages = async (pid) => {
+      const port = processCommandLine(pid).match(
+        /--remote-debugging-port=(\d+)/,
+      )?.[1];
+      if (!port) return [];
+      const targets = await fetch(`http://127.0.0.1:${port}/json`)
+        .then((response) => response.json())
+        .catch(() => []);
+      return targets
+        .filter((target) => target.type === "page")
+        .map((target) => target.url);
+    };
+    const stop = async () => {
+      const current = (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      );
+      await app.invoke("kill_browser_profile", { profile: current });
+      await waitForProcessExit(app, current.process_id);
+      browserPid = undefined;
+    };
+
+    const launched = await app.invoke("launch_browser_profile", {
+      profile: withPages,
+    });
+    browserPid = launched.process_id;
+    const pages = await app.waitFor(
+      async () => {
+        const urls = await openPages(browserPid);
+        return urls.includes(one) && urls.includes(two) ? urls : false;
+      },
+      { timeoutMs: 30_000, description: "both start pages open" },
+    );
+    assert.equal(pages.length, 2, `only the start pages: ${pages}`);
+    await stop();
+
+    const given = `${fixtureUrl}/given-url`;
+    const relaunched = await app.invoke("launch_browser_profile", {
+      profile: (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      ),
+      url: given,
+    });
+    browserPid = relaunched.process_id;
+    const replaced = await app.waitFor(
+      async () => {
+        const urls = await openPages(browserPid);
+        return urls.includes(given) ? urls : false;
+      },
+      { timeoutMs: 30_000, description: "the given URL open" },
+    );
+    assert.ok(
+      !replaced.includes(one) && !replaced.includes(two),
+      `a given URL replaces the start pages: ${replaced}`,
+    );
+    await stop();
+    await app.invoke("delete_profile", { profileId: profile.id });
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    if (app.session && browserPid && processExists(browserPid)) {
+      const running = (
+        await app.invoke("list_browser_profiles").catch(() => [])
+      ).find((item) => item.process_id === browserPid);
+      if (running)
+        await app
+          .invoke("kill_browser_profile", { profile: running })
+          .catch(() => {});
+    }
+    await app.close();
+  }
+});
+
 test("custom launch arguments reach only their Wayfern profile", async () => {
   assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
   const app = appFromEnvironment("browser-launch-args", {

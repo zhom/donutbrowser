@@ -51,6 +51,9 @@ pub struct ApiProfile {
   pub dns_server: Option<String>,
   /// The profile's status id (see `/v1/statuses`), or `null`.
   pub status_id: Option<String>,
+  /// Pages a launch from the app opens, in order, instead of the last
+  /// session. A run with a `url` opens only that URL.
+  pub start_urls: Vec<String>,
   /// Extension group loaded into the browser at launch. Settable via
   /// `PUT /v1/profiles/{id}`; exposed here so a caller can read back what it
   /// set instead of having to go through the desktop app.
@@ -105,6 +108,7 @@ impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
       vpn_id: profile.vpn_id.clone(),
       dns_server: profile.dns_server.clone(),
       status_id: profile.status_id.clone(),
+      start_urls: profile.start_urls.clone(),
       extension_group_id: profile.extension_group_id.clone(),
       ephemeral: profile.ephemeral,
       temporary: profile.temporary,
@@ -174,6 +178,9 @@ pub struct CreateProfileRequest {
   /// Optional status id from `/v1/statuses`.
   #[serde(default)]
   pub status_id: Option<String>,
+  /// Optional start pages, at most 20 http(s) URLs. A bare host gets `https://`.
+  #[serde(default)]
+  pub start_urls: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -206,6 +213,9 @@ pub struct UpdateProfileRequest {
   pub dns_server: Option<String>,
   /// Omitted or `null` leaves the status unchanged; an empty string clears it.
   pub status_id: Option<String>,
+  /// Replaces the start pages; an empty list removes them. Omitted or `null`
+  /// leaves them unchanged.
+  pub start_urls: Option<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -1661,6 +1671,12 @@ async fn create_profile(
       )));
     }
   }
+  let start_urls = request
+    .start_urls
+    .clone()
+    .map(crate::profile::manager::checked_start_urls)
+    .transpose()
+    .map_err(manager_error_response)?;
 
   // Create profile using the async create_profile_with_group method
   match profile_manager
@@ -1689,6 +1705,12 @@ async fn create_profile(
           return Err(manager_error_response(e));
         }
         profile.status_id = Some(status_id);
+      }
+      if let Some(start_urls) = start_urls.filter(|urls| !urls.is_empty()) {
+        match profile_manager.update_profile_start_urls(&profile.id.to_string(), start_urls) {
+          Ok(updated) => profile = updated,
+          Err(e) => return Err(manager_error_response(e)),
+        }
       }
       if request.temporary.unwrap_or(false) {
         match profile_manager.mark_profile_temporary(&profile.id.to_string()) {
@@ -1786,6 +1808,10 @@ async fn update_profile(
         "PROFILE_STATUS_NOT_FOUND",
       )));
     }
+  }
+  if let Some(start_urls) = &request.start_urls {
+    crate::profile::manager::checked_start_urls(start_urls.clone())
+      .map_err(manager_error_response)?;
   }
 
   // Update profile fields
@@ -1910,6 +1936,12 @@ async fn update_profile(
 
   if let Some(dns_server) = request.dns_server {
     if let Err(e) = profile_manager.update_profile_dns_server(&id, Some(dns_server)) {
+      return Err(manager_error_response(e));
+    }
+  }
+
+  if let Some(start_urls) = request.start_urls {
+    if let Err(e) = profile_manager.update_profile_start_urls(&id, start_urls) {
       return Err(manager_error_response(e));
     }
   }
@@ -5870,6 +5902,25 @@ mod tests {
         "{always} is always reported and must stay required"
       );
     }
+  }
+
+  #[test]
+  fn openapi_documents_start_pages() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for schema in ["CreateProfileRequest", "UpdateProfileRequest"] {
+      assert!(
+        !schema_required(&spec, schema)
+          .iter()
+          .any(|f| f == "start_urls"),
+        "{schema}.start_urls must be optional"
+      );
+    }
+    assert!(
+      schema_required(&spec, "ApiProfile")
+        .iter()
+        .any(|f| f == "start_urls"),
+      "ApiProfile always reports its start pages"
+    );
   }
 
   #[test]

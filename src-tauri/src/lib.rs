@@ -171,7 +171,8 @@ use profile::manager::{
   list_browser_profiles, rename_profile, update_profile_clear_on_close,
   update_profile_dns_blocklist, update_profile_dns_server, update_profile_launch_hook,
   update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
-  update_profile_tags, update_profile_vpn, update_profile_window_color, update_wayfern_config,
+  update_profile_start_urls, update_profile_tags, update_profile_vpn, update_profile_window_color,
+  update_wayfern_config,
 };
 
 use profile::trash::{
@@ -3332,6 +3333,7 @@ pub fn run_with_builder(
       update_profile_proxy_bypass_rules,
       update_profile_dns_blocklist,
       update_profile_dns_server,
+      update_profile_start_urls,
       profile_dns::describe_dns_server,
       profile_statuses::list_profile_statuses,
       profile_statuses::create_profile_status,

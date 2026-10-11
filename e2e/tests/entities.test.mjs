@@ -463,6 +463,33 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         profileIds: [profile.id],
         statusId: warming.id,
       });
+
+      // Start pages: tidied, web pages only, at most twenty.
+      assert.match(
+        await app.invokeError("update_profile_start_urls", {
+          profileId: profile.id,
+          startUrls: ["file:///etc/passwd"],
+        }),
+        /START_URL_INVALID/,
+      );
+      assert.match(
+        await app.invokeError("update_profile_start_urls", {
+          profileId: profile.id,
+          startUrls: Array.from(
+            { length: 21 },
+            (_, i) => `https://${i}.example/`,
+          ),
+        }),
+        /START_URLS_TOO_MANY/,
+      );
+      const withStartPages = await app.invoke("update_profile_start_urls", {
+        profileId: profile.id,
+        startUrls: [" https://mail.example/inbox ", "", "shop.example"],
+      });
+      assert.deepEqual(withStartPages.start_urls, [
+        "https://mail.example/inbox",
+        "https://shop.example/",
+      ]);
       await app.invoke("update_profile_clear_on_close", {
         profileId: profile.id,
         clearOnClose: true,
@@ -481,6 +508,10 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       assert.equal(changed.dns_blocklist, "light");
       assert.equal(changed.dns_server, "https://dns.quad9.net/dns-query");
       assert.equal(changed.status_id, warming.id);
+      assert.deepEqual(changed.start_urls, [
+        "https://mail.example/inbox",
+        "https://shop.example/",
+      ]);
       assert.equal(changed.clear_on_close, true);
       assert.deepEqual((await app.invoke("get_all_tags")).sort(), [
         "alpha",
@@ -756,6 +787,13 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         }),
         /DNS_SERVER_INVALID/,
       );
+      assert.match(
+        await app.invokeError("create_browser_profile_new", {
+          ...createDnsArgs,
+          startUrls: ["chrome://settings"],
+        }),
+        /START_URL_INVALID/,
+      );
       assert.ok(
         !(await app.invoke("list_browser_profiles")).some(
           (item) => item.name === "DNS Profile",
@@ -765,8 +803,10 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       const dnsProfile = await app.invoke("create_browser_profile_new", {
         ...createDnsArgs,
         dnsServer: "9.9.9.9",
+        startUrls: ["https://start.example/"],
       });
       assert.equal(dnsProfile.dns_server, "9.9.9.9");
+      assert.deepEqual(dnsProfile.start_urls, ["https://start.example/"]);
       const cleared = await app.invoke("update_profile_dns_server", {
         profileId: dnsProfile.id,
         dnsServer: "",

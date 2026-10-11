@@ -1511,7 +1511,8 @@
       "delete": "프로필 삭제",
       "activity": "활동",
       "launchHook": "실행 후크",
-      "transfer": "전송"
+      "transfer": "전송",
+      "startPages": "시작 페이지"
     },
     "sectionDesc": {
       "fingerprint": "이 프로필이 핑거프린팅 스크립트에 어떻게 표시되는지 구성합니다.",
@@ -1753,6 +1754,10 @@
     "delete": "상태 삭제",
     "deleteTitle": "\"{{name}}\"을(를) 삭제할까요?",
     "deleteDescription": "이 상태의 프로필은 상태가 없어집니다. 되돌릴 수 없습니다."
+  },
+  "startPages": {
+    "description": "Donut에서 실행할 때마다 마지막 세션 대신 여는 페이지입니다. 한 줄에 하나씩 입력하세요. 자체 URL이 있는 실행은 그 URL만 엽니다.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2487,7 +2492,9 @@
     "proxyRotationUrlMissing": "이 프록시에는 IP 변경 링크가 없습니다. 프록시를 편집할 때 추가하세요.",
     "proxyRotationFailed": "공급자가 IP 변경을 거부했습니다 (HTTP {{status}}).",
     "proxyRotationTimeout": "공급자가 30초 안에 IP 변경에 응답하지 않았습니다.",
-    "proxyRotationUnreachable": "공급자의 IP 변경 링크에 연결할 수 없습니다."
+    "proxyRotationUnreachable": "공급자의 IP 변경 링크에 연결할 수 없습니다.",
+    "startUrlInvalid": "\"{{url}}\"은(는) 웹 페이지가 아닙니다. 시작 페이지는 http:// 또는 https:// 주소여야 합니다.",
+    "startUrlsTooMany": "프로필 하나에 시작 페이지는 최대 20개까지 가능합니다."
   },
   "rail": {
     "profiles": "프로필",

@@ -1511,7 +1511,8 @@
       "delete": "删除配置文件",
       "activity": "活动",
       "launchHook": "启动钩子",
-      "transfer": "迁移"
+      "transfer": "迁移",
+      "startPages": "启动页"
     },
     "sectionDesc": {
       "fingerprint": "配置此配置文件如何对指纹脚本显示。",
@@ -1753,6 +1754,10 @@
     "delete": "删除状态",
     "deleteTitle": "删除“{{name}}”？",
     "deleteDescription": "具有此状态的配置文件将不再有状态。此操作无法撤销。"
+  },
+  "startPages": {
+    "description": "每次从 Donut 启动时打开的页面，每行一个，代替上次会话。带有自身 URL 的运行只打开该 URL。",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2487,7 +2492,9 @@
     "proxyRotationUrlMissing": "此代理没有更换 IP 链接。请在编辑代理时添加。",
     "proxyRotationFailed": "服务商拒绝了更换 IP（HTTP {{status}}）。",
     "proxyRotationTimeout": "服务商在 30 秒内未响应更换 IP。",
-    "proxyRotationUnreachable": "Donut 无法访问服务商的更换 IP 链接。"
+    "proxyRotationUnreachable": "Donut 无法访问服务商的更换 IP 链接。",
+    "startUrlInvalid": "“{{url}}”不是网页。启动页必须是 http:// 或 https:// 地址。",
+    "startUrlsTooMany": "一个配置文件最多可以有 20 个启动页。"
   },
   "rail": {
     "profiles": "配置文件",

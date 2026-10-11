@@ -61,6 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -74,6 +75,7 @@ import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { getOSDisplayName, getOSIcon } from "@/lib/browser-utils";
 import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { MOTION_EASE_OUT } from "@/lib/motion";
+import { startPagesFromText } from "@/lib/start-pages";
 import { cn } from "@/lib/utils";
 import type { BrowserReleaseTypes, WayfernConfig, WayfernOS } from "@/types";
 
@@ -113,6 +115,7 @@ interface CreateProfileDialogProps {
     ephemeral?: boolean;
     dnsBlocklist?: string;
     dnsServer?: string;
+    startUrls?: string[];
     launchHook?: string;
     password?: string;
   }) => Promise<void>;
@@ -146,6 +149,7 @@ export function CreateProfileDialog({
   const [dnsBlocklist, setDnsBlocklist] = useState("");
   const [dnsServer, setDnsServer] = useState("");
   const [dnsServerValid, setDnsServerValid] = useState(true);
+  const [startPages, setStartPages] = useState("");
   const [launchHook, setLaunchHook] = useState("");
   const [wayfernConfig, setWayfernConfig] =
     useState<WayfernConfig>(defaultWayfernConfig);
@@ -306,6 +310,7 @@ export function CreateProfileDialog({
     setShowProxyForm(false);
     setDnsBlocklist("");
     setDnsServer("");
+    setStartPages("");
     setLaunchHook("");
     setSelectedExtensionGroupId(undefined);
     setReleaseTypes({});
@@ -351,6 +356,7 @@ export function CreateProfileDialog({
         ephemeral,
         dnsBlocklist: dnsBlocklist || undefined,
         dnsServer: dnsServer.trim() || undefined,
+        startUrls: startPagesFromText(startPages),
         launchHook: launchHook.trim() || undefined,
         password: enablePassword && !ephemeral ? password : undefined,
       });
@@ -1005,6 +1011,28 @@ export function CreateProfileDialog({
                       onValidityChange={setDnsServerValid}
                       disabled={isCreating}
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="profile-start-pages"
+                      className={FIELD_LABEL_CLASS}
+                    >
+                      {t("profileInfo.sections.startPages")}
+                    </Label>
+                    <Textarea
+                      id="profile-start-pages"
+                      variant="soft"
+                      value={startPages}
+                      onChange={(event) => setStartPages(event.target.value)}
+                      placeholder={t("startPages.placeholder")}
+                      rows={3}
+                      spellCheck={false}
+                      disabled={isCreating}
+                      className="font-mono text-xs"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("startPages.description")}
+                    </p>
                   </div>
                   <div className="space-y-4 pt-1">
                     {creatableVersion && (

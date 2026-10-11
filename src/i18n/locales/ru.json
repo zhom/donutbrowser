@@ -1525,7 +1525,8 @@
       "delete": "Удалить профиль",
       "activity": "Активность",
       "launchHook": "Хук запуска",
-      "transfer": "Перенос"
+      "transfer": "Перенос",
+      "startPages": "Стартовые страницы"
     },
     "sectionDesc": {
       "fingerprint": "Настройте, как этот профиль выглядит для скриптов отпечатков.",
@@ -1767,6 +1768,10 @@
     "delete": "Удалить статус",
     "deleteTitle": "Удалить «{{name}}»?",
     "deleteDescription": "Профили с этим статусом останутся без статуса. Это действие нельзя отменить."
+  },
+  "startPages": {
+    "description": "Страницы, которые открывает каждый запуск из Donut вместо прошлой сессии, по одной на строку. Запуск со своим URL открывает только этот URL.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2509,7 +2514,9 @@
     "proxyRotationUrlMissing": "У этого прокси нет ссылки для смены IP. Добавьте её при редактировании прокси.",
     "proxyRotationFailed": "Провайдер отклонил смену IP (HTTP {{status}}).",
     "proxyRotationTimeout": "Провайдер не ответил на смену IP за 30 секунд.",
-    "proxyRotationUnreachable": "Donut не удалось открыть ссылку провайдера для смены IP."
+    "proxyRotationUnreachable": "Donut не удалось открыть ссылку провайдера для смены IP.",
+    "startUrlInvalid": "«{{url}}» — не веб-страница. Стартовые страницы должны быть адресами http:// или https://.",
+    "startUrlsTooMany": "У профиля может быть не более 20 стартовых страниц."
   },
   "rail": {
     "profiles": "Профили",

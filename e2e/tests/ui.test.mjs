@@ -4240,6 +4240,41 @@ test("profile statuses start from a common set and are picked from the table", a
   });
 });
 
+test("the start pages section saves one page per line and reports a bad page", async () => {
+  await withApp("ui-start-pages", async (app) => {
+    const profile = await createUiProfile(app, "Profile Start Pages");
+    await app.waitForText(profile.name);
+    const stored = async () =>
+      (await app.invoke("list_browser_profiles")).find(
+        (item) => item.id === profile.id,
+      ).start_urls ?? [];
+    await app.clickSelector(
+      `[data-slot="profile-inspect-trigger"][data-profile-id="${profile.id}"]`,
+    );
+    await app.clickSelector(
+      '[data-slot="profile-info-section"][data-section="startPages"]',
+    );
+    await app.waitForText(en.startPages.description);
+    const field = '[data-slot="profile-start-pages-input"]';
+    await app.fillSelector(field, "mail.example\nfile:///etc/hosts");
+    await app.clickText(en.common.buttons.save, { exact: true });
+    await app.waitForText(
+      en.backendErrors.startUrlInvalid.replace("{{url}}", "file:///etc/hosts"),
+    );
+    assert.deepEqual(await stored(), []);
+    await app.fillSelector(field, "mail.example\nhttps://shop.example/cart");
+    await app.clickText(en.common.buttons.save, { exact: true });
+    await app.waitFor(
+      async () =>
+        JSON.stringify(await stored()) ===
+        JSON.stringify(["https://mail.example/", "https://shop.example/cart"]),
+      { description: "the saved start pages" },
+    );
+    await app.capture("profile-start-pages");
+    await app.clickSelector('[data-slot="profile-info-close"]');
+  });
+});
+
 test("the profile network section saves, refuses and clears a DNS server", async () => {
   await withApp("ui-dns-server", async (app) => {
     const profile = await createUiProfile(app, "Profile DNS Server");

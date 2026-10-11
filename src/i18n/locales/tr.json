@@ -1511,7 +1511,8 @@
       "delete": "Profili sil",
       "activity": "Etkinlik",
       "launchHook": "Başlatma kancası",
-      "transfer": "Aktarım"
+      "transfer": "Aktarım",
+      "startPages": "Başlangıç sayfaları"
     },
     "sectionDesc": {
       "fingerprint": "Bu profilin parmak izi tarama betiklerine nasıl görüneceğini yapılandırın.",
@@ -1753,6 +1754,10 @@
     "delete": "Durumu sil",
     "deleteTitle": "\"{{name}}\" silinsin mi?",
     "deleteDescription": "Bu durumdaki profillerin durumu kalmaz. Bu işlem geri alınamaz."
+  },
+  "startPages": {
+    "description": "Donut'tan her başlatmada son oturum yerine açılan sayfalar, satır başına bir tane. Kendi URL'si olan bir çalıştırma yalnızca o URL'yi açar.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2487,7 +2492,9 @@
     "proxyRotationUrlMissing": "Bu proxy'nin IP değiştirme bağlantısı yok. Proxy'yi düzenlerken ekleyin.",
     "proxyRotationFailed": "Sağlayıcı IP değişikliğini reddetti (HTTP {{status}}).",
     "proxyRotationTimeout": "Sağlayıcı IP değişikliğine 30 saniye içinde yanıt vermedi.",
-    "proxyRotationUnreachable": "Donut, sağlayıcının IP değiştirme bağlantısına ulaşamadı."
+    "proxyRotationUnreachable": "Donut, sağlayıcının IP değiştirme bağlantısına ulaşamadı.",
+    "startUrlInvalid": "\"{{url}}\" bir web sayfası değil. Başlangıç sayfaları http:// veya https:// adresleri olmalıdır.",
+    "startUrlsTooMany": "Bir profilde en fazla 20 başlangıç sayfası olabilir."
   },
   "rail": {
     "profiles": "Profiller",

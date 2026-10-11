@@ -441,9 +441,15 @@ pub fn session_restore_verdict(
   ephemeral: bool,
   clear_on_close: bool,
   identity_at_launch: bool,
+  opens_start_pages: bool,
 ) -> Result<(), &'static str> {
   if kind == LaunchKind::Automation {
     return Err("an automation run starts clean");
+  }
+  // As in Chrome: a set of start pages replaces the last session. Restoring
+  // both would add the start pages to the restored tabs on every launch.
+  if opens_start_pages {
+    return Err("the profile opens its start pages instead");
   }
   if headless {
     return Err("a headless launch has no session to show");
@@ -466,6 +472,21 @@ pub fn session_restore_verdict(
     );
   }
   Ok(())
+}
+
+/// What a launch opens: the URL it was given, or else, for a person's own
+/// launch, the profile's start pages. An automation run without a URL starts
+/// on a blank tab, as its caller expects.
+pub fn launch_pages<'a>(
+  url: Option<&'a str>,
+  start_urls: &'a [String],
+  kind: LaunchKind,
+) -> Vec<&'a str> {
+  match (url, kind) {
+    (Some(url), _) => vec![url],
+    (None, LaunchKind::Interactive) => start_urls.iter().map(String::as_str).collect(),
+    (None, LaunchKind::Automation) => Vec::new(),
+  }
 }
 
 /// The switches that shape the first window: session restore and the launch
@@ -2901,6 +2922,8 @@ impl WayfernManager {
     };
     let identity_at_launch =
       identity_file.is_some() || (config.identity_id.is_none() && config.fingerprint.is_none());
+    let pages = launch_pages(url, &profile.start_urls, kind);
+    let opens_start_pages = url.is_none() && !pages.is_empty();
     let restore_session = match session_restore_verdict(
       config,
       kind,
@@ -2908,6 +2931,7 @@ impl WayfernManager {
       ephemeral,
       profile.clear_on_close,
       identity_at_launch,
+      opens_start_pages,
     ) {
       Ok(()) => true,
       Err(reason) => {
@@ -3295,25 +3319,32 @@ impl WayfernManager {
 
     // Geolocation is handled internally by the browser binary.
 
-    if let Some(url) = url {
-      if restore_session {
-        // The tabs the browser reopened are the user's; the URL gets a tab of
-        // its own instead of replacing whichever one came first.
-        if let Err(e) = self.open_url_on_port(port, url).await {
-          log::warn!(
-            "Launch URL tab open failed profile={} err=\"{}\"",
-            profile.id,
-            crate::log_redaction::text(&e.to_string())
-          );
-        }
-      } else if let Some(target) = page_targets.first() {
-        if let Some(ws_url) = &target.websocket_debugger_url {
+    for (index, page) in pages.iter().enumerate() {
+      // The first page takes the window's first tab. Every other page, and
+      // any page next to tabs the browser reopened (those are the user's),
+      // gets a tab of its own.
+      let navigate_first_tab = index == 0 && !restore_session;
+      let target = page_targets
+        .first()
+        .and_then(|t| t.websocket_debugger_url.as_ref());
+      match (navigate_first_tab, target) {
+        (true, Some(ws_url)) => {
           if let Err(e) = self
-            .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
+            .send_cdp_command(ws_url, "Page.navigate", json!({ "url": page }))
             .await
           {
             log::warn!(
               "Launch URL navigation failed profile={} err=\"{}\"",
+              profile.id,
+              crate::log_redaction::text(&e.to_string())
+            );
+          }
+        }
+        (true, None) => {}
+        (false, _) => {
+          if let Err(e) = self.open_url_on_port(port, page).await {
+            log::warn!(
+              "Launch URL tab open failed profile={} err=\"{}\"",
               profile.id,
               crate::log_redaction::text(&e.to_string())
             );
@@ -4477,27 +4508,95 @@ mod tests {
   }
 
   #[test]
+  fn start_pages_open_on_a_persons_launch_and_replace_the_last_session() {
+    let pages = vec![
+      "https://a.example/".to_string(),
+      "https://b.example/".to_string(),
+    ];
+    assert_eq!(
+      launch_pages(None, &pages, LaunchKind::Interactive),
+      ["https://a.example/", "https://b.example/"]
+    );
+    assert_eq!(
+      launch_pages(
+        Some("https://given.example/"),
+        &pages,
+        LaunchKind::Interactive
+      ),
+      ["https://given.example/"],
+      "an explicit URL wins over the start pages"
+    );
+    assert!(launch_pages(None, &pages, LaunchKind::Automation).is_empty());
+    assert!(session_restore_verdict(
+      &WayfernConfig::default(),
+      LaunchKind::Interactive,
+      false,
+      false,
+      false,
+      true,
+      true
+    )
+    .is_err());
+  }
+
+  #[test]
   fn session_restore_is_only_for_a_person_on_a_device_committed_at_launch() {
     let config = WayfernConfig::default();
     let interactive = |c: &WayfernConfig| {
-      session_restore_verdict(c, LaunchKind::Interactive, false, false, false, true)
+      session_restore_verdict(c, LaunchKind::Interactive, false, false, false, true, false)
     };
     assert_eq!(interactive(&config), Ok(()));
+    assert!(session_restore_verdict(
+      &config,
+      LaunchKind::Automation,
+      false,
+      false,
+      false,
+      true,
+      false
+    )
+    .is_err());
+    assert!(session_restore_verdict(
+      &config,
+      LaunchKind::Interactive,
+      true,
+      false,
+      false,
+      true,
+      false
+    )
+    .is_err());
+    assert!(session_restore_verdict(
+      &config,
+      LaunchKind::Interactive,
+      false,
+      true,
+      false,
+      true,
+      false
+    )
+    .is_err());
+    assert!(session_restore_verdict(
+      &config,
+      LaunchKind::Interactive,
+      false,
+      false,
+      true,
+      true,
+      false
+    )
+    .is_err());
     assert!(
-      session_restore_verdict(&config, LaunchKind::Automation, false, false, false, true).is_err()
-    );
-    assert!(
-      session_restore_verdict(&config, LaunchKind::Interactive, true, false, false, true).is_err()
-    );
-    assert!(
-      session_restore_verdict(&config, LaunchKind::Interactive, false, true, false, true).is_err()
-    );
-    assert!(
-      session_restore_verdict(&config, LaunchKind::Interactive, false, false, true, true).is_err()
-    );
-    assert!(
-      session_restore_verdict(&config, LaunchKind::Interactive, false, false, false, false)
-        .is_err(),
+      session_restore_verdict(
+        &config,
+        LaunchKind::Interactive,
+        false,
+        false,
+        false,
+        false,
+        false
+      )
+      .is_err(),
       "a device applied after the window opens loses the race with a restored tab"
     );
     let off = WayfernConfig {

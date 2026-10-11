@@ -1511,7 +1511,8 @@
       "delete": "Xóa profile",
       "activity": "Hoạt động",
       "launchHook": "Hook khởi chạy",
-      "transfer": "Chuyển"
+      "transfer": "Chuyển",
+      "startPages": "Trang khởi động"
     },
     "sectionDesc": {
       "fingerprint": "Cấu hình cách profile này hiển thị với các script vân tay.",
@@ -1753,6 +1754,10 @@
     "delete": "Xóa trạng thái",
     "deleteTitle": "Xóa \"{{name}}\"?",
     "deleteDescription": "Các profile có trạng thái này sẽ không còn trạng thái. Không thể hoàn tác."
+  },
+  "startPages": {
+    "description": "Các trang mà mỗi lần khởi chạy từ Donut sẽ mở thay cho phiên trước, mỗi dòng một trang. Lần chạy có URL riêng chỉ mở URL đó.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2487,7 +2492,9 @@
     "proxyRotationUrlMissing": "Proxy này chưa có liên kết đổi IP. Hãy thêm khi chỉnh sửa proxy.",
     "proxyRotationFailed": "Nhà cung cấp từ chối đổi IP (HTTP {{status}}).",
     "proxyRotationTimeout": "Nhà cung cấp không phản hồi yêu cầu đổi IP trong 30 giây.",
-    "proxyRotationUnreachable": "Donut không thể truy cập liên kết đổi IP của nhà cung cấp."
+    "proxyRotationUnreachable": "Donut không thể truy cập liên kết đổi IP của nhà cung cấp.",
+    "startUrlInvalid": "\"{{url}}\" không phải là trang web. Trang khởi động phải là địa chỉ http:// hoặc https://.",
+    "startUrlsTooMany": "Mỗi profile có tối đa 20 trang khởi động."
   },
   "rail": {
     "profiles": "Profile",

@@ -1511,7 +1511,8 @@
       "delete": "Delete profile",
       "activity": "Activity",
       "launchHook": "Launch hook",
-      "transfer": "Transfer"
+      "transfer": "Transfer",
+      "startPages": "Start pages"
     },
     "sectionDesc": {
       "fingerprint": "Configure how this profile appears to fingerprinting scripts.",
@@ -1753,6 +1754,10 @@
     "delete": "Delete status",
     "deleteTitle": "Delete \"{{name}}\"?",
     "deleteDescription": "Profiles with this status will have no status. You cannot undo this."
+  },
+  "startPages": {
+    "description": "Pages that every launch from Donut opens, one per line, instead of the last session. A run with its own URL opens only that URL.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2487,7 +2492,9 @@
     "proxyRotationUrlMissing": "This proxy has no change IP link. Add one when you edit the proxy.",
     "proxyRotationFailed": "The provider refused the IP change (HTTP {{status}}).",
     "proxyRotationTimeout": "The provider did not answer the IP change within 30 seconds.",
-    "proxyRotationUnreachable": "Donut could not reach the provider's change IP link."
+    "proxyRotationUnreachable": "Donut could not reach the provider's change IP link.",
+    "startUrlInvalid": "\"{{url}}\" is not a web page. Start pages must be http:// or https:// addresses.",
+    "startUrlsTooMany": "A profile can have at most 20 start pages."
   },
   "rail": {
     "profiles": "Profiles",

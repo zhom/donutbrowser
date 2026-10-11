@@ -1511,7 +1511,8 @@
       "delete": "プロファイルを削除",
       "activity": "アクティビティ",
       "launchHook": "起動フック",
-      "transfer": "転送"
+      "transfer": "転送",
+      "startPages": "スタートページ"
     },
     "sectionDesc": {
       "fingerprint": "フィンガープリント対策スクリプトに対するこのプロファイルの表示を設定します。",
@@ -1753,6 +1754,10 @@
     "delete": "ステータスを削除",
     "deleteTitle": "「{{name}}」を削除しますか？",
     "deleteDescription": "このステータスのプロファイルはステータスなしになります。元に戻すことはできません。"
+  },
+  "startPages": {
+    "description": "Donut から起動するたびに前回のセッションの代わりに開くページです。1 行に 1 つ入力します。独自の URL を指定した実行では、その URL だけが開きます。",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2487,7 +2492,9 @@
     "proxyRotationUrlMissing": "このプロキシには IP 変更リンクがありません。プロキシの編集時に追加してください。",
     "proxyRotationFailed": "プロバイダーが IP 変更を拒否しました (HTTP {{status}})。",
     "proxyRotationTimeout": "プロバイダーが 30 秒以内に IP 変更に応答しませんでした。",
-    "proxyRotationUnreachable": "プロバイダーの IP 変更リンクに接続できませんでした。"
+    "proxyRotationUnreachable": "プロバイダーの IP 変更リンクに接続できませんでした。",
+    "startUrlInvalid": "「{{url}}」はウェブページではありません。スタートページは http:// または https:// のアドレスにしてください。",
+    "startUrlsTooMany": "1 つのプロファイルに設定できるスタートページは 20 件までです。"
   },
   "rail": {
     "profiles": "プロファイル",

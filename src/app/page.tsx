@@ -1155,6 +1155,7 @@ export default function Home() {
       ephemeral?: boolean;
       dnsBlocklist?: string;
       dnsServer?: string;
+      startUrls?: string[];
       launchHook?: string;
       password?: string;
     }) => {
@@ -1178,6 +1179,7 @@ export default function Home() {
             dnsBlocklist: profileData.dnsBlocklist,
             dnsServer: profileData.dnsServer,
             launchHook: profileData.launchHook,
+            startUrls: profileData.startUrls,
           },
         );
 

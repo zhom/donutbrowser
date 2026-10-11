@@ -1518,7 +1518,8 @@
       "delete": "Eliminar perfil",
       "activity": "Actividad",
       "launchHook": "Hook de inicio",
-      "transfer": "Transferir"
+      "transfer": "Transferir",
+      "startPages": "Páginas de inicio"
     },
     "sectionDesc": {
       "fingerprint": "Configura cómo aparece este perfil para los scripts de fingerprinting.",
@@ -1760,6 +1761,10 @@
     "delete": "Eliminar estado",
     "deleteTitle": "¿Eliminar «{{name}}»?",
     "deleteDescription": "Los perfiles con este estado quedarán sin estado. No se puede deshacer."
+  },
+  "startPages": {
+    "description": "Páginas que abre cada inicio desde Donut, una por línea, en lugar de la última sesión. Una ejecución con su propia URL abre solo esa URL.",
+    "placeholder": "https://mail.example.com\nhttps://shop.example.com"
   },
   "vpns": {
     "form": {
@@ -2498,7 +2503,9 @@
     "proxyRotationUrlMissing": "Este proxy no tiene enlace para cambiar IP. Añade uno al editar el proxy.",
     "proxyRotationFailed": "El proveedor rechazó el cambio de IP (HTTP {{status}}).",
     "proxyRotationTimeout": "El proveedor no respondió al cambio de IP en 30 segundos.",
-    "proxyRotationUnreachable": "Donut no pudo acceder al enlace para cambiar IP del proveedor."
+    "proxyRotationUnreachable": "Donut no pudo acceder al enlace para cambiar IP del proveedor.",
+    "startUrlInvalid": "«{{url}}» no es una página web. Las páginas de inicio deben ser direcciones http:// o https://.",
+    "startUrlsTooMany": "Un perfil puede tener como máximo 20 páginas de inicio."
   },
   "rail": {
     "profiles": "Perfiles",

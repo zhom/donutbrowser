@@ -23,6 +23,7 @@ import {
   LuFingerprint,
   LuGlobe,
   LuGroup,
+  LuHouse,
   LuKey,
   LuLink,
   LuLock,
@@ -84,6 +85,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { LaunchArgumentsEditor } from "@/components/wayfern-config-form";
 import { WindowDragArea } from "@/components/window-drag-area";
 import { useInputModality } from "@/hooks/use-input-modality";
@@ -94,6 +96,7 @@ import { formatRelativeTime } from "@/lib/flag-utils";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import { rotateProxyIps } from "@/lib/proxy-rotation";
 import type { RemoteHandoffState } from "@/lib/remote-sessions";
+import { startPagesFromText } from "@/lib/start-pages";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -961,6 +964,7 @@ type ProfileSection =
   | "overview"
   | "fingerprint"
   | "network"
+  | "startPages"
   | "cookies"
   | "extensions"
   | "sync"
@@ -1080,6 +1084,14 @@ function ProfileInfoLayout({
       icon: <LuGlobe className="size-3.5" />,
       label: t("profileInfo.sections.network"),
       badge: profile.proxy_id || profile.vpn_id ? networkLabel : undefined,
+    },
+    {
+      id: "startPages",
+      icon: <LuHouse className="size-3.5" />,
+      label: t("profileInfo.sections.startPages"),
+      badge: profile.start_urls?.length
+        ? String(profile.start_urls.length)
+        : undefined,
     },
     {
       id: "cookies",
@@ -1393,6 +1405,10 @@ function ProfileInfoLayout({
             />
           )}
 
+          {section === "startPages" && (
+            <StartPagesEditor profile={profile} isDisabled={isDisabled} t={t} />
+          )}
+
           {section === "cookies" &&
             (isEphemeral ? (
               <EphemeralSectionNotice
@@ -1626,6 +1642,89 @@ function LaunchHookEditor({
           onClick={() => {
             void onSave();
           }}
+        >
+          {isSaving ? t("common.buttons.saving") : t("common.buttons.save")}
+        </Button>
+        {dirty && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => {
+              setValue(initial);
+              setError(null);
+            }}
+          >
+            {t("common.buttons.cancel")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StartPagesEditor({
+  profile,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { t: tFn } = useTranslation();
+  const initial = (profile.start_urls ?? []).join("\n");
+  const [value, setValue] = React.useState(initial);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const dirty = value.trim() !== initial;
+
+  React.useEffect(() => {
+    setValue(initial);
+  }, [initial]);
+
+  const onSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const saved = await invoke<BrowserProfile>("update_profile_start_urls", {
+        profileId: profile.id,
+        startUrls: startPagesFromText(value),
+      });
+      setValue((saved.start_urls ?? []).join("\n"));
+    } catch (e) {
+      setError(translateBackendError(tFn, e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuHouse className="size-4" />
+        {t("profileInfo.sections.startPages")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("startPages.description")}
+      </p>
+      <Textarea
+        data-slot="profile-start-pages-input"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={t("startPages.placeholder")}
+        rows={5}
+        spellCheck={false}
+        disabled={isDisabled || isSaving}
+        className="font-mono text-xs"
+      />
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={!dirty || isSaving || isDisabled}
+          onClick={() => void onSave()}
         >
           {isSaving ? t("common.buttons.saving") : t("common.buttons.save")}
         </Button>

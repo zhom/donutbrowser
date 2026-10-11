@@ -2552,6 +2552,11 @@ impl McpServer {
               "type": "string",
               "description": "Optional status id from list_profile_statuses"
             },
+            "start_urls": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Optional start pages (at most 20 http(s) URLs) a launch from the app opens instead of the last session"
+            },
             "dns_server": {
               "type": "string",
               "description": "Optional. DNS server the profile resolves names with, through its own proxy or VPN: https://host/path (DNS over HTTPS), tls://host[:port] (DNS over TLS), tcp://host[:port] (plain DNS) or a bare host[:port]. A bare address of a well-known public resolver such as 1.1.1.1 uses its DNS over HTTPS endpoint. If the server does not answer, connections fail instead of falling back to the proxy's resolver. Omit it to let the proxy resolve names."
@@ -2673,6 +2678,11 @@ impl McpServer {
             "status_id": {
               "type": "string",
               "description": "Status id from list_profile_statuses (empty string to remove)"
+            },
+            "start_urls": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Start pages, replacing the current ones (empty array to remove). At most 20 http(s) URLs."
             },
             "dns_server": {
               "type": "string",
@@ -5351,6 +5361,23 @@ impl McpServer {
         data: None,
       });
     }
+    let start_urls = arguments
+      .get("start_urls")
+      .and_then(|v| v.as_array())
+      .map(|urls| {
+        crate::profile::manager::checked_start_urls(
+          urls
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
+        )
+      })
+      .transpose()
+      .map_err(|e| McpError {
+        code: -32602,
+        message: format!("Invalid start pages: {e}"),
+        data: None,
+      })?;
 
     let temporary = arguments
       .get("temporary")
@@ -5403,6 +5430,11 @@ impl McpServer {
           message: format!("Profile created but could not be marked temporary: {e}"),
           data: None,
         })?;
+    }
+
+    if let Some(start_urls) = start_urls.filter(|urls| !urls.is_empty()) {
+      let _ =
+        ProfileManager::instance().update_profile_start_urls(&profile.id.to_string(), start_urls);
     }
 
     if let Some(status_id) = arguments
@@ -5578,6 +5610,19 @@ impl McpServer {
         .map_err(|e| McpError {
           code: -32000,
           message: format!("Failed to update clear-on-close: {e}"),
+          data: None,
+        })?;
+    }
+
+    if let Some(urls) = arguments.get("start_urls").and_then(|v| v.as_array()) {
+      let urls = urls
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+      pm.update_profile_start_urls(profile_id, urls)
+        .map_err(|e| McpError {
+          code: -32602,
+          message: format!("Failed to update start pages: {e}"),
           data: None,
         })?;
     }
