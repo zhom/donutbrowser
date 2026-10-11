@@ -1552,6 +1552,28 @@ impl ProfileManager {
     }
   }
 
+  /// Set what profile creation takes no value for on a profile just made
+  /// from a template.
+  pub fn finish_new_profile(
+    &self,
+    mut profile: BrowserProfile,
+    patch: &super::patch::ProfilePatch,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    if !patch.apply_to(&mut profile) {
+      return Ok(profile);
+    }
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+    self.save_profile(&profile)?;
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+    if profile.is_sync_enabled() {
+      Self::sync_patched_groups(patch);
+    }
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
+    }
+    Ok(profile)
+  }
+
   /// Give the listed profiles one status, or none. A running profile can
   /// take a status: it is a label, not a launch setting.
   pub fn set_profiles_status(

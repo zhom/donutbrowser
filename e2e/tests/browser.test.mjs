@@ -1854,6 +1854,74 @@ test("start pages open on a launch from the app, and a given URL replaces them",
   }
 });
 
+test("a batch from a template makes numbered profiles, each with its own device", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const app = appFromEnvironment("browser-template-batch", {
+    seedVersionCache:
+      cachedFixtureVersion(process.env.DONUT_E2E_PROJECT_ROOT) ?? false,
+    wayfernTermsAccepted: false,
+  });
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    await app.invoke("accept_wayfern_terms");
+    // A profile that already holds the name, so numbering continues after it.
+    await createRealProfile(app, prepared.version, "Real Batch 1");
+    const template = await app.invoke("create_profile_template", {
+      name: "Real",
+      settings: {
+        tags: ["batch"],
+        start_urls: ["shop.example"],
+        wayfern_config: {
+          geoip: false,
+          randomize_fingerprint_on_launch: false,
+        },
+      },
+    });
+
+    const result = await app.invoke("bulk_create_profiles", {
+      settings: template.settings,
+      name: "Real Batch",
+      count: 2,
+    });
+    assert.equal(result.error, null);
+    assert.equal(result.cancelled, false);
+    assert.deepEqual(
+      result.created.map((p) => p.name),
+      ["Real Batch 2", "Real Batch 3"],
+    );
+    const stored = (await app.invoke("list_browser_profiles")).filter((p) =>
+      result.created.some((made) => made.id === p.id),
+    );
+    assert.equal(stored.length, 2);
+    for (const profile of stored) {
+      assert.deepEqual(profile.tags, ["batch"]);
+      assert.deepEqual(profile.start_urls, ["https://shop.example/"]);
+      assert.equal(profile.version, prepared.version);
+    }
+    const devices = stored.map(
+      (p) => p.wayfern_config?.identity_id ?? p.wayfern_config?.fingerprint,
+    );
+    assert.ok(devices.every(Boolean), "every profile got a device");
+    assert.notEqual(devices[0], devices[1], "no two profiles share a device");
+
+    for (const profile of await app.invoke("list_browser_profiles")) {
+      await app.invoke("delete_profile", {
+        profileId: profile.id,
+        permanent: true,
+      });
+    }
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    await app.close();
+  }
+});
+
 test("custom launch arguments reach only their Wayfern profile", async () => {
   assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
   const app = appFromEnvironment("browser-launch-args", {

@@ -275,6 +275,33 @@ impl From<crate::profile_statuses::ProfileStatus> for ApiStatusResponse {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
+struct TemplateRequest {
+  /// 1 to 60 characters, unique (case-insensitive).
+  name: String,
+  #[serde(default)]
+  settings: crate::profile_templates::TemplateSettings,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct CreateFromTemplateRequest {
+  /// 1 to 100.
+  count: u32,
+  /// One profile takes this name; several take it followed by numbers that
+  /// continue after the highest in use. Defaults to the template's name
+  /// prefix, else its name.
+  #[serde(default)]
+  name: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ApiBulkCreateResponse {
+  /// The profiles made, in order.
+  profiles: Vec<ApiProfile>,
+  /// Why creation stopped before `count` (an error code JSON), or `null`.
+  error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
 struct StatusRequest {
   /// 1 to 40 characters, unique (case-insensitive).
   name: String,
@@ -745,6 +772,11 @@ struct ImportProxiesResponse {
     update_status,
     delete_status,
     bulk_edit_profiles,
+    get_templates,
+    create_template,
+    update_template,
+    delete_template,
+    create_profiles_from_template,
     get_tags,
     get_proxies,
     get_proxy,
@@ -795,6 +827,11 @@ struct ImportProxiesResponse {
     StatusRequest,
     BulkEditRequest,
     BulkEditResponse,
+    TemplateRequest,
+    CreateFromTemplateRequest,
+    ApiBulkCreateResponse,
+    crate::profile_templates::ProfileTemplate,
+    crate::profile_templates::TemplateSettings,
     crate::profile::patch::ProfilePatch,
     ApiProxyResponse,
     crate::proxy_rotation::RotationResult,
@@ -892,6 +929,7 @@ struct ImportProxiesResponse {
     (name = "profiles", description = "Profile management endpoints"),
     (name = "groups", description = "Group management endpoints"),
     (name = "statuses", description = "Profile status management endpoints"),
+    (name = "templates", description = "Profile templates and creating profiles from them"),
     (name = "tags", description = "Tag management endpoints"),
     (name = "proxies", description = "Proxy management endpoints"),
     (name = "vpns", description = "VPN management endpoints"),
@@ -1087,6 +1125,9 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(get_statuses, create_status))
     .routes(routes!(update_status, delete_status))
     .routes(routes!(bulk_edit_profiles))
+    .routes(routes!(get_templates, create_template))
+    .routes(routes!(update_template, delete_template))
+    .routes(routes!(create_profiles_from_template))
     .routes(routes!(get_tags))
     .routes(routes!(get_proxies, create_proxy))
     .routes(routes!(import_proxies_api))
@@ -1399,7 +1440,7 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
     if let Some(code) = value.get("code").and_then(|c| c.as_str()) {
       let status = if code.ends_with("_NOT_FOUND") {
         StatusCode::NOT_FOUND
-      } else if LAUNCH_CONFLICT_CODES.contains(&code) {
+      } else if LAUNCH_CONFLICT_CODES.contains(&code) || code == "BULK_CREATE_BUSY" {
         // Someone or something else holds this profile: another team member, a
         // browser already open, or a remote session whose work has not been
         // pulled back yet. All of them are "try again later", not "your request
@@ -2308,6 +2349,139 @@ async fn bulk_edit_profiles(
     .apply_patch(&request.profile_ids, request.patch)
     .map(|changed| Json(BulkEditResponse { changed }))
     .map_err(manager_error_response)
+}
+
+// API Handlers - Templates
+#[utoipa::path(
+  get,
+  path = "/v1/templates",
+  responses(
+    (status = 200, description = "Every profile template, in their order", body = Vec<crate::profile_templates::ProfileTemplate>),
+    (status = 401, description = "Unauthorized")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "templates"
+)]
+async fn get_templates() -> Json<Vec<crate::profile_templates::ProfileTemplate>> {
+  Json(crate::profile_templates::list())
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/templates",
+  request_body = TemplateRequest,
+  responses(
+    (status = 200, description = "Template created. Device fields in `wayfern_config` are dropped: every profile made from it gets its own device", body = crate::profile_templates::ProfileTemplate),
+    (status = 400, description = "Empty, too long or duplicate name, an invalid value, both a proxy and a VPN, or 100 templates already"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "A status, group or extension group does not exist")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "templates"
+)]
+async fn create_template(
+  Json(request): Json<TemplateRequest>,
+) -> Result<Json<crate::profile_templates::ProfileTemplate>, (StatusCode, String)> {
+  crate::profile_templates::create(&request.name, request.settings)
+    .await
+    .map(Json)
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
+  put,
+  path = "/v1/templates/{id}",
+  params(
+    ("id" = String, Path, description = "Template ID")
+  ),
+  request_body = TemplateRequest,
+  responses(
+    (status = 200, description = "Template replaced", body = crate::profile_templates::ProfileTemplate),
+    (status = 400, description = "Empty, too long or duplicate name, an invalid value, or both a proxy and a VPN"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Template, status, group or extension group not found")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "templates"
+)]
+async fn update_template(
+  Path(id): Path<String>,
+  Json(request): Json<TemplateRequest>,
+) -> Result<Json<crate::profile_templates::ProfileTemplate>, (StatusCode, String)> {
+  crate::profile_templates::update(&id, &request.name, request.settings)
+    .await
+    .map(Json)
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
+  delete,
+  path = "/v1/templates/{id}",
+  params(
+    ("id" = String, Path, description = "Template ID")
+  ),
+  responses(
+    (status = 204, description = "Template deleted; profiles made from it keep their settings"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Template not found")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "templates"
+)]
+async fn delete_template(Path(id): Path<String>) -> Result<StatusCode, (StatusCode, String)> {
+  crate::profile_templates::delete(&id)
+    .map(|()| StatusCode::NO_CONTENT)
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/templates/{id}/profiles",
+  params(
+    ("id" = String, Path, description = "Template ID")
+  ),
+  request_body = CreateFromTemplateRequest,
+  responses(
+    (status = 200, description = "Profiles made with the newest downloaded Wayfern, each with its own device. When `error` is set, creation stopped early and `profiles` lists what was made", body = ApiBulkCreateResponse),
+    (status = 400, description = "Count outside 1 to 100, empty name, a name in use, or a proxy or VPN that does not work"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "The template's fingerprint OS needs a paid plan"),
+    (status = 404, description = "Template not found"),
+    (status = 409, description = "Another bulk creation is running"),
+    (status = 429, description = "The hourly profile allowance is used up; nothing was made")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "templates"
+)]
+async fn create_profiles_from_template(
+  State(state): State<ApiServerState>,
+  Path(id): Path<String>,
+  Json(request): Json<CreateFromTemplateRequest>,
+) -> Result<Json<ApiBulkCreateResponse>, (StatusCode, String)> {
+  crate::profile_templates::create_from_template(
+    &state.app_handle,
+    &id,
+    request.name.as_deref(),
+    request.count,
+  )
+  .await
+  .map(|result| {
+    Json(ApiBulkCreateResponse {
+      profiles: result.created.iter().map(ApiProfile::from).collect(),
+      error: result.error,
+    })
+  })
+  .map_err(manager_error_response)
 }
 
 // API Handlers - Tags
@@ -5989,6 +6163,36 @@ mod tests {
         "{schema}.status_id must be optional"
       );
     }
+  }
+
+  #[test]
+  fn openapi_documents_bulk_edit_and_templates() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for path in [
+      "/v1/profiles/bulk-edit",
+      "/v1/templates",
+      "/v1/templates/{id}",
+      "/v1/templates/{id}/profiles",
+    ] {
+      assert!(
+        spec["paths"][path].is_object(),
+        "{path} must be in the spec"
+      );
+    }
+    let patch = &spec["components"]["schemas"]["ProfilePatch"];
+    assert!(patch["properties"]["status_id"].is_object());
+    assert!(
+      schema_required(&spec, "ProfilePatch").is_empty(),
+      "every patch field is optional"
+    );
+    assert!(
+      schema_required(&spec, "TemplateSettings").is_empty(),
+      "every template setting is optional"
+    );
+    assert!(!schema_required(&spec, "CreateFromTemplateRequest")
+      .iter()
+      .any(|f| f == "name"));
+    assert!(spec["paths"]["/v1/templates/{id}/profiles"]["post"]["responses"]["429"].is_object());
   }
 
   #[test]

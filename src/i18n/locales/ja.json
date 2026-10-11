@@ -1790,6 +1790,32 @@
     "applied_one": "{{count}} 件のプロファイルを変更しました",
     "applied_other": "{{count}} 件のプロファイルを変更しました"
   },
+  "templates": {
+    "label": "テンプレート",
+    "none": "テンプレートなし",
+    "empty": "テンプレートはまだありません。ここでプロファイルを設定し、テンプレートとして保存してください。",
+    "saveCurrent": "テンプレートとして保存",
+    "namePlaceholder": "テンプレート名",
+    "save": "保存",
+    "replace": "置き換え",
+    "saved": "テンプレート {{name}} を保存しました",
+    "delete": "テンプレート {{name}} を削除",
+    "count": "プロファイル数",
+    "fewer": "減らす",
+    "more": "増やす",
+    "namesHint": "プロファイル名は {{name}} 1、{{name}} 2 のように、使用済みの番号の続きになります。",
+    "allowanceLeft_one": "この1時間であと {{count}} 件作成できます。",
+    "allowanceLeft_other": "この1時間であと {{count}} 件作成できます。",
+    "createMany_one": "{{count}} 件のプロファイルを作成",
+    "createMany_other": "{{count}} 件のプロファイルを作成",
+    "progress": "{{total}} 件中 {{done}} 件を作成中",
+    "stop": "停止",
+    "created_one": "{{count}} 件のプロファイルを作成しました",
+    "created_other": "{{count}} 件のプロファイルを作成しました",
+    "stoppedEarly": "{{total}} 件中 {{created}} 件のプロファイルを作成しました。{{error}}",
+    "passwordOneOnly": "パスワードはプロファイルを1件だけ作成するときにのみ設定できます。",
+    "saveFromProfileDescription": "このテンプレートから作成した新しいプロファイルは、その設定とそれぞれ新しいデバイスを受け取ります。名前、メモ、デバイスはこのプロファイルに残ります。"
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN を編集",
@@ -2531,7 +2557,13 @@
     "totpLimitReached": "1 つのプロファイルに保存できる 2FA キーは 50 個までです。",
     "totpEntryNotFound": "この 2FA キーはもう存在しません。",
     "dnsBlocklistInvalid": "この DNS ブロックリストのレベルは存在しません。",
-    "webrtcModeInvalid": "WebRTC は「自動」「プロキシ出口のみ」「ブロック」のいずれかにしてください。"
+    "webrtcModeInvalid": "WebRTC は「自動」「プロキシ出口のみ」「ブロック」のいずれかにしてください。",
+    "templateNotFound": "このテンプレートはもう存在しません。",
+    "templateExists": "この名前のテンプレートは既に存在します。",
+    "templateNameTooLong": "テンプレート名は60文字以内にしてください。",
+    "templateLimitReached": "保存できるテンプレートは最大100件です。先に1件削除してください。",
+    "bulkCreateCountInvalid": "一度に作成できるプロファイルは1〜{{max}}件です。",
+    "bulkCreateBusy": "既にプロファイルを作成中です。完了するまでお待ちください。"
   },
   "rail": {
     "profiles": "プロファイル",

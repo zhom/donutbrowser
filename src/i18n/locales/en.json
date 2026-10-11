@@ -1790,6 +1790,32 @@
     "applied_one": "Changed {{count}} profile",
     "applied_other": "Changed {{count}} profiles"
   },
+  "templates": {
+    "label": "Template",
+    "none": "No template",
+    "empty": "No templates yet. Set up a profile here, then save it as a template.",
+    "saveCurrent": "Save as template",
+    "namePlaceholder": "Template name",
+    "save": "Save",
+    "replace": "Replace",
+    "saved": "Template {{name}} saved",
+    "delete": "Delete template {{name}}",
+    "count": "Number of profiles",
+    "fewer": "Fewer",
+    "more": "More",
+    "namesHint": "The profiles get the names {{name}} 1, {{name}} 2 and so on, after the numbers already in use.",
+    "allowanceLeft_one": "You can create {{count}} more this hour.",
+    "allowanceLeft_other": "You can create {{count}} more this hour.",
+    "createMany_one": "Create {{count}} profile",
+    "createMany_other": "Create {{count}} profiles",
+    "progress": "Creating {{done}} of {{total}}",
+    "stop": "Stop",
+    "created_one": "Created {{count}} profile",
+    "created_other": "Created {{count}} profiles",
+    "stoppedEarly": "Created {{created}} of {{total}} profiles. {{error}}",
+    "passwordOneOnly": "You can set a password only when you create one profile.",
+    "saveFromProfileDescription": "New profiles made from this template get its settings and their own new device. The name, the note and the device stay with this profile."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Edit VPN",
@@ -2531,7 +2557,13 @@
     "totpLimitReached": "A profile can keep at most 50 2FA keys.",
     "totpEntryNotFound": "This 2FA key no longer exists.",
     "dnsBlocklistInvalid": "This DNS blocklist level does not exist.",
-    "webrtcModeInvalid": "WebRTC must be Automatic, Proxy exit only or Blocked."
+    "webrtcModeInvalid": "WebRTC must be Automatic, Proxy exit only or Blocked.",
+    "templateNotFound": "This template no longer exists.",
+    "templateExists": "A template with this name already exists.",
+    "templateNameTooLong": "A template name can have at most 60 characters.",
+    "templateLimitReached": "You can keep at most 100 templates. Delete one first.",
+    "bulkCreateCountInvalid": "You can create from 1 to {{max}} profiles at a time.",
+    "bulkCreateBusy": "Profiles are already being created. Wait until that is done."
   },
   "rail": {
     "profiles": "Profiles",

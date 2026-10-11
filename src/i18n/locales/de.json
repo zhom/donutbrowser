@@ -1790,6 +1790,32 @@
     "applied_one": "{{count}} Profil geändert",
     "applied_other": "{{count}} Profile geändert"
   },
+  "templates": {
+    "label": "Vorlage",
+    "none": "Keine Vorlage",
+    "empty": "Noch keine Vorlagen. Richten Sie hier ein Profil ein und speichern Sie es dann als Vorlage.",
+    "saveCurrent": "Als Vorlage speichern",
+    "namePlaceholder": "Name der Vorlage",
+    "save": "Speichern",
+    "replace": "Ersetzen",
+    "saved": "Vorlage {{name}} gespeichert",
+    "delete": "Vorlage {{name}} löschen",
+    "count": "Anzahl der Profile",
+    "fewer": "Weniger",
+    "more": "Mehr",
+    "namesHint": "Die Profile heißen {{name}} 1, {{name}} 2 und so weiter, nach den bereits verwendeten Nummern.",
+    "allowanceLeft_one": "Sie können in dieser Stunde noch {{count}} erstellen.",
+    "allowanceLeft_other": "Sie können in dieser Stunde noch {{count}} erstellen.",
+    "createMany_one": "{{count}} Profil erstellen",
+    "createMany_other": "{{count}} Profile erstellen",
+    "progress": "Erstelle {{done}} von {{total}}",
+    "stop": "Stoppen",
+    "created_one": "{{count}} Profil erstellt",
+    "created_other": "{{count}} Profile erstellt",
+    "stoppedEarly": "{{created}} von {{total}} Profilen erstellt. {{error}}",
+    "passwordOneOnly": "Ein Passwort können Sie nur festlegen, wenn Sie ein einzelnes Profil erstellen.",
+    "saveFromProfileDescription": "Neue Profile aus dieser Vorlage erhalten ihre Einstellungen und jeweils ein eigenes neues Gerät. Name, Notiz und Gerät bleiben bei diesem Profil."
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN bearbeiten",
@@ -2531,7 +2557,13 @@
     "totpLimitReached": "Ein Profil kann höchstens 50 2FA-Schlüssel speichern.",
     "totpEntryNotFound": "Dieser 2FA-Schlüssel existiert nicht mehr.",
     "dnsBlocklistInvalid": "Diese Stufe der DNS-Sperrliste existiert nicht.",
-    "webrtcModeInvalid": "WebRTC muss Automatisch, Nur Proxy-Ausgang oder Blockiert sein."
+    "webrtcModeInvalid": "WebRTC muss Automatisch, Nur Proxy-Ausgang oder Blockiert sein.",
+    "templateNotFound": "Diese Vorlage existiert nicht mehr.",
+    "templateExists": "Eine Vorlage mit diesem Namen existiert bereits.",
+    "templateNameTooLong": "Ein Vorlagenname darf höchstens 60 Zeichen haben.",
+    "templateLimitReached": "Sie können höchstens 100 Vorlagen behalten. Löschen Sie zuerst eine.",
+    "bulkCreateCountInvalid": "Sie können 1 bis {{max}} Profile auf einmal erstellen.",
+    "bulkCreateBusy": "Es werden bereits Profile erstellt. Warten Sie, bis das abgeschlossen ist."
   },
   "rail": {
     "profiles": "Profile",

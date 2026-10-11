@@ -26,6 +26,7 @@ import {
   LuHouse,
   LuKey,
   LuKeyRound,
+  LuLayoutTemplate,
   LuLink,
   LuLock,
   LuLockOpen,
@@ -129,6 +130,7 @@ interface ProfileInfoDialogProps {
   onOpenDnsBlocklist?: (profile: BrowserProfile) => void;
   onOpenLaunchHook?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
+  onSaveAsTemplate?: (profile: BrowserProfile) => void;
   onDeleteProfile?: (profile: BrowserProfile) => void;
   onLaunchWithSync?: (profile: BrowserProfile) => void;
   onSetPassword?: (profile: BrowserProfile) => void;
@@ -590,6 +592,7 @@ function ProfileInfoContents({
   onOpenDnsBlocklist,
   onOpenLaunchHook,
   onCloneProfile,
+  onSaveAsTemplate,
   onDeleteProfile,
   onLaunchWithSync,
   onSetPassword,
@@ -810,6 +813,15 @@ function ProfileInfoContents({
       hidden: profile.ephemeral === true,
     },
     {
+      id: "saveTemplate",
+      icon: <LuLayoutTemplate className="size-4" />,
+      label: t("templates.saveCurrent"),
+      onClick: () => {
+        handleAction(() => onSaveAsTemplate?.(profile));
+      },
+      hidden: !onSaveAsTemplate,
+    },
+    {
       id: "extension",
       icon: <LuPuzzle className="size-4" />,
       label: t("profileInfo.actions.assignExtensionGroup"),
@@ -1022,6 +1034,7 @@ function ProfileInfoLayout({
   const cookiesCopyAction = findAction("cookiesCopy");
   const cookiesAction = cookiesManageAction ?? cookiesCopyAction;
   const extensionAction = findAction("extension");
+  const saveTemplateAction = findAction("saveTemplate");
   const syncAction = findAction("sync");
   const synchronizerAction = findAction("synchronizer");
   const _launchHookAction = findAction("hook");
@@ -1174,6 +1187,18 @@ function ProfileInfoLayout({
           >
             <LuCopy className="size-3" />
             {t("profileInfo.duplicate")}
+          </Button>
+        )}
+        {saveTemplateAction && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 px-2 text-xs"
+            data-slot="profile-info-save-template"
+            onClick={saveTemplateAction.onClick}
+          >
+            <LuLayoutTemplate className="size-3" />
+            {saveTemplateAction.label}
           </Button>
         )}
         <button

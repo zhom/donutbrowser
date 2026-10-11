@@ -362,6 +362,46 @@ export interface ProfileStatus {
   updated_at: number;
 }
 
+/**
+ * Saved settings that new profiles are made from. A template never holds a
+ * device: every profile made from it gets its own.
+ */
+export interface TemplateSettings {
+  name_prefix?: string | null;
+  proxy_id?: string | null;
+  vpn_id?: string | null;
+  /** Proxies to spread new profiles across, one each in turn. */
+  proxy_ids?: string[];
+  group_id?: string | null;
+  tags?: string[];
+  status_id?: string | null;
+  note?: string | null;
+  extension_group_id?: string | null;
+  dns_blocklist?: string | null;
+  dns_server?: string | null;
+  proxy_bypass_rules?: string[];
+  start_urls?: string[];
+  launch_hook?: string | null;
+  ephemeral?: boolean;
+  clear_on_close?: boolean;
+  wayfern_config?: WayfernConfig | null;
+}
+
+export interface ProfileTemplate {
+  id: string;
+  name: string;
+  settings: TemplateSettings;
+  position: number;
+  updated_at: number;
+}
+
+export interface BulkCreateResult {
+  created: BrowserProfile[];
+  /** Why creation stopped before the count, as a backend error, or null. */
+  error: string | null;
+  cancelled: boolean;
+}
+
 export interface GroupWithCount {
   id: string;
   name: string;

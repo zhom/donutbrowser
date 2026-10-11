@@ -1790,6 +1790,32 @@
     "applied_one": "Đã thay đổi {{count}} profile",
     "applied_other": "Đã thay đổi {{count}} profile"
   },
+  "templates": {
+    "label": "Mẫu",
+    "none": "Không dùng mẫu",
+    "empty": "Chưa có mẫu nào. Hãy thiết lập profile ở đây rồi lưu thành mẫu.",
+    "saveCurrent": "Lưu thành mẫu",
+    "namePlaceholder": "Tên mẫu",
+    "save": "Lưu",
+    "replace": "Thay thế",
+    "saved": "Đã lưu mẫu {{name}}",
+    "delete": "Xóa mẫu {{name}}",
+    "count": "Số lượng profile",
+    "fewer": "Bớt",
+    "more": "Thêm",
+    "namesHint": "Các profile được đặt tên {{name}} 1, {{name}} 2, v.v., tiếp sau các số đã dùng.",
+    "allowanceLeft_one": "Bạn có thể tạo thêm {{count}} trong giờ này.",
+    "allowanceLeft_other": "Bạn có thể tạo thêm {{count}} trong giờ này.",
+    "createMany_one": "Tạo {{count}} profile",
+    "createMany_other": "Tạo {{count}} profile",
+    "progress": "Đang tạo {{done}} trên {{total}}",
+    "stop": "Dừng",
+    "created_one": "Đã tạo {{count}} profile",
+    "created_other": "Đã tạo {{count}} profile",
+    "stoppedEarly": "Đã tạo {{created}} trên {{total}} profile. {{error}}",
+    "passwordOneOnly": "Bạn chỉ có thể đặt mật khẩu khi tạo một profile.",
+    "saveFromProfileDescription": "Các profile mới tạo từ mẫu này nhận cài đặt của mẫu và mỗi profile có thiết bị mới riêng. Tên, ghi chú và thiết bị vẫn thuộc profile này."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Chỉnh sửa VPN",
@@ -2531,7 +2557,13 @@
     "totpLimitReached": "Mỗi profile lưu tối đa 50 khóa 2FA.",
     "totpEntryNotFound": "Khóa 2FA này không còn tồn tại.",
     "dnsBlocklistInvalid": "Mức danh sách chặn DNS này không tồn tại.",
-    "webrtcModeInvalid": "WebRTC phải là Tự động, Chỉ lối ra proxy hoặc Bị chặn."
+    "webrtcModeInvalid": "WebRTC phải là Tự động, Chỉ lối ra proxy hoặc Bị chặn.",
+    "templateNotFound": "Mẫu này không còn tồn tại.",
+    "templateExists": "Đã có mẫu với tên này.",
+    "templateNameTooLong": "Tên mẫu có tối đa 60 ký tự.",
+    "templateLimitReached": "Bạn chỉ có thể giữ tối đa 100 mẫu. Hãy xóa một mẫu trước.",
+    "bulkCreateCountInvalid": "Mỗi lần bạn có thể tạo từ 1 đến {{max}} profile.",
+    "bulkCreateBusy": "Đang có profile được tạo. Hãy chờ đến khi xong."
   },
   "rail": {
     "profiles": "Profile",

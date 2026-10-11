@@ -43,6 +43,12 @@ export type BackendErrorCode =
   | "TOTP_ENTRY_NOT_FOUND"
   | "DNS_BLOCKLIST_INVALID"
   | "WEBRTC_MODE_INVALID"
+  | "TEMPLATE_NOT_FOUND"
+  | "TEMPLATE_EXISTS"
+  | "TEMPLATE_NAME_TOO_LONG"
+  | "TEMPLATE_LIMIT_REACHED"
+  | "BULK_CREATE_COUNT_INVALID"
+  | "BULK_CREATE_BUSY"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -419,6 +425,20 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.dnsBlocklistInvalid");
     case "WEBRTC_MODE_INVALID":
       return t("backendErrors.webrtcModeInvalid");
+    case "TEMPLATE_NOT_FOUND":
+      return t("backendErrors.templateNotFound");
+    case "TEMPLATE_EXISTS":
+      return t("backendErrors.templateExists");
+    case "TEMPLATE_NAME_TOO_LONG":
+      return t("backendErrors.templateNameTooLong");
+    case "TEMPLATE_LIMIT_REACHED":
+      return t("backendErrors.templateLimitReached");
+    case "BULK_CREATE_COUNT_INVALID":
+      return t("backendErrors.bulkCreateCountInvalid", {
+        max: parsed.params?.max ?? "100",
+      });
+    case "BULK_CREATE_BUSY":
+      return t("backendErrors.bulkCreateBusy");
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

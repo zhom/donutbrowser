@@ -2,6 +2,7 @@
 
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { motion, useReducedMotion } from "motion/react";
 import type * as React from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -13,10 +14,14 @@ import {
   LuChevronRight,
   LuFlame,
   LuGlobe,
+  LuLayoutTemplate,
   LuLoaderCircle,
   LuLock,
   LuLockOpen,
+  LuMinus,
+  LuPlus,
   LuShieldCheck,
+  LuTrash2,
   LuTriangleAlert,
 } from "react-icons/lu";
 import { DnsServerField } from "@/components/dns-server-field";
@@ -70,16 +75,28 @@ import {
 import { WayfernConfigForm } from "@/components/wayfern-config-form";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useInputModality } from "@/hooks/use-input-modality";
+import { useProfileTemplates } from "@/hooks/use-profile-templates";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
+import { translateBackendError } from "@/lib/backend-errors";
 import { getOSDisplayName, getOSIcon } from "@/lib/browser-utils";
 import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { MOTION_EASE_OUT } from "@/lib/motion";
 import { startPagesFromText } from "@/lib/start-pages";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
-import type { BrowserReleaseTypes, WayfernConfig, WayfernOS } from "@/types";
+import type {
+  BrowserReleaseTypes,
+  BulkCreateResult,
+  ProfileTemplate,
+  TemplateSettings,
+  WayfernConfig,
+  WayfernOS,
+} from "@/types";
 
 const PASSWORD_MIN_LEN = 8;
+/** The most profiles one bulk creation makes; the backend holds the same cap. */
+const MAX_BULK_CREATE = 100;
 
 const OS_OPTIONS: WayfernOS[] = ["windows", "macos", "linux", "android", "ios"];
 
@@ -155,6 +172,14 @@ export function CreateProfileDialog({
     useState<WayfernConfig>(defaultWayfernConfig);
   const [isCreating, setIsCreating] = useState(false);
   const [ephemeral, setEphemeral] = useState(false);
+  const templates = useProfileTemplates();
+  const [appliedTemplate, setAppliedTemplate] =
+    useState<ProfileTemplate | null>(null);
+  const [count, setCount] = useState(1);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const [allowance, setAllowance] = useState<ProfileCreationAllowance | null>(
     null,
   );
@@ -190,6 +215,19 @@ export function CreateProfileDialog({
     allowance !== null && allowance.used >= allowance.per_hour;
   const hourlyCapReached = overAllowance && allowance.enforcement === "hard";
   const creatingQuickly = overAllowance && allowance.enforcement === "soft";
+  // A batch stops at the hourly allowance on every plan, so it is never
+  // offered past what is left.
+  const maxCount =
+    allowance === null
+      ? MAX_BULK_CREATE
+      : Math.max(
+          1,
+          Math.min(MAX_BULK_CREATE, allowance.per_hour - allowance.used),
+        );
+  const many = count > 1;
+  useEffect(() => {
+    setCount((current) => Math.min(current, maxCount));
+  }, [maxCount]);
   const [enablePassword, setEnablePassword] = useState(false);
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -318,8 +356,160 @@ export function CreateProfileDialog({
     setReleaseTypesError(false);
     setWayfernConfig(defaultWayfernConfig());
     setEphemeral(false);
+    setAppliedTemplate(null);
+    setCount(1);
+    setProgress(null);
     clearPassword();
     onClose();
+  };
+
+  /** The form as template settings, over the applied template's own extras. */
+  const formSettings = (): TemplateSettings => {
+    const base = appliedTemplate?.settings;
+    const isVpn = selectedProxyId?.startsWith("vpn-") ?? false;
+    const proxyId = isVpn ? null : (selectedProxyId ?? null);
+    const spread = base?.proxy_ids ?? [];
+    return {
+      ...base,
+      name_prefix: profileName.trim() || null,
+      proxy_id: proxyId,
+      vpn_id: isVpn ? (selectedProxyId?.slice(4) ?? null) : null,
+      // A template that spreads its profiles over several proxies keeps
+      // doing so while its first proxy is still the one chosen.
+      proxy_ids: proxyId && spread[0] === proxyId ? spread : [],
+      group_id:
+        base?.group_id ??
+        (selectedGroupId && selectedGroupId !== "__all__"
+          ? selectedGroupId
+          : null),
+      extension_group_id: selectedExtensionGroupId ?? null,
+      dns_blocklist: dnsBlocklist || null,
+      dns_server: dnsServer.trim() || null,
+      start_urls: startPagesFromText(startPages),
+      launch_hook: launchHook.trim() || null,
+      ephemeral,
+      wayfern_config: wayfernConfig,
+    };
+  };
+
+  const applyTemplate = (template: ProfileTemplate | null) => {
+    setAppliedTemplate(template);
+    if (!template) return;
+    const settings = template.settings;
+    setSelectedProxyId(
+      settings.vpn_id
+        ? `vpn-${settings.vpn_id}`
+        : (settings.proxy_ids?.[0] ?? settings.proxy_id ?? undefined),
+    );
+    setWayfernConfig({
+      ...defaultWayfernConfig(),
+      ...(settings.wayfern_config ?? {}),
+    });
+    setDnsBlocklist(settings.dns_blocklist ?? "");
+    setDnsServer(settings.dns_server ?? "");
+    setStartPages((settings.start_urls ?? []).join("\n"));
+    setLaunchHook(settings.launch_hook ?? "");
+    setSelectedExtensionGroupId(settings.extension_group_id ?? undefined);
+    setEphemeral(settings.ephemeral === true);
+    if (settings.ephemeral) clearPassword();
+    if (!profileName.trim()) {
+      setProfileName(settings.name_prefix ?? template.name);
+    }
+  };
+
+  const saveTemplate = async (name: string) => {
+    const existing = templates.find(
+      (template) => template.name.toLowerCase() === name.toLowerCase(),
+    );
+    try {
+      const saved = existing
+        ? await invoke<ProfileTemplate>("update_profile_template", {
+            templateId: existing.id,
+            name,
+            settings: formSettings(),
+          })
+        : await invoke<ProfileTemplate>("create_profile_template", {
+            name,
+            settings: formSettings(),
+          });
+      setAppliedTemplate(saved);
+      showSuccessToast(t("templates.saved", { name: saved.name }));
+      return true;
+    } catch (error) {
+      showErrorToast(translateBackendError(t, error));
+      return false;
+    }
+  };
+
+  const deleteTemplate = async (template: ProfileTemplate) => {
+    try {
+      await invoke("delete_profile_template", { templateId: template.id });
+      if (appliedTemplate?.id === template.id) setAppliedTemplate(null);
+    } catch (error) {
+      showErrorToast(translateBackendError(t, error));
+    }
+  };
+
+  const changeCount = (next: number) => {
+    setCount(next);
+    if (next > 1) clearPassword();
+  };
+
+  /** Several profiles, or one from a template: one backend run for both. */
+  const createFromSettings = async () => {
+    setIsCreating(true);
+    setProgress({ done: 0, total: count });
+    const stopListening = await listen<{ done: number; total: number }>(
+      "profiles-bulk-create-progress",
+      (event) => setProgress(event.payload),
+    );
+    try {
+      const result = await invoke<BulkCreateResult>("bulk_create_profiles", {
+        settings: formSettings(),
+        name: profileName.trim(),
+        count,
+      });
+      const [first] = result.created;
+      if (count === 1 && first && enablePassword && !ephemeral) {
+        try {
+          await invoke("set_profile_password", {
+            profileId: first.id,
+            password,
+          });
+        } catch (error) {
+          showErrorToast(
+            t("errors.setProfilePasswordFailed", {
+              error: translateBackendError(t, error),
+            }),
+          );
+        }
+      }
+      if (result.error) {
+        showErrorToast(
+          t("templates.stoppedEarly", {
+            created: result.created.length,
+            total: count,
+            error: translateBackendError(t, result.error),
+          }),
+        );
+      } else {
+        showSuccessToast(
+          t("templates.created", { count: result.created.length }),
+        );
+      }
+      handleClose();
+    } catch (error) {
+      showErrorToast(
+        t("errors.createProfileFailed", {
+          error: translateBackendError(t, error),
+        }),
+      );
+      void loadAllowance();
+    } finally {
+      stopListening();
+      setIsCreating(false);
+      setProgress(null);
+    }
   };
 
   const handleCreate = async () => {
@@ -337,6 +527,10 @@ export function CreateProfileDialog({
       }
     }
     setPasswordError(null);
+    if (many || appliedTemplate) {
+      await createFromSettings();
+      return;
+    }
     setIsCreating(true);
     const isVpnSelection = selectedProxyId?.startsWith("vpn-") ?? false;
     try {
@@ -396,12 +590,17 @@ export function CreateProfileDialog({
       : {};
   const createButton = (
     <LoadingButton
+      data-slot="profile-create-submit"
       onClick={handleCreate}
-      isLoading={isCreating}
-      disabled={isCreateDisabled}
+      isLoading={isCreating && !progress}
+      disabled={isCreateDisabled || progress !== null}
       className="h-9 rounded-md px-4 transition-[opacity,box-shadow,transform] duration-200"
     >
-      {t("common.buttons.create")}
+      {progress
+        ? t("templates.progress", progress)
+        : many
+          ? t("templates.createMany", { count })
+          : t("common.buttons.create")}
     </LoadingButton>
   );
 
@@ -433,10 +632,19 @@ export function CreateProfileDialog({
         aria-describedby={undefined}
         dismissible={!isCreating}
       >
-        <DialogHeader className="shrink-0">
+        <DialogHeader className="shrink-0 flex-row items-center justify-between gap-2 space-y-0">
           <DialogTitle className="text-base">
             {t("createProfile.title")}
           </DialogTitle>
+          <TemplatePicker
+            templates={templates}
+            applied={appliedTemplate}
+            onApply={applyTemplate}
+            onSave={saveTemplate}
+            onDelete={deleteTemplate}
+            disabled={isCreating}
+            animate={animateEntry}
+          />
         </DialogHeader>
 
         <div
@@ -552,6 +760,20 @@ export function CreateProfileDialog({
               </PopoverContent>
             </Popover>
           </motion.div>
+
+          {many && (
+            <motion.p
+              data-slot="profile-count-hint"
+              className="px-2 text-xs text-muted-foreground"
+              {...reveal}
+            >
+              {t("templates.namesHint", {
+                name: profileName.trim() || t("createProfile.profileName"),
+              })}
+              {allowance !== null &&
+                ` ${t("templates.allowanceLeft", { count: maxCount })}`}
+            </motion.p>
+          )}
 
           <motion.div
             className="flex flex-wrap items-center gap-1.5"
@@ -706,11 +928,15 @@ export function CreateProfileDialog({
                   setEphemeral(false);
                 } else clearPassword();
               }}
-              disabled={isCreating}
+              disabled={isCreating || many}
               animate={animateEntry}
               icon={enablePassword ? <LuLock /> : <LuLockOpen />}
               label={t("profiles.passwordProtectedBadge")}
-              hint={t("createProfile.passwordProtect.description")}
+              hint={
+                many
+                  ? t("templates.passwordOneOnly")
+                  : t("createProfile.passwordProtect.description")
+              }
             />
             <OptionToggle
               id="ephemeral"
@@ -1101,13 +1327,29 @@ export function CreateProfileDialog({
             {t("createProfile.advancedOptions")}
           </Button>
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="subtle"
-              onClick={handleClose}
+            {progress ? (
+              <Button
+                variant="subtle"
+                data-slot="profile-create-stop"
+                onClick={() => void invoke("cancel_bulk_create_profiles")}
+              >
+                {t("templates.stop")}
+              </Button>
+            ) : (
+              <Button
+                variant="subtle"
+                onClick={handleClose}
+                disabled={isCreating}
+              >
+                {t("common.buttons.cancel")}
+              </Button>
+            )}
+            <CountStepper
+              value={count}
+              max={maxCount}
+              onChange={changeCount}
               disabled={isCreating}
-            >
-              {t("common.buttons.cancel")}
-            </Button>
+            />
             {hourlyCapReached ? (
               <Tooltip
                 onOpenChange={(open) => {
@@ -1281,5 +1523,271 @@ function OptionToggle({
         {hint}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Picks a template for the form, saves the form as one, or deletes one. */
+function TemplatePicker({
+  templates,
+  applied,
+  onApply,
+  onSave,
+  onDelete,
+  disabled,
+  animate,
+}: {
+  templates: ProfileTemplate[];
+  applied: ProfileTemplate | null;
+  onApply: (template: ProfileTemplate | null) => void;
+  onSave: (name: string) => Promise<boolean>;
+  onDelete: (template: ProfileTemplate) => Promise<void>;
+  disabled: boolean;
+  animate: boolean;
+}) {
+  const { t } = useTranslation();
+  const valueId = useId();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const trimmed = name.trim();
+  const replaces = templates.some(
+    (template) => template.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setName(applied?.name ?? "");
+    setConfirmingDelete(null);
+  }, [open, applied]);
+
+  const save = async () => {
+    if (!trimmed || saving) return;
+    setSaving(true);
+    const saved = await onSave(trimmed);
+    setSaving(false);
+    if (saved) setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-slot="template-picker"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-describedby={valueId}
+          className={cn(optionPill(applied !== null), "h-7 shrink-0 text-xs")}
+          disabled={disabled}
+        >
+          <PillIcon on={applied !== null} animate={animate}>
+            <LuLayoutTemplate />
+          </PillIcon>
+          <PillLabel
+            id={valueId}
+            label={applied?.name ?? t("templates.label")}
+            animate={animate}
+          />
+          <LuChevronDown
+            className={cn(
+              "-mr-0.5 opacity-60 transition-transform duration-200 motion-reduce:transition-none",
+              open && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="end" sideOffset={6}>
+        {templates.length > 0 ? (
+          <Command>
+            <CommandList>
+              <CommandGroup>
+                {applied && (
+                  <CommandItem
+                    value="__no_template__"
+                    onSelect={() => {
+                      onApply(null);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="truncate text-muted-foreground">
+                      {t("templates.none")}
+                    </span>
+                  </CommandItem>
+                )}
+                {templates.map((template) => (
+                  <CommandItem
+                    key={template.id}
+                    value={template.id}
+                    data-slot="template-option"
+                    className="group/template"
+                    onSelect={() => {
+                      onApply(template);
+                      setOpen(false);
+                    }}
+                  >
+                    <LuCheck
+                      className={cn(
+                        "size-4 shrink-0",
+                        applied?.id === template.id
+                          ? "opacity-100"
+                          : "opacity-0",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {template.name}
+                    </span>
+                    {confirmingDelete === template.id ? (
+                      <button
+                        type="button"
+                        data-slot="template-delete-confirm"
+                        className="rounded-md px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConfirmingDelete(null);
+                          void onDelete(template);
+                        }}
+                      >
+                        {t("common.buttons.delete")}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        data-slot="template-delete"
+                        aria-label={t("templates.delete", {
+                          name: template.name,
+                        })}
+                        className="grid size-6 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-100 group-hover/template:opacity-100 group-data-[selected=true]/template:opacity-100 hover:bg-foreground/8 hover:text-destructive focus-visible:opacity-100 [&_svg]:size-3.5"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConfirmingDelete(template.id);
+                        }}
+                      >
+                        <LuTrash2 aria-hidden="true" />
+                      </button>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        ) : (
+          <p className="px-3 pt-3 text-xs text-muted-foreground">
+            {t("templates.empty")}
+          </p>
+        )}
+        <div className="space-y-1.5 p-2">
+          <p className={cn(FIELD_LABEL_CLASS, "px-1")}>
+            {t("templates.saveCurrent")}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <Input
+              variant="soft"
+              data-slot="template-name"
+              value={name}
+              maxLength={60}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void save();
+                }
+              }}
+              placeholder={t("templates.namePlaceholder")}
+              aria-label={t("templates.namePlaceholder")}
+              className="h-8 text-sm"
+            />
+            <Button
+              size="sm"
+              data-slot="template-save"
+              className="h-8 shrink-0"
+              disabled={!trimmed || saving}
+              onClick={() => void save()}
+            >
+              {replaces ? t("templates.replace") : t("templates.save")}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** How many profiles to create, from 1 to `max`. */
+function CountStepper({
+  value,
+  max,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  max: number;
+  onChange: (value: number) => void;
+  disabled: boolean;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const parsed = Number.parseInt(draft, 10);
+    const next = Number.isFinite(parsed)
+      ? Math.min(max, Math.max(1, parsed))
+      : value;
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  };
+  const step =
+    "grid h-9 w-7 place-items-center text-muted-foreground transition-colors duration-100 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-3.5";
+
+  return (
+    <div
+      role="group"
+      aria-label={t("templates.count")}
+      className="inline-flex h-9 items-center rounded-md bg-foreground/5"
+    >
+      <button
+        type="button"
+        aria-label={t("templates.fewer")}
+        data-slot="profile-count-fewer"
+        className={step}
+        disabled={disabled || value <= 1}
+        onClick={() => onChange(value - 1)}
+      >
+        <LuMinus aria-hidden="true" />
+      </button>
+      <input
+        id="profile-count"
+        data-slot="profile-count"
+        inputMode="numeric"
+        aria-label={t("templates.count")}
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value.replace(/\D/g, ""))}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+        }}
+        className="w-8 bg-transparent text-center text-sm tabular-nums outline-none disabled:opacity-50"
+      />
+      <button
+        type="button"
+        aria-label={t("templates.more")}
+        data-slot="profile-count-more"
+        className={step}
+        disabled={disabled || value >= max}
+        onClick={() => onChange(value + 1)}
+      >
+        <LuPlus aria-hidden="true" />
+      </button>
+    </div>
   );
 }

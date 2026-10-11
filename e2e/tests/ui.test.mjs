@@ -170,7 +170,7 @@ test("profile creation stays compact and saves basic, protected, and ephemeral p
         JSON.stringify(basic),
       );
       assert.equal(basic.tabs, 0);
-      assert.deepEqual(basic.fields, ["profile-name"]);
+      assert.deepEqual(basic.fields, ["profile-name", "profile-count"]);
       assert.deepEqual(basic.checkboxes, ["enable-password", "ephemeral"]);
       assert.equal(basic.advancedVisible, false);
       assert.ok(!basic.text.includes(en.profiles.ephemeralDescription));
@@ -3344,6 +3344,109 @@ test("bulk edit opens from the action bar and changes only the ticked rows", asy
         (profile) => profile.note ?? null,
       );
       assert.ok(notes.includes("Keep me"), "an unticked field stays as it is");
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
+test("templates save from the create dialog and the inspector, and several profiles go to one batch", async () => {
+  await withApp(
+    "ui-templates",
+    async (app) => {
+      await stubCommand(app, "is_geoip_database_available", true);
+      const base = await createUiProfile(app, "Template Base");
+      await app.waitForText(base.name);
+      const templates = () => app.invoke("list_profile_templates");
+
+      await openProfileCreation(app);
+      await app.fillSelector("#profile-name", "Batch");
+      await app.clickSelector('[data-slot="template-picker"]');
+      await app.waitForText(en.templates.empty);
+      await app.fillSelector('[data-slot="template-name"]', "Quick");
+      await app.clickSelector('[data-slot="template-save"]');
+      await app.waitFor(
+        async () => (await templates()).some((t) => t.name === "Quick"),
+        { description: "the template saved from the form" },
+      );
+      const [quick] = await templates();
+      assert.equal(quick.settings.name_prefix, "Batch");
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('[data-slot="template-picker"]')?.innerText.includes("Quick") ?? false;`,
+          ),
+        { description: "the saved template shown as applied" },
+      );
+
+      await app.clickSelector('[data-slot="profile-count-more"]');
+      await app.clickSelector('[data-slot="profile-count-more"]');
+      await app.waitForText(
+        en.templates.createMany_other.replace("{{count}}", "3"),
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('[data-slot="profile-count-hint"]') !== null;`,
+        ),
+        true,
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#enable-password')?.disabled ?? null;`,
+        ),
+        true,
+        "a password is for one profile only",
+      );
+      await app.capture("templates-create-many");
+
+      await stubCommand(app, "bulk_create_profiles", {
+        created: [{ id: "a" }, { id: "b" }, { id: "c" }],
+        error: null,
+        cancelled: false,
+      });
+      await app.clickSelector('[data-slot="profile-create-submit"]');
+      await app.waitFor(
+        () => app.execute(`return !document.querySelector('#profile-name');`),
+        { description: "the dialog closing after the batch" },
+      );
+      const [call] = await app.execute(
+        `return (window.__donutStubbedCalls ?? []).filter((c) => c.command === "bulk_create_profiles");`,
+      );
+      assert.equal(call.payload.count, 3);
+      assert.equal(call.payload.name, "Batch");
+      assert.equal(call.payload.settings.name_prefix, "Batch");
+      await app.waitForText(
+        en.templates.created_other.replace("{{count}}", "3"),
+      );
+
+      await openProfileCreation(app);
+      await app.clickSelector('[data-slot="template-picker"]');
+      await app.clickSelector('[data-slot="template-option"]');
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('#profile-name')?.value === "Batch";`,
+          ),
+        { description: "the template's name prefix filling an empty name" },
+      );
+      await app.clickSelector('[data-slot="template-picker"]');
+      await app.clickSelector('[data-slot="template-delete"]');
+      await app.clickSelector('[data-slot="template-delete-confirm"]');
+      await app.waitFor(async () => (await templates()).length === 0, {
+        description: "the template deleted from the picker",
+      });
+      await dismissSurface(app);
+      await dismissSurface(app);
+
+      await app.clickSelector(
+        `[data-slot="profile-inspect-trigger"][data-profile-id="${base.id}"]`,
+      );
+      await app.clickSelector('[data-slot="profile-info-save-template"]');
+      await app.waitForText(en.templates.saveFromProfileDescription);
+      await app.clickSelector('[data-slot="save-template-confirm"]');
+      await app.waitFor(
+        async () => (await templates()).some((t) => t.name === "Template Base"),
+        { description: "the template saved from the inspector" },
+      );
     },
     { seedDownloadedBrowser: true },
   );

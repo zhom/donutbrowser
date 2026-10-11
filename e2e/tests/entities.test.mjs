@@ -1569,6 +1569,168 @@ test("bulk edit changes only the ticked settings, checks every value first, and 
   });
 });
 
+test("templates keep settings but never a device, and a batch stops at the hourly allowance", async () => {
+  await withApp(
+    "entities-templates",
+    async (app) => {
+      const status = await app.invoke("create_profile_status", {
+        name: "Fresh",
+        color: "#22c55e",
+      });
+      const profile = await createProfile(app, "Template Source");
+      await app.invoke("update_profile_note", {
+        profileId: profile.id,
+        note: "login for one shop",
+      });
+      await app.invoke("bulk_update_profiles", {
+        profileIds: [profile.id],
+        patch: {
+          status_id: status.id,
+          tags_add: ["shop"],
+          start_urls: ["shop.example"],
+          block_images: true,
+        },
+      });
+
+      const saved = await app.invoke("save_profile_template_from_profile", {
+        profileId: profile.id,
+        name: " Shop ",
+      });
+      assert.equal(saved.name, "Shop");
+      assert.equal(saved.settings.status_id, status.id);
+      assert.deepEqual(saved.settings.tags, ["shop"]);
+      assert.deepEqual(saved.settings.start_urls, ["https://shop.example/"]);
+      assert.equal(saved.settings.note, null, "a note belongs to its profile");
+      assert.equal(saved.settings.wayfern_config.block_images, true);
+      assert.equal(
+        saved.settings.wayfern_config.fingerprint ?? null,
+        null,
+        "a template never carries the source profile's device",
+      );
+      assert.equal(saved.settings.wayfern_config.identity_id ?? null, null);
+
+      assert.match(
+        await app.invokeError("save_profile_template_from_profile", {
+          profileId: profile.id,
+          name: "shop",
+        }),
+        /TEMPLATE_EXISTS/,
+      );
+      for (const [settings, code] of [
+        [{ proxy_id: "p", vpn_id: "v" }, /PROXY_AND_VPN_MUTUALLY_EXCLUSIVE/],
+        [{ status_id: "missing" }, /PROFILE_STATUS_NOT_FOUND/],
+        [{ start_urls: ["file:///etc/passwd"] }, /START_URL_INVALID/],
+      ]) {
+        assert.match(
+          await app.invokeError("create_profile_template", {
+            name: "Broken",
+            settings,
+          }),
+          code,
+        );
+      }
+      assert.match(
+        await app.invokeError("create_profile_template", {
+          name: "x".repeat(61),
+          settings: {},
+        }),
+        /TEMPLATE_NAME_TOO_LONG/,
+      );
+
+      const mail = await app.invoke("create_profile_template", {
+        name: "Mail",
+        settings: {
+          name_prefix: " Mail ",
+          tags: ["mail", " mail "],
+          ephemeral: true,
+          clear_on_close: true,
+          wayfern_config: { fingerprint: "{}", os: "linux" },
+        },
+      });
+      assert.equal(mail.settings.name_prefix, "Mail");
+      assert.deepEqual(mail.settings.tags, ["mail"]);
+      assert.equal(mail.settings.clear_on_close, false);
+      assert.equal(mail.settings.wayfern_config.fingerprint ?? null, null);
+      assert.deepEqual(
+        (await app.invoke("list_profile_templates")).map((t) => t.name),
+        ["Shop", "Mail"],
+      );
+
+      const renamed = await app.invoke("update_profile_template", {
+        templateId: mail.id,
+        name: "Webmail",
+        settings: { ...mail.settings, tags: ["webmail"] },
+      });
+      assert.equal(renamed.name, "Webmail");
+      assert.deepEqual(renamed.settings.tags, ["webmail"]);
+      assert.ok(renamed.updated_at >= mail.updated_at);
+      assert.match(
+        await app.invokeError("update_profile_template", {
+          templateId: mail.id,
+          name: "SHOP",
+          settings: {},
+        }),
+        /TEMPLATE_EXISTS/,
+      );
+
+      for (const count of [0, 101]) {
+        assert.match(
+          await app.invokeError("bulk_create_profiles", {
+            settings: saved.settings,
+            name: "Batch",
+            count,
+          }),
+          /BULK_CREATE_COUNT_INVALID/,
+        );
+      }
+      // Nothing to stop: cancelling with no batch running is harmless.
+      await app.invoke("cancel_bulk_create_profiles");
+
+      // The signed-out allowance is eight an hour. With eight used, one more
+      // manual profile would only warn, but a batch never goes past it. The
+      // window is read on its first use, and nothing above used it, so the
+      // file is read without a restart (a restart would also drop the seeded
+      // browser, which has no binary).
+      const now = Math.floor(Date.now() / 1000);
+      await writeFile(
+        path.join(app.dataRoot, "data", "settings", "profile_generations.json"),
+        JSON.stringify({
+          generations: {
+            local: Array.from({ length: 8 }, (_, i) => now - 600 + i),
+          },
+        }),
+      );
+      const before = (await app.invoke("list_browser_profiles")).length;
+      assert.match(
+        await app.invokeError("bulk_create_profiles", {
+          settings: saved.settings,
+          name: "Batch",
+          count: 3,
+        }),
+        /PROFILE_GENERATION_LIMIT_REACHED/,
+      );
+      assert.equal(
+        (await app.invoke("list_browser_profiles")).length,
+        before,
+        "a refused batch makes nothing",
+      );
+
+      await app.invoke("delete_profile_template", { templateId: mail.id });
+      assert.match(
+        await app.invokeError("delete_profile_template", {
+          templateId: mail.id,
+        }),
+        /TEMPLATE_NOT_FOUND/,
+      );
+      assert.deepEqual(
+        (await app.invoke("list_profile_templates")).map((t) => t.id),
+        [saved.id],
+      );
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
 test("deleted profiles land in the trash and come back intact on restore", async () => {
   await withApp("entities-trash", async (app) => {
     assert.deepEqual(await app.invoke("list_trashed_profiles"), []);

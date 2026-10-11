@@ -2780,6 +2780,39 @@ impl McpServer {
           "required": []
         }),
       },
+      McpTool {
+        name: "list_profile_templates".to_string(),
+        description: "List the profile templates: saved settings (proxy or VPN, group, tags, status, DNS, start pages, fingerprint OS and options) that new profiles are made from. A template never holds a device; every profile made from it gets its own.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "create_profiles_from_template".to_string(),
+        description: "Make 1 to 100 profiles from a template with the newest downloaded Wayfern, each with its own new device. Everything is checked first, each proxy once. One profile takes the name as given; several take it followed by numbers that continue after the highest in use. Creation stops at the hourly profile allowance; the result lists what was made and why it stopped early, if it did.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "description": "The template's id, from list_profile_templates"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "How many profiles to make"
+            },
+            "name": {
+              "type": "string",
+              "description": "Optional. Defaults to the template's name prefix, else its name"
+            }
+          },
+          "required": ["template_id", "count"]
+        }),
+      },
       // Group management tools
       McpTool {
         name: "list_groups".to_string(),
@@ -4627,6 +4660,13 @@ impl McpServer {
           "text": serde_json::to_string_pretty(&crate::profile_statuses::list()).unwrap_or_default()
         }]
       })),
+      "list_profile_templates" => Ok(serde_json::json!({
+        "content": [{
+          "type": "text",
+          "text": serde_json::to_string_pretty(&crate::profile_templates::list()).unwrap_or_default()
+        }]
+      })),
+      "create_profiles_from_template" => self.handle_create_profiles_from_template(arguments).await,
       "get_group" => self.handle_get_group(arguments).await,
       "create_group" => self.handle_create_group(arguments).await,
       "update_group" => self.handle_update_group(arguments).await,
@@ -5917,6 +5957,63 @@ impl McpServer {
       "content": [{
         "type": "text",
         "text": serde_json::to_string_pretty(&groups).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_create_profiles_from_template(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let invalid = |message: &str| McpError {
+      code: -32602,
+      message: message.to_string(),
+      data: None,
+    };
+    let template_id = arguments
+      .get("template_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| invalid("Missing template_id"))?;
+    let count = arguments
+      .get("count")
+      .and_then(serde_json::Value::as_u64)
+      .and_then(|count| u32::try_from(count).ok())
+      .ok_or_else(|| invalid("count must be a whole number from 1 to 100"))?;
+    let name = arguments.get("name").and_then(|v| v.as_str());
+    // Cloned out of the lock before the long await, as in create_profile.
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+          data: None,
+        })?
+        .clone()
+    };
+    let result =
+      crate::profile_templates::create_from_template(&app_handle, template_id, name, count)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Creating profiles failed: {e}"),
+          data: None,
+        })?;
+    let profiles: Vec<serde_json::Value> = result
+      .created
+      .iter()
+      .map(|profile| serde_json::json!({ "id": profile.id, "name": profile.name }))
+      .collect();
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&serde_json::json!({
+          "created": profiles,
+          "stopped_early": result.error,
+        }))
+        .unwrap_or_default()
       }]
     }))
   }
@@ -10025,7 +10122,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      96,
+      98,
       "the tool list is a published contract; update this number deliberately"
     );
 

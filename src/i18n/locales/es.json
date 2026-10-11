@@ -1799,6 +1799,35 @@
     "applied_many": "{{count}} perfiles cambiados",
     "applied_other": "{{count}} perfiles cambiados"
   },
+  "templates": {
+    "label": "Plantilla",
+    "none": "Sin plantilla",
+    "empty": "Aún no hay plantillas. Configura aquí un perfil y luego guárdalo como plantilla.",
+    "saveCurrent": "Guardar como plantilla",
+    "namePlaceholder": "Nombre de la plantilla",
+    "save": "Guardar",
+    "replace": "Reemplazar",
+    "saved": "Plantilla {{name}} guardada",
+    "delete": "Eliminar la plantilla {{name}}",
+    "count": "Número de perfiles",
+    "fewer": "Menos",
+    "more": "Más",
+    "namesHint": "Los perfiles se llaman {{name}} 1, {{name}} 2 y así sucesivamente, después de los números ya usados.",
+    "allowanceLeft_one": "Puedes crear {{count}} más en esta hora.",
+    "allowanceLeft_many": "Puedes crear {{count}} más en esta hora.",
+    "allowanceLeft_other": "Puedes crear {{count}} más en esta hora.",
+    "createMany_one": "Crear {{count}} perfil",
+    "createMany_many": "Crear {{count}} perfiles",
+    "createMany_other": "Crear {{count}} perfiles",
+    "progress": "Creando {{done}} de {{total}}",
+    "stop": "Detener",
+    "created_one": "{{count}} perfil creado",
+    "created_many": "{{count}} perfiles creados",
+    "created_other": "{{count}} perfiles creados",
+    "stoppedEarly": "Se crearon {{created}} de {{total}} perfiles. {{error}}",
+    "passwordOneOnly": "Solo puedes poner una contraseña cuando creas un único perfil.",
+    "saveFromProfileDescription": "Los perfiles nuevos creados con esta plantilla reciben sus ajustes y su propio dispositivo nuevo. El nombre, la nota y el dispositivo se quedan con este perfil."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Editar VPN",
@@ -2544,7 +2573,13 @@
     "totpLimitReached": "Un perfil puede guardar como máximo 50 claves 2FA.",
     "totpEntryNotFound": "Esta clave 2FA ya no existe.",
     "dnsBlocklistInvalid": "Este nivel de lista de bloqueo DNS no existe.",
-    "webrtcModeInvalid": "WebRTC debe ser Automático, Solo salida del proxy o Bloqueado."
+    "webrtcModeInvalid": "WebRTC debe ser Automático, Solo salida del proxy o Bloqueado.",
+    "templateNotFound": "Esta plantilla ya no existe.",
+    "templateExists": "Ya existe una plantilla con este nombre.",
+    "templateNameTooLong": "El nombre de una plantilla puede tener como máximo 60 caracteres.",
+    "templateLimitReached": "Puedes guardar como máximo 100 plantillas. Elimina una primero.",
+    "bulkCreateCountInvalid": "Puedes crear de 1 a {{max}} perfiles a la vez.",
+    "bulkCreateBusy": "Ya se están creando perfiles. Espera a que termine."
   },
   "rail": {
     "profiles": "Perfiles",

@@ -1790,6 +1790,32 @@
     "applied_one": "已更改 {{count}} 个配置文件",
     "applied_other": "已更改 {{count}} 个配置文件"
   },
+  "templates": {
+    "label": "模板",
+    "none": "不使用模板",
+    "empty": "还没有模板。在这里设置好配置文件，然后将其保存为模板。",
+    "saveCurrent": "保存为模板",
+    "namePlaceholder": "模板名称",
+    "save": "保存",
+    "replace": "替换",
+    "saved": "已保存模板 {{name}}",
+    "delete": "删除模板 {{name}}",
+    "count": "配置文件数量",
+    "fewer": "减少",
+    "more": "增加",
+    "namesHint": "配置文件将命名为 {{name}} 1、{{name}} 2 等，编号接在已用编号之后。",
+    "allowanceLeft_one": "本小时内还可以创建 {{count}} 个。",
+    "allowanceLeft_other": "本小时内还可以创建 {{count}} 个。",
+    "createMany_one": "创建 {{count}} 个配置文件",
+    "createMany_other": "创建 {{count}} 个配置文件",
+    "progress": "正在创建第 {{done}} 个，共 {{total}} 个",
+    "stop": "停止",
+    "created_one": "已创建 {{count}} 个配置文件",
+    "created_other": "已创建 {{count}} 个配置文件",
+    "stoppedEarly": "已创建 {{created}} 个配置文件，共 {{total}} 个。{{error}}",
+    "passwordOneOnly": "只有在创建单个配置文件时才能设置密码。",
+    "saveFromProfileDescription": "用此模板创建的新配置文件会获得它的设置以及各自的新设备。名称、备注和设备保留在此配置文件中。"
+  },
   "vpns": {
     "form": {
       "titleEdit": "编辑 VPN",
@@ -2531,7 +2557,13 @@
     "totpLimitReached": "一个配置文件最多保存 50 个 2FA 密钥。",
     "totpEntryNotFound": "此 2FA 密钥已不存在。",
     "dnsBlocklistInvalid": "该 DNS 拦截列表级别不存在。",
-    "webrtcModeInvalid": "WebRTC 必须是“自动”“仅代理出口”或“已阻止”。"
+    "webrtcModeInvalid": "WebRTC 必须是“自动”“仅代理出口”或“已阻止”。",
+    "templateNotFound": "该模板已不存在。",
+    "templateExists": "已存在同名模板。",
+    "templateNameTooLong": "模板名称最多 60 个字符。",
+    "templateLimitReached": "最多可保留 100 个模板。请先删除一个。",
+    "bulkCreateCountInvalid": "每次可以创建 1 到 {{max}} 个配置文件。",
+    "bulkCreateBusy": "已在创建配置文件。请等待完成。"
   },
   "rail": {
     "profiles": "配置文件",

@@ -73,6 +73,7 @@ import {
   ProfileStatusChip,
   ProfileStatusesDialog,
 } from "@/components/profile-statuses-dialog";
+import { SaveTemplateDialog } from "@/components/save-template-dialog";
 import {
   DATA_TABLE_CLASSES,
   TableColumnResizer,
@@ -1819,6 +1820,8 @@ export function ProfilesDataTable({
     React.useState<BrowserProfile | null>(null);
   const [statusesDialogOpen, setStatusesDialogOpen] = React.useState(false);
   const [bulkEditOpen, setBulkEditOpen] = React.useState(false);
+  const [templateProfile, setTemplateProfile] =
+    React.useState<BrowserProfile | null>(null);
   const [dnsBlocklistProfile, setDnsBlocklistProfile] =
     React.useState<BrowserProfile | null>(null);
   const [launchHookProfile, setLaunchHookProfile] =
@@ -4133,6 +4136,7 @@ export function ProfilesDataTable({
                   setLaunchHookProfile(profile);
                 }}
                 onCloneProfile={onCloneProfile}
+                onSaveAsTemplate={setTemplateProfile}
                 onLaunchWithSync={onLaunchWithSync}
                 onSetPassword={onSetPassword}
                 onChangePassword={onChangePassword}
@@ -4280,6 +4284,10 @@ export function ProfilesDataTable({
         }}
         profileId={bypassRulesProfile?.id ?? null}
         initialRules={bypassRulesProfile?.proxy_bypass_rules ?? []}
+      />
+      <SaveTemplateDialog
+        profile={templateProfile}
+        onClose={() => setTemplateProfile(null)}
       />
       <BulkEditDialog
         isOpen={bulkEditOpen}

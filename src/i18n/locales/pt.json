@@ -1799,6 +1799,35 @@
     "applied_many": "{{count}} perfis alterados",
     "applied_other": "{{count}} perfis alterados"
   },
+  "templates": {
+    "label": "Modelo",
+    "none": "Sem modelo",
+    "empty": "Ainda não há modelos. Configure um perfil aqui e depois salve-o como modelo.",
+    "saveCurrent": "Salvar como modelo",
+    "namePlaceholder": "Nome do modelo",
+    "save": "Salvar",
+    "replace": "Substituir",
+    "saved": "Modelo {{name}} salvo",
+    "delete": "Excluir o modelo {{name}}",
+    "count": "Número de perfis",
+    "fewer": "Menos",
+    "more": "Mais",
+    "namesHint": "Os perfis recebem os nomes {{name}} 1, {{name}} 2 e assim por diante, depois dos números já usados.",
+    "allowanceLeft_one": "Você pode criar mais {{count}} nesta hora.",
+    "allowanceLeft_many": "Você pode criar mais {{count}} nesta hora.",
+    "allowanceLeft_other": "Você pode criar mais {{count}} nesta hora.",
+    "createMany_one": "Criar {{count}} perfil",
+    "createMany_many": "Criar {{count}} perfis",
+    "createMany_other": "Criar {{count}} perfis",
+    "progress": "Criando {{done}} de {{total}}",
+    "stop": "Parar",
+    "created_one": "{{count}} perfil criado",
+    "created_many": "{{count}} perfis criados",
+    "created_other": "{{count}} perfis criados",
+    "stoppedEarly": "{{created}} de {{total}} perfis criados. {{error}}",
+    "passwordOneOnly": "Você só pode definir uma senha ao criar um único perfil.",
+    "saveFromProfileDescription": "Os novos perfis criados a partir deste modelo recebem as configurações dele e um novo dispositivo próprio. O nome, a nota e o dispositivo ficam com este perfil."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Editar VPN",
@@ -2544,7 +2573,13 @@
     "totpLimitReached": "Um perfil pode guardar no máximo 50 chaves 2FA.",
     "totpEntryNotFound": "Esta chave 2FA não existe mais.",
     "dnsBlocklistInvalid": "Este nível de lista de bloqueio DNS não existe.",
-    "webrtcModeInvalid": "O WebRTC precisa ser Automático, Só saída do proxy ou Bloqueado."
+    "webrtcModeInvalid": "O WebRTC precisa ser Automático, Só saída do proxy ou Bloqueado.",
+    "templateNotFound": "Este modelo não existe mais.",
+    "templateExists": "Já existe um modelo com este nome.",
+    "templateNameTooLong": "O nome de um modelo pode ter no máximo 60 caracteres.",
+    "templateLimitReached": "Você pode manter no máximo 100 modelos. Exclua um primeiro.",
+    "bulkCreateCountInvalid": "Você pode criar de 1 a {{max}} perfis de cada vez.",
+    "bulkCreateBusy": "Já há perfis sendo criados. Aguarde até terminar."
   },
   "rail": {
     "profiles": "Perfis",

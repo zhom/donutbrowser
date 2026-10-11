@@ -1790,6 +1790,32 @@
     "applied_one": "{{count}} profil değiştirildi",
     "applied_other": "{{count}} profil değiştirildi"
   },
+  "templates": {
+    "label": "Şablon",
+    "none": "Şablon yok",
+    "empty": "Henüz şablon yok. Burada bir profil ayarlayın, ardından şablon olarak kaydedin.",
+    "saveCurrent": "Şablon olarak kaydet",
+    "namePlaceholder": "Şablon adı",
+    "save": "Kaydet",
+    "replace": "Değiştir",
+    "saved": "{{name}} şablonu kaydedildi",
+    "delete": "{{name}} şablonunu sil",
+    "count": "Profil sayısı",
+    "fewer": "Azalt",
+    "more": "Artır",
+    "namesHint": "Profiller, kullanılan numaralardan sonra gelecek şekilde {{name}} 1, {{name}} 2 diye adlandırılır.",
+    "allowanceLeft_one": "Bu saat içinde {{count}} tane daha oluşturabilirsiniz.",
+    "allowanceLeft_other": "Bu saat içinde {{count}} tane daha oluşturabilirsiniz.",
+    "createMany_one": "{{count}} profil oluştur",
+    "createMany_other": "{{count}} profil oluştur",
+    "progress": "{{total}} profilden {{done}} tanesi oluşturuluyor",
+    "stop": "Durdur",
+    "created_one": "{{count}} profil oluşturuldu",
+    "created_other": "{{count}} profil oluşturuldu",
+    "stoppedEarly": "{{total}} profilden {{created}} tanesi oluşturuldu. {{error}}",
+    "passwordOneOnly": "Parolayı yalnızca tek bir profil oluştururken ayarlayabilirsiniz.",
+    "saveFromProfileDescription": "Bu şablondan oluşturulan yeni profiller şablonun ayarlarını ve her biri kendi yeni cihazını alır. Ad, not ve cihaz bu profilde kalır."
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN'i Düzenle",
@@ -2531,7 +2557,13 @@
     "totpLimitReached": "Bir profil en fazla 50 2FA anahtarı saklayabilir.",
     "totpEntryNotFound": "Bu 2FA anahtarı artık yok.",
     "dnsBlocklistInvalid": "Bu DNS engel listesi düzeyi yok.",
-    "webrtcModeInvalid": "WebRTC Otomatik, Yalnızca proxy çıkışı veya Engelli olmalıdır."
+    "webrtcModeInvalid": "WebRTC Otomatik, Yalnızca proxy çıkışı veya Engelli olmalıdır.",
+    "templateNotFound": "Bu şablon artık yok.",
+    "templateExists": "Bu adda bir şablon zaten var.",
+    "templateNameTooLong": "Şablon adı en fazla 60 karakter olabilir.",
+    "templateLimitReached": "En fazla 100 şablon tutabilirsiniz. Önce birini silin.",
+    "bulkCreateCountInvalid": "Bir seferde 1 ile {{max}} arasında profil oluşturabilirsiniz.",
+    "bulkCreateBusy": "Profiller zaten oluşturuluyor. Bitmesini bekleyin."
   },
   "rail": {
     "profiles": "Profiller",

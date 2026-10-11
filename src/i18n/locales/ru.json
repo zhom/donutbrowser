@@ -1808,6 +1808,38 @@
     "applied_many": "Изменено {{count}} профилей",
     "applied_other": "Изменено {{count}} профилей"
   },
+  "templates": {
+    "label": "Шаблон",
+    "none": "Без шаблона",
+    "empty": "Шаблонов пока нет. Настройте здесь профиль, затем сохраните его как шаблон.",
+    "saveCurrent": "Сохранить как шаблон",
+    "namePlaceholder": "Название шаблона",
+    "save": "Сохранить",
+    "replace": "Заменить",
+    "saved": "Шаблон {{name}} сохранён",
+    "delete": "Удалить шаблон {{name}}",
+    "count": "Количество профилей",
+    "fewer": "Меньше",
+    "more": "Больше",
+    "namesHint": "Профили получат имена {{name}} 1, {{name}} 2 и так далее, после уже занятых номеров.",
+    "allowanceLeft_one": "В этот час можно создать ещё {{count}}.",
+    "allowanceLeft_few": "В этот час можно создать ещё {{count}}.",
+    "allowanceLeft_many": "В этот час можно создать ещё {{count}}.",
+    "allowanceLeft_other": "В этот час можно создать ещё {{count}}.",
+    "createMany_one": "Создать {{count}} профиль",
+    "createMany_few": "Создать {{count}} профиля",
+    "createMany_many": "Создать {{count}} профилей",
+    "createMany_other": "Создать {{count}} профилей",
+    "progress": "Создание {{done}} из {{total}}",
+    "stop": "Остановить",
+    "created_one": "Создан {{count}} профиль",
+    "created_few": "Создано {{count}} профиля",
+    "created_many": "Создано {{count}} профилей",
+    "created_other": "Создано {{count}} профилей",
+    "stoppedEarly": "Создано профилей: {{created}} из {{total}}. {{error}}",
+    "passwordOneOnly": "Пароль можно задать, только когда вы создаёте один профиль.",
+    "saveFromProfileDescription": "Новые профили из этого шаблона получат его настройки и каждый своё новое устройство. Имя, заметка и устройство останутся у этого профиля."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Изменить VPN",
@@ -2557,7 +2589,13 @@
     "totpLimitReached": "Профиль может хранить не более 50 ключей 2FA.",
     "totpEntryNotFound": "Этого ключа 2FA больше нет.",
     "dnsBlocklistInvalid": "Такого уровня списка блокировки DNS нет.",
-    "webrtcModeInvalid": "WebRTC должен быть «Автоматически», «Только выход прокси» или «Заблокирован»."
+    "webrtcModeInvalid": "WebRTC должен быть «Автоматически», «Только выход прокси» или «Заблокирован».",
+    "templateNotFound": "Этого шаблона больше нет.",
+    "templateExists": "Шаблон с таким названием уже существует.",
+    "templateNameTooLong": "Название шаблона может содержать не более 60 символов.",
+    "templateLimitReached": "Можно хранить не более 100 шаблонов. Сначала удалите один.",
+    "bulkCreateCountInvalid": "За один раз можно создать от 1 до {{max}} профилей.",
+    "bulkCreateBusy": "Профили уже создаются. Дождитесь окончания."
   },
   "rail": {
     "profiles": "Профили",
