@@ -65,9 +65,10 @@ pub struct ApiProfile {
   /// OS the profile was created on (`"macos"`, `"windows"`, `"linux"`).
   /// `null` when neither `host_os` nor the browser config records one.
   pub host_os: Option<String>,
-  /// True when the profile belongs to a different OS than this machine.
-  /// Such a profile cannot be launched locally, and must only ever run on a
-  /// remote host of its own OS — Chromium profile state is OS-specific.
+  /// True when the profile cannot be launched on this machine because a
+  /// browser bound to its OS created it on another OS; such a profile can only
+  /// run on a remote host of its own OS. Always false for Wayfern profiles,
+  /// which sync their data and launch on every OS.
   pub is_cross_os: bool,
   /// The fingerprint operating system set at creation via `wayfern_config.os`
   /// (`"windows"`, `"macos"`, `"linux"`, `"android"` or `"ios"`), or `null`
@@ -1292,9 +1293,10 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
         StatusCode::CONFLICT
       } else if code == "INTERNAL_ERROR" {
         StatusCode::INTERNAL_SERVER_ERROR
-      } else if code == "PROFILE_LOCK_UNAVAILABLE" {
-        // The lock service could not be reached. The launch is refused because
-        // it cannot be proven safe, which is an upstream failure, not the
+      } else if code == "PROFILE_LOCK_UNAVAILABLE" || code == "PROFILE_DATA_NOT_DOWNLOADED" {
+        // The lock service, or the sync storage holding a profile's first
+        // download, could not be reached. The launch is refused because it
+        // cannot be proven safe, which is an upstream failure, not the
         // caller's fault.
         StatusCode::SERVICE_UNAVAILABLE
       } else if code.ends_with("_REQUIRES_PRO")
@@ -2905,7 +2907,7 @@ async fn remove_extension_from_group_api(
     (status = 404, description = "Profile not found"),
     (status = 409, description = "Profile is locked by another team member, running on the remote fleet, or waiting for a finished remote session to be pulled back"),
     (status = 429, description = "Automation request rate limit exceeded"),
-    (status = 503, description = "The profile lock service could not be reached"),
+    (status = 503, description = "The profile lock service could not be reached, or the profile's files could not be downloaded from sync before its first launch here"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -3058,9 +3060,9 @@ async fn run_profile_remote(
     }
   }
 
-  // Deliberately NO is_cross_os() guard here. Local /run refuses a foreign
-  // profile because this machine is the wrong OS; running it remotely on a host
-  // of its OWN OS is precisely what this endpoint exists for.
+  // Deliberately NO is_cross_os() guard here. Local /run refuses a profile
+  // bound to another OS because this machine is the wrong OS; running it
+  // remotely on a host of its OWN OS is precisely what this endpoint exists for.
   let outcome =
     crate::remote_session::start_remote_session(state.app_handle.clone(), profile, request.url)
       .await
@@ -4044,7 +4046,7 @@ async fn get_cookie_bot_usage(
     (status = 404, description = "Profile not found"),
     (status = 409, description = "Profile is locked by another team member, or waiting for a finished remote session to be pulled back"),
     (status = 429, description = "Automation request rate limit exceeded"),
-    (status = 503, description = "The profile lock service could not be reached"),
+    (status = 503, description = "The profile lock service could not be reached, or the profile's files could not be downloaded from sync before its first launch here"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -5062,14 +5064,16 @@ mod tests {
       "windows"
     };
     let foreign = profile_with(SyncMode::Regular, Some(other));
+    // A Wayfern profile from another OS runs locally too, and remotely.
+    assert!(!foreign.is_cross_os());
+    assert!(remote_launch_profile_rules(&foreign).is_ok());
 
-    assert!(
-      foreign.is_cross_os(),
-      "test setup: profile should be foreign"
-    );
+    let mut bound = foreign.clone();
+    bound.browser = "camoufox".to_string();
+    assert!(bound.is_cross_os(), "test setup: profile should be foreign");
     // Local /run refuses this; running it remotely on a host of its own OS is
     // exactly what /run-remote is for.
-    assert!(remote_launch_profile_rules(&foreign).is_ok());
+    assert!(remote_launch_profile_rules(&bound).is_ok());
   }
 
   #[tokio::test]
@@ -5113,9 +5117,9 @@ mod tests {
     assert!(encrypted.cloud_sync_enabled);
   }
 
-  // A profile must only ever run on its own operating system: Chromium's
-  // on-disk state is OS-specific, so replaying a macOS profile on Windows is a
-  // mismatch no amount of user-agent spoofing repairs.
+  // `host_os` reports where the profile was created; `is_cross_os` reports
+  // whether that stops it from launching here, which it never does for a
+  // Wayfern profile.
   #[test]
   fn api_profile_reports_its_operating_system() {
     let host = crate::profile::types::get_host_os();
@@ -5130,7 +5134,13 @@ mod tests {
     };
     let foreign = ApiProfile::from(&profile_with(SyncMode::Regular, Some(other)));
     assert_eq!(foreign.host_os.as_deref(), Some(other));
-    assert!(foreign.is_cross_os);
+    assert!(!foreign.is_cross_os);
+
+    let mut bound = profile_with(SyncMode::Regular, Some(other));
+    bound.browser = "camoufox".to_string();
+    let bound = ApiProfile::from(&bound);
+    assert_eq!(bound.host_os.as_deref(), Some(other));
+    assert!(bound.is_cross_os);
   }
 
   #[test]
@@ -6070,6 +6080,16 @@ mod tests {
     let (status, _) =
       manager_error_response(serde_json::json!({ "code": "PROFILE_LOCK_UNAVAILABLE" }).to_string());
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+  }
+
+  #[test]
+  fn a_first_download_that_cannot_complete_is_not_the_callers_fault() {
+    let (status, body) = manager_error_response(crate::backend_error_with_detail(
+      "PROFILE_DATA_NOT_DOWNLOADED",
+      "offline",
+    ));
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(body.contains("PROFILE_DATA_NOT_DOWNLOADED"));
   }
 
   #[test]

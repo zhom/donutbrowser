@@ -1554,10 +1554,11 @@ test("profile notes save through the inspector and real launch failures retain a
         )?.note === "Remember the launch context",
       { description: "note saved" },
     );
-    // A cross-platform launch is rejected before starting any process.
+    // A profile bound to another OS is rejected before starting any process.
+    // Wayfern profiles run on every OS, so the bound one is another browser's.
     const otherOs = process.platform === "darwin" ? "linux" : "macos";
     await app.invokeError("launch_browser_profile", {
-      profile: { ...profile, host_os: otherOs },
+      profile: { ...profile, browser: "camoufox", host_os: otherOs },
       url: null,
     });
     await waitForSelector(

@@ -2317,6 +2317,7 @@
     "cookieBotTouchFingerprintUnsupported": "Ce profil déclare un appareil tactile, que le bot ne peut pas piloter. Utilisez une empreinte de bureau.",
     "profileRunningRemotely": "Ce profil s'exécute sur une machine distante. Arrêtez d'abord la session distante.",
     "profileRemoteSyncPending": "Une session distante vient de se terminer. Ses modifications doivent être téléchargées avant d'ouvrir ce profil ici.",
+    "profileDataNotDownloaded": "Les fichiers de ce profil n'ont pas encore été téléchargés sur cet ordinateur. Vérifiez que la synchronisation est connectée, puis réessayez.",
     "profileLockedByMember": "Ce profil est utilisé par {{email}}.",
     "profileLockedElsewhere": "Ce profil est utilisé sur un autre appareil.",
     "profileLockUnavailable": "Impossible de vérifier si ce profil est utilisé ailleurs. Vérifiez votre connexion et réessayez.",

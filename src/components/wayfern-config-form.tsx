@@ -183,6 +183,10 @@ interface WayfernConfigFormProps {
   /// The saved profile whose persona is edited here. Absent while a profile is
   /// being created: there is no seed yet, so there is no person to show.
   profileId?: string;
+  /// The OS a fingerprint without an explicit `os` describes: the machine that
+  /// created the saved profile. It stays the profile's claim on every
+  /// computer, so it is shown and regenerated instead of this computer's OS.
+  nativeOS?: WayfernOS;
 }
 
 export function LaunchArgumentsEditor({
@@ -281,6 +285,7 @@ export function WayfernConfigForm({
   profileVersion,
   profileBrowser,
   profileId,
+  nativeOS,
 }: WayfernConfigFormProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
@@ -296,7 +301,10 @@ export function WayfernConfigForm({
     if (!profileVersion) return;
     setIsGeneratingFingerprint(true);
     try {
-      const configJson = JSON.stringify(config);
+      const configJson = JSON.stringify({
+        ...config,
+        os: config.os ?? nativeOS,
+      });
       const result = await invoke<GeneratedFingerprint>(
         "generate_sample_fingerprint",
         {
@@ -341,7 +349,7 @@ export function WayfernConfigForm({
     void handleGenerateFingerprint();
   };
 
-  const selectedOS = config.os || currentOS;
+  const selectedOS = config.os || nativeOS || currentOS;
 
   useEffect(() => {
     if (isCreating && typeof window !== "undefined") {

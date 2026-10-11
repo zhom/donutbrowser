@@ -2307,6 +2307,7 @@
     "cookieBotTouchFingerprintUnsupported": "Hồ sơ này khai báo là thiết bị cảm ứng, bot không điều khiển được. Hãy dùng vân tay máy tính để bàn.",
     "profileRunningRemotely": "Hồ sơ này đang chạy trên máy từ xa. Hãy dừng phiên từ xa trước.",
     "profileRemoteSyncPending": "Một phiên từ xa vừa kết thúc. Đang chờ tải các thay đổi về trước khi mở hồ sơ này tại đây.",
+    "profileDataNotDownloaded": "Các tệp của hồ sơ này chưa được tải về máy tính này. Hãy kiểm tra kết nối đồng bộ rồi thử lại.",
     "profileLockedByMember": "Hồ sơ này đang được {{email}} sử dụng.",
     "profileLockedElsewhere": "Hồ sơ này đang được sử dụng trên thiết bị khác.",
     "profileLockUnavailable": "Không thể kiểm tra hồ sơ này có đang được dùng ở nơi khác hay không. Hãy kiểm tra kết nối và thử lại.",

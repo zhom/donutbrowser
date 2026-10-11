@@ -446,7 +446,8 @@ pub fn purge_expired(trash_root: &Path, now: u64, retention_days: u32) -> Vec<St
 
 /// A profile whose browser process is alive on this machine cannot be
 /// trashed: its data directory is in use. A stale process id (the browser
-/// crashed) does not count, and a cross-OS profile can never be running here.
+/// crashed) does not count, and a profile bound to another OS can never be
+/// running here.
 pub fn is_running_locally(profile: &BrowserProfile) -> bool {
   profile
     .process_id
@@ -1043,12 +1044,15 @@ mod tests {
     let mut profile = sample_profile("Running");
     profile.process_id = Some(std::process::id());
     assert!(is_running_locally(&profile));
-    // A cross-OS profile can never be running on this machine.
+    // A Wayfern profile created on another OS runs here like any other.
     profile.host_os = Some(if cfg!(target_os = "macos") {
       "linux".to_string()
     } else {
       "macos".to_string()
     });
+    assert!(is_running_locally(&profile));
+    // A profile bound to another OS can never be running on this machine.
+    profile.browser = "camoufox".to_string();
     assert!(!is_running_locally(&profile));
     let mut idle = sample_profile("Idle");
     idle.process_id = None;

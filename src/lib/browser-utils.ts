@@ -90,10 +90,29 @@ export function getProfileIcon(profile: {
   return getBrowserIcon(profile.browser);
 }
 
+/**
+ * The OS a fingerprint without an explicit `os` was generated for: the machine
+ * that created the profile. Mirrors `BrowserProfile::native_os`, without its
+ * fallback to this computer, so callers can tell "unknown" apart.
+ */
+export function getProfileNativeOs(profile: {
+  host_os?: string;
+}): "macos" | "windows" | "linux" | undefined {
+  const os = profile.host_os;
+  return os === "macos" || os === "windows" || os === "linux" ? os : undefined;
+}
+
+/**
+ * Whether a profile cannot run on this computer because a browser bound to
+ * its OS created it elsewhere. Mirrors `BrowserProfile::is_cross_os`: a
+ * Wayfern profile runs on every OS, so it is never cross-OS.
+ */
 export function isCrossOsProfile(profile: {
+  browser: string;
   host_os?: string;
   wayfern_config?: { os?: string };
 }): boolean {
+  if (profile.browser === "wayfern") return false;
   const profileOs = profile.host_os || profile.wayfern_config?.os;
   if (!profileOs) return false;
   return profileOs !== getCurrentOS();

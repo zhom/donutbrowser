@@ -2307,6 +2307,7 @@
     "cookieBotTouchFingerprintUnsupported": "Bu profil dokunmatik bir cihaz olduğunu bildiriyor ve bot bunu süremez. Masaüstü parmak izi kullanın.",
     "profileRunningRemotely": "Bu profil uzak bir makinede çalışıyor. Önce uzak oturumu durdurun.",
     "profileRemoteSyncPending": "Uzak oturum az önce bitti. Bu profili burada açmadan önce değişikliklerinin inmesi bekleniyor.",
+    "profileDataNotDownloaded": "Bu profilin dosyaları henüz bu bilgisayara inmedi. Eşitlemenin bağlı olduğunu kontrol edip tekrar deneyin.",
     "profileLockedByMember": "Bu profil {{email}} tarafından kullanılıyor.",
     "profileLockedElsewhere": "Bu profil başka bir cihazda kullanılıyor.",
     "profileLockUnavailable": "Bu profilin başka bir yerde kullanılıp kullanılmadığı denetlenemedi. Bağlantınızı kontrol edip yeniden deneyin.",

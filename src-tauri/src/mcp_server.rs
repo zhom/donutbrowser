@@ -9469,9 +9469,9 @@ impl McpServer {
 
   /// Start this profile on a host of its own operating system.
   ///
-  /// Deliberately no `is_cross_os` guard: local `run_profile` refuses a foreign
-  /// profile because THIS machine is the wrong OS, and running it on a host of
-  /// its own OS is precisely what this exists for.
+  /// Deliberately no `is_cross_os` guard: local `run_profile` refuses a profile
+  /// bound to another OS because THIS machine is the wrong OS, and running it
+  /// on a host of its own OS is precisely what this exists for.
   async fn handle_run_profile_remote(
     &self,
     arguments: &serde_json::Value,

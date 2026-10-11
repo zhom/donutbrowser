@@ -99,7 +99,6 @@ pub fn stored_shape(config: &WayfernConfig) -> StoredShape {
 pub fn needs_conversion(profile: &BrowserProfile) -> bool {
   profile.browser == "wayfern"
     && supports_wayfern_152(&profile.version)
-    && !profile.is_cross_os()
     && profile.wayfern_config.as_ref().is_some_and(|config| {
       config.randomize_fingerprint_on_launch != Some(true)
         && matches!(
@@ -698,6 +697,7 @@ mod tests {
     camoufox.browser = "camoufox".to_string();
     assert!(!needs_conversion(&camoufox));
 
+    // A profile created on another OS launches here, so it converts here too.
     let mut foreign = profile_with("152.0.7977.64", payload_only);
     foreign.host_os = Some(
       if get_host_os() == "windows" {
@@ -707,7 +707,7 @@ mod tests {
       }
       .to_string(),
     );
-    assert!(!needs_conversion(&foreign));
+    assert!(needs_conversion(&foreign));
   }
 
   #[test]

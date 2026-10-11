@@ -66,12 +66,13 @@ fn log_err(err: &str, profile: &BrowserProfile) -> String {
 }
 
 /// Outcomes the person meets as a dialog or a notice, not a fault.
-const LAUNCH_BLOCK_CODES: [&str; 10] = [
+const LAUNCH_BLOCK_CODES: [&str; 11] = [
   "FINGERPRINT_EXIT_MISMATCH",
   "LAUNCH_CONSENT_EXPIRED",
   "PROFILE_RUNNING",
   "PROFILE_RUNNING_REMOTELY",
   "PROFILE_REMOTE_SYNC_PENDING",
+  "PROFILE_DATA_NOT_DOWNLOADED",
   "PROFILE_LOCKED_BY_MEMBER",
   "PROFILE_LOCKED_ELSEWHERE",
   "PROFILE_ROUTE_REQUIRED",
@@ -120,6 +121,17 @@ fn log_launch_failure(profile: &BrowserProfile, err: &str, started: std::time::I
     "Browser launch failed profile={} code={code}{detail} elapsed_ms={elapsed_ms}",
     profile.id
   );
+}
+
+/// Why this machine refuses to launch the profile locally, or `None` when it
+/// may. A Wayfern profile is never refused for the OS that created it.
+fn local_os_refusal(profile: &BrowserProfile) -> Option<String> {
+  profile.is_cross_os().then(|| {
+    format!(
+      "this profile was created on {} and cannot be launched on a different operating system",
+      profile.host_os.as_deref().unwrap_or("another OS"),
+    )
+  })
 }
 
 pub struct BrowserRunner {
@@ -1453,10 +1465,10 @@ impl BrowserRunner {
     let _profile_launch_guard = lock_profile_launch(&profile.id.to_string()).await;
 
     // A profile already open on the leased fleet is driven, not launched. This
-    // sits above the cross-OS guard on purpose: a Windows profile cannot run on
-    // this Mac, which is the whole reason it is running remotely, and refusing
-    // to point it at a URL for that reason would make the remote session
-    // unusable from the one endpoint that exists to use it.
+    // sits above the cross-OS guard on purpose: a profile bound to another OS
+    // cannot run here, and refusing to point its remote session at a URL for
+    // that reason would make the session unusable from the one endpoint that
+    // exists to use it.
     //
     // Guarded on there being no local process, so a profile running here never
     // pays for the lookup: a local launch records a pid, and the profile lock
@@ -1483,11 +1495,10 @@ impl BrowserRunner {
       }
     }
 
-    if profile.is_cross_os() {
+    if let Some(reason) = local_os_refusal(&profile) {
       return Err(format!(
-        "Cannot open URL with profile '{}': this profile was created on {} and cannot be used on a different operating system",
-        profile.name,
-        profile.host_os.as_deref().unwrap_or("another OS"),
+        "Cannot open URL with profile '{}': {reason}",
+        profile.name
       ));
     }
 
@@ -1498,6 +1509,10 @@ impl BrowserRunner {
     // to a local launch on a profile a host was writing to.
     crate::remote_handoff::ensure_local_launch_allowed(&profile.id.to_string())?;
     let acquired_team_lock = crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
+    if let Err(e) = crate::sync::download_before_first_launch(&app_handle, &profile).await {
+      unwind_launch(&profile, acquired_team_lock).await;
+      return Err(e);
+    }
     let started = std::time::Instant::now();
 
     // Use launch_or_open_url which handles both launching new instances and opening in existing ones
@@ -1662,11 +1677,10 @@ async fn launch_browser_profile_tracked(
   } = options;
   emit_launch_stage(&profile, "preparing", None);
 
-  if profile.is_cross_os() {
+  if let Some(reason) = local_os_refusal(&profile) {
     return Err(format!(
-      "Cannot launch profile '{}': this profile was created on {} and cannot be launched on a different operating system",
-      profile.name,
-      profile.host_os.as_deref().unwrap_or("another OS"),
+      "Cannot launch profile '{}': {reason}",
+      profile.name
     ));
   }
 
@@ -1678,6 +1692,13 @@ async fn launch_browser_profile_tracked(
 
   // Team lock check: if profile is sync-enabled and user is on a team, acquire lock
   let acquired_team_lock = crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
+
+  // A profile that reached this machine as metadata alone downloads its files
+  // first; launched empty, its next sync would erase the real profile.
+  if let Err(e) = crate::sync::download_before_first_launch(&app_handle, &profile).await {
+    unwind_launch(&profile, acquired_team_lock).await;
+    return Err(e);
+  }
 
   // Notify sync scheduler that profile is now running and queue sync for when it stops
   if let Some(scheduler) = crate::sync::get_global_scheduler() {
@@ -1938,6 +1959,46 @@ mod tests {
       tokio::time::timeout(Duration::from_millis(100), lock_profile_launch(&profile))
         .await
         .is_ok()
+    );
+  }
+
+  fn profile_created_on(browser: &str, os: &str) -> BrowserProfile {
+    BrowserProfile {
+      name: "p".to_string(),
+      browser: browser.to_string(),
+      host_os: Some(os.to_string()),
+      ..BrowserProfile::default()
+    }
+  }
+
+  #[test]
+  fn a_wayfern_profile_from_any_os_launches_locally() {
+    for os in ["macos", "windows", "linux"] {
+      assert_eq!(
+        local_os_refusal(&profile_created_on("wayfern", os)),
+        None,
+        "a Wayfern profile created on {os} must launch here"
+      );
+    }
+  }
+
+  #[test]
+  fn a_profile_bound_to_another_os_is_refused_locally() {
+    let host = crate::profile::types::get_host_os();
+    let other = if host == "windows" {
+      "macos"
+    } else {
+      "windows"
+    };
+    let reason = local_os_refusal(&profile_created_on("camoufox", other))
+      .expect("a profile bound to another OS must be refused");
+    assert!(
+      reason.contains(other),
+      "the reason must name the OS: {reason}"
+    );
+    assert_eq!(
+      local_os_refusal(&profile_created_on("camoufox", &host)),
+      None
     );
   }
 }

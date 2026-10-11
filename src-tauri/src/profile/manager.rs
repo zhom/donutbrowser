@@ -601,10 +601,10 @@ impl ProfileManager {
           //
           // Only a real host OS may be stored here. The fallback in
           // `resolved_os` reads `wayfern_config.os`, which is a fingerprint OS
-          // and may be "android"/"ios". Persisting that made `is_cross_os`
-          // permanently true and locked the profile out of every local launch,
-          // with no way to undo it from the UI. Leaving `host_os` as None keeps
-          // the profile launchable, which is what it was before the field.
+          // and may be "android"/"ios". Persisting that records a creating
+          // machine that cannot exist, with no way to undo it from the UI.
+          // Leaving `host_os` as None means "unknown", which is what it was
+          // before the field.
           let needs_repair = profile.host_os.as_deref().is_some_and(|os| !is_host_os(os));
           if profile.host_os.is_none() || needs_repair {
             let inferred_os = profile
@@ -1617,9 +1617,13 @@ impl ProfileManager {
     {
       return Err(crate::backend_error("FINGERPRINT_REQUIRES_PRO").into());
     }
-    if !CLOUD_AUTH
-      .is_fingerprint_os_allowed(config.os.as_deref())
-      .await
+    // Only a new claim is checked: a profile created on another OS keeps the
+    // claim it arrived with, and editing anything else must not refuse it.
+    let os_changed = config.os != stored.and_then(|c| c.os.clone());
+    if os_changed
+      && !CLOUD_AUTH
+        .is_fingerprint_os_allowed(config.os.as_deref())
+        .await
     {
       return Err(crate::backend_error("FINGERPRINT_REQUIRES_PRO").into());
     }

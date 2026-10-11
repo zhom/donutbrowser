@@ -13,9 +13,10 @@ pub use encryption::{
   check_has_e2e_password, delete_e2e_password, set_e2e_password, verify_e2e_password,
 };
 pub use engine::{
-  cancel_profile_sync, enable_extension_group_sync_if_needed, enable_group_sync_if_needed,
-  enable_proxy_sync_if_needed, enable_sync_for_all_entities, enable_vpn_sync_if_needed,
-  get_unsynced_entity_counts, is_group_in_use_by_synced_profile, is_group_used_by_synced_profile,
+  awaits_first_download, cancel_profile_sync, download_before_first_launch,
+  enable_extension_group_sync_if_needed, enable_group_sync_if_needed, enable_proxy_sync_if_needed,
+  enable_sync_for_all_entities, enable_vpn_sync_if_needed, get_unsynced_entity_counts,
+  is_group_in_use_by_synced_profile, is_group_used_by_synced_profile,
   is_proxy_in_use_by_synced_profile, is_proxy_used_by_synced_profile, is_sync_configured,
   is_vpn_in_use_by_synced_profile, is_vpn_used_by_synced_profile,
   pull_profile_after_remote_session, request_profile_sync, resume_profile_sync,

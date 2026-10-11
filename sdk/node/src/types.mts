@@ -46,7 +46,11 @@ export interface ApiProfile {
   sync_mode: string;
   cloud_sync_enabled: boolean;
   host_os?: string | null;
-  /** A profile from another OS can only ever run on a remote host of that OS. */
+  /**
+   * True when a browser bound to its OS created the profile on another OS, so
+   * it can only run on a remote host of that OS. Always false for Wayfern
+   * profiles, which run on every OS.
+   */
   is_cross_os: boolean;
   fingerprint_os?: string | null;
 }

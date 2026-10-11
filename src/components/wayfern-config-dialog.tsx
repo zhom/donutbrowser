@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { translateBackendError } from "@/lib/backend-errors";
+import { getProfileNativeOs } from "@/lib/browser-utils";
 import type { BrowserProfile, WayfernConfig, WayfernOS } from "@/types";
 import { LoadingButton } from "./loading-button";
 import { RippleButton } from "./ui/ripple";
@@ -51,10 +52,8 @@ export function WayfernConfigDialog({
   useEffect(() => {
     if (profile?.browser === "wayfern") {
       setConfig(
-        profile.wayfern_config || {
-          geoip: true,
-          os: getCurrentOS(),
-        },
+        // No `os` means the profile's native OS, which the form shows.
+        profile.wayfern_config || { geoip: true },
       );
     }
   }, [profile]);
@@ -96,12 +95,7 @@ export function WayfernConfigDialog({
 
   const handleClose = () => {
     if (profile?.browser === "wayfern") {
-      setConfig(
-        profile.wayfern_config || {
-          geoip: true,
-          os: getCurrentOS(),
-        },
-      );
+      setConfig(profile.wayfern_config || { geoip: true });
     }
     onClose();
   };
@@ -139,6 +133,7 @@ export function WayfernConfigDialog({
               profileVersion={profile.version}
               profileBrowser="wayfern"
               profileId={profile.id}
+              nativeOS={getProfileNativeOs(profile)}
             />
           </div>
         </ScrollArea>

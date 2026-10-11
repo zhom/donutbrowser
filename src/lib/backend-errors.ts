@@ -155,6 +155,7 @@ export type BackendErrorCode =
   | "REMOTE_HOURS_EXHAUSTED"
   | "PROFILE_RUNNING_REMOTELY"
   | "PROFILE_REMOTE_SYNC_PENDING"
+  | "PROFILE_DATA_NOT_DOWNLOADED"
   | "PROFILE_LOCKED_BY_MEMBER"
   | "PROFILE_LOCKED_ELSEWHERE"
   | "PROFILE_LOCK_UNAVAILABLE"
@@ -670,6 +671,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.profileRunningRemotely");
     case "PROFILE_REMOTE_SYNC_PENDING":
       return t("backendErrors.profileRemoteSyncPending");
+    case "PROFILE_DATA_NOT_DOWNLOADED":
+      return t("backendErrors.profileDataNotDownloaded");
     case "PROFILE_LOCKED_BY_MEMBER":
       return t("backendErrors.profileLockedByMember", {
         email: parsed.params?.email ?? "",

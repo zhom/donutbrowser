@@ -2307,6 +2307,7 @@
     "cookieBotTouchFingerprintUnsupported": "该配置文件声称是触摸设备，机器人无法操作。请使用桌面端指纹。",
     "profileRunningRemotely": "该配置文件正在远程计算机上运行。请先停止远程会话。",
     "profileRemoteSyncPending": "远程会话刚刚结束。正在等待其更改下载完成后才能在此打开该配置文件。",
+    "profileDataNotDownloaded": "此配置文件的文件尚未下载到这台电脑。请确认同步已连接，然后重试。",
     "profileLockedByMember": "该配置文件正在被 {{email}} 使用。",
     "profileLockedElsewhere": "该配置文件正在另一台设备上使用。",
     "profileLockUnavailable": "无法检查该配置文件是否正在别处使用。请检查网络连接后重试。",

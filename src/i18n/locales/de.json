@@ -2307,6 +2307,7 @@
     "cookieBotTouchFingerprintUnsupported": "Dieses Profil gibt sich als Touch-Gerät aus, das der Bot nicht steuern kann. Verwenden Sie einen Desktop-Fingerprint.",
     "profileRunningRemotely": "Dieses Profil läuft auf einem entfernten Rechner. Stoppen Sie zuerst die Remote-Sitzung.",
     "profileRemoteSyncPending": "Eine Remote-Sitzung wurde gerade beendet. Ihre Änderungen werden heruntergeladen, bevor dieses Profil hier geöffnet werden kann.",
+    "profileDataNotDownloaded": "Die Dateien dieses Profils wurden noch nicht auf diesen Computer heruntergeladen. Prüfen Sie, ob die Synchronisierung verbunden ist, und versuchen Sie es dann erneut.",
     "profileLockedByMember": "Dieses Profil wird von {{email}} verwendet.",
     "profileLockedElsewhere": "Dieses Profil wird auf einem anderen Gerät verwendet.",
     "profileLockUnavailable": "Es konnte nicht geprüft werden, ob dieses Profil an anderer Stelle verwendet wird. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",

@@ -2307,6 +2307,7 @@
     "cookieBotTouchFingerprintUnsupported": "このプロファイルはタッチ端末を名乗っており、ボットは操作できません。デスクトップのフィンガープリントをお使いください。",
     "profileRunningRemotely": "このプロファイルはリモートマシンで実行中です。先にリモートセッションを停止してください。",
     "profileRemoteSyncPending": "リモートセッションが終了しました。この profile をここで開く前に、変更のダウンロードを待っています。",
+    "profileDataNotDownloaded": "このプロファイルのファイルはまだこのコンピューターにダウンロードされていません。同期が接続されていることを確認してから、もう一度お試しください。",
     "profileLockedByMember": "このプロファイルは {{email}} が使用中です。",
     "profileLockedElsewhere": "このプロファイルは別のデバイスで使用中です。",
     "profileLockUnavailable": "このプロファイルが他で使用中か確認できませんでした。接続を確認して再試行してください。",

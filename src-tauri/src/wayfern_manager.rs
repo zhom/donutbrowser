@@ -1718,7 +1718,13 @@ impl WayfernManager {
   /// operating system, or no timezone. The browser requires the timezone
   /// because it does not resolve the exit itself; donut holds the proxy and
   /// resolved it when the location was written.
-  pub fn launch_identity_document(config: &WayfernConfig) -> Option<serde_json::Value> {
+  ///
+  /// `native_os` is `BrowserProfile::native_os`: the OS a profile without an
+  /// explicit claim was generated for, which stays its claim on every machine.
+  pub fn launch_identity_document(
+    config: &WayfernConfig,
+    native_os: &str,
+  ) -> Option<serde_json::Value> {
     if config.fingerprint.is_some() {
       return None;
     }
@@ -1727,11 +1733,10 @@ impl WayfernManager {
       .as_deref()
       .map(str::trim)
       .filter(|id| !id.is_empty())?;
-    // The browser requires the operating system in the document. Over CDP an
-    // omitted `operatingSystem` means the host, so the document says so
-    // explicitly, and the profile's own claim wins when it has one.
-    let host_os = crate::profile::types::get_host_os();
-    let os = Self::claimed_operating_system(config, None).unwrap_or(host_os.as_str());
+    // The browser requires the operating system in the document. A profile
+    // with no explicit claim was generated for the machine that created it,
+    // so the document names that OS rather than the machine launching it.
+    let os = Self::claimed_operating_system(config, None).unwrap_or(native_os);
     let location = Self::stored_object(config.location.as_deref());
     let geo = Self::geo_params(&location);
     let timezone = geo
@@ -2390,8 +2395,10 @@ impl WayfernManager {
     .await?;
     let ws_url = session.page_ws_url().to_string();
 
-    let host_os = crate::profile::types::get_host_os();
-    let os = config.os.as_deref().unwrap_or(&host_os);
+    // A profile without an explicit claim keeps the OS of the machine that
+    // created it, wherever it is regenerated.
+    let native_os = profile.native_os();
+    let os = config.os.as_deref().unwrap_or(&native_os);
 
     // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
     let mut generate_params = json!({ "operatingSystem": os });
@@ -2606,17 +2613,8 @@ impl WayfernManager {
     {
       let profile_path_buf = std::path::PathBuf::from(profile_path);
       let key_path = profile_path_buf.join("os_crypt_key");
-      let cookies_path = {
-        let network = profile_path_buf
-          .join("Default")
-          .join("Network")
-          .join("Cookies");
-        if network.exists() {
-          network
-        } else {
-          profile_path_buf.join("Default").join("Cookies")
-        }
-      };
+      let cookies_path =
+        crate::cookie_manager::CookieManager::wayfern_cookie_path(&profile_path_buf);
 
       // Length only. The contents are the profile's encryption key, and this
       // log is the first thing a user attaches to a bug report.
@@ -2880,7 +2878,7 @@ impl WayfernManager {
     // device payloads and a profile whose location carries no timezone keep
     // the post-launch CDP apply below.
     let launch_identity = if supports_wayfern_152(&profile.version) {
-      Self::launch_identity_document(config)
+      Self::launch_identity_document(config, &profile.native_os())
     } else {
       None
     };
@@ -4405,7 +4403,7 @@ mod tests {
   #[test]
   fn the_launch_identity_document_carries_exactly_what_the_browser_reads() {
     let document =
-      WayfernManager::launch_identity_document(&identity_config(Some("Europe/Berlin")))
+      WayfernManager::launch_identity_document(&identity_config(Some("Europe/Berlin")), "macos")
         .expect("a complete identity profile yields a document");
     assert_eq!(
       document,
@@ -4425,22 +4423,40 @@ mod tests {
   fn the_launch_identity_document_needs_a_timezone_and_an_identity() {
     // The browser refuses a document without a timezone, and does not resolve
     // one itself, so no document is written at all.
-    assert!(WayfernManager::launch_identity_document(&identity_config(None)).is_none());
-    // No claim means the host, which is what an omitted `operatingSystem`
-    // means over CDP as well.
-    let mut no_os = identity_config(Some("Europe/Berlin"));
-    no_os.os = None;
-    assert_eq!(
-      WayfernManager::launch_identity_document(&no_os).unwrap()["operatingSystem"],
-      json!(crate::profile::types::get_host_os())
-    );
+    assert!(WayfernManager::launch_identity_document(&identity_config(None), "windows").is_none());
     let mut no_identity = identity_config(Some("Europe/Berlin"));
     no_identity.identity_id = Some("  ".into());
-    assert!(WayfernManager::launch_identity_document(&no_identity).is_none());
+    assert!(WayfernManager::launch_identity_document(&no_identity, "windows").is_none());
     // A legacy device payload is only reproducible through setFingerprint.
     let mut legacy = identity_config(Some("Europe/Berlin"));
     legacy.fingerprint = Some("{}".into());
-    assert!(WayfernManager::launch_identity_document(&legacy).is_none());
+    assert!(WayfernManager::launch_identity_document(&legacy, "windows").is_none());
+  }
+
+  #[test]
+  fn an_unclaimed_identity_keeps_the_os_of_the_machine_that_created_it() {
+    // No explicit claim means the fingerprint was generated for the creating
+    // machine, so a profile synced to another OS still names that OS.
+    let mut no_os = identity_config(Some("Europe/Berlin"));
+    no_os.os = None;
+    for created_on in ["macos", "windows", "linux"] {
+      let profile = BrowserProfile {
+        browser: "wayfern".into(),
+        host_os: Some(created_on.into()),
+        ..Default::default()
+      };
+      assert_eq!(
+        WayfernManager::launch_identity_document(&no_os, &profile.native_os()).unwrap()
+          ["operatingSystem"],
+        json!(created_on)
+      );
+    }
+    // An explicit claim wins over the creating machine.
+    assert_eq!(
+      WayfernManager::launch_identity_document(&identity_config(Some("Europe/Berlin")), "linux")
+        .unwrap()["operatingSystem"],
+      json!("windows")
+    );
   }
 
   #[test]
@@ -4448,7 +4464,7 @@ mod tests {
     let mut config = identity_config(Some("Asia/Tokyo"));
     config.location = Some(r#"{"timezone":"Asia/Tokyo","latitude":35.6}"#.into());
     config.identity_overrides = None;
-    let document = WayfernManager::launch_identity_document(&config).unwrap();
+    let document = WayfernManager::launch_identity_document(&config, "macos").unwrap();
     assert_eq!(
       document,
       json!({

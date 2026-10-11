@@ -2307,6 +2307,7 @@
     "cookieBotTouchFingerprintUnsupported": "This profile claims a touch device, which the bot cannot drive. Use a desktop fingerprint.",
     "profileRunningRemotely": "This profile is running on a remote machine. Stop the remote session first.",
     "profileRemoteSyncPending": "A remote session just finished. Waiting for its changes to download before this profile can open here.",
+    "profileDataNotDownloaded": "This profile's files have not downloaded to this computer yet. Check that sync is connected, then try again.",
     "profileLockedByMember": "This profile is in use by {{email}}.",
     "profileLockedElsewhere": "This profile is in use on another device.",
     "profileLockUnavailable": "Could not check whether this profile is in use elsewhere. Check your connection and try again.",

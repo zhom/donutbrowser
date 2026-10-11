@@ -210,6 +210,76 @@ fn is_safe_manifest_path(path: &str) -> bool {
     .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
+/// Whether this machine syncs the profile's browser files, or only its
+/// metadata. Every Wayfern profile syncs its files, whichever OS created it;
+/// only a profile of a browser bound to another OS keeps to its metadata.
+fn syncs_browser_files(profile: &BrowserProfile) -> bool {
+  !profile.is_cross_os()
+}
+
+/// True when `dir` holds no file at any depth, or does not exist.
+fn holds_no_files(dir: &Path) -> bool {
+  let Ok(entries) = fs::read_dir(dir) else {
+    return true;
+  };
+  entries.flatten().all(|entry| {
+    entry
+      .file_type()
+      .is_ok_and(|kind| kind.is_dir() && holds_no_files(&entry.path()))
+  })
+}
+
+/// Whether a synced profile created on another OS is on this machine as
+/// metadata alone, with no browser files yet. Earlier versions synced a
+/// profile from another OS that way.
+pub fn awaits_first_download(profile: &BrowserProfile, profiles_dir: &Path) -> bool {
+  profile.is_sync_enabled()
+    && syncs_browser_files(profile)
+    && profile
+      .resolved_os()
+      .is_some_and(|os| os != crate::profile::types::get_host_os())
+    && holds_no_files(&profile.get_profile_data_path(profiles_dir))
+}
+
+/// Download the browser files of a profile that `awaits_first_download`
+/// before it launches. Launched empty, the browser would write a fresh
+/// profile, and the sync after it closes would publish that as the newer copy
+/// and delete the real files everywhere, so a download that does not complete
+/// refuses the launch.
+pub async fn download_before_first_launch(
+  app_handle: &tauri::AppHandle,
+  profile: &BrowserProfile,
+) -> Result<(), String> {
+  let profiles_dir = ProfileManager::instance().get_profiles_dir();
+  if !awaits_first_download(profile, &profiles_dir) {
+    return Ok(());
+  }
+  let refused = |detail: String| {
+    log::warn!(
+      "Launch refused, profile data not downloaded profile={} err=\"{detail}\"",
+      profile.id
+    );
+    crate::backend_error_with_detail("PROFILE_DATA_NOT_DOWNLOADED", detail)
+  };
+  let engine = SyncEngine::create_from_settings(app_handle)
+    .await
+    .map_err(|e| refused(e.to_string()))?;
+  match engine
+    .sync_profile_with_bias(app_handle, profile, DiffBias::Auto)
+    .await
+  {
+    Ok(ProfileSyncOutcome::Completed) => {
+      log::info!(
+        "Profile data downloaded before launch profile={}",
+        profile.id
+      );
+      Ok(())
+    }
+    Ok(ProfileSyncOutcome::Skipped(reason)) => Err(refused(reason.to_string())),
+    Err(e) => Err(refused(e.to_string())),
+  }
+}
+
 /// Parse an S3 `lastModified` (RFC3339) into unix seconds.
 fn rfc3339_secs(value: &str) -> Option<u64> {
   DateTime::parse_from_rfc3339(value)
@@ -678,7 +748,7 @@ impl SyncEngine {
       .ok_or_else(|| SyncError::InvalidData(format!("Profile {profile_id} not found")))?;
     let profile = &current_profile;
 
-    if profile.is_cross_os() {
+    if !syncs_browser_files(profile) {
       log::debug!(
         "Profile sync: cross-OS, metadata only profile={}",
         profile.id
@@ -1176,8 +1246,8 @@ impl SyncEngine {
     Ok(remote)
   }
 
-  /// Sync only metadata for cross-OS profiles (tags, notes, proxies, groups).
-  /// No browser files are synced.
+  /// Sync only metadata for profiles bound to another OS (tags, notes,
+  /// proxies, groups). No browser files are synced.
   async fn sync_cross_os_metadata(
     &self,
     app_handle: &tauri::AppHandle,
@@ -2737,8 +2807,9 @@ impl SyncEngine {
     let mut profile: BrowserProfile = serde_json::from_slice(&metadata_data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
 
-    // Cross-OS profile: save metadata only, skip manifest + file downloads
-    if profile.is_cross_os() {
+    // A profile bound to another OS: save metadata only, skip manifest + file
+    // downloads. A Wayfern profile from any OS downloads in full below.
+    if !syncs_browser_files(&profile) {
       fs::create_dir_all(&profile_dir).map_err(|e| {
         SyncError::IoError(format!(
           "Failed to create profile directory {}: {e}",
@@ -2837,18 +2908,8 @@ impl SyncEngine {
 
     // Verify critical files after download
     let os_crypt_key_path = profile_dir.join("profile").join("os_crypt_key");
-    let cookies_path = {
-      let network = profile_dir
-        .join("profile")
-        .join("Default")
-        .join("Network")
-        .join("Cookies");
-      if network.exists() {
-        network
-      } else {
-        profile_dir.join("profile").join("Default").join("Cookies")
-      }
-    };
+    let cookies_path =
+      crate::cookie_manager::CookieManager::wayfern_cookie_path(&profile_dir.join("profile"));
     let has_os_crypt_key = os_crypt_key_path.exists();
     let cookies_bytes = fs::metadata(&cookies_path).ok().map(|meta| meta.len());
     if !has_os_crypt_key || cookies_bytes.is_none() {
@@ -3081,7 +3142,7 @@ impl SyncEngine {
       .list_profiles()
       .unwrap_or_default()
       .iter()
-      .filter(|p| p.is_cross_os() && p.is_sync_enabled())
+      .filter(|p| !syncs_browser_files(p) && p.is_sync_enabled())
       .map(|p| (p.id.to_string(), p.sync_mode, p.created_by_id.clone()))
       .collect();
 
@@ -3530,7 +3591,7 @@ async fn apply_profile_sync_mode(
     .find(|p| p.id == profile_uuid)
     .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
-  if profile.is_cross_os() {
+  if !syncs_browser_files(&profile) {
     return Err("Cannot modify sync settings for a cross-OS profile".to_string());
   }
 
@@ -4740,6 +4801,127 @@ mod tests {
 
     // An unreadable write time fails closed.
     assert!(tombstone_outranks_local(true, None, 501));
+  }
+
+  fn other_host_os() -> &'static str {
+    if crate::profile::types::get_host_os() == "windows" {
+      "macos"
+    } else {
+      "windows"
+    }
+  }
+
+  fn synced_profile(browser: &str, host_os: &str) -> BrowserProfile {
+    BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      browser: browser.to_string(),
+      host_os: Some(host_os.to_string()),
+      sync_mode: SyncMode::Regular,
+      ..BrowserProfile::default()
+    }
+  }
+
+  #[test]
+  fn a_wayfern_profile_from_another_os_syncs_its_browser_files() {
+    for os in ["macos", "windows", "linux"] {
+      assert!(
+        syncs_browser_files(&synced_profile("wayfern", os)),
+        "a Wayfern profile created on {os} must sync its data here"
+      );
+    }
+  }
+
+  #[test]
+  fn a_profile_bound_to_another_os_syncs_metadata_only() {
+    assert!(!syncs_browser_files(&synced_profile(
+      "camoufox",
+      other_host_os()
+    )));
+    assert!(syncs_browser_files(&synced_profile(
+      "camoufox",
+      &crate::profile::types::get_host_os()
+    )));
+  }
+
+  #[test]
+  fn a_profile_from_another_os_transfers_its_whole_directory() {
+    // A profile directory as Chromium on Windows leaves it: a raw key file,
+    // migrated network data, and the per-machine files sync never carries.
+    let source = tempfile::TempDir::new().unwrap();
+    let uuid_dir = source.path();
+    let data_dir = uuid_dir.join("profile");
+    let network_dir = data_dir.join("Default").join("Network");
+    fs::create_dir_all(&network_dir).unwrap();
+    fs::create_dir_all(data_dir.join("Default").join("Cache")).unwrap();
+    fs::write(data_dir.join("os_crypt_key"), [0x42u8; 32]).unwrap();
+    fs::write(data_dir.join("Local State"), b"{}").unwrap();
+    fs::write(data_dir.join("Default").join("Preferences"), b"{}").unwrap();
+    fs::write(network_dir.join("Cookies"), b"cookies").unwrap();
+    fs::write(network_dir.join("NetworkDataMigrated"), b"").unwrap();
+    fs::write(data_dir.join("SingletonLock"), b"host-1234").unwrap();
+    fs::write(data_dir.join("Default").join("LOCK"), b"").unwrap();
+    fs::write(data_dir.join("Default").join("Cache").join("data_0"), b"").unwrap();
+    fs::write(uuid_dir.join("metadata.json"), b"{}").unwrap();
+
+    let mut cache = HashCache::default();
+    let remote = generate_manifest("p", uuid_dir, &mut cache).unwrap();
+    let mut uploaded: Vec<&str> = remote.files.iter().map(|f| f.path.as_str()).collect();
+    uploaded.sort_unstable();
+    assert_eq!(
+      uploaded,
+      vec![
+        "profile/Default/Network/Cookies",
+        "profile/Default/Network/NetworkDataMigrated",
+        "profile/Default/Preferences",
+        "profile/Local State",
+        "profile/os_crypt_key",
+      ],
+      "every data file syncs and only the per-machine files stay behind"
+    );
+
+    // The machine on the other OS holds metadata alone; it pulls everything.
+    let target = tempfile::TempDir::new().unwrap();
+    fs::write(target.path().join("metadata.json"), b"{}").unwrap();
+    let mut target_cache = HashCache::default();
+    let local = generate_manifest("p", target.path(), &mut target_cache).unwrap();
+    let diff = compute_diff_with_bias(&local, Some(&remote), DiffBias::Auto);
+    assert_eq!(diff.files_to_download.len(), remote.files.len());
+    assert!(diff.files_to_upload.is_empty());
+    assert!(diff.files_to_delete_remote.is_empty());
+  }
+
+  #[test]
+  fn a_metadata_only_copy_from_another_os_awaits_its_first_download() {
+    let profiles_dir = tempfile::TempDir::new().unwrap();
+    let profile = synced_profile("wayfern", other_host_os());
+    let uuid_dir = profiles_dir.path().join(profile.id.to_string());
+    fs::create_dir_all(&uuid_dir).unwrap();
+    fs::write(uuid_dir.join("metadata.json"), b"{}").unwrap();
+    assert!(awaits_first_download(&profile, profiles_dir.path()));
+
+    // An empty directory tree is still nothing to launch on.
+    let data_dir = profile.get_profile_data_path(profiles_dir.path());
+    fs::create_dir_all(data_dir.join("Default")).unwrap();
+    assert!(awaits_first_download(&profile, profiles_dir.path()));
+
+    // Once any file is there, the launch goes ahead as for any profile.
+    fs::write(data_dir.join("Local State"), b"{}").unwrap();
+    assert!(!awaits_first_download(&profile, profiles_dir.path()));
+  }
+
+  #[test]
+  fn only_a_synced_profile_from_another_os_waits_for_a_download() {
+    let profiles_dir = tempfile::TempDir::new().unwrap();
+    // A new profile created here launches on an empty directory.
+    let local = synced_profile("wayfern", &crate::profile::types::get_host_os());
+    assert!(!awaits_first_download(&local, profiles_dir.path()));
+    // Without sync there is nothing to download.
+    let mut unsynced = synced_profile("wayfern", other_host_os());
+    unsynced.sync_mode = SyncMode::Disabled;
+    assert!(!awaits_first_download(&unsynced, profiles_dir.path()));
+    // A profile bound to another OS never launches here at all.
+    let bound = synced_profile("camoufox", other_host_os());
+    assert!(!awaits_first_download(&bound, profiles_dir.path()));
   }
 
   #[test]
