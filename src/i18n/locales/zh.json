@@ -1775,6 +1775,21 @@
     "deleteTitle": "删除“{{label}}”的 2FA 密钥？",
     "deleteDescription": "请先在其他地方保存密钥副本，否则可能无法再访问该账号。"
   },
+  "bulkEdit": {
+    "action": "编辑所选项",
+    "title": "编辑配置文件",
+    "description": "勾选要更改的设置。其他设置在每个配置文件中保持不变。",
+    "tagsAdd": "添加标签",
+    "tagsRemove": "移除标签",
+    "tagsPlaceholder": "工作, 商店",
+    "notePlaceholder": "留空即可移除备注",
+    "newDevice": "下次启动时使用新设备",
+    "newDeviceDescription": "每个配置文件在下次启动时获得新设备，网站无法将其与旧设备关联。",
+    "apply_one": "应用到 {{count}} 个配置文件",
+    "apply_other": "应用到 {{count}} 个配置文件",
+    "applied_one": "已更改 {{count}} 个配置文件",
+    "applied_other": "已更改 {{count}} 个配置文件"
+  },
   "vpns": {
     "form": {
       "titleEdit": "编辑 VPN",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "这不是 2FA 密钥。请粘贴网站显示的密钥或 otpauth:// 链接。",
     "totpLabelTooLong": "标签最多 60 个字符。",
     "totpLimitReached": "一个配置文件最多保存 50 个 2FA 密钥。",
-    "totpEntryNotFound": "此 2FA 密钥已不存在。"
+    "totpEntryNotFound": "此 2FA 密钥已不存在。",
+    "dnsBlocklistInvalid": "该 DNS 拦截列表级别不存在。",
+    "webrtcModeInvalid": "WebRTC 必须是“自动”“仅代理出口”或“已阻止”。"
   },
   "rail": {
     "profiles": "配置文件",

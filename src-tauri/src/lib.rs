@@ -169,8 +169,8 @@ use browser_runner::{
 };
 
 use profile::manager::{
-  check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
-  list_browser_profiles, rename_profile, update_profile_clear_on_close,
+  bulk_update_profiles, check_browser_status, clone_profile, create_browser_profile_new,
+  delete_profile, list_browser_profiles, rename_profile, update_profile_clear_on_close,
   update_profile_dns_blocklist, update_profile_dns_server, update_profile_launch_hook,
   update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
   update_profile_start_urls, update_profile_tags, update_profile_vpn, update_profile_window_color,
@@ -3336,6 +3336,7 @@ pub fn run_with_builder(
       update_profile_dns_blocklist,
       update_profile_dns_server,
       update_profile_start_urls,
+      bulk_update_profiles,
       profile_dns::describe_dns_server,
       profile_statuses::list_profile_statuses,
       profile_statuses::create_profile_status,

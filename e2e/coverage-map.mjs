@@ -57,6 +57,7 @@ export const commandCoverage = {
       "update_profile_dns_blocklist",
       "update_profile_dns_server",
       "update_profile_start_urls",
+      "bulk_update_profiles",
       "profile_statuses::list_profile_statuses",
       "profile_statuses::create_profile_status",
       "profile_statuses::update_profile_status",

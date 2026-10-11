@@ -33,12 +33,14 @@ import {
   LuPlay,
   LuPuzzle,
   LuShuffle,
+  LuSlidersHorizontal,
   LuSquare,
   LuTrash2,
   LuTriangleAlert,
   LuUserSearch,
   LuUsers,
 } from "react-icons/lu";
+import { BulkEditDialog } from "@/components/bulk-edit-dialog";
 import { CookieBotEnrolDialog } from "@/components/cookie-bot-enrol-dialog";
 import { CookieBotRunsDialog } from "@/components/cookie-bot-runs-dialog";
 import {
@@ -1816,6 +1818,7 @@ export function ProfilesDataTable({
   const [bypassRulesProfile, setBypassRulesProfile] =
     React.useState<BrowserProfile | null>(null);
   const [statusesDialogOpen, setStatusesDialogOpen] = React.useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = React.useState(false);
   const [dnsBlocklistProfile, setDnsBlocklistProfile] =
     React.useState<BrowserProfile | null>(null);
   const [launchHookProfile, setLaunchHookProfile] =
@@ -4187,6 +4190,12 @@ export function ProfilesDataTable({
             )}
           </span>
         )}
+        <DataTableActionBarAction
+          tooltip={t("bulkEdit.action")}
+          onClick={() => setBulkEditOpen(true)}
+        >
+          <LuSlidersHorizontal />
+        </DataTableActionBarAction>
         {onBulkGroupAssignment && (
           <DataTableActionBarAction
             tooltip={t("profiles.actionBar.assignToGroup")}
@@ -4271,6 +4280,12 @@ export function ProfilesDataTable({
         }}
         profileId={bypassRulesProfile?.id ?? null}
         initialRules={bypassRulesProfile?.proxy_bypass_rules ?? []}
+      />
+      <BulkEditDialog
+        isOpen={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        profileIds={selectedProfiles}
+        statuses={profileStatuses}
       />
       <ProfileStatusesDialog
         isOpen={statusesDialogOpen}

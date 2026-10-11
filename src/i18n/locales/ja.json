@@ -1775,6 +1775,21 @@
     "deleteTitle": "「{{label}}」の 2FA キーを削除しますか？",
     "deleteDescription": "先にキーのコピーを別の場所に保管してください。保管しないとアカウントにアクセスできなくなる場合があります。"
   },
+  "bulkEdit": {
+    "action": "選択項目を編集",
+    "title": "プロファイルを編集",
+    "description": "変更する設定にチェックを入れてください。それ以外は各プロファイルでそのままです。",
+    "tagsAdd": "タグを追加",
+    "tagsRemove": "タグを削除",
+    "tagsPlaceholder": "仕事, ショップ",
+    "notePlaceholder": "空欄にするとメモを削除します",
+    "newDevice": "次回起動時に新しいデバイス",
+    "newDeviceDescription": "各プロファイルは次回起動時に新しいデバイスになり、サイトは以前のデバイスと結び付けられなくなります。",
+    "apply_one": "{{count}} 件のプロファイルに適用",
+    "apply_other": "{{count}} 件のプロファイルに適用",
+    "applied_one": "{{count}} 件のプロファイルを変更しました",
+    "applied_other": "{{count}} 件のプロファイルを変更しました"
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN を編集",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "2FA キーではありません。サイトに表示されるシークレットキーまたは otpauth:// リンクを貼り付けてください。",
     "totpLabelTooLong": "ラベルは 60 文字以内にしてください。",
     "totpLimitReached": "1 つのプロファイルに保存できる 2FA キーは 50 個までです。",
-    "totpEntryNotFound": "この 2FA キーはもう存在しません。"
+    "totpEntryNotFound": "この 2FA キーはもう存在しません。",
+    "dnsBlocklistInvalid": "この DNS ブロックリストのレベルは存在しません。",
+    "webrtcModeInvalid": "WebRTC は「自動」「プロキシ出口のみ」「ブロック」のいずれかにしてください。"
   },
   "rail": {
     "profiles": "プロファイル",

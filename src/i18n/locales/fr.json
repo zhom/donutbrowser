@@ -1782,6 +1782,23 @@
     "deleteTitle": "Supprimer la clé 2FA de « {{label}} » ?",
     "deleteDescription": "Gardez d'abord une copie de la clé ailleurs, sinon vous pouvez perdre l'accès au compte."
   },
+  "bulkEdit": {
+    "action": "Modifier la sélection",
+    "title": "Modifier les profils",
+    "description": "Cochez les réglages à changer. Tout le reste ne change pas sur chaque profil.",
+    "tagsAdd": "Ajouter des tags",
+    "tagsRemove": "Retirer des tags",
+    "tagsPlaceholder": "travail, boutique",
+    "notePlaceholder": "Laissez vide pour retirer la note",
+    "newDevice": "Nouvel appareil au prochain lancement",
+    "newDeviceDescription": "Chaque profil reçoit un nouvel appareil au prochain démarrage, pour que les sites ne puissent pas le relier à l'ancien.",
+    "apply_one": "Appliquer à {{count}} profil",
+    "apply_many": "Appliquer à {{count}} profils",
+    "apply_other": "Appliquer à {{count}} profils",
+    "applied_one": "{{count}} profil modifié",
+    "applied_many": "{{count}} profils modifiés",
+    "applied_other": "{{count}} profils modifiés"
+  },
   "vpns": {
     "form": {
       "titleEdit": "Modifier le VPN",
@@ -2525,7 +2542,9 @@
     "totpKeyInvalid": "Ce n'est pas une clé 2FA. Collez la clé secrète ou le lien otpauth:// affiché par le site.",
     "totpLabelTooLong": "Un libellé ne peut pas dépasser 60 caractères.",
     "totpLimitReached": "Un profil peut garder au plus 50 clés 2FA.",
-    "totpEntryNotFound": "Cette clé 2FA n'existe plus."
+    "totpEntryNotFound": "Cette clé 2FA n'existe plus.",
+    "dnsBlocklistInvalid": "Ce niveau de liste de blocage DNS n'existe pas.",
+    "webrtcModeInvalid": "WebRTC doit être Automatique, Sortie du proxy uniquement ou Bloqué."
   },
   "rail": {
     "profiles": "Profils",

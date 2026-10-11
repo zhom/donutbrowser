@@ -1775,6 +1775,21 @@
     "deleteTitle": "\"{{label}}\"의 2FA 키를 삭제할까요?",
     "deleteDescription": "먼저 키 사본을 다른 곳에 보관하세요. 그렇지 않으면 계정에 접근하지 못할 수 있습니다."
   },
+  "bulkEdit": {
+    "action": "선택 항목 편집",
+    "title": "프로필 편집",
+    "description": "변경할 설정을 체크하세요. 나머지는 각 프로필에서 그대로 유지됩니다.",
+    "tagsAdd": "태그 추가",
+    "tagsRemove": "태그 제거",
+    "tagsPlaceholder": "업무, 쇼핑",
+    "notePlaceholder": "비워 두면 메모를 제거합니다",
+    "newDevice": "다음 실행 시 새 기기",
+    "newDeviceDescription": "각 프로필은 다음 시작 시 새 기기를 받으므로 사이트가 이전 기기와 연결할 수 없습니다.",
+    "apply_one": "프로필 {{count}}개에 적용",
+    "apply_other": "프로필 {{count}}개에 적용",
+    "applied_one": "프로필 {{count}}개를 변경했습니다",
+    "applied_other": "프로필 {{count}}개를 변경했습니다"
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN 편집",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "2FA 키가 아닙니다. 사이트에 표시된 비밀 키나 otpauth:// 링크를 붙여 넣으세요.",
     "totpLabelTooLong": "라벨은 최대 60자까지 가능합니다.",
     "totpLimitReached": "프로필 하나에 2FA 키는 최대 50개까지 저장할 수 있습니다.",
-    "totpEntryNotFound": "이 2FA 키는 더 이상 존재하지 않습니다."
+    "totpEntryNotFound": "이 2FA 키는 더 이상 존재하지 않습니다.",
+    "dnsBlocklistInvalid": "이 DNS 차단 목록 수준은 존재하지 않습니다.",
+    "webrtcModeInvalid": "WebRTC는 자동, 프록시 출구만, 차단 중 하나여야 합니다."
   },
   "rail": {
     "profiles": "프로필",

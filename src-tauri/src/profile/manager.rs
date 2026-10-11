@@ -1486,6 +1486,72 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Change many profiles at once. Every value is checked and every profile
+  /// found before any of them changes, and a running profile refuses the
+  /// whole batch: its browser would keep the old settings and the next save
+  /// from the running session could undo the edit. Returns how many changed.
+  pub fn apply_patch(
+    &self,
+    profile_ids: &[String],
+    patch: super::patch::ProfilePatch,
+  ) -> Result<usize, Box<dyn std::error::Error>> {
+    let patch = patch.validated()?;
+    let mut profiles = Vec::with_capacity(profile_ids.len());
+    for profile_id in profile_ids {
+      let profile = self.find_profile(profile_id)?;
+      if crate::profile::trash::is_running_locally(&profile) {
+        return Err(crate::backend_error("PROFILE_RUNNING").into());
+      }
+      profiles.push(profile);
+    }
+
+    let mut changed = 0;
+    let mut any_synced = false;
+    for mut profile in profiles {
+      if !patch.apply_to(&mut profile) {
+        continue;
+      }
+      profile.updated_at = Some(crate::proxy_manager::now_secs());
+      self.save_profile(&profile)?;
+      crate::sync::queue_profile_sync_if_eligible(&profile);
+      any_synced |= profile.is_sync_enabled();
+      changed += 1;
+    }
+
+    if any_synced {
+      Self::sync_patched_groups(&patch);
+    }
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
+    }
+    log::info!(
+      "Profiles edited in bulk selected={} changed={changed}",
+      profile_ids.len()
+    );
+    Ok(changed)
+  }
+
+  /// A synced profile needs the groups a patch points it at in the cloud too.
+  fn sync_patched_groups(patch: &super::patch::ProfilePatch) {
+    let (group_id, extension_group_id) = patch.group_ids();
+    if let Some(group_id) = group_id.map(str::to_string) {
+      tauri::async_runtime::spawn(async move {
+        let _ = crate::sync::enable_group_sync_if_needed(&group_id).await;
+        if let Some(scheduler) = crate::sync::get_global_scheduler() {
+          scheduler.queue_group_sync(group_id).await;
+        }
+      });
+    }
+    if let Some(group_id) = extension_group_id.map(str::to_string) {
+      tauri::async_runtime::spawn(async move {
+        let _ = crate::sync::enable_extension_group_sync_if_needed(&group_id).await;
+        if let Some(scheduler) = crate::sync::get_global_scheduler() {
+          scheduler.queue_extension_group_sync(group_id).await;
+        }
+      });
+    }
+  }
+
   /// Give the listed profiles one status, or none. A running profile can
   /// take a status: it is a label, not a launch setting.
   pub fn set_profiles_status(
@@ -2770,6 +2836,16 @@ pub fn update_profile_dns_blocklist(
   profile_manager
     .update_profile_dns_blocklist(&profile_id, dns_blocklist)
     .map_err(|e| format!("Failed to update DNS blocklist: {e}"))
+}
+
+#[tauri::command]
+pub fn bulk_update_profiles(
+  profile_ids: Vec<String>,
+  patch: super::patch::ProfilePatch,
+) -> Result<usize, String> {
+  ProfileManager::instance()
+    .apply_patch(&profile_ids, patch)
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to edit profiles"))
 }
 
 #[tauri::command]

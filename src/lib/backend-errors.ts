@@ -41,6 +41,8 @@ export type BackendErrorCode =
   | "TOTP_LABEL_TOO_LONG"
   | "TOTP_LIMIT_REACHED"
   | "TOTP_ENTRY_NOT_FOUND"
+  | "DNS_BLOCKLIST_INVALID"
+  | "WEBRTC_MODE_INVALID"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -413,6 +415,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.totpLimitReached");
     case "TOTP_ENTRY_NOT_FOUND":
       return t("backendErrors.totpEntryNotFound");
+    case "DNS_BLOCKLIST_INVALID":
+      return t("backendErrors.dnsBlocklistInvalid");
+    case "WEBRTC_MODE_INVALID":
+      return t("backendErrors.webrtcModeInvalid");
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

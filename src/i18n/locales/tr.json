@@ -1775,6 +1775,21 @@
     "deleteTitle": "\"{{label}}\" için 2FA anahtarı silinsin mi?",
     "deleteDescription": "Önce anahtarın bir kopyasını başka bir yerde saklayın, yoksa hesaba erişimi kaybedebilirsiniz."
   },
+  "bulkEdit": {
+    "action": "Seçilenleri düzenle",
+    "title": "Profilleri düzenle",
+    "description": "Değiştirilecek ayarları işaretleyin. Diğer her şey her profilde olduğu gibi kalır.",
+    "tagsAdd": "Etiket ekle",
+    "tagsRemove": "Etiket kaldır",
+    "tagsPlaceholder": "iş, mağaza",
+    "notePlaceholder": "Notu kaldırmak için boş bırakın",
+    "newDevice": "Sonraki başlatmada yeni cihaz",
+    "newDeviceDescription": "Her profil bir sonraki başlatmada yeni bir cihaz alır; böylece siteler onu eskisiyle ilişkilendiremez.",
+    "apply_one": "{{count}} profile uygula",
+    "apply_other": "{{count}} profile uygula",
+    "applied_one": "{{count}} profil değiştirildi",
+    "applied_other": "{{count}} profil değiştirildi"
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN'i Düzenle",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "Bu bir 2FA anahtarı değil. Sitenin gösterdiği gizli anahtarı veya otpauth:// bağlantısını yapıştırın.",
     "totpLabelTooLong": "Etiket en fazla 60 karakter olabilir.",
     "totpLimitReached": "Bir profil en fazla 50 2FA anahtarı saklayabilir.",
-    "totpEntryNotFound": "Bu 2FA anahtarı artık yok."
+    "totpEntryNotFound": "Bu 2FA anahtarı artık yok.",
+    "dnsBlocklistInvalid": "Bu DNS engel listesi düzeyi yok.",
+    "webrtcModeInvalid": "WebRTC Otomatik, Yalnızca proxy çıkışı veya Engelli olmalıdır."
   },
   "rail": {
     "profiles": "Profiller",

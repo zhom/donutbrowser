@@ -240,6 +240,20 @@ struct UpdateGroupRequest {
   name: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+struct BulkEditRequest {
+  profile_ids: Vec<String>,
+  /// Fields left out stay as they are; `null` clears a field that can be
+  /// empty. `new_device: true` makes the next launch generate a new device.
+  patch: crate::profile::patch::ProfilePatch,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BulkEditResponse {
+  /// How many of the profiles actually changed.
+  changed: usize,
+}
+
 /// A profile status: a named, colored label for where a profile's account
 /// stands.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -730,6 +744,7 @@ struct ImportProxiesResponse {
     create_status,
     update_status,
     delete_status,
+    bulk_edit_profiles,
     get_tags,
     get_proxies,
     get_proxy,
@@ -778,6 +793,9 @@ struct ImportProxiesResponse {
     UpdateGroupRequest,
     ApiStatusResponse,
     StatusRequest,
+    BulkEditRequest,
+    BulkEditResponse,
+    crate::profile::patch::ProfilePatch,
     ApiProxyResponse,
     crate::proxy_rotation::RotationResult,
     CreateProxyRequest,
@@ -1068,6 +1086,7 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(get_group, update_group, delete_group))
     .routes(routes!(get_statuses, create_status))
     .routes(routes!(update_status, delete_status))
+    .routes(routes!(bulk_edit_profiles))
     .routes(routes!(get_tags))
     .routes(routes!(get_proxies, create_proxy))
     .routes(routes!(import_proxies_api))
@@ -2263,6 +2282,31 @@ async fn update_status(
 async fn delete_status(Path(id): Path<String>) -> Result<StatusCode, (StatusCode, String)> {
   crate::profile_statuses::delete(&id)
     .map(|()| StatusCode::NO_CONTENT)
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/bulk-edit",
+  request_body = BulkEditRequest,
+  responses(
+    (status = 200, description = "Every profile was checked first, then the changed ones were saved", body = BulkEditResponse),
+    (status = 400, description = "A value is invalid (DNS_SERVER_INVALID, START_URL_INVALID, WEBRTC_MODE_INVALID, ...); nothing changed"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "A profile, status, group or extension group does not exist; nothing changed"),
+    (status = 409, description = "A listed profile is running; nothing changed")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn bulk_edit_profiles(
+  Json(request): Json<BulkEditRequest>,
+) -> Result<Json<BulkEditResponse>, (StatusCode, String)> {
+  ProfileManager::instance()
+    .apply_patch(&request.profile_ids, request.patch)
+    .map(|changed| Json(BulkEditResponse { changed }))
     .map_err(manager_error_response)
 }
 

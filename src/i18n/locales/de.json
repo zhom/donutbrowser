@@ -1775,6 +1775,21 @@
     "deleteTitle": "2FA-Schlüssel für „{{label}}“ löschen?",
     "deleteDescription": "Bewahren Sie zuerst eine Kopie des Schlüssels an anderer Stelle auf, sonst können Sie den Zugang zum Konto verlieren."
   },
+  "bulkEdit": {
+    "action": "Auswahl bearbeiten",
+    "title": "Profile bearbeiten",
+    "description": "Haken Sie die Einstellungen an, die sich ändern sollen. Alles andere bleibt in jedem Profil, wie es ist.",
+    "tagsAdd": "Tags hinzufügen",
+    "tagsRemove": "Tags entfernen",
+    "tagsPlaceholder": "arbeit, shop",
+    "notePlaceholder": "Leer lassen, um die Notiz zu entfernen",
+    "newDevice": "Neues Gerät beim nächsten Start",
+    "newDeviceDescription": "Jedes Profil erhält beim nächsten Start ein neues Gerät, sodass Websites es nicht mit dem alten verbinden können.",
+    "apply_one": "Auf {{count}} Profil anwenden",
+    "apply_other": "Auf {{count}} Profile anwenden",
+    "applied_one": "{{count}} Profil geändert",
+    "applied_other": "{{count}} Profile geändert"
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN bearbeiten",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "Das ist kein 2FA-Schlüssel. Fügen Sie den geheimen Schlüssel oder den otpauth://-Link ein, den die Website zeigt.",
     "totpLabelTooLong": "Eine Bezeichnung darf höchstens 60 Zeichen haben.",
     "totpLimitReached": "Ein Profil kann höchstens 50 2FA-Schlüssel speichern.",
-    "totpEntryNotFound": "Dieser 2FA-Schlüssel existiert nicht mehr."
+    "totpEntryNotFound": "Dieser 2FA-Schlüssel existiert nicht mehr.",
+    "dnsBlocklistInvalid": "Diese Stufe der DNS-Sperrliste existiert nicht.",
+    "webrtcModeInvalid": "WebRTC muss Automatisch, Nur Proxy-Ausgang oder Blockiert sein."
   },
   "rail": {
     "profiles": "Profile",

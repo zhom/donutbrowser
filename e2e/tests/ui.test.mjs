@@ -3293,6 +3293,62 @@ test("the distribute-proxies dialog opens from the action bar, counts the pairin
   );
 });
 
+test("bulk edit opens from the action bar and changes only the ticked rows", async () => {
+  await withApp(
+    "ui-bulk-edit",
+    async (app) => {
+      for (const name of ["Batch One", "Batch Two"]) {
+        await createUiProfile(app, name);
+      }
+      await app.invoke("update_profile_note", {
+        profileId: (await app.invoke("list_browser_profiles"))[0].id,
+        note: "Keep me",
+      });
+      await app.waitForText("Batch Two");
+
+      await app.clickSelector(`[aria-label="${en.common.aria.selectAll}"]`);
+      await app.clickSelector(`[aria-label="${en.bulkEdit.action}"]`);
+      await app.waitForText(en.bulkEdit.title);
+
+      const applyDisabled = () =>
+        app.execute(
+          `return document.querySelector('[data-slot="bulk-edit-apply"]')?.disabled ?? null;`,
+        );
+      assert.equal(
+        await applyDisabled(),
+        true,
+        "nothing ticked, nothing to apply",
+      );
+      await app.waitForText(en.bulkEdit.apply_other.replace("{{count}}", "2"));
+
+      await app.clickSelector("#bulk-edit-tagsAdd");
+      await app.fillSelector('[data-field="tagsAdd"] input', "ui-bulk, shop");
+      assert.equal(await applyDisabled(), false);
+      await app.capture("bulk-edit-dialog");
+      await app.clickSelector('[data-slot="bulk-edit-apply"]');
+
+      await app.waitFor(
+        async () =>
+          (await app.invoke("list_browser_profiles")).every(
+            (profile) =>
+              profile.tags?.includes("ui-bulk") &&
+              profile.tags.includes("shop"),
+          ),
+        { description: "tags on every selected profile" },
+      );
+      await app.waitFor(
+        async () => !(await app.visibleTextIncludes(en.bulkEdit.title)),
+        { description: "dialog closing after apply" },
+      );
+      const notes = (await app.invoke("list_browser_profiles")).map(
+        (profile) => profile.note ?? null,
+      );
+      assert.ok(notes.includes("Keep me"), "an unticked field stays as it is");
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
 test("the group bookmark editor adds, reorders and removes a row", async () => {
   await withApp("ui-group-bookmarks", async (app) => {
     const group = await app.invoke("create_profile_group", { name: "Client" });

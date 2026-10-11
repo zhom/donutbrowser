@@ -1775,6 +1775,21 @@
     "deleteTitle": "Xóa khóa 2FA của \"{{label}}\"?",
     "deleteDescription": "Hãy lưu một bản sao khóa ở nơi khác trước, nếu không bạn có thể mất quyền truy cập tài khoản."
   },
+  "bulkEdit": {
+    "action": "Sửa các mục đã chọn",
+    "title": "Sửa profile",
+    "description": "Đánh dấu các cài đặt cần thay đổi. Mọi thứ khác giữ nguyên trên từng profile.",
+    "tagsAdd": "Thêm thẻ",
+    "tagsRemove": "Gỡ thẻ",
+    "tagsPlaceholder": "công việc, cửa hàng",
+    "notePlaceholder": "Để trống để xóa ghi chú",
+    "newDevice": "Thiết bị mới ở lần khởi chạy tiếp theo",
+    "newDeviceDescription": "Mỗi profile nhận thiết bị mới ở lần khởi động tiếp theo, nên các trang web không thể liên kết nó với thiết bị cũ.",
+    "apply_one": "Áp dụng cho {{count}} profile",
+    "apply_other": "Áp dụng cho {{count}} profile",
+    "applied_one": "Đã thay đổi {{count}} profile",
+    "applied_other": "Đã thay đổi {{count}} profile"
+  },
   "vpns": {
     "form": {
       "titleEdit": "Chỉnh sửa VPN",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "Đây không phải khóa 2FA. Hãy dán khóa bí mật hoặc liên kết otpauth:// mà trang web hiển thị.",
     "totpLabelTooLong": "Nhãn tối đa 60 ký tự.",
     "totpLimitReached": "Mỗi profile lưu tối đa 50 khóa 2FA.",
-    "totpEntryNotFound": "Khóa 2FA này không còn tồn tại."
+    "totpEntryNotFound": "Khóa 2FA này không còn tồn tại.",
+    "dnsBlocklistInvalid": "Mức danh sách chặn DNS này không tồn tại.",
+    "webrtcModeInvalid": "WebRTC phải là Tự động, Chỉ lối ra proxy hoặc Bị chặn."
   },
   "rail": {
     "profiles": "Profile",

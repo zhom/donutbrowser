@@ -1775,6 +1775,21 @@
     "deleteTitle": "Delete the 2FA key for \"{{label}}\"?",
     "deleteDescription": "Keep a copy of the key somewhere else first, or you can lose access to the account."
   },
+  "bulkEdit": {
+    "action": "Edit selected",
+    "title": "Edit profiles",
+    "description": "Tick the settings to change. Everything else stays as it is on each profile.",
+    "tagsAdd": "Add tags",
+    "tagsRemove": "Remove tags",
+    "tagsPlaceholder": "work, shop",
+    "notePlaceholder": "Leave empty to remove the note",
+    "newDevice": "New device at next launch",
+    "newDeviceDescription": "Each profile gets a new device the next time it starts, so sites cannot link it to the old one.",
+    "apply_one": "Apply to {{count}} profile",
+    "apply_other": "Apply to {{count}} profiles",
+    "applied_one": "Changed {{count}} profile",
+    "applied_other": "Changed {{count}} profiles"
+  },
   "vpns": {
     "form": {
       "titleEdit": "Edit VPN",
@@ -2514,7 +2529,9 @@
     "totpKeyInvalid": "This is not a 2FA key. Paste the secret key or the otpauth:// link that the site shows.",
     "totpLabelTooLong": "A label can have at most 60 characters.",
     "totpLimitReached": "A profile can keep at most 50 2FA keys.",
-    "totpEntryNotFound": "This 2FA key no longer exists."
+    "totpEntryNotFound": "This 2FA key no longer exists.",
+    "dnsBlocklistInvalid": "This DNS blocklist level does not exist.",
+    "webrtcModeInvalid": "WebRTC must be Automatic, Proxy exit only or Blocked."
   },
   "rail": {
     "profiles": "Profiles",

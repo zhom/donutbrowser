@@ -2753,6 +2753,25 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "bulk_update_profiles".to_string(),
+        description: "Change the same settings on many profiles at once. Every value is checked and every profile found before anything changes, and a running profile refuses the whole batch. Fields left out stay as they are; null clears a field that can be empty. Returns how many profiles changed.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "UUIDs of the profiles to change"
+            },
+            "patch": {
+              "type": "object",
+              "description": "The change. Keys: status_id, tags_add, tags_remove, note, group_id, extension_group_id, dns_blocklist, dns_server, proxy_bypass_rules, start_urls, launch_hook, clear_on_close, randomize_fingerprint_on_launch, webrtc_mode (auto|tcp_only|block), block_images, block_webgl, restore_session, new_device (true makes the next launch generate a new device)."
+            }
+          },
+          "required": ["profile_ids", "patch"]
+        }),
+      },
+      McpTool {
         name: "list_profile_statuses".to_string(),
         description: "List the profile statuses (named, colored labels such as Active or Banned) in their order. Set one on a profile with update_profile's status_id.".to_string(),
         input_schema: serde_json::json!({
@@ -4568,6 +4587,40 @@ impl McpServer {
       "get_profile_status" => self.handle_get_profile_status(arguments).await,
       // Group management
       "list_groups" => self.handle_list_groups().await,
+      "bulk_update_profiles" => {
+        let profile_ids: Vec<String> = arguments
+          .get("profile_ids")
+          .and_then(|v| serde_json::from_value(v.clone()).ok())
+          .ok_or_else(|| McpError {
+            code: -32602,
+            message: "Missing profile_ids".to_string(),
+            data: None,
+          })?;
+        let patch: crate::profile::patch::ProfilePatch = arguments
+          .get("patch")
+          .cloned()
+          .map(serde_json::from_value)
+          .transpose()
+          .map_err(|e| McpError {
+            code: -32602,
+            message: format!("Invalid patch: {e}"),
+            data: None,
+          })?
+          .unwrap_or_default();
+        let changed = ProfileManager::instance()
+          .apply_patch(&profile_ids, patch)
+          .map_err(|e| McpError {
+            code: -32000,
+            message: format!("Bulk edit failed: {e}"),
+            data: None,
+          })?;
+        Ok(serde_json::json!({
+          "content": [{
+            "type": "text",
+            "text": format!("{changed} of {} profiles changed", profile_ids.len())
+          }]
+        }))
+      }
       "list_profile_statuses" => Ok(serde_json::json!({
         "content": [{
           "type": "text",
@@ -9972,7 +10025,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      95,
+      96,
       "the tool list is a published contract; update this number deliberately"
     );
 

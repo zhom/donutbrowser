@@ -1782,6 +1782,23 @@
     "deleteTitle": "Excluir a chave 2FA de \"{{label}}\"?",
     "deleteDescription": "Guarde antes uma cópia da chave em outro lugar, ou você pode perder o acesso à conta."
   },
+  "bulkEdit": {
+    "action": "Editar seleção",
+    "title": "Editar perfis",
+    "description": "Marque as configurações que quer mudar. Todo o resto fica como está em cada perfil.",
+    "tagsAdd": "Adicionar tags",
+    "tagsRemove": "Remover tags",
+    "tagsPlaceholder": "trabalho, loja",
+    "notePlaceholder": "Deixe vazio para remover a nota",
+    "newDevice": "Novo dispositivo na próxima inicialização",
+    "newDeviceDescription": "Cada perfil recebe um novo dispositivo na próxima inicialização, para que os sites não o liguem ao anterior.",
+    "apply_one": "Aplicar a {{count}} perfil",
+    "apply_many": "Aplicar a {{count}} perfis",
+    "apply_other": "Aplicar a {{count}} perfis",
+    "applied_one": "{{count}} perfil alterado",
+    "applied_many": "{{count}} perfis alterados",
+    "applied_other": "{{count}} perfis alterados"
+  },
   "vpns": {
     "form": {
       "titleEdit": "Editar VPN",
@@ -2525,7 +2542,9 @@
     "totpKeyInvalid": "Isto não é uma chave 2FA. Cole a chave secreta ou o link otpauth:// que o site mostra.",
     "totpLabelTooLong": "Um rótulo pode ter no máximo 60 caracteres.",
     "totpLimitReached": "Um perfil pode guardar no máximo 50 chaves 2FA.",
-    "totpEntryNotFound": "Esta chave 2FA não existe mais."
+    "totpEntryNotFound": "Esta chave 2FA não existe mais.",
+    "dnsBlocklistInvalid": "Este nível de lista de bloqueio DNS não existe.",
+    "webrtcModeInvalid": "O WebRTC precisa ser Automático, Só saída do proxy ou Bloqueado."
   },
   "rail": {
     "profiles": "Perfis",

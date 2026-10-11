@@ -43,6 +43,9 @@ pub struct TotpCode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidTotpKey;
 
+/// 80 bits: authenticator apps refuse shorter keys, and a word or a typo
+/// would otherwise read as a valid secret and give wrong codes.
+const MIN_SECRET_BYTES: usize = 10;
 const MAX_SECRET_BYTES: usize = 128;
 
 fn decode_base32(input: &str) -> Option<Vec<u8>> {
@@ -66,7 +69,9 @@ fn decode_base32(input: &str) -> Option<Vec<u8>> {
       bits &= (1 << bit_count) - 1;
     }
   }
-  (!out.is_empty() && out.len() <= MAX_SECRET_BYTES).then_some(out)
+  (MIN_SECRET_BYTES..=MAX_SECRET_BYTES)
+    .contains(&out.len())
+    .then_some(out)
 }
 
 fn normalized_secret(raw: &str) -> Option<String> {
@@ -291,6 +296,8 @@ mod tests {
       "",
       "   ",
       "not base32!",
+      "not a key",
+      "JBSWY3DP",
       "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP&counter=1",
       "otpauth://totp/x",
       "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&digits=4",

@@ -441,15 +441,16 @@ pub fn session_restore_verdict(
   ephemeral: bool,
   clear_on_close: bool,
   identity_at_launch: bool,
-  opens_start_pages: bool,
+  has_start_pages: bool,
 ) -> Result<(), &'static str> {
   if kind == LaunchKind::Automation {
     return Err("an automation run starts clean");
   }
-  // As in Chrome: a set of start pages replaces the last session. Restoring
-  // both would add the start pages to the restored tabs on every launch.
-  if opens_start_pages {
-    return Err("the profile opens its start pages instead");
+  // As in Chrome: a set of start pages replaces the last session, also on a
+  // launch that opens a given URL. Restoring would add the start pages to
+  // the restored tabs on every launch, or bring them back with the URL.
+  if has_start_pages {
+    return Err("the profile starts on its start pages, not its last session");
   }
   if headless {
     return Err("a headless launch has no session to show");
@@ -2923,7 +2924,6 @@ impl WayfernManager {
     let identity_at_launch =
       identity_file.is_some() || (config.identity_id.is_none() && config.fingerprint.is_none());
     let pages = launch_pages(url, &profile.start_urls, kind);
-    let opens_start_pages = url.is_none() && !pages.is_empty();
     let restore_session = match session_restore_verdict(
       config,
       kind,
@@ -2931,7 +2931,7 @@ impl WayfernManager {
       ephemeral,
       profile.clear_on_close,
       identity_at_launch,
-      opens_start_pages,
+      !profile.start_urls.is_empty(),
     ) {
       Ok(()) => true,
       Err(reason) => {

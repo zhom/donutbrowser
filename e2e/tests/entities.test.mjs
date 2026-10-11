@@ -1398,7 +1398,13 @@ test("2FA keys stay sealed on this device, hand out codes, and go with their pro
     assert.equal(codes[0].id, entry.id);
     assert.match(codes[0].code, /^\d{8}$/);
 
-    const sealed = path.join(app.dataRoot, "data", "totp", `${profile.id}.dat`);
+    const sealed = path.join(
+      app.dataRoot,
+      "data",
+      "data",
+      "totp",
+      `${profile.id}.dat`,
+    );
     const onDisk = await readFile(sealed);
     assert.ok(
       !onDisk.toString("latin1").includes(secret) &&
@@ -1442,6 +1448,124 @@ test("2FA keys stay sealed on this device, hand out codes, and go with their pro
       !existsSync(sealed),
       "a purged profile takes its 2FA keys with it",
     );
+  });
+});
+
+test("bulk edit changes only the ticked settings, checks every value first, and skips no-ops", async () => {
+  await withApp("entities-bulk-edit", async (app) => {
+    const first = await createProfile(app, "Bulk One");
+    const second = await createProfile(app, "Bulk Two");
+    const untouched = await createProfile(app, "Bulk Untouched");
+    const group = await app.invoke("create_profile_group", {
+      name: "Bulk Group",
+    });
+    const status = await app.invoke("create_profile_status", {
+      name: "Warming",
+      color: "#eab308",
+    });
+    const ids = [first.id, second.id];
+    const byId = async () =>
+      new Map(
+        (await app.invoke("list_browser_profiles")).map((p) => [p.id, p]),
+      );
+
+    for (const [patch, code] of [
+      [{ status_id: "missing" }, /PROFILE_STATUS_NOT_FOUND/],
+      [{ group_id: "missing" }, /GROUP_NOT_FOUND/],
+      [{ webrtc_mode: "leak" }, /WEBRTC_MODE_INVALID/],
+      [{ dns_blocklist: "everything" }, /DNS_BLOCKLIST_INVALID/],
+      [{ start_urls: ["file:///etc/passwd"] }, /START_URL_INVALID/],
+      [{ note: "kept?", nickname: "unknown field" }, /nickname/],
+    ]) {
+      assert.match(
+        await app.invokeError("bulk_update_profiles", {
+          profileIds: ids,
+          patch,
+        }),
+        code,
+      );
+    }
+    assert.match(
+      await app.invokeError("bulk_update_profiles", {
+        profileIds: [first.id, "00000000-0000-4000-8000-000000000000"],
+        patch: { note: "never written" },
+      }),
+      /not found/i,
+    );
+    for (const profile of (await byId()).values()) {
+      assert.equal(profile.note ?? null, null, "a refused batch changes none");
+    }
+
+    assert.equal(
+      await app.invoke("bulk_update_profiles", {
+        profileIds: ids,
+        patch: {
+          status_id: status.id,
+          tags_add: ["bulk", "shop"],
+          note: "  Bulk note  ",
+          group_id: group.id,
+          start_urls: ["shop.example"],
+          dns_blocklist: "light",
+          block_images: true,
+          webrtc_mode: "block",
+        },
+      }),
+      2,
+    );
+    let profiles = await byId();
+    for (const id of ids) {
+      const profile = profiles.get(id);
+      assert.equal(profile.status_id, status.id);
+      assert.deepEqual(profile.tags, ["bulk", "shop"]);
+      assert.equal(profile.note, "Bulk note");
+      assert.equal(profile.group_id, group.id);
+      assert.deepEqual(profile.start_urls, ["https://shop.example/"]);
+      assert.equal(profile.dns_blocklist, "light");
+      assert.equal(profile.wayfern_config.block_images, true);
+      assert.equal(profile.wayfern_config.webrtc_mode, "block");
+      assert.equal(
+        profile.wayfern_config.fingerprint,
+        "{}",
+        "the device stays unless asked",
+      );
+    }
+    const other = profiles.get(untouched.id);
+    assert.deepEqual(other.tags ?? [], []);
+    assert.equal(other.status_id ?? null, null);
+    assert.equal(other.group_id ?? null, null);
+
+    assert.equal(
+      await app.invoke("bulk_update_profiles", {
+        profileIds: ids,
+        patch: { status_id: status.id, tags_add: ["bulk"] },
+      }),
+      0,
+      "a patch that changes nothing saves nothing",
+    );
+
+    assert.equal(
+      await app.invoke("bulk_update_profiles", {
+        profileIds: ids,
+        patch: {
+          tags_remove: ["shop"],
+          note: null,
+          group_id: null,
+          new_device: true,
+        },
+      }),
+      2,
+    );
+    profiles = await byId();
+    for (const id of ids) {
+      const profile = profiles.get(id);
+      assert.deepEqual(profile.tags, ["bulk"]);
+      assert.equal(profile.note ?? null, null);
+      assert.equal(profile.group_id ?? null, null);
+      assert.equal(profile.status_id, status.id, "left out means kept");
+      assert.equal(profile.wayfern_config.fingerprint ?? null, null);
+      assert.equal(profile.wayfern_config.block_images, true);
+    }
+    assert.deepEqual((await app.invoke("get_all_tags")).sort(), ["bulk"]);
   });
 });
 
