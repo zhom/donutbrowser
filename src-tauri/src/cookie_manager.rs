@@ -12,54 +12,33 @@ use tauri::AppHandle;
 /// so no encryption path is needed here — Chromium reads plaintext when
 /// `encrypted_value` is empty, regardless of what other cookies store.
 pub mod chrome_decrypt {
-  use aes::cipher::{block_padding::Pkcs7, BlockModeDecrypt, KeyIvInit};
-  use ring::pbkdf2;
+  use crate::profile_import::os_crypt;
   use sha2::{Digest, Sha256};
-  use std::num::NonZeroU32;
   use std::path::Path;
 
-  type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
-
-  /// PBKDF2 iteration count for deriving the AES key from the password stored
-  /// in `os_crypt_key`. Must match Chromium's `OSCryptImpl` on each platform:
-  /// macOS uses 1003 iterations, Linux uses 1. Getting this wrong produces a
-  /// different AES key → silent decryption failure → empty cookie values.
-  /// See `components/os_crypt/sync/os_crypt_{mac.mm,linux.cc}` in Chromium.
-  #[cfg(target_os = "macos")]
-  const PBKDF2_ITERATIONS: u32 = 1003;
-  #[cfg(not(target_os = "macos"))]
-  const PBKDF2_ITERATIONS: u32 = 1;
-
-  const KEY_LEN: usize = 16; // AES-128
-  const SALT: &[u8] = b"saltysalt";
-  const IV: [u8; 16] = [b' '; 16]; // 16 spaces
   const HOST_HASH_LEN: usize = 32; // SHA-256 output length
 
-  fn derive_key(password: &[u8]) -> [u8; KEY_LEN] {
-    let mut key = [0u8; KEY_LEN];
-    // Using ring::pbkdf2 instead of the `pbkdf2` crate to avoid digest
-    // version conflicts between sha1 0.11 (digest 0.11) and pbkdf2 0.12
-    // (digest 0.10). ring's implementation is self-contained.
-    pbkdf2::derive(
-      pbkdf2::PBKDF2_HMAC_SHA1,
-      NonZeroU32::new(PBKDF2_ITERATIONS).expect("iterations must be non-zero"),
-      SALT,
-      password,
-      &mut key,
-    );
-    key
+  /// The exact contents of a profile's `os_crypt_key` file.
+  ///
+  /// Which cipher opens a record depends on the file's format and the record's
+  /// tag, never on the OS reading it, so a profile written on any OS decrypts
+  /// on every OS (see `os_crypt::key_for_tag`).
+  pub struct EncryptionKey {
+    contents: Vec<u8>,
   }
 
-  pub fn get_encryption_key(profile_data_path: &Path) -> Option<[u8; KEY_LEN]> {
-    let key_file = profile_data_path.join("os_crypt_key");
+  impl EncryptionKey {
+    pub fn from_contents(contents: Vec<u8>) -> Option<Self> {
+      (!contents.is_empty()).then_some(Self { contents })
+    }
+  }
+
+  pub fn get_encryption_key(profile_data_path: &Path) -> Option<EncryptionKey> {
     // Read as raw bytes and do NOT trim — Chromium's `ReadFileToString`
     // passes the exact file contents to `Pbkdf2(file_contents)`. Any
     // normalisation we do here would produce a different derived key.
-    let contents = std::fs::read(&key_file).ok()?;
-    if contents.is_empty() {
-      return None;
-    }
-    Some(derive_key(&contents))
+    let contents = std::fs::read(profile_data_path.join(os_crypt::KEY_FILE_NAME)).ok()?;
+    EncryptionKey::from_contents(contents)
   }
 
   /// Decrypt a Chrome encrypted cookie value.
@@ -70,34 +49,36 @@ pub mod chrome_decrypt {
   /// when present. Passing `host_key` is required to do that verification —
   /// without it we'd return 32 bytes of hash noise plus the actual value,
   /// which is not valid UTF-8 and gets thrown away.
-  pub fn decrypt(encrypted: &[u8], host_key: &str, key: &[u8; KEY_LEN]) -> Option<String> {
+  ///
+  /// An AES-128-CBC record that does not open under the key file's key is
+  /// retried with Chromium's fixed fallback keys; the first key whose output
+  /// is a valid value wins.
+  pub fn decrypt(encrypted: &[u8], host_key: &str, key: &EncryptionKey) -> Option<String> {
     if encrypted.len() < 3 {
       return None;
     }
-    let prefix = &encrypted[..3];
-    if prefix != b"v10" && prefix != b"v11" {
-      return None;
-    }
-    let ciphertext = &encrypted[3..];
+    let (tag, ciphertext) = encrypted.split_at(3);
+    let primary = os_crypt::key_for_tag(&key.contents, tag)?;
     if ciphertext.is_empty() {
       return Some(String::new());
     }
+    primary
+      .with_fallbacks()
+      .iter()
+      .filter_map(|candidate| candidate.decrypt(ciphertext))
+      .find_map(|plaintext| cookie_value(&plaintext, host_key))
+  }
 
-    let mut buf = ciphertext.to_vec();
-    let decrypted = Aes128CbcDec::new(key.into(), &IV.into())
-      .decrypt_padded::<Pkcs7>(&mut buf)
-      .ok()?;
-
-    // Strip the SHA-256(host_key) integrity prefix if present. Older cookies
-    // (pre-M100) didn't have this prefix, so we fall back to the raw bytes
-    // when the first 32 bytes don't match the expected hash.
+  /// Strip the SHA-256(host_key) integrity prefix if present. Older cookies
+  /// (pre-M100) didn't have this prefix, so we fall back to the raw bytes
+  /// when the first 32 bytes don't match the expected hash.
+  fn cookie_value(decrypted: &[u8], host_key: &str) -> Option<String> {
     if decrypted.len() >= HOST_HASH_LEN {
       let expected: [u8; HOST_HASH_LEN] = Sha256::digest(host_key.as_bytes()).into();
       if decrypted[..HOST_HASH_LEN] == expected {
         return String::from_utf8(decrypted[HOST_HASH_LEN..].to_vec()).ok();
       }
     }
-
     String::from_utf8(decrypted.to_vec()).ok()
   }
 }
@@ -279,20 +260,34 @@ impl CookieManager {
   /// Windows epoch offset: seconds between 1601-01-01 and 1970-01-01
   const WINDOWS_EPOCH_DIFF: i64 = 11644473600;
 
-  fn get_chrome_encryption_key(profile: &BrowserProfile, profiles_dir: &Path) -> Option<[u8; 16]> {
+  fn get_chrome_encryption_key(
+    profile: &BrowserProfile,
+    profiles_dir: &Path,
+  ) -> Option<chrome_decrypt::EncryptionKey> {
     let profile_data_path = profile.get_profile_data_path(profiles_dir);
     chrome_decrypt::get_encryption_key(&profile_data_path)
   }
 
-  fn wayfern_cookie_path(profile_data_path: &Path) -> PathBuf {
+  /// The cookie database Chromium uses for this profile directory. A profile
+  /// written on another OS resolves to the file the browser reads here, not to
+  /// this host's default location.
+  ///
+  /// Chromium on Windows moves network data from `Default/` into
+  /// `Default/Network/` and leaves the `NetworkDataMigrated` checkpoint there.
+  /// Once that checkpoint exists, Chromium on every OS keeps using `Network/`;
+  /// without it, other OSes use `Default/`, and Windows migrates a
+  /// `Default/Cookies` it finds on the next launch.
+  pub(crate) fn wayfern_cookie_path(profile_data_path: &Path) -> PathBuf {
     let default_dir = profile_data_path.join("Default");
-    #[cfg(target_os = "windows")]
+    let network_dir = default_dir.join("Network");
+    let migrated = network_dir.join("Cookies");
+    let unmigrated = default_dir.join("Cookies");
+    if network_dir.join("NetworkDataMigrated").exists()
+      || (cfg!(target_os = "windows") && !unmigrated.exists())
     {
-      default_dir.join("Network").join("Cookies")
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-      default_dir.join("Cookies")
+      migrated
+    } else {
+      unmigrated
     }
   }
 
@@ -412,7 +407,7 @@ impl CookieManager {
   /// Handles encrypted cookies by decrypting encrypted_value using the profile's encryption key.
   fn read_chrome_cookies(
     db_path: &Path,
-    encryption_key: Option<&[u8; 16]>,
+    encryption_key: Option<&chrome_decrypt::EncryptionKey>,
   ) -> Result<Vec<UnifiedCookie>, String> {
     let conn = Connection::open(db_path).map_err(|e| format!("Failed to open database: {e}"))?;
 
@@ -1218,21 +1213,55 @@ impl CookieManager {
 mod tests {
   use super::*;
 
-  #[cfg(target_os = "macos")]
+  // Known-answer vectors, sealed outside this code base from the plaintext
+  // SHA-256(SYNTHETIC_COOKIE_HOST) || SYNTHETIC_COOKIE_VALUE. They hold for
+  // every host: the key file's format and the record's tag choose the cipher.
   const SYNTHETIC_COOKIE_HOST: &str = ".example.test";
-  #[cfg(target_os = "macos")]
   const SYNTHETIC_COOKIE_VALUE: &str = "synthetic-cookie-value";
-  #[cfg(target_os = "macos")]
+  /// A password key file, the format Chromium uses on macOS and Linux.
   const SYNTHETIC_OS_CRYPT_PASSWORD: &[u8] = b"donut-synthetic-cookie-key";
-  #[cfg(target_os = "macos")]
+  /// A raw 32-byte key file (0x40..0x5f), the format Chromium uses on Windows.
+  const SYNTHETIC_OS_CRYPT_RAW_KEY_HEX: &str =
+    "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f";
+  /// `v10`, password file: AES-128-CBC, PBKDF2(password, "saltysalt", 1003).
   const SYNTHETIC_ENCRYPTED_COOKIE_HEX: &str = "763130d83b9fd3e6d1b1c793769f55251f5e9d1193be72c0c08ea32e2cf068a85d9d0b97d8b2e6deca93a2b3c290e98e1a851f83d5566f9aa9314befe56dc6bdbd423d";
+  /// `v10`, raw key file: AES-256-GCM, nonce 0xa0..0xab, then ciphertext and tag.
+  const V10_RAW_KEY_GCM_HEX: &str = "763130a0a1a2a3a4a5a6a7a8a9aaab80ca93cabb34c5dd58110a3d46900c1fa9ecd0d2de71d7b20447d42094e312b029ee1c37a83550c88b77cbf131874eaccf3a660a9e9c574aba285fd5136dc8dfcc4f4cf4f000";
+  /// `v11`, password file: AES-128-CBC, PBKDF2(password, "saltysalt", 1).
+  const V11_PASSWORD_HEX: &str = "76313134ac798d9e3721442b1ff0eeaf137cbaa12cbf87938b967e5f63791f03bd1928007773702a89a8f4a53145d1ea1814815f2ab922cd4e1dbe341cd327af6cd02f";
+  /// `v11`, raw key file: AES-128-CBC, PBKDF2(the 32 bytes, "saltysalt", 1).
+  const V11_RAW_KEY_HEX: &str = "763131d909f5941863272d931e7186ee58d7f87864945cf01dbb4f55b379e6c0fb56e0033d63bbf2bb96bf36168e8a1b7211c6916b205b5b0974d02e93e92444fc9ab7";
+  /// `v10` sealed with PBKDF2("", "saltysalt", 1).
+  const V10_EMPTY_FALLBACK_HEX: &str = "763130e8da432f0721b44064bf87de3cb1eba14d33853aeb85ca13e60bbe64565cc4c776b3bf2bea6268b199fd7038864f0e156a09f00ebb80bb68ed0db71d217ceac3";
+  /// `v10` sealed with PBKDF2("peanuts", "saltysalt", 1).
+  const V10_PEANUTS_FALLBACK_HEX: &str = "76313059f2bdd15dd07447497282fada0e1febf791a1cfea589774156a60a2dc399ec0171af1de360e7f35019c4e9ac34477b265d5eb9758a95daca408325f9e80e2d0";
+  /// `v11` sealed with PBKDF2("peanuts", "saltysalt", 1).
+  const V11_PEANUTS_FALLBACK_HEX: &str = "76313159f2bdd15dd07447497282fada0e1febf791a1cfea589774156a60a2dc399ec0171af1de360e7f35019c4e9ac34477b265d5eb9758a95daca408325f9e80e2d0";
+  /// `v10`, password file, a pre-M100 record without the host hash.
+  const V10_PASSWORD_NO_HOST_HASH_HEX: &str =
+    "763130a90053a1148568ad32692552b4016aeca1e381f70defa7f8ca833dcb9d29ed5b";
 
-  #[cfg(target_os = "macos")]
-  fn synthetic_encrypted_cookie() -> Vec<u8> {
-    (0..SYNTHETIC_ENCRYPTED_COOKIE_HEX.len())
+  fn unhex(hex: &str) -> Vec<u8> {
+    (0..hex.len())
       .step_by(2)
-      .map(|i| u8::from_str_radix(&SYNTHETIC_ENCRYPTED_COOKIE_HEX[i..i + 2], 16).unwrap())
+      .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
       .collect()
+  }
+
+  fn synthetic_encrypted_cookie() -> Vec<u8> {
+    unhex(SYNTHETIC_ENCRYPTED_COOKIE_HEX)
+  }
+
+  fn password_key() -> chrome_decrypt::EncryptionKey {
+    chrome_decrypt::EncryptionKey::from_contents(SYNTHETIC_OS_CRYPT_PASSWORD.to_vec()).unwrap()
+  }
+
+  fn raw_key() -> chrome_decrypt::EncryptionKey {
+    chrome_decrypt::EncryptionKey::from_contents(unhex(SYNTHETIC_OS_CRYPT_RAW_KEY_HEX)).unwrap()
+  }
+
+  fn open(hex: &str, key: &chrome_decrypt::EncryptionKey) -> Option<String> {
+    chrome_decrypt::decrypt(&unhex(hex), SYNTHETIC_COOKIE_HOST, key)
   }
 
   #[test]
@@ -1835,49 +1864,149 @@ mod tests {
   }
 
   #[test]
-  #[cfg(target_os = "macos")]
   fn test_decrypt_v10_cookie_with_synthetic_vector() {
-    let profile_dir =
-      std::env::temp_dir().join(format!("donut_decrypt_vector_{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&profile_dir).unwrap();
+    let profile_dir = tempfile::TempDir::new().unwrap();
     std::fs::write(
-      profile_dir.join("os_crypt_key"),
+      profile_dir.path().join("os_crypt_key"),
       SYNTHETIC_OS_CRYPT_PASSWORD,
     )
     .unwrap();
 
-    let key = chrome_decrypt::get_encryption_key(&profile_dir)
-      .expect("should derive key from os_crypt_key file");
+    let key = chrome_decrypt::get_encryption_key(profile_dir.path())
+      .expect("should read the os_crypt_key file");
 
     let decrypted =
       chrome_decrypt::decrypt(&synthetic_encrypted_cookie(), SYNTHETIC_COOKIE_HOST, &key)
         .expect("decryption must succeed with correct key and host");
     assert_eq!(decrypted, SYNTHETIC_COOKIE_VALUE);
-
-    let _ = std::fs::remove_dir_all(&profile_dir);
   }
 
   #[test]
-  #[cfg(target_os = "macos")]
   fn test_decrypt_with_wrong_host_returns_none_or_raw() {
-    let profile_dir =
-      std::env::temp_dir().join(format!("donut_decrypt_wrong_host_{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&profile_dir).unwrap();
-    std::fs::write(
-      profile_dir.join("os_crypt_key"),
-      SYNTHETIC_OS_CRYPT_PASSWORD,
-    )
-    .unwrap();
-
-    let key = chrome_decrypt::get_encryption_key(&profile_dir).unwrap();
-    let result =
-      chrome_decrypt::decrypt(&synthetic_encrypted_cookie(), ".wrong.example.test", &key);
+    let result = chrome_decrypt::decrypt(
+      &synthetic_encrypted_cookie(),
+      ".wrong.example.test",
+      &password_key(),
+    );
     assert!(
       result.as_deref() != Some(SYNTHETIC_COOKIE_VALUE),
       "decrypt must not return the cookie value when host_key is wrong"
     );
+  }
 
-    let _ = std::fs::remove_dir_all(&profile_dir);
+  #[test]
+  fn a_raw_key_file_opens_v10_as_aes_256_gcm() {
+    let profile_dir = tempfile::TempDir::new().unwrap();
+    std::fs::write(
+      profile_dir.path().join("os_crypt_key"),
+      unhex(SYNTHETIC_OS_CRYPT_RAW_KEY_HEX),
+    )
+    .unwrap();
+    let key = chrome_decrypt::get_encryption_key(profile_dir.path()).unwrap();
+    assert_eq!(
+      open(V10_RAW_KEY_GCM_HEX, &key).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE)
+    );
+    // The same record under a password file is not GCM, so it does not open.
+    assert_eq!(open(V10_RAW_KEY_GCM_HEX, &password_key()), None);
+  }
+
+  #[test]
+  fn a_password_key_file_opens_v10_with_1003_iterations() {
+    assert_eq!(
+      open(SYNTHETIC_ENCRYPTED_COOKIE_HEX, &password_key()).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE)
+    );
+    // A raw key file reads v10 as GCM, so this CBC record does not open there.
+    assert_eq!(open(SYNTHETIC_ENCRYPTED_COOKIE_HEX, &raw_key()), None);
+  }
+
+  #[test]
+  fn every_key_file_opens_v11_with_one_iteration() {
+    assert_eq!(
+      open(V11_PASSWORD_HEX, &password_key()).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE)
+    );
+    assert_eq!(
+      open(V11_RAW_KEY_HEX, &raw_key()).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE)
+    );
+  }
+
+  #[test]
+  fn cbc_records_fall_back_to_chromiums_fixed_keys() {
+    for key in [password_key(), raw_key()] {
+      assert_eq!(
+        open(V11_PEANUTS_FALLBACK_HEX, &key).as_deref(),
+        Some(SYNTHETIC_COOKIE_VALUE),
+        "a v11 record sealed with the peanuts key must open"
+      );
+    }
+    let key = password_key();
+    assert_eq!(
+      open(V10_EMPTY_FALLBACK_HEX, &key).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE),
+      "a v10 record sealed with the empty password must open"
+    );
+    assert_eq!(
+      open(V10_PEANUTS_FALLBACK_HEX, &key).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE),
+      "a v10 record sealed with the peanuts key must open"
+    );
+  }
+
+  #[test]
+  fn a_record_without_the_host_hash_reads_as_is() {
+    assert_eq!(
+      open(V10_PASSWORD_NO_HOST_HASH_HEX, &password_key()).as_deref(),
+      Some(SYNTHETIC_COOKIE_VALUE)
+    );
+  }
+
+  #[test]
+  fn unknown_tags_and_empty_key_files_decrypt_nothing() {
+    let mut v20 = unhex(V10_RAW_KEY_GCM_HEX);
+    v20[..3].copy_from_slice(b"v20");
+    assert_eq!(
+      chrome_decrypt::decrypt(&v20, SYNTHETIC_COOKIE_HOST, &raw_key()),
+      None
+    );
+    assert!(chrome_decrypt::EncryptionKey::from_contents(Vec::new()).is_none());
+    let empty_dir = tempfile::TempDir::new().unwrap();
+    std::fs::write(empty_dir.path().join("os_crypt_key"), b"").unwrap();
+    assert!(chrome_decrypt::get_encryption_key(empty_dir.path()).is_none());
+  }
+
+  #[test]
+  fn the_cookie_database_follows_chromiums_network_checkpoint() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let default_dir = dir.path().join("Default");
+    let network_dir = default_dir.join("Network");
+
+    // Nothing on disk: the host's own location.
+    let fresh = CookieManager::wayfern_cookie_path(dir.path());
+    if cfg!(target_os = "windows") {
+      assert_eq!(fresh, network_dir.join("Cookies"));
+    } else {
+      assert_eq!(fresh, default_dir.join("Cookies"));
+    }
+
+    // A profile Chromium has not migrated keeps its database in Default/.
+    std::fs::create_dir_all(&default_dir).unwrap();
+    std::fs::write(default_dir.join("Cookies"), b"db").unwrap();
+    assert_eq!(
+      CookieManager::wayfern_cookie_path(dir.path()),
+      default_dir.join("Cookies")
+    );
+
+    // Once migrated, every OS reads Network/, whatever Default/ still holds.
+    std::fs::create_dir_all(&network_dir).unwrap();
+    std::fs::write(network_dir.join("Cookies"), b"db").unwrap();
+    std::fs::write(network_dir.join("NetworkDataMigrated"), b"").unwrap();
+    assert_eq!(
+      CookieManager::wayfern_cookie_path(dir.path()),
+      network_dir.join("Cookies")
+    );
   }
 
   /// Regression: a brand-new Wayfern profile has no `Default/Cookies` file

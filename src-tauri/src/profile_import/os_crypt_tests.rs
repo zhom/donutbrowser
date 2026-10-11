@@ -18,6 +18,94 @@ fn peanuts_key_matches_known_vector() {
       0x78
     ]
   );
+  assert_eq!(
+    derive_key(POSIX_FALLBACK_PASSWORD, POSIX_ITERATIONS),
+    POSIX_FALLBACK_KEY
+  );
+}
+
+fn key_bytes(key: &CryptoKey) -> Vec<u8> {
+  match key {
+    CryptoKey::Aes128Cbc(k) => k.to_vec(),
+    CryptoKey::Aes256Gcm(k) => k.to_vec(),
+  }
+}
+
+#[test]
+fn the_key_file_format_and_the_tag_choose_the_key_on_every_host() {
+  let raw = [0x42u8; GCM_KEY_LEN];
+  let password = b"bG9jYWwtcGFzc3dvcmQhIQ==";
+
+  assert!(matches!(key_for_tag(&raw, b"v10"), Some(CryptoKey::Aes256Gcm(k)) if k == raw));
+  assert!(matches!(
+    key_for_tag(password, b"v10"),
+    Some(CryptoKey::Aes128Cbc(k)) if k == derive_key(password, MAC_ITERATIONS)
+  ));
+  assert!(matches!(
+    key_for_tag(password, b"v11"),
+    Some(CryptoKey::Aes128Cbc(k)) if k == derive_key(password, POSIX_ITERATIONS)
+  ));
+  assert!(matches!(
+    key_for_tag(&raw, b"v11"),
+    Some(CryptoKey::Aes128Cbc(k)) if k == derive_key(&raw, POSIX_ITERATIONS)
+  ));
+  // One byte short of a raw key is a password.
+  assert!(matches!(
+    key_for_tag(&raw[..31], b"v10"),
+    Some(CryptoKey::Aes128Cbc(_))
+  ));
+  assert!(key_for_tag(&raw, b"v20").is_none());
+  assert!(key_for_tag(b"", b"v10").is_none());
+}
+
+#[test]
+fn only_cbc_keys_carry_chromiums_fallbacks() {
+  let cbc = CryptoKey::Aes128Cbc([1u8; 16]);
+  let keys: Vec<Vec<u8>> = cbc.with_fallbacks().iter().map(key_bytes).collect();
+  assert_eq!(
+    keys,
+    vec![
+      vec![1u8; 16],
+      EMPTY_PASSWORD_KEY.to_vec(),
+      POSIX_FALLBACK_KEY.to_vec()
+    ]
+  );
+  assert_eq!(CryptoKey::Aes256Gcm([1u8; 32]).with_fallbacks().len(), 1);
+}
+
+#[test]
+fn a_key_file_from_another_os_is_kept_and_written_with() {
+  // Both Chromium formats, on whichever host runs this: a profile synced from
+  // another OS must keep its key, or every record it already holds is lost.
+  let raw = vec![0x42u8; GCM_KEY_LEN];
+  let password = b"bG9jYWwtcGFzc3dvcmQhIQ==".to_vec();
+  for contents in [raw, password] {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(dir.path().join(KEY_FILE_NAME), &contents).unwrap();
+
+    let target = TargetKey::ensure(dir.path()).expect("an existing key file is usable");
+    assert_eq!(
+      std::fs::read(dir.path().join(KEY_FILE_NAME)).unwrap(),
+      contents,
+      "an existing key file must never be replaced"
+    );
+
+    let sealed = target.encrypt(b"value").expect("encrypt");
+    let (tag, body) = sealed.split_at(3);
+    assert_eq!(tag, TargetKey::host_tag());
+    let key = key_for_tag(&contents, tag).expect("the tag is served");
+    assert_eq!(key.decrypt(body).expect("decrypt"), b"value");
+  }
+}
+
+#[test]
+fn an_empty_key_file_is_replaced_with_a_new_one() {
+  let dir = TempDir::new().unwrap();
+  std::fs::write(dir.path().join(KEY_FILE_NAME), b"").unwrap();
+  TargetKey::ensure(dir.path()).expect("mint");
+  assert!(!std::fs::read(dir.path().join(KEY_FILE_NAME))
+    .unwrap()
+    .is_empty());
 }
 
 #[test]
@@ -164,6 +252,24 @@ fn empty_password_fallback_recovers_the_record() {
   match keyring.decrypt(&stored) {
     Decrypted::Value(v) => assert_eq!(v, b"legacy"),
     _ => panic!("empty-password fallback must be attempted"),
+  }
+}
+
+#[test]
+fn peanuts_fallback_recovers_the_record() {
+  let sealed_body = CryptoKey::Aes128Cbc(POSIX_FALLBACK_KEY)
+    .encrypt(b"linux")
+    .unwrap();
+  let mut stored = b"v10".to_vec();
+  stored.extend_from_slice(&sealed_body);
+
+  let keyring = SourceKeyring {
+    v10: Some(CryptoKey::Aes128Cbc(derive_key(b"a different key", 1003))),
+    ..Default::default()
+  };
+  match keyring.decrypt(&stored) {
+    Decrypted::Value(v) => assert_eq!(v, b"linux"),
+    _ => panic!("peanuts fallback must be attempted"),
   }
 }
 
