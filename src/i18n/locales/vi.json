@@ -695,6 +695,18 @@
       "skippedProxies_other": "Đã bỏ qua {{count}} proxy vẫn đang được hồ sơ sử dụng",
       "skippedVpns_one": "Đã bỏ qua {{count}} VPN vẫn đang được hồ sơ sử dụng",
       "skippedVpns_other": "Đã bỏ qua {{count}} VPN vẫn đang được hồ sơ sử dụng"
+    },
+    "rotation": {
+      "label": "Liên kết đổi IP",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Không bắt buộc. Liên kết từ nhà cung cấp để cấp IP mới cho proxy này. Mọi profile dùng proxy sẽ chuyển sang IP mới.",
+      "action": "Đổi IP",
+      "actionTooltip": "Lấy IP mới từ nhà cung cấp. Mọi profile dùng proxy này sẽ chuyển sang IP đó.",
+      "requested": "Đã yêu cầu IP mới cho {{name}}",
+      "requestedMany_one": "Đã yêu cầu IP mới cho {{count}} proxy",
+      "requestedMany_other": "Đã yêu cầu IP mới cho {{count}} proxy",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "Không proxy nào trong số này có liên kết đổi IP. Hãy thêm khi chỉnh sửa proxy."
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "Trạng thái này không còn tồn tại.",
     "profileStatusColorInvalid": "Hãy chọn màu cho trạng thái.",
     "profileStatusNameTooLong": "Tên trạng thái tối đa 40 ký tự.",
-    "profileStatusLimitReached": "Bạn đã có 100 trạng thái, mức tối đa. Hãy xóa một trạng thái để thêm mới."
+    "profileStatusLimitReached": "Bạn đã có 100 trạng thái, mức tối đa. Hãy xóa một trạng thái để thêm mới.",
+    "proxyRotationUrlInvalid": "Liên kết đổi IP phải là URL http:// hoặc https:// đầy đủ.",
+    "proxyRotationUrlMissing": "Proxy này chưa có liên kết đổi IP. Hãy thêm khi chỉnh sửa proxy.",
+    "proxyRotationFailed": "Nhà cung cấp từ chối đổi IP (HTTP {{status}}).",
+    "proxyRotationTimeout": "Nhà cung cấp không phản hồi yêu cầu đổi IP trong 30 giây.",
+    "proxyRotationUnreachable": "Donut không thể truy cập liên kết đổi IP của nhà cung cấp."
   },
   "rail": {
     "profiles": "Profile",

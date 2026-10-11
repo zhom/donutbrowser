@@ -695,6 +695,18 @@
       "skippedProxies_other": "Skipped {{count}} proxies that are still in use by profiles",
       "skippedVpns_one": "Skipped {{count}} VPN that is still in use by a profile",
       "skippedVpns_other": "Skipped {{count}} VPNs that are still in use by profiles"
+    },
+    "rotation": {
+      "label": "Change IP link",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Optional. A link from your provider that gives this proxy a new IP. Every profile that uses the proxy moves to the new IP.",
+      "action": "Change IP",
+      "actionTooltip": "Get a new IP from the provider. Every profile that uses this proxy moves to it.",
+      "requested": "New IP requested for {{name}}",
+      "requestedMany_one": "New IP requested for {{count}} proxy",
+      "requestedMany_other": "New IP requested for {{count}} proxies",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "None of these proxies has a change IP link. Add one when you edit a proxy."
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "This status no longer exists.",
     "profileStatusColorInvalid": "Pick a color for the status.",
     "profileStatusNameTooLong": "A status name can have at most 40 characters.",
-    "profileStatusLimitReached": "You have 100 statuses, the maximum. Delete one to add another."
+    "profileStatusLimitReached": "You have 100 statuses, the maximum. Delete one to add another.",
+    "proxyRotationUrlInvalid": "The change IP link must be a full http:// or https:// URL.",
+    "proxyRotationUrlMissing": "This proxy has no change IP link. Add one when you edit the proxy.",
+    "proxyRotationFailed": "The provider refused the IP change (HTTP {{status}}).",
+    "proxyRotationTimeout": "The provider did not answer the IP change within 30 seconds.",
+    "proxyRotationUnreachable": "Donut could not reach the provider's change IP link."
   },
   "rail": {
     "profiles": "Profiles",

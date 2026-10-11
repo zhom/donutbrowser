@@ -695,6 +695,18 @@
       "skippedProxies_other": "已跳过 {{count}} 个仍被配置文件使用的代理",
       "skippedVpns_one": "已跳过 {{count}} 个仍被配置文件使用的 VPN",
       "skippedVpns_other": "已跳过 {{count}} 个仍被配置文件使用的 VPN"
+    },
+    "rotation": {
+      "label": "更换 IP 链接",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "可选。服务商提供的链接，可为此代理更换新 IP。使用此代理的所有配置文件都会换到新 IP。",
+      "action": "更换 IP",
+      "actionTooltip": "向服务商获取新 IP。使用此代理的所有配置文件都会换到该 IP。",
+      "requested": "已为 {{name}} 请求新 IP",
+      "requestedMany_one": "已为 {{count}} 个代理请求新 IP",
+      "requestedMany_other": "已为 {{count}} 个代理请求新 IP",
+      "failedFor": "{{name}}：{{error}}",
+      "noneSelected": "这些代理都没有更换 IP 链接。请在编辑代理时添加。"
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "此状态已不存在。",
     "profileStatusColorInvalid": "请为状态选择颜色。",
     "profileStatusNameTooLong": "状态名称最多 40 个字符。",
-    "profileStatusLimitReached": "状态数量已达上限 100 个。请删除一个后再添加。"
+    "profileStatusLimitReached": "状态数量已达上限 100 个。请删除一个后再添加。",
+    "proxyRotationUrlInvalid": "更换 IP 链接必须是完整的 http:// 或 https:// URL。",
+    "proxyRotationUrlMissing": "此代理没有更换 IP 链接。请在编辑代理时添加。",
+    "proxyRotationFailed": "服务商拒绝了更换 IP（HTTP {{status}}）。",
+    "proxyRotationTimeout": "服务商在 30 秒内未响应更换 IP。",
+    "proxyRotationUnreachable": "Donut 无法访问服务商的更换 IP 链接。"
   },
   "rail": {
     "profiles": "配置文件",

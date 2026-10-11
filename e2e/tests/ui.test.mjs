@@ -839,6 +839,58 @@ test("profile table filters, range selection, view settings, and keyboard edits 
   );
 });
 
+test("a proxy with a change-IP link offers Change IP on its row", async () => {
+  await withApp("ui-proxy-rotation", async (app) => {
+    const linked = await app.invoke("create_stored_proxy", {
+      name: "Rotating mobile proxy",
+      proxySettings: {
+        proxy_type: "http",
+        host: "127.0.0.1",
+        port: 9,
+        username: null,
+        password: null,
+      },
+    });
+    await app.invoke("set_proxy_rotation_url", {
+      proxyId: linked.id,
+      rotationUrl: `${process.env.DONUT_E2E_FIXTURE_URL}/change-ip?key=ui`,
+    });
+    const plain = await app.invoke("create_stored_proxy", {
+      name: "Static proxy",
+      proxySettings: {
+        proxy_type: "http",
+        host: "127.0.0.1",
+        port: 9,
+        username: null,
+        password: null,
+      },
+    });
+    await app.pressShortcut({
+      key: "n",
+      ...(process.platform === "darwin" ? { meta: true } : { ctrl: true }),
+    });
+    await app.waitFor(
+      async () => (await tableRows(app, "proxies")).length === 2,
+      { description: "proxy table" },
+    );
+    const rotateIn = (id) =>
+      `[data-table-id="proxies"] tr[data-table-row="${id}"] [data-slot="proxy-rotate"]`;
+    assert.equal(
+      await app.execute(
+        "return Boolean(document.querySelector(arguments[0]));",
+        [rotateIn(plain.id)],
+      ),
+      false,
+      "a proxy without a link has no Change IP action",
+    );
+    await app.clickSelector(rotateIn(linked.id));
+    await app.waitForText(
+      en.proxies.rotation.requested.replace("{{name}}", linked.name),
+    );
+    await app.capture("proxy-rotation-requested");
+  });
+});
+
 test("management tables share search, filters, selection, and saved views", async () => {
   await withApp("ui-management-tables", async (app) => {
     const proxies = [];

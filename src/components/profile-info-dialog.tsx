@@ -29,6 +29,7 @@ import {
   LuLockOpen,
   LuPlus,
   LuPuzzle,
+  LuRefreshCcwDot,
   LuRefreshCw,
   LuSettings,
   LuShield,
@@ -91,6 +92,7 @@ import { getProfileIcon, getProfileNativeOs } from "@/lib/browser-utils";
 import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import { MOTION_EASE_OUT } from "@/lib/motion";
+import { rotateProxyIps } from "@/lib/proxy-rotation";
 import type { RemoteHandoffState } from "@/lib/remote-sessions";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
@@ -1751,6 +1753,9 @@ function NetworkSectionInline({
   const [vpnId, setVpnId] = React.useState<string | null>(
     profile.vpn_id ?? null,
   );
+  const rotatableProxy = storedProxies.find(
+    (p) => p.id === proxyId && p.rotation_url,
+  );
   const dnsServerId = React.useId();
   const [savedDnsServer, setSavedDnsServer] = React.useState(
     profile.dns_server ?? "",
@@ -1863,6 +1868,20 @@ function NetworkSectionInline({
             ))}
           </SelectContent>
         </Select>
+        {rotatableProxy && (
+          <Button
+            type="button"
+            variant="soft"
+            className="shrink-0"
+            data-slot="profile-proxy-rotate"
+            title={t("proxies.rotation.actionTooltip")}
+            disabled={isSaving}
+            onClick={() => void rotateProxyIps([rotatableProxy], t as never)}
+          >
+            <LuRefreshCcwDot className="size-3.5" />
+            {t("proxies.rotation.action")}
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

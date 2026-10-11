@@ -15,6 +15,7 @@ import { GoPlus } from "react-icons/go";
 import {
   LuDownload,
   LuPencil,
+  LuRefreshCcwDot,
   LuRefreshCw,
   LuTrash2,
   LuUpload,
@@ -63,6 +64,7 @@ import { useProfileReferences } from "@/hooks/use-profile-references";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
+import { rotateProxyIps } from "@/lib/proxy-rotation";
 import { isFirstHopEncrypted, proxyProtocolToken } from "@/lib/proxy-string";
 import { canonicalProxyType } from "@/lib/proxy-type";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
@@ -655,6 +657,26 @@ export function ProxyManagementDialog({
           return (
             <div className="flex gap-1">
               <ProxyCheckButton proxy={proxy} />
+              {proxy.rotation_url && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      data-slot="proxy-rotate"
+                      aria-label={t("proxies.rotation.action")}
+                      onClick={() => {
+                        void rotateProxyIps([proxy], t);
+                      }}
+                    >
+                      <LuRefreshCcwDot className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{t("proxies.rotation.actionTooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1385,6 +1407,19 @@ export function ProxyManagementDialog({
             onClick={() => void handleBulkToggleProxiesSync()}
           >
             <LuRefreshCw />
+          </DataTableActionBarAction>
+          <DataTableActionBarAction
+            tooltip={t("proxies.rotation.action")}
+            onClick={() =>
+              void rotateProxyIps(
+                proxiesTable
+                  .getSelectedRowModel()
+                  .rows.map((row) => row.original),
+                t,
+              )
+            }
+          >
+            <LuRefreshCcwDot />
           </DataTableActionBarAction>
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}

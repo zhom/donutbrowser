@@ -488,8 +488,8 @@ const SECRET_EXPORT_TOOLS: &[&str] = &["export_proxies"];
 /// Strip the fields of a stored proxy a remote caller must not see.
 ///
 /// A bridge caller holds an account credential, not this machine. The proxy
-/// password, the VLESS URI (which carries the credential inline) and the
-/// dynamic list URL (which usually carries an API key) are secrets of the
+/// password, the VLESS URI (which carries the credential inline), the dynamic
+/// list URL and the change-IP link (which usually carry an API key) are secrets of the
 /// machine, not of the account, and an agent needs none of them to pick a
 /// proxy by id. Present values are replaced rather than removed so the shape
 /// an agent has learned stays the same, and absent ones stay absent.
@@ -506,11 +506,10 @@ fn redact_proxy_secrets(proxy: &mut serde_json::Value) {
     }
   }
   if let Some(map) = proxy.as_object_mut() {
-    if map.get("dynamic_proxy_url").is_some_and(|v| !v.is_null()) {
-      map.insert(
-        "dynamic_proxy_url".to_string(),
-        serde_json::Value::from(REDACTED),
-      );
+    for field in ["dynamic_proxy_url", "rotation_url"] {
+      if map.get(field).is_some_and(|v| !v.is_null()) {
+        map.insert(field.to_string(), serde_json::Value::from(REDACTED));
+      }
     }
   }
 }
@@ -2716,6 +2715,20 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "rotate_proxy_ip".to_string(),
+        description: "Give a stored proxy a new exit IP by calling its provider's change-IP link. Every profile that uses the proxy moves to the new IP, and their open connections may drop. Fails when the proxy has no change-IP link.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "proxy_id": {
+              "type": "string",
+              "description": "The id of the stored proxy"
+            }
+          },
+          "required": ["proxy_id"]
+        }),
+      },
+      McpTool {
         name: "get_profile_status".to_string(),
         description: "Check whether a browser profile is running and can be driven. Returns is_running (true when the browser can be driven, wherever it is), location ('local', 'remote' or 'stopped'), is_running_locally, and remote_session_id when it is running on the remote fleet.".to_string(),
         input_schema: serde_json::json!({
@@ -4519,6 +4532,29 @@ impl McpServer {
       "delete_profile" => self.handle_delete_profile(arguments).await,
       "list_tags" => self.handle_list_tags().await,
       "list_proxies" => self.handle_list_proxies().await,
+      "rotate_proxy_ip" => {
+        let proxy_id = arguments
+          .get("proxy_id")
+          .and_then(|v| v.as_str())
+          .ok_or_else(|| McpError {
+            code: -32602,
+            message: "Missing proxy_id".to_string(),
+            data: None,
+          })?;
+        let result = crate::proxy_rotation::rotate(proxy_id)
+          .await
+          .map_err(|e| McpError {
+            code: -32000,
+            message: format!("Proxy IP change failed: {e}"),
+            data: None,
+          })?;
+        Ok(serde_json::json!({
+          "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&result).unwrap_or_default()
+          }]
+        }))
+      }
       "get_profile_status" => self.handle_get_profile_status(arguments).await,
       // Group management
       "list_groups" => self.handle_list_groups().await,
@@ -9891,7 +9927,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      94,
+      95,
       "the tool list is a published contract; update this number deliberately"
     );
 
@@ -11173,13 +11209,15 @@ mod tests {
         "vless_uri": "vless://uuid@host:443?security=reality#name"
       },
       "geo_country": "DE",
-      "dynamic_proxy_url": "https://lists.example/rotate?key=SECRET"
+      "dynamic_proxy_url": "https://lists.example/rotate?key=SECRET",
+      "rotation_url": "https://provider.example/change-ip?token=ROTATE"
     });
     redact_proxy_secrets(&mut proxy);
 
     assert_eq!(proxy["proxy_settings"]["password"], "[redacted]");
     assert_eq!(proxy["proxy_settings"]["vless_uri"], "[redacted]");
     assert_eq!(proxy["dynamic_proxy_url"], "[redacted]");
+    assert_eq!(proxy["rotation_url"], "[redacted]");
     // Everything an agent needs to choose a proxy survives.
     assert_eq!(proxy["id"], "p1");
     assert_eq!(proxy["name"], "Berlin");
@@ -11189,6 +11227,7 @@ mod tests {
     assert_eq!(proxy["geo_country"], "DE");
     let text = proxy.to_string();
     assert!(!text.contains("hunter2") && !text.contains("SECRET") && !text.contains("vless://"));
+    assert!(!text.contains("ROTATE"));
 
     // A proxy with no secrets is left exactly as it was: no field is invented
     // just to say it was redacted.

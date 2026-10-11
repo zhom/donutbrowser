@@ -264,6 +264,20 @@ struct ApiProxyResponse {
   name: String,
   #[schema(value_type = Object)]
   proxy_settings: ProxySettings,
+  /// The provider's "change IP" link, or `null`. Call
+  /// `POST /v1/proxies/{id}/rotate` to use it.
+  rotation_url: Option<String>,
+}
+
+impl From<crate::proxy_manager::StoredProxy> for ApiProxyResponse {
+  fn from(proxy: crate::proxy_manager::StoredProxy) -> Self {
+    Self {
+      id: proxy.id,
+      name: proxy.name,
+      proxy_settings: proxy.proxy_settings,
+      rotation_url: proxy.rotation_url,
+    }
+  }
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -271,6 +285,9 @@ struct CreateProxyRequest {
   name: String,
   #[schema(value_type = Object)]
   proxy_settings: ProxySettings,
+  /// Optional http(s) "change IP" link from the proxy provider.
+  #[serde(default)]
+  rotation_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -278,6 +295,10 @@ struct UpdateProxyRequest {
   name: Option<String>,
   #[schema(value_type = Option<Object>)]
   proxy_settings: Option<ProxySettings>,
+  /// Omitted or `null` leaves the "change IP" link unchanged; an empty string
+  /// clears it.
+  #[serde(default)]
+  rotation_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -705,6 +726,7 @@ struct ImportProxiesResponse {
     create_proxy,
     import_proxies_api,
     update_proxy,
+    rotate_proxy,
     delete_proxy,
     get_vpns,
     get_vpn,
@@ -747,6 +769,7 @@ struct ImportProxiesResponse {
     ApiStatusResponse,
     StatusRequest,
     ApiProxyResponse,
+    crate::proxy_rotation::RotationResult,
     CreateProxyRequest,
     UpdateProxyRequest,
     ApiVpnResponse,
@@ -1039,6 +1062,7 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(get_proxies, create_proxy))
     .routes(routes!(import_proxies_api))
     .routes(routes!(get_proxy, update_proxy, delete_proxy))
+    .routes(routes!(rotate_proxy))
     .routes(routes!(get_vpns, create_vpn))
     .routes(routes!(import_vpn))
     .routes(routes!(export_vpn))
@@ -2253,14 +2277,7 @@ async fn get_proxies(
 ) -> Result<Json<Vec<ApiProxyResponse>>, StatusCode> {
   let proxies = PROXY_MANAGER.get_stored_proxies();
   Ok(Json(
-    proxies
-      .into_iter()
-      .map(|p| ApiProxyResponse {
-        id: p.id,
-        name: p.name,
-        proxy_settings: p.proxy_settings,
-      })
-      .collect(),
+    proxies.into_iter().map(ApiProxyResponse::from).collect(),
   ))
 }
 
@@ -2287,11 +2304,7 @@ async fn get_proxy(
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
   let proxies = PROXY_MANAGER.get_stored_proxies();
   if let Some(proxy) = proxies.into_iter().find(|p| p.id == id) {
-    Ok(Json(ApiProxyResponse {
-      id: proxy.id,
-      name: proxy.name,
-      proxy_settings: proxy.proxy_settings,
-    }))
+    Ok(Json(ApiProxyResponse::from(proxy)))
   } else {
     Err(StatusCode::NOT_FOUND)
   }
@@ -2316,6 +2329,8 @@ async fn create_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, (StatusCode, String)> {
+  let rotation_url = crate::proxy_rotation::checked_rotation_url(request.rotation_url)
+    .map_err(manager_error_response)?;
   let result = PROXY_MANAGER.create_stored_proxy(
     &state.app_handle,
     request.name.clone(),
@@ -2323,11 +2338,11 @@ async fn create_proxy(
   );
 
   match result {
-    Ok(proxy) => Ok(Json(ApiProxyResponse {
-      id: proxy.id,
-      name: proxy.name,
-      proxy_settings: proxy.proxy_settings,
-    })),
+    Ok(proxy) if rotation_url.is_some() => PROXY_MANAGER
+      .set_rotation_url(&proxy.id, rotation_url)
+      .map(|proxy| Json(ApiProxyResponse::from(proxy)))
+      .map_err(manager_error_response),
+    Ok(proxy) => Ok(Json(ApiProxyResponse::from(proxy))),
     Err(e) => Err(manager_error_response(e)),
   }
 }
@@ -2394,11 +2409,7 @@ async fn import_proxies_api(
     proxies: result
       .proxies
       .into_iter()
-      .map(|p| ApiProxyResponse {
-        id: p.id,
-        name: p.name,
-        proxy_settings: p.proxy_settings,
-      })
+      .map(ApiProxyResponse::from)
       .collect(),
   }))
 }
@@ -2427,17 +2438,58 @@ async fn update_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, (StatusCode, String)> {
+  // Checked first, so a bad link leaves the proxy as it was.
+  let rotation_url = request
+    .rotation_url
+    .map(|url| crate::proxy_rotation::checked_rotation_url(Some(url)))
+    .transpose()
+    .map_err(manager_error_response)?;
   let result =
     PROXY_MANAGER.update_stored_proxy(&state.app_handle, &id, request.name, request.proxy_settings);
 
   match result {
-    Ok(proxy) => Ok(Json(ApiProxyResponse {
-      id: proxy.id,
-      name: proxy.name,
-      proxy_settings: proxy.proxy_settings,
-    })),
+    Ok(_) if rotation_url.is_some() => PROXY_MANAGER
+      .set_rotation_url(&id, rotation_url.flatten())
+      .map(|proxy| Json(ApiProxyResponse::from(proxy)))
+      .map_err(manager_error_response),
+    Ok(proxy) => Ok(Json(ApiProxyResponse::from(proxy))),
     Err(e) => Err(manager_error_response(e)),
   }
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/proxies/{id}/rotate",
+  params(
+    ("id" = String, Path, description = "Proxy ID")
+  ),
+  responses(
+    (status = 200, description = "The provider accepted the IP change. Every profile behind the proxy moves to the new IP.", body = crate::proxy_rotation::RotationResult),
+    (status = 400, description = "The proxy has no change-IP link (PROXY_ROTATION_URL_MISSING)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Proxy not found"),
+    (status = 502, description = "The provider refused or did not answer (PROXY_ROTATION_FAILED, PROXY_ROTATION_TIMEOUT, PROXY_ROTATION_UNREACHABLE, SYSTEM_PROXY_UNREACHABLE)")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
+async fn rotate_proxy(
+  Path(id): Path<String>,
+) -> Result<Json<crate::proxy_rotation::RotationResult>, (StatusCode, String)> {
+  crate::proxy_rotation::rotate(&id)
+    .await
+    .map(Json)
+    .map_err(|e| {
+      if e.contains("PROXY_NOT_FOUND") {
+        (StatusCode::NOT_FOUND, e)
+      } else if e.contains("PROXY_ROTATION_URL_MISSING") {
+        (StatusCode::BAD_REQUEST, e)
+      } else {
+        (StatusCode::BAD_GATEWAY, e)
+      }
+    })
 }
 
 #[utoipa::path(
@@ -5149,8 +5201,12 @@ mod url_guard_tests {
       .split("struct ")
       .skip(1)
       .filter(|chunk| {
-        let head = &chunk[..chunk.len().min(600)];
-        head.contains("url: Option<String>") || head.contains("url: String")
+        // A field named exactly `url`: what a browser is sent to. Links with
+        // their own name (`rotation_url`) are checked where they are used.
+        chunk[..chunk.len().min(600)].lines().any(|line| {
+          let field = line.trim().trim_start_matches("pub ");
+          field.starts_with("url: Option<String>") || field.starts_with("url: String")
+        })
       })
       .map(|chunk| chunk.split(['{', ' ', '<']).next().unwrap_or("?"))
       .collect();

@@ -699,6 +699,19 @@
       "skippedVpns_one": "{{count}} VPN ignoré car encore utilisé par un profil",
       "skippedVpns_many": "{{count}} VPN ignorés car encore utilisés par des profils",
       "skippedVpns_other": "{{count}} VPN ignorés car encore utilisés par des profils"
+    },
+    "rotation": {
+      "label": "Lien de changement d'IP",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Facultatif. Un lien de votre fournisseur qui donne une nouvelle IP à ce proxy. Tous les profils qui utilisent le proxy passent à la nouvelle IP.",
+      "action": "Changer d'IP",
+      "actionTooltip": "Demander une nouvelle IP au fournisseur. Tous les profils qui utilisent ce proxy y passent.",
+      "requested": "Nouvelle IP demandée pour {{name}}",
+      "requestedMany_one": "Nouvelle IP demandée pour {{count}} proxy",
+      "requestedMany_many": "Nouvelle IP demandée pour {{count}} proxys",
+      "requestedMany_other": "Nouvelle IP demandée pour {{count}} proxys",
+      "failedFor": "{{name}} : {{error}}",
+      "noneSelected": "Aucun de ces proxys n'a de lien de changement d'IP. Ajoutez-en un en modifiant un proxy."
     }
   },
   "groups": {
@@ -2480,7 +2493,12 @@
     "profileStatusNotFound": "Ce statut n'existe plus.",
     "profileStatusColorInvalid": "Choisissez une couleur pour le statut.",
     "profileStatusNameTooLong": "Le nom d'un statut ne peut pas dépasser 40 caractères.",
-    "profileStatusLimitReached": "Vous avez 100 statuts, le maximum. Supprimez-en un pour en ajouter un autre."
+    "profileStatusLimitReached": "Vous avez 100 statuts, le maximum. Supprimez-en un pour en ajouter un autre.",
+    "proxyRotationUrlInvalid": "Le lien de changement d'IP doit être une URL http:// ou https:// complète.",
+    "proxyRotationUrlMissing": "Ce proxy n'a pas de lien de changement d'IP. Ajoutez-en un en modifiant le proxy.",
+    "proxyRotationFailed": "Le fournisseur a refusé le changement d'IP (HTTP {{status}}).",
+    "proxyRotationTimeout": "Le fournisseur n'a pas répondu au changement d'IP en 30 secondes.",
+    "proxyRotationUnreachable": "Donut n'a pas pu joindre le lien de changement d'IP du fournisseur."
   },
   "rail": {
     "profiles": "Profils",

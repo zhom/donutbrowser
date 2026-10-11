@@ -329,6 +329,8 @@ export interface StoredProxy {
   geo_region?: string;
   geo_city?: string;
   geo_isp?: string;
+  /** The provider's change-IP link; see `rotateProxyIps`. */
+  rotation_url?: string | null;
 }
 
 export interface LocationItem {

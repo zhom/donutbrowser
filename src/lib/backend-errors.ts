@@ -30,6 +30,11 @@ export type BackendErrorCode =
   | "PROFILE_STATUS_COLOR_INVALID"
   | "PROFILE_STATUS_NAME_TOO_LONG"
   | "PROFILE_STATUS_LIMIT_REACHED"
+  | "PROXY_ROTATION_URL_INVALID"
+  | "PROXY_ROTATION_URL_MISSING"
+  | "PROXY_ROTATION_TIMEOUT"
+  | "PROXY_ROTATION_UNREACHABLE"
+  | "PROXY_ROTATION_FAILED"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -376,6 +381,18 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.profileStatusNameTooLong");
     case "PROFILE_STATUS_LIMIT_REACHED":
       return t("backendErrors.profileStatusLimitReached");
+    case "PROXY_ROTATION_URL_INVALID":
+      return t("backendErrors.proxyRotationUrlInvalid");
+    case "PROXY_ROTATION_URL_MISSING":
+      return t("backendErrors.proxyRotationUrlMissing");
+    case "PROXY_ROTATION_TIMEOUT":
+      return t("backendErrors.proxyRotationTimeout");
+    case "PROXY_ROTATION_UNREACHABLE":
+      return t("backendErrors.proxyRotationUnreachable");
+    case "PROXY_ROTATION_FAILED":
+      return t("backendErrors.proxyRotationFailed", {
+        status: parsed.params?.status ?? "",
+      });
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

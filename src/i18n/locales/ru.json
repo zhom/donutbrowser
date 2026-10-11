@@ -703,6 +703,20 @@
       "skippedVpns_few": "Пропущено {{count}} VPN, которые ещё используются профилями",
       "skippedVpns_many": "Пропущено {{count}} VPN, которые ещё используются профилями",
       "skippedVpns_other": "Пропущено {{count}} VPN, которые ещё используются профилями"
+    },
+    "rotation": {
+      "label": "Ссылка для смены IP",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Необязательно. Ссылка провайдера, которая даёт этому прокси новый IP. Все профили с этим прокси переходят на новый IP.",
+      "action": "Сменить IP",
+      "actionTooltip": "Получить новый IP у провайдера. Все профили с этим прокси перейдут на него.",
+      "requested": "Запрошен новый IP для {{name}}",
+      "requestedMany_one": "Запрошен новый IP для {{count}} прокси",
+      "requestedMany_few": "Запрошены новые IP для {{count}} прокси",
+      "requestedMany_many": "Запрошены новые IP для {{count}} прокси",
+      "requestedMany_other": "Запрошены новые IP для {{count}} прокси",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "Ни у одного из этих прокси нет ссылки для смены IP. Добавьте её при редактировании прокси."
     }
   },
   "groups": {
@@ -2490,7 +2504,12 @@
     "profileStatusNotFound": "Этого статуса больше нет.",
     "profileStatusColorInvalid": "Выберите цвет статуса.",
     "profileStatusNameTooLong": "Название статуса может содержать не более 40 символов.",
-    "profileStatusLimitReached": "У вас 100 статусов, это максимум. Удалите один, чтобы добавить другой."
+    "profileStatusLimitReached": "У вас 100 статусов, это максимум. Удалите один, чтобы добавить другой.",
+    "proxyRotationUrlInvalid": "Ссылка для смены IP должна быть полным URL с http:// или https://.",
+    "proxyRotationUrlMissing": "У этого прокси нет ссылки для смены IP. Добавьте её при редактировании прокси.",
+    "proxyRotationFailed": "Провайдер отклонил смену IP (HTTP {{status}}).",
+    "proxyRotationTimeout": "Провайдер не ответил на смену IP за 30 секунд.",
+    "proxyRotationUnreachable": "Donut не удалось открыть ссылку провайдера для смены IP."
   },
   "rail": {
     "profiles": "Профили",

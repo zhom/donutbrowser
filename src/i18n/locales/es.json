@@ -699,6 +699,19 @@
       "skippedVpns_one": "Se omitió {{count}} VPN que todavía usa un perfil",
       "skippedVpns_many": "Se omitieron {{count}} VPN que todavía usan algunos perfiles",
       "skippedVpns_other": "Se omitieron {{count}} VPN que todavía usan algunos perfiles"
+    },
+    "rotation": {
+      "label": "Enlace para cambiar IP",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Opcional. Un enlace de tu proveedor que da a este proxy una IP nueva. Todos los perfiles que usan el proxy pasan a la IP nueva.",
+      "action": "Cambiar IP",
+      "actionTooltip": "Pedir una IP nueva al proveedor. Todos los perfiles que usan este proxy pasan a ella.",
+      "requested": "IP nueva solicitada para {{name}}",
+      "requestedMany_one": "IP nueva solicitada para {{count}} proxy",
+      "requestedMany_many": "IP nueva solicitada para {{count}} proxies",
+      "requestedMany_other": "IP nueva solicitada para {{count}} proxies",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "Ninguno de estos proxies tiene un enlace para cambiar IP. Añade uno al editar un proxy."
     }
   },
   "groups": {
@@ -2480,7 +2493,12 @@
     "profileStatusNotFound": "Este estado ya no existe.",
     "profileStatusColorInvalid": "Elige un color para el estado.",
     "profileStatusNameTooLong": "El nombre de un estado puede tener como máximo 40 caracteres.",
-    "profileStatusLimitReached": "Tienes 100 estados, el máximo. Elimina uno para añadir otro."
+    "profileStatusLimitReached": "Tienes 100 estados, el máximo. Elimina uno para añadir otro.",
+    "proxyRotationUrlInvalid": "El enlace para cambiar IP debe ser una URL completa http:// o https://.",
+    "proxyRotationUrlMissing": "Este proxy no tiene enlace para cambiar IP. Añade uno al editar el proxy.",
+    "proxyRotationFailed": "El proveedor rechazó el cambio de IP (HTTP {{status}}).",
+    "proxyRotationTimeout": "El proveedor no respondió al cambio de IP en 30 segundos.",
+    "proxyRotationUnreachable": "Donut no pudo acceder al enlace para cambiar IP del proveedor."
   },
   "rail": {
     "profiles": "Perfiles",

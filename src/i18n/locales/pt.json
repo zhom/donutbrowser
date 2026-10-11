@@ -699,6 +699,19 @@
       "skippedVpns_one": "{{count}} VPN ignorada por ainda estar em uso por um perfil",
       "skippedVpns_many": "{{count}} VPNs ignoradas por ainda estarem em uso por perfis",
       "skippedVpns_other": "{{count}} VPNs ignoradas por ainda estarem em uso por perfis"
+    },
+    "rotation": {
+      "label": "Link de troca de IP",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Opcional. Um link do seu provedor que dá um IP novo a este proxy. Todos os perfis que usam o proxy passam para o IP novo.",
+      "action": "Trocar IP",
+      "actionTooltip": "Pedir um IP novo ao provedor. Todos os perfis que usam este proxy passam para ele.",
+      "requested": "IP novo solicitado para {{name}}",
+      "requestedMany_one": "IP novo solicitado para {{count}} proxy",
+      "requestedMany_many": "IP novo solicitado para {{count}} proxies",
+      "requestedMany_other": "IP novo solicitado para {{count}} proxies",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "Nenhum destes proxies tem link de troca de IP. Adicione um ao editar um proxy."
     }
   },
   "groups": {
@@ -2480,7 +2493,12 @@
     "profileStatusNotFound": "Este status não existe mais.",
     "profileStatusColorInvalid": "Escolha uma cor para o status.",
     "profileStatusNameTooLong": "O nome de um status pode ter no máximo 40 caracteres.",
-    "profileStatusLimitReached": "Você tem 100 status, o máximo. Exclua um para adicionar outro."
+    "profileStatusLimitReached": "Você tem 100 status, o máximo. Exclua um para adicionar outro.",
+    "proxyRotationUrlInvalid": "O link de troca de IP precisa ser uma URL completa http:// ou https://.",
+    "proxyRotationUrlMissing": "Este proxy não tem link de troca de IP. Adicione um ao editar o proxy.",
+    "proxyRotationFailed": "O provedor recusou a troca de IP (HTTP {{status}}).",
+    "proxyRotationTimeout": "O provedor não respondeu à troca de IP em 30 segundos.",
+    "proxyRotationUnreachable": "O Donut não conseguiu acessar o link de troca de IP do provedor."
   },
   "rail": {
     "profiles": "Perfis",

@@ -695,6 +695,18 @@
       "skippedProxies_other": "Bir profil tarafından hâlâ kullanıldığı için {{count}} proxy atlandı",
       "skippedVpns_one": "Bir profil tarafından hâlâ kullanıldığı için {{count}} VPN atlandı",
       "skippedVpns_other": "Bir profil tarafından hâlâ kullanıldığı için {{count}} VPN atlandı"
+    },
+    "rotation": {
+      "label": "IP değiştirme bağlantısı",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "İsteğe bağlı. Sağlayıcınızın bu proxy'ye yeni bir IP veren bağlantısı. Proxy'yi kullanan her profil yeni IP'ye geçer.",
+      "action": "IP değiştir",
+      "actionTooltip": "Sağlayıcıdan yeni bir IP alın. Bu proxy'yi kullanan her profil ona geçer.",
+      "requested": "{{name}} için yeni IP istendi",
+      "requestedMany_one": "{{count}} proxy için yeni IP istendi",
+      "requestedMany_other": "{{count}} proxy için yeni IP istendi",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "Bu proxy'lerin hiçbirinde IP değiştirme bağlantısı yok. Bir proxy'yi düzenlerken ekleyin."
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "Bu durum artık yok.",
     "profileStatusColorInvalid": "Durum için bir renk seçin.",
     "profileStatusNameTooLong": "Durum adı en fazla 40 karakter olabilir.",
-    "profileStatusLimitReached": "En fazla sayı olan 100 durumunuz var. Yenisini eklemek için birini silin."
+    "profileStatusLimitReached": "En fazla sayı olan 100 durumunuz var. Yenisini eklemek için birini silin.",
+    "proxyRotationUrlInvalid": "IP değiştirme bağlantısı tam bir http:// veya https:// URL'si olmalıdır.",
+    "proxyRotationUrlMissing": "Bu proxy'nin IP değiştirme bağlantısı yok. Proxy'yi düzenlerken ekleyin.",
+    "proxyRotationFailed": "Sağlayıcı IP değişikliğini reddetti (HTTP {{status}}).",
+    "proxyRotationTimeout": "Sağlayıcı IP değişikliğine 30 saniye içinde yanıt vermedi.",
+    "proxyRotationUnreachable": "Donut, sağlayıcının IP değiştirme bağlantısına ulaşamadı."
   },
   "rail": {
     "profiles": "Profiller",

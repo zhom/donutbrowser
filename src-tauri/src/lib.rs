@@ -116,6 +116,7 @@ mod profile_statuses;
 mod profile_templates;
 mod proxy_distribution;
 mod proxy_manager;
+mod proxy_rotation;
 pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
@@ -3337,6 +3338,9 @@ pub fn run_with_builder(
       profile_statuses::update_profile_status,
       profile_statuses::delete_profile_status,
       profile_statuses::set_profiles_status,
+      proxy_rotation::set_proxy_rotation_url,
+      proxy_rotation::rotate_proxy_ip,
+      proxy_rotation::rotate_proxy_ips,
       check_browser_status,
       kill_browser_profile,
       rename_profile,

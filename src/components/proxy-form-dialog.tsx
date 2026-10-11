@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { translateBackendError } from "@/lib/backend-errors";
+import { looksLikeRotationUrl } from "@/lib/proxy-rotation";
 import {
   isFirstHopEncrypted,
   isXrayProxyType,
@@ -42,6 +43,7 @@ interface ProxyFormData {
   username: string;
   password: string;
   vless_uri: string;
+  rotation_url: string;
 }
 
 interface ProxyFormDialogProps {
@@ -58,6 +60,7 @@ const DEFAULT_FORM: ProxyFormData = {
   username: "",
   password: "",
   vless_uri: "",
+  rotation_url: "",
 };
 
 /**
@@ -175,6 +178,7 @@ export function ProxyFormDialog({
       username: editingProxy.proxy_settings.username ?? "",
       password: editingProxy.proxy_settings.password ?? "",
       vless_uri: editingProxy.proxy_settings.vless_uri ?? "",
+      rotation_url: editingProxy.rotation_url ?? "",
     });
   }, [editingProxy, isOpen, resetForm]);
 
@@ -215,6 +219,12 @@ export function ProxyFormDialog({
       return;
     }
 
+    const rotationUrl = form.rotation_url.trim();
+    if (rotationUrl && !looksLikeRotationUrl(rotationUrl)) {
+      toast.error(t("backendErrors.proxyRotationUrlInvalid"));
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -234,9 +244,24 @@ export function ProxyFormDialog({
           proxyId: editingProxy.id,
           ...payload,
         });
+        if (rotationUrl !== (editingProxy.rotation_url ?? "")) {
+          await invoke("set_proxy_rotation_url", {
+            proxyId: editingProxy.id,
+            rotationUrl: rotationUrl || null,
+          });
+        }
         toast.success(t("toasts.success.proxyUpdated"));
       } else {
-        await invoke("create_stored_proxy", payload);
+        const created = await invoke<StoredProxy>(
+          "create_stored_proxy",
+          payload,
+        );
+        if (rotationUrl) {
+          await invoke("set_proxy_rotation_url", {
+            proxyId: created.id,
+            rotationUrl,
+          });
+        }
         toast.success(t("toasts.success.proxyCreated"));
       }
 
@@ -602,6 +627,26 @@ export function ProxyFormDialog({
               )}
             </>
           )}
+
+          <div className="grid gap-2">
+            <Label htmlFor="proxy-rotation-url">
+              {t("proxies.rotation.label")}
+            </Label>
+            <Input
+              id="proxy-rotation-url"
+              value={form.rotation_url}
+              onChange={(e) => {
+                setForm({ ...form, rotation_url: e.target.value });
+              }}
+              placeholder={t("proxies.rotation.placeholder")}
+              spellCheck={false}
+              autoComplete="off"
+              disabled={isSubmitting}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("proxies.rotation.hint")}
+            </p>
+          </div>
         </div>
 
         <DialogFooter>

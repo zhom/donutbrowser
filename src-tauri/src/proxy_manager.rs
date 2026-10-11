@@ -207,6 +207,11 @@ pub struct StoredProxy {
   pub dynamic_proxy_url: Option<String>,
   #[serde(default)]
   pub dynamic_proxy_format: Option<String>,
+  /// The provider's "change IP" link. Calling it gives the proxy a new exit
+  /// address. It usually carries an API key, so it is handled like the
+  /// password: never logged, redacted for remote MCP callers.
+  #[serde(default)]
+  pub rotation_url: Option<String>,
 }
 
 /// Current unix time in whole seconds. Used to stamp `updated_at` on edits.
@@ -325,6 +330,7 @@ impl StoredProxy {
       geo_isp: None,
       dynamic_proxy_url: None,
       dynamic_proxy_format: None,
+      rotation_url: None,
     }
   }
 
@@ -705,6 +711,7 @@ impl ProxyManager {
         geo_isp: None,
         dynamic_proxy_url: None,
         dynamic_proxy_format: None,
+        rotation_url: None,
       };
       stored_proxies.insert(CLOUD_PROXY_ID.to_string(), cloud_proxy.clone());
       drop(stored_proxies);
@@ -898,6 +905,7 @@ impl ProxyManager {
       geo_isp: isp,
       dynamic_proxy_url: None,
       dynamic_proxy_format: None,
+      rotation_url: None,
     };
 
     {
@@ -1094,6 +1102,45 @@ impl ProxyManager {
     }
 
     Ok(updated_proxy)
+  }
+
+  /// Set or clear a proxy's "change IP" link. Cloud proxies are refused:
+  /// the cloud owns their configuration.
+  pub fn set_rotation_url(
+    &self,
+    proxy_id: &str,
+    rotation_url: Option<String>,
+  ) -> Result<StoredProxy, String> {
+    let updated = {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      let proxy = stored_proxies
+        .get_mut(proxy_id)
+        .ok_or_else(|| crate::backend_error("PROXY_NOT_FOUND"))?;
+      if proxy.is_cloud_managed || proxy.is_cloud_derived {
+        return Err(crate::backend_error("CANNOT_MODIFY_CLOUD_MANAGED_PROXY"));
+      }
+      if proxy.rotation_url == rotation_url {
+        return Ok(proxy.clone());
+      }
+      proxy.rotation_url = rotation_url;
+      proxy.updated_at = Some(now_secs());
+      proxy.clone()
+    };
+    self
+      .save_proxy(&updated)
+      .map_err(|e| crate::wrap_backend_error(e, "Failed to save the proxy"))?;
+    if let Err(e) = events::emit_empty("proxies-changed") {
+      log::warn!("Event emit failed event=proxies-changed err=\"{e}\"");
+    }
+    if updated.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = updated.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_proxy_sync(id).await;
+        });
+      }
+    }
+    Ok(updated)
   }
 
   /// Update the in-memory `sync_enabled` / `last_sync` fields of a stored
@@ -4341,6 +4388,7 @@ mod tests {
       geo_isp: None,
       dynamic_proxy_url: None,
       dynamic_proxy_format: None,
+      rotation_url: None,
     };
 
     // Before migration

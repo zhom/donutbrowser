@@ -695,6 +695,18 @@
       "skippedProxies_other": "프로필에서 사용 중이어서 프록시 {{count}}개를 건너뛰었습니다",
       "skippedVpns_one": "프로필에서 사용 중이어서 VPN {{count}}개를 건너뛰었습니다",
       "skippedVpns_other": "프로필에서 사용 중이어서 VPN {{count}}개를 건너뛰었습니다"
+    },
+    "rotation": {
+      "label": "IP 변경 링크",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "선택 사항. 이 프록시에 새 IP를 주는 공급자의 링크입니다. 이 프록시를 쓰는 모든 프로필이 새 IP로 이동합니다.",
+      "action": "IP 변경",
+      "actionTooltip": "공급자에게서 새 IP를 받습니다. 이 프록시를 쓰는 모든 프로필이 그 IP로 이동합니다.",
+      "requested": "{{name}}의 새 IP를 요청했습니다",
+      "requestedMany_one": "프록시 {{count}}개의 새 IP를 요청했습니다",
+      "requestedMany_other": "프록시 {{count}}개의 새 IP를 요청했습니다",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "이 프록시들에는 IP 변경 링크가 없습니다. 프록시를 편집할 때 추가하세요."
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "이 상태는 더 이상 존재하지 않습니다.",
     "profileStatusColorInvalid": "상태 색상을 선택하세요.",
     "profileStatusNameTooLong": "상태 이름은 최대 40자까지 가능합니다.",
-    "profileStatusLimitReached": "상태가 최대치인 100개입니다. 추가하려면 하나를 삭제하세요."
+    "profileStatusLimitReached": "상태가 최대치인 100개입니다. 추가하려면 하나를 삭제하세요.",
+    "proxyRotationUrlInvalid": "IP 변경 링크는 전체 http:// 또는 https:// URL이어야 합니다.",
+    "proxyRotationUrlMissing": "이 프록시에는 IP 변경 링크가 없습니다. 프록시를 편집할 때 추가하세요.",
+    "proxyRotationFailed": "공급자가 IP 변경을 거부했습니다 (HTTP {{status}}).",
+    "proxyRotationTimeout": "공급자가 30초 안에 IP 변경에 응답하지 않았습니다.",
+    "proxyRotationUnreachable": "공급자의 IP 변경 링크에 연결할 수 없습니다."
   },
   "rail": {
     "profiles": "프로필",

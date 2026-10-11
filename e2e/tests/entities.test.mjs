@@ -88,6 +88,47 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       assert.equal(updatedProxy.name, "Updated Proxy");
       assert.equal(updatedProxy.updated_at >= proxy.updated_at, true);
 
+      // The provider's change-IP link: checked when set, called on request.
+      assert.match(
+        await app.invokeError("rotate_proxy_ip", { proxyId: proxy.id }),
+        /PROXY_ROTATION_URL_MISSING/,
+      );
+      assert.match(
+        await app.invokeError("set_proxy_rotation_url", {
+          proxyId: proxy.id,
+          rotationUrl: "ftp://provider.example/change-ip",
+        }),
+        /PROXY_ROTATION_URL_INVALID/,
+      );
+      const rotationUrl = `${process.env.DONUT_E2E_FIXTURE_URL}/change-ip?key=e2e`;
+      const linked = await app.invoke("set_proxy_rotation_url", {
+        proxyId: proxy.id,
+        rotationUrl: ` ${rotationUrl} `,
+      });
+      assert.equal(linked.rotation_url, rotationUrl);
+      const rotated = await app.invoke("rotate_proxy_ip", {
+        proxyId: proxy.id,
+      });
+      assert.equal(rotated.status, 200);
+      assert.equal(rotated.error, null);
+      const rotations = await app.invoke("rotate_proxy_ips", {
+        proxyIds: [proxy.id, proxy.id, "missing-proxy"],
+      });
+      assert.deepEqual(
+        rotations.map((result) => [result.proxy_id, result.status]),
+        [
+          [proxy.id, 200],
+          ["missing-proxy", null],
+        ],
+        "duplicates are called once and each proxy gets its own result",
+      );
+      assert.match(rotations[1].error, /PROXY_NOT_FOUND/);
+      const unlinked = await app.invoke("set_proxy_rotation_url", {
+        proxyId: proxy.id,
+        rotationUrl: "",
+      });
+      assert.equal(unlinked.rotation_url, null);
+
       const parsed = await app.invoke("parse_txt_proxies", {
         content: [
           "http://one.example:8080",

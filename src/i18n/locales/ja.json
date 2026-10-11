@@ -695,6 +695,18 @@
       "skippedProxies_other": "プロファイルで使用中のため、{{count}} 件のプロキシをスキップしました",
       "skippedVpns_one": "プロファイルで使用中のため、{{count}} 件の VPN をスキップしました",
       "skippedVpns_other": "プロファイルで使用中のため、{{count}} 件の VPN をスキップしました"
+    },
+    "rotation": {
+      "label": "IP 変更リンク",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "任意。このプロキシに新しい IP を割り当てるプロバイダーのリンクです。このプロキシを使うすべてのプロファイルが新しい IP に移ります。",
+      "action": "IP を変更",
+      "actionTooltip": "プロバイダーから新しい IP を取得します。このプロキシを使うすべてのプロファイルがその IP に移ります。",
+      "requested": "{{name}} の新しい IP をリクエストしました",
+      "requestedMany_one": "{{count}} 件のプロキシの新しい IP をリクエストしました",
+      "requestedMany_other": "{{count}} 件のプロキシの新しい IP をリクエストしました",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "これらのプロキシには IP 変更リンクがありません。プロキシの編集時に追加してください。"
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "このステータスはもう存在しません。",
     "profileStatusColorInvalid": "ステータスの色を選択してください。",
     "profileStatusNameTooLong": "ステータス名は 40 文字以内にしてください。",
-    "profileStatusLimitReached": "ステータスが上限の 100 個に達しています。追加するには 1 つ削除してください。"
+    "profileStatusLimitReached": "ステータスが上限の 100 個に達しています。追加するには 1 つ削除してください。",
+    "proxyRotationUrlInvalid": "IP 変更リンクは完全な http:// または https:// URL にしてください。",
+    "proxyRotationUrlMissing": "このプロキシには IP 変更リンクがありません。プロキシの編集時に追加してください。",
+    "proxyRotationFailed": "プロバイダーが IP 変更を拒否しました (HTTP {{status}})。",
+    "proxyRotationTimeout": "プロバイダーが 30 秒以内に IP 変更に応答しませんでした。",
+    "proxyRotationUnreachable": "プロバイダーの IP 変更リンクに接続できませんでした。"
   },
   "rail": {
     "profiles": "プロファイル",

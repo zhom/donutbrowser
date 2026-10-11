@@ -695,6 +695,18 @@
       "skippedProxies_other": "{{count}} Proxys übersprungen, die noch von Profilen verwendet werden",
       "skippedVpns_one": "{{count}} VPN übersprungen, das noch von einem Profil verwendet wird",
       "skippedVpns_other": "{{count}} VPNs übersprungen, die noch von Profilen verwendet werden"
+    },
+    "rotation": {
+      "label": "Link zum IP-Wechsel",
+      "placeholder": "https://provider.example/change-ip?key=…",
+      "hint": "Optional. Ein Link Ihres Anbieters, der diesem Proxy eine neue IP gibt. Jedes Profil, das den Proxy nutzt, wechselt zur neuen IP.",
+      "action": "IP wechseln",
+      "actionTooltip": "Eine neue IP beim Anbieter anfordern. Jedes Profil, das diesen Proxy nutzt, wechselt zu ihr.",
+      "requested": "Neue IP für {{name}} angefordert",
+      "requestedMany_one": "Neue IP für {{count}} Proxy angefordert",
+      "requestedMany_other": "Neue IP für {{count}} Proxys angefordert",
+      "failedFor": "{{name}}: {{error}}",
+      "noneSelected": "Keiner dieser Proxys hat einen Link zum IP-Wechsel. Fügen Sie einen beim Bearbeiten eines Proxys hinzu."
     }
   },
   "groups": {
@@ -2470,7 +2482,12 @@
     "profileStatusNotFound": "Dieser Status existiert nicht mehr.",
     "profileStatusColorInvalid": "Wählen Sie eine Farbe für den Status.",
     "profileStatusNameTooLong": "Ein Statusname darf höchstens 40 Zeichen haben.",
-    "profileStatusLimitReached": "Sie haben 100 Status, das Maximum. Löschen Sie einen, um einen weiteren hinzuzufügen."
+    "profileStatusLimitReached": "Sie haben 100 Status, das Maximum. Löschen Sie einen, um einen weiteren hinzuzufügen.",
+    "proxyRotationUrlInvalid": "Der Link zum IP-Wechsel muss eine vollständige http://- oder https://-URL sein.",
+    "proxyRotationUrlMissing": "Dieser Proxy hat keinen Link zum IP-Wechsel. Fügen Sie einen beim Bearbeiten des Proxys hinzu.",
+    "proxyRotationFailed": "Der Anbieter hat den IP-Wechsel abgelehnt (HTTP {{status}}).",
+    "proxyRotationTimeout": "Der Anbieter hat innerhalb von 30 Sekunden nicht auf den IP-Wechsel geantwortet.",
+    "proxyRotationUnreachable": "Donut konnte den Link zum IP-Wechsel des Anbieters nicht erreichen."
   },
   "rail": {
     "profiles": "Profile",
