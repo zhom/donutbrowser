@@ -1448,7 +1448,8 @@
       "cookieCount": "Cookies guardadas",
       "localDataTransfer": "Transferencia de datos local",
       "created": "Creado",
-      "windowColor": "Color de ventana"
+      "windowColor": "Color de ventana",
+      "dns": "DNS"
     },
     "values": {
       "none": "Ninguno",
@@ -1507,7 +1508,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Configura cómo aparece este perfil para los scripts de fingerprinting.",
-      "network": "Administra el proxy o la VPN que usa este perfil.",
+      "network": "Administra el proxy o la VPN que usa este perfil y el servidor DNS con el que resuelve los nombres.",
       "cookies": "Importa, copia o borra cookies de este perfil.",
       "extensions": "Elige las extensiones que se cargan con este perfil.",
       "sync": "Configura cómo se replica este perfil entre tus dispositivos.",
@@ -1710,6 +1711,18 @@
     "custom.allowlistModeOff": "Bloquear los dominios de la lista; permitir todo lo demás.",
     "custom.allowedOnlyLabel": "Dominios permitidos (solo estos)",
     "custom.allowedOnlyHint": "También se permiten los subdominios de un dominio de la lista. Una lista vacía desactiva el filtrado."
+  },
+  "dnsServer": {
+    "label": "Servidor DNS",
+    "placeholder": "Introduce una dirección DNS o déjalo en blanco",
+    "presets": "Opciones cifradas:",
+    "summary": {
+      "default": "El proxy resuelve los nombres. Indica un servidor si el proxy no puede resolver algunos sitios.",
+      "https": "Cifrado con DNS sobre HTTPS ({{server}}). Las consultas pasan por el proxy o la VPN de este perfil. Si el servidor no responde, las páginas no cargan.",
+      "tls": "Cifrado con DNS sobre TLS ({{server}}). Las consultas pasan por el proxy o la VPN de este perfil. Si el servidor no responde, las páginas no cargan.",
+      "tcp": "Sin cifrar: DNS simple a {{server}}. El proxy puede leer y cambiar las respuestas. Si el servidor no responde, las páginas no cargan.",
+      "upgraded": "Esta dirección también ofrece DNS cifrado, así que Donut lo usa. Empieza con tcp:// para mantener DNS simple."
+    }
   },
   "vpns": {
     "form": {
@@ -2437,7 +2450,8 @@
     "feedbackInvalid": "Los comentarios no se aceptaron. Revisa el mensaje e inténtalo de nuevo.",
     "feedbackRateLimited": "Enviaste muchos comentarios en poco tiempo. Inténtalo de nuevo en unos minutos.",
     "feedbackSendFailed": "No se pudieron enviar los comentarios. Inténtalo más tarde.",
-    "feedbackLogsUnreadable": "No se pudieron leer los registros. Desactiva «Incluir registros recientes» y envía de nuevo."
+    "feedbackLogsUnreadable": "No se pudieron leer los registros. Desactiva «Incluir registros recientes» y envía de nuevo.",
+    "dnsServerInvalid": "Este servidor DNS no es válido. Introduce una dirección IP o un nombre de host, tls://host para DNS sobre TLS o una URL https:// para DNS sobre HTTPS."
   },
   "rail": {
     "profiles": "Perfiles",

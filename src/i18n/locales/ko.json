@@ -1442,7 +1442,8 @@
       "cookieCount": "저장된 쿠키",
       "localDataTransfer": "로컬 데이터 전송",
       "created": "생성일",
-      "windowColor": "창 색상"
+      "windowColor": "창 색상",
+      "dns": "DNS"
     },
     "values": {
       "none": "없음",
@@ -1501,7 +1502,7 @@
     },
     "sectionDesc": {
       "fingerprint": "이 프로필이 핑거프린팅 스크립트에 어떻게 표시되는지 구성합니다.",
-      "network": "이 프로필이 인터넷에 도달하는 데 사용하는 프록시 또는 VPN을 관리합니다.",
+      "network": "이 프로필이 인터넷에 도달하는 데 사용하는 프록시 또는 VPN과 이름 확인에 사용하는 DNS 서버를 관리합니다.",
       "cookies": "이 프로필의 쿠키를 가져오거나, 복사하거나, 지웁니다.",
       "extensions": "이 프로필이 실행될 때 어떤 확장 프로그램이 로드될지 선택합니다.",
       "sync": "이 프로필이 다른 기기에 어떻게 미러링되는지 구성합니다.",
@@ -1704,6 +1705,18 @@
     "custom.allowlistModeOff": "목록의 도메인을 차단하고, 그 외에는 모두 허용합니다.",
     "custom.allowedOnlyLabel": "허용 도메인 (이것만)",
     "custom.allowedOnlyHint": "목록에 있는 도메인의 하위 도메인도 허용됩니다. 목록이 비어 있으면 필터링이 비활성화됩니다."
+  },
+  "dnsServer": {
+    "label": "DNS 서버",
+    "placeholder": "DNS 주소를 입력하거나 비워 두세요",
+    "presets": "암호화 프리셋:",
+    "summary": {
+      "default": "프록시가 이름을 확인합니다. 프록시가 일부 사이트를 확인하지 못하면 서버를 설정하세요.",
+      "https": "DNS over HTTPS로 암호화됨 ({{server}}). 쿼리는 이 프로필의 프록시 또는 VPN을 거칩니다. 서버가 응답하지 않으면 페이지가 로드되지 않습니다.",
+      "tls": "DNS over TLS로 암호화됨 ({{server}}). 쿼리는 이 프로필의 프록시 또는 VPN을 거칩니다. 서버가 응답하지 않으면 페이지가 로드되지 않습니다.",
+      "tcp": "암호화되지 않음: {{server}}(으)로의 일반 DNS입니다. 프록시가 응답을 읽고 변경할 수 있습니다. 서버가 응답하지 않으면 페이지가 로드되지 않습니다.",
+      "upgraded": "이 주소는 암호화된 DNS도 제공하므로 Donut이 이를 사용합니다. 일반 DNS를 유지하려면 tcp://로 시작하세요."
+    }
   },
   "vpns": {
     "form": {
@@ -2427,7 +2440,8 @@
     "feedbackInvalid": "피드백이 접수되지 않았습니다. 메시지를 확인하고 다시 시도하세요.",
     "feedbackRateLimited": "짧은 시간에 피드백을 너무 많이 보냈습니다. 몇 분 후에 다시 시도하세요.",
     "feedbackSendFailed": "피드백을 보낼 수 없습니다. 나중에 다시 시도하세요.",
-    "feedbackLogsUnreadable": "로그를 읽을 수 없습니다. '최근 로그 첨부'를 끄고 다시 보내세요."
+    "feedbackLogsUnreadable": "로그를 읽을 수 없습니다. '최근 로그 첨부'를 끄고 다시 보내세요.",
+    "dnsServerInvalid": "유효하지 않은 DNS 서버입니다. IP 주소 또는 호스트 이름, DNS over TLS의 경우 tls://host, DNS over HTTPS의 경우 https:// URL을 입력하세요."
   },
   "rail": {
     "profiles": "프로필",

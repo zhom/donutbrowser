@@ -264,6 +264,7 @@ async fn handle_request(
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
   blocklist_matcher: BlocklistMatcher,
+  resolver: Option<crate::profile_dns::ProfileResolver>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
   // CONNECT cannot be tunneled on the hyper path: hyper owns the connection
   // and would keep parsing the post-200 tunnel bytes (TLS) as HTTP. This is
@@ -283,7 +284,14 @@ async fn handle_request(
   }
 
   // Handle regular HTTP requests
-  handle_http(req, upstream_url, bypass_matcher, blocklist_matcher).await
+  handle_http(
+    req,
+    upstream_url,
+    bypass_matcher,
+    blocklist_matcher,
+    resolver,
+  )
+  .await
 }
 
 /// Extract percent-decoded (username, password) from the upstream URL.
@@ -775,13 +783,6 @@ async fn handle_http_via_socks4(
   req: Request<hyper::body::Incoming>,
   upstream_url: &str,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-  // Extract domain for traffic tracking
-  let domain = req
-    .uri()
-    .host()
-    .map(|h| h.to_string())
-    .unwrap_or_else(|| "unknown".to_string());
-
   // Parse upstream SOCKS4 proxy URL
   let upstream = match Url::parse(upstream_url) {
     Ok(url) => url,
@@ -890,7 +891,27 @@ async fn handle_http_via_socks4(
     return Ok(response);
   }
 
-  // Now send the HTTP request through the SOCKS4 connection
+  forward_http_over_stream(req, socks_stream, "SOCKS4").await
+}
+
+/// Send a plain-HTTP request over a stream that already reaches the origin (a
+/// SOCKS4 tunnel, or a tunnel to an address from the profile DNS server) and
+/// buffer the response. `via` names the path in warnings.
+async fn forward_http_over_stream<S: AsyncRead + AsyncWrite + Unpin>(
+  req: Request<hyper::body::Incoming>,
+  mut stream: S,
+  via: &str,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+  // Extract domain for traffic tracking
+  let domain = req
+    .uri()
+    .host()
+    .map(|h| h.to_string())
+    .unwrap_or_else(|| "unknown".to_string());
+  let target_uri = req.uri().clone();
+  let target_host = target_uri.host().unwrap_or("localhost");
+  let target_port = target_uri.port_u16().unwrap_or(80);
+
   // Build HTTP request line
   let method = req.method().as_str();
   let path = target_uri
@@ -948,9 +969,9 @@ async fn handle_http_via_socks4(
   http_request.push_str("\r\n");
 
   // Send HTTP request
-  if let Err(e) = socks_stream.write_all(http_request.as_bytes()).await {
+  if let Err(e) = stream.write_all(http_request.as_bytes()).await {
     warn_upstream_failure(
-      "HTTP request send via SOCKS4 failed",
+      &format!("HTTP request send via {via} failed"),
       &e.to_string(),
       Some(&domain),
     );
@@ -964,9 +985,9 @@ async fn handle_http_via_socks4(
 
   // Send body if present
   if !body_bytes.is_empty() {
-    if let Err(e) = socks_stream.write_all(&body_bytes).await {
+    if let Err(e) = stream.write_all(&body_bytes).await {
       warn_upstream_failure(
-        "HTTP body send via SOCKS4 failed",
+        &format!("HTTP body send via {via} failed"),
         &e.to_string(),
         Some(&domain),
       );
@@ -984,13 +1005,17 @@ async fn handle_http_via_socks4(
   // permit) forever.
   let buffered = match tokio::time::timeout(
     PLAIN_HTTP_EXCHANGE_TIMEOUT,
-    read_http_response_buffer(&mut socks_stream),
+    read_http_response_buffer(&mut stream),
   )
   .await
   {
     Ok(buffer) => buffer,
     Err(_) => {
-      warn_upstream_failure("HTTP response via SOCKS4 failed", "timed out", None);
+      warn_upstream_failure(
+        &format!("HTTP response via {via} failed"),
+        "timed out",
+        None,
+      );
       let mut response = Response::new(Full::new(Bytes::from("Upstream response timed out")));
       *response.status_mut() = StatusCode::GATEWAY_TIMEOUT;
       return Ok(response);
@@ -1001,7 +1026,7 @@ async fn handle_http_via_socks4(
   // browser a complete-looking short response, so fail the request instead.
   if buffered.truncated {
     warn_upstream_failure(
-      "HTTP response via SOCKS4 failed",
+      &format!("HTTP response via {via} failed"),
       "exceeded the buffer cap; truncated body not forwarded",
       None,
     );
@@ -1039,7 +1064,7 @@ async fn handle_http_via_socks4(
     BufferedBody::Dechunked(body) => body,
     BufferedBody::BrokenChunks => {
       warn_upstream_failure(
-        "HTTP response via SOCKS4 failed",
+        &format!("HTTP response via {via} failed"),
         "chunked body did not decode",
         None,
       );
@@ -1219,6 +1244,7 @@ async fn handle_http(
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
   blocklist_matcher: BlocklistMatcher,
+  resolver: Option<crate::profile_dns::ProfileResolver>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
   // Extract domain for traffic tracking
   let domain = req
@@ -1243,6 +1269,43 @@ async fn handle_http(
   );
 
   let should_bypass = bypass_matcher.should_bypass(&domain);
+
+  // reqwest would hand the name to the proxy, so with a profile DNS server
+  // the request goes through a tunnel to the address it resolved.
+  if let Some(resolver) = resolver.as_ref().filter(|_| !should_bypass) {
+    let port = req.uri().port_u16().unwrap_or(80);
+    let tunnel = connect_to_target_via_upstream(
+      &domain,
+      port,
+      upstream_url.as_deref(),
+      &bypass_matcher,
+      Some(resolver),
+    )
+    .await
+    .map_err(|e| {
+      (
+        crate::profile_dns::is_missing_name(e.as_ref()),
+        e.to_string(),
+      )
+    });
+    return match tunnel {
+      Ok(stream) => forward_http_over_stream(req, stream, "the profile DNS server").await,
+      Err((missing_name, e)) => {
+        if missing_name {
+          log::debug!("HTTP request to a name the profile DNS server does not know");
+        } else {
+          warn_upstream_failure(
+            "HTTP request via the profile DNS server failed",
+            &e,
+            Some(&domain),
+          );
+        }
+        let mut response = Response::new(Full::new(Bytes::from(format!("Request failed: {e}"))));
+        *response.status_mut() = StatusCode::BAD_GATEWAY;
+        Ok(response)
+      }
+    };
+  }
 
   // Handle proxy types that reqwest doesn't support natively
   if !should_bypass {
@@ -1478,6 +1541,7 @@ pub async fn handle_proxy_connection(
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
   blocklist_matcher: BlocklistMatcher,
+  resolver: Option<crate::profile_dns::ProfileResolver>,
 ) {
   let _ = stream.set_nodelay(true);
 
@@ -1559,14 +1623,19 @@ pub async fn handle_proxy_connection(
           upstream_url,
           bypass_matcher,
           blocklist_matcher,
+          resolver.as_ref(),
         )
         .await
         {
-          warn_upstream_failure(
-            "CONNECT tunnel failed",
-            &e.to_string(),
-            target_host.as_deref(),
-          );
+          if crate::profile_dns::is_missing_name(e.as_ref()) {
+            log::debug!("CONNECT to a name the profile DNS server does not know");
+          } else {
+            warn_upstream_failure(
+              "CONNECT tunnel failed",
+              &e.to_string(),
+              target_host.as_deref(),
+            );
+          }
         }
         return;
       }
@@ -1585,6 +1654,7 @@ pub async fn handle_proxy_connection(
           upstream_url.clone(),
           bypass_matcher.clone(),
           blocklist_matcher.clone(),
+          resolver.clone(),
         )
       });
 
@@ -1865,14 +1935,31 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     BlocklistMatcher::new()
   };
 
+  // Fail closed: a worker that ignored the profile's DNS server would quietly
+  // send every name to the proxy's resolver instead.
+  let resolver = match config.dns_server.as_deref() {
+    None => None,
+    Some(value) => match crate::profile_dns::DnsServer::parse(value) {
+      Ok(server) => Some(crate::profile_dns::ProfileResolver::new(
+        server,
+        upstream_url.clone(),
+      )),
+      Err(_) => return Err("Invalid DNS server in proxy config".into()),
+    },
+  };
+
+  // `dns` names the transport only: a DoH path can carry an account id.
   log::info!(
-    "Worker started kind=proxy id={} pid={} listen=127.0.0.1:{actual_port} serve={local_protocol} upstream={} profile={} blocklist={} bypass_rules={} record_domains={} connections={connection_limit} elapsed_ms={}",
+    "Worker started kind=proxy id={} pid={} listen=127.0.0.1:{actual_port} serve={local_protocol} upstream={} profile={} dns={} blocklist={} bypass_rules={} record_domains={} connections={connection_limit} elapsed_ms={}",
     config.id,
     std::process::id(),
     upstream_url
       .as_deref()
       .map_or_else(|| "direct".to_string(), redacted_upstream),
     config.profile_id.as_deref().unwrap_or("-"),
+    resolver
+      .as_ref()
+      .map_or("route", |r| r.transport().as_str()),
     match &config.blocklist_file {
       Some(_) => format!(
         "{}:{}",
@@ -1885,6 +1972,10 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     config.record_domains,
     started.elapsed().as_millis()
   );
+
+  if let Some(resolver) = resolver.clone() {
+    tokio::spawn(async move { resolver.warm_up().await });
+  }
 
   let conn_semaphore = Arc::new(tokio::sync::Semaphore::new(connection_limit));
 
@@ -1902,15 +1993,19 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
         let upstream = upstream_url.clone();
         let matcher = bypass_matcher.clone();
         let blocker = blocklist_matcher.clone();
+        let resolver = resolver.clone();
         if serve_socks5 {
           tokio::task::spawn(async move {
             let _permit = permit;
-            crate::socks5_local::handle_socks5_connection(stream, upstream, matcher, blocker).await;
+            crate::socks5_local::handle_socks5_connection(
+              stream, upstream, matcher, blocker, resolver,
+            )
+            .await;
           });
         } else {
           tokio::task::spawn(async move {
             let _permit = permit;
-            handle_proxy_connection(stream, upstream, matcher, blocker).await;
+            handle_proxy_connection(stream, upstream, matcher, blocker, resolver).await;
           });
         }
       }
@@ -1930,6 +2025,7 @@ async fn handle_connect_from_buffer(
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
   blocklist_matcher: BlocklistMatcher,
+  resolver: Option<&crate::profile_dns::ProfileResolver>,
 ) -> Result<(), Box<dyn std::error::Error>> {
   // Parse the CONNECT request from the buffer
   let request_str = String::from_utf8_lossy(&request_buffer);
@@ -1991,6 +2087,7 @@ async fn handle_connect_from_buffer(
     target_port,
     upstream_url.as_deref(),
     &bypass_matcher,
+    resolver,
   )
   .await?;
 
@@ -2381,13 +2478,42 @@ async fn tls_wrap_upstream_hop(
 /// TLS-wrapped CONNECT, SOCKS4/5, Shadowsocks) is dialed in exactly one place.
 /// Returns a `BoxedAsyncStream` so the caller can tunnel over any upstream
 /// uniformly.
+///
+/// With a profile DNS server, the name is resolved here and the upstream is
+/// asked for the address. A bypassed host goes direct and keeps the system
+/// resolver: bypass rules name local and intranet hosts that a public
+/// resolver cannot answer for.
 pub(crate) async fn connect_to_target_via_upstream(
   target_host: &str,
   target_port: u16,
   upstream_url: Option<&str>,
   bypass_matcher: &BypassMatcher,
+  resolver: Option<&crate::profile_dns::ProfileResolver>,
 ) -> Result<BoxedAsyncStream, Box<dyn std::error::Error>> {
   let should_bypass = bypass_matcher.should_bypass(target_host);
+  let Some(resolver) = resolver.filter(|_| !should_bypass) else {
+    return dial_route(target_host, target_port, upstream_url, should_bypass).await;
+  };
+  let addresses = resolver.resolve(target_host).await?;
+  // A second address covers an exit that cannot reach the first one.
+  let mut last_error = String::new();
+  for address in addresses.iter().take(2) {
+    match dial_route(&address.to_string(), target_port, upstream_url, false).await {
+      Ok(stream) => return Ok(stream),
+      Err(e) => last_error = e.to_string(),
+    }
+  }
+  Err(last_error.into())
+}
+
+/// Dial `target_host:target_port` over the route as given, with no name
+/// resolution of its own: direct when `bypass` is set or there is no upstream.
+pub(crate) async fn dial_route(
+  target_host: &str,
+  target_port: u16,
+  upstream_url: Option<&str>,
+  should_bypass: bool,
+) -> Result<BoxedAsyncStream, Box<dyn std::error::Error>> {
   // Helper: configure outbound TCP to match browser TCP fingerprint
   let configure_tcp = |stream: &TcpStream| {
     let _ = stream.set_nodelay(true);
@@ -2509,8 +2635,12 @@ pub(crate) async fn connect_to_target_via_upstream(
           )
           .map_err(|e| format!("Invalid Shadowsocks config: {e}"))?;
 
-          let target_addr =
-            shadowsocks::relay::Address::DomainNameAddress(target_host.to_string(), target_port);
+          let target_addr = match target_host.parse::<std::net::IpAddr>() {
+            Ok(ip) => shadowsocks::relay::Address::SocketAddress(SocketAddr::new(ip, target_port)),
+            Err(_) => {
+              shadowsocks::relay::Address::DomainNameAddress(target_host.to_string(), target_port)
+            }
+          };
 
           let stream = tokio::time::timeout(
             UPSTREAM_DIAL_TIMEOUT,
@@ -3240,6 +3370,7 @@ this line has no colon\r\n\
         443,
         Some(&upstream),
         &matcher,
+        None,
       )
       .await;
     });
@@ -3343,7 +3474,7 @@ this line has no colon\r\n\
     let matcher = BypassMatcher::new(&[]);
     let result = tokio::time::timeout(
       std::time::Duration::from_secs(20),
-      connect_to_target_via_upstream("example.com", 443, Some(&upstream), &matcher),
+      connect_to_target_via_upstream("example.com", 443, Some(&upstream), &matcher, None),
     )
     .await
     .expect("the dial must not hang");

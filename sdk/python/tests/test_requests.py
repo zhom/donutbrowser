@@ -58,10 +58,10 @@ CASES: List[Case] = [
     (
         "update_profile",
         ("p1",),
-        {"name": "Renamed", "proxy_id": "", "clear_on_close": False},
+        {"name": "Renamed", "proxy_id": "", "clear_on_close": False, "dns_server": "9.9.9.9"},
         "PUT",
         "/v1/profiles/p1",
-        {"name": "Renamed", "proxy_id": "", "clear_on_close": False},
+        {"name": "Renamed", "proxy_id": "", "clear_on_close": False, "dns_server": "9.9.9.9"},
         {},
         "/v1/profiles/{id}",
     ),

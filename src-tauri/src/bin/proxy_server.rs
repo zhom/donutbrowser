@@ -161,6 +161,11 @@ async fn main() {
                 .help("Treat --blocklist-file as an allowlist (block all domains not listed)"),
             )
             .arg(
+              Arg::new("dns-server")
+                .long("dns-server")
+                .help("Resolve destinations with this DNS server, through the upstream: https://host/path, tls://host[:port], tcp://host[:port] or host[:port]"),
+            )
+            .arg(
               Arg::new("no-domain-history")
                 .long("no-domain-history")
                 .num_args(0)
@@ -303,6 +308,7 @@ async fn main() {
         .unwrap_or_default();
       let blocklist_file = start_matches.get_one::<String>("blocklist-file").cloned();
       let dns_allowlist_mode = start_matches.get_flag("dns-allowlist-mode");
+      let dns_server = start_matches.get_one::<String>("dns-server").cloned();
       let local_protocol = start_matches.get_one::<String>("local-protocol").cloned();
       let record_domains = !start_matches.get_flag("no-domain-history");
 
@@ -313,6 +319,7 @@ async fn main() {
         bypass_rules,
         blocklist_file,
         dns_allowlist_mode,
+        dns_server,
         local_protocol,
         record_domains,
       )

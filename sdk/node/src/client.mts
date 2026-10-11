@@ -278,6 +278,14 @@ export class DonutClient {
     tags?: string[];
     ephemeral?: boolean;
     temporary?: boolean;
+    /**
+     * DNS server to resolve names with, through the profile's proxy or VPN:
+     * `https://host/path`, `tls://host[:port]`, `tcp://host[:port]` or a bare
+     * `host[:port]`. A bare address of a well-known resolver such as
+     * `"1.1.1.1"` uses its DNS over HTTPS endpoint. Omit it to let the proxy
+     * resolve names.
+     */
+    dns_server?: string;
   }): Promise<ApiProfileResponse> {
     return this.#request("POST", "/v1/profiles", body({ ...request }));
   }
@@ -305,6 +313,8 @@ export class DonutClient {
       /** `"Disabled"`, `"Regular"` or `"Encrypted"`. */
       sync_mode?: string;
       clear_on_close?: boolean;
+      /** Same formats as on create; `""` lets the proxy resolve names again. */
+      dns_server?: string;
     },
   ): Promise<ApiProfileResponse> {
     return this.#request("PUT", `/v1/profiles/${segment(profileId)}`, body({ ...request }));

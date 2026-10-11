@@ -271,6 +271,7 @@ pub async fn start_proxy_process(
     None,
     false,
     None,
+    None,
     true,
   )
   .await
@@ -284,9 +285,11 @@ pub async fn start_proxy_process_with_profile(
   bypass_rules: Vec<String>,
   blocklist_file: Option<String>,
   dns_allowlist_mode: bool,
+  dns_server: Option<String>,
   local_protocol: Option<String>,
   record_domains: bool,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
+  let dns_server = crate::profile_dns::normalize_dns_server(dns_server)?;
   ensure_sidecar_version().await?;
 
   let id = generate_proxy_id();
@@ -304,6 +307,7 @@ pub async fn start_proxy_process_with_profile(
     .with_bypass_rules(bypass_rules)
     .with_blocklist_file(blocklist_file)
     .with_dns_allowlist_mode(dns_allowlist_mode)
+    .with_dns_server(dns_server)
     .with_local_protocol(local_protocol)
     .with_record_domains(record_domains);
   save_proxy_config(&config)?;

@@ -1442,7 +1442,8 @@
       "cookieCount": "Cookies stored",
       "localDataTransfer": "Local data transfer",
       "created": "Created",
-      "windowColor": "Window color"
+      "windowColor": "Window color",
+      "dns": "DNS"
     },
     "values": {
       "none": "None",
@@ -1501,7 +1502,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Configure how this profile appears to fingerprinting scripts.",
-      "network": "Manage the proxy or VPN this profile uses to reach the internet.",
+      "network": "Manage the proxy or VPN this profile uses to reach the internet, and the DNS server it resolves names with.",
       "cookies": "Import, copy, or wipe cookies for this profile.",
       "extensions": "Choose which extensions load when this profile launches.",
       "sync": "Configure how this profile is mirrored to your other devices.",
@@ -1704,6 +1705,18 @@
     "custom.allowlistModeOff": "Block listed domains; allow everything else.",
     "custom.allowedOnlyLabel": "Allowed domains (only these)",
     "custom.allowedOnlyHint": "Subdomains of a listed domain are allowed too. An empty list disables filtering."
+  },
+  "dnsServer": {
+    "label": "DNS server",
+    "placeholder": "Enter a DNS address or leave blank",
+    "presets": "Encrypted presets:",
+    "summary": {
+      "default": "The proxy resolves names. Set a server if the proxy cannot resolve some sites.",
+      "https": "Encrypted with DNS over HTTPS ({{server}}). Queries go through this profile's proxy or VPN. If the server does not answer, pages do not load.",
+      "tls": "Encrypted with DNS over TLS ({{server}}). Queries go through this profile's proxy or VPN. If the server does not answer, pages do not load.",
+      "tcp": "Not encrypted: plain DNS to {{server}}. The proxy can read and change the answers. If the server does not answer, pages do not load.",
+      "upgraded": "This address also serves encrypted DNS, so Donut uses it. Start with tcp:// to keep plain DNS."
+    }
   },
   "vpns": {
     "form": {
@@ -2427,7 +2440,8 @@
     "feedbackInvalid": "The feedback was not accepted. Check the message and try again.",
     "feedbackRateLimited": "You sent a lot of feedback in a short time. Try again in a few minutes.",
     "feedbackSendFailed": "The feedback could not be sent. Try again later.",
-    "feedbackLogsUnreadable": "The logs could not be read. Turn off \"Include recent logs\" and send again."
+    "feedbackLogsUnreadable": "The logs could not be read. Turn off \"Include recent logs\" and send again.",
+    "dnsServerInvalid": "This DNS server is not valid. Enter an IP address or host name, tls://host for DNS over TLS, or an https:// URL for DNS over HTTPS."
   },
   "rail": {
     "profiles": "Profiles",

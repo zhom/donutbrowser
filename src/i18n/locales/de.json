@@ -1442,7 +1442,8 @@
       "cookieCount": "Gespeicherte Cookies",
       "localDataTransfer": "Lokale Datenübertragung",
       "created": "Erstellt",
-      "windowColor": "Fensterfarbe"
+      "windowColor": "Fensterfarbe",
+      "dns": "DNS"
     },
     "values": {
       "none": "Keine",
@@ -1501,7 +1502,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Legen Sie fest, wie dieses Profil für Fingerprinting-Skripte erscheint.",
-      "network": "Verwalten Sie den Proxy oder das VPN, über das dieses Profil ins Internet geht.",
+      "network": "Verwalten Sie den Proxy oder das VPN, über das dieses Profil ins Internet geht, und den DNS-Server, mit dem es Namen auflöst.",
       "cookies": "Cookies für dieses Profil importieren, kopieren oder löschen.",
       "extensions": "Legen Sie fest, welche Erweiterungen beim Start dieses Profils geladen werden.",
       "sync": "Legen Sie fest, wie dieses Profil auf Ihre anderen Geräte gespiegelt wird.",
@@ -1704,6 +1705,18 @@
     "custom.allowlistModeOff": "Aufgeführte Domains blockieren; alles andere erlauben.",
     "custom.allowedOnlyLabel": "Erlaubte Domains (nur diese)",
     "custom.allowedOnlyHint": "Subdomains einer aufgeführten Domain sind ebenfalls erlaubt. Eine leere Liste deaktiviert die Filterung."
+  },
+  "dnsServer": {
+    "label": "DNS-Server",
+    "placeholder": "DNS-Adresse eingeben oder leer lassen",
+    "presets": "Verschlüsselte Vorlagen:",
+    "summary": {
+      "default": "Der Proxy löst Namen auf. Legen Sie einen Server fest, wenn der Proxy manche Websites nicht auflösen kann.",
+      "https": "Verschlüsselt mit DNS over HTTPS ({{server}}). Anfragen laufen über den Proxy oder das VPN dieses Profils. Antwortet der Server nicht, laden keine Seiten.",
+      "tls": "Verschlüsselt mit DNS over TLS ({{server}}). Anfragen laufen über den Proxy oder das VPN dieses Profils. Antwortet der Server nicht, laden keine Seiten.",
+      "tcp": "Nicht verschlüsselt: einfaches DNS an {{server}}. Der Proxy kann die Antworten mitlesen und ändern. Antwortet der Server nicht, laden keine Seiten.",
+      "upgraded": "Diese Adresse bietet auch verschlüsseltes DNS, daher verwendet Donut es. Beginnen Sie mit tcp://, um einfaches DNS zu behalten."
+    }
   },
   "vpns": {
     "form": {
@@ -2427,7 +2440,8 @@
     "feedbackInvalid": "Das Feedback wurde nicht angenommen. Prüfen Sie die Nachricht und versuchen Sie es erneut.",
     "feedbackRateLimited": "Sie haben in kurzer Zeit viel Feedback gesendet. Versuchen Sie es in ein paar Minuten erneut.",
     "feedbackSendFailed": "Das Feedback konnte nicht gesendet werden. Versuchen Sie es später erneut.",
-    "feedbackLogsUnreadable": "Die Protokolle konnten nicht gelesen werden. Schalten Sie „Aktuelle Protokolle anhängen“ aus und senden Sie erneut."
+    "feedbackLogsUnreadable": "Die Protokolle konnten nicht gelesen werden. Schalten Sie „Aktuelle Protokolle anhängen“ aus und senden Sie erneut.",
+    "dnsServerInvalid": "Dieser DNS-Server ist ungültig. Geben Sie eine IP-Adresse oder einen Hostnamen ein, tls://host für DNS over TLS oder eine https://-URL für DNS over HTTPS."
   },
   "rail": {
     "profiles": "Profile",

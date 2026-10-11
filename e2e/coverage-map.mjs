@@ -55,6 +55,7 @@ export const commandCoverage = {
       "update_profile_window_color",
       "update_profile_proxy_bypass_rules",
       "update_profile_dns_blocklist",
+      "update_profile_dns_server",
       "rename_profile",
       "detect_existing_profiles",
       "import_browser_profiles",
@@ -175,6 +176,7 @@ export const commandCoverage = {
       "dns_blocklist::set_custom_dns_config",
       "dns_blocklist::import_custom_dns_rules",
       "dns_blocklist::export_custom_dns_rules",
+      "profile_dns::describe_dns_server",
     ],
   },
   browser: {

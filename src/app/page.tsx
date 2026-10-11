@@ -1152,6 +1152,7 @@ export default function Home() {
       extensionGroupId?: string;
       ephemeral?: boolean;
       dnsBlocklist?: string;
+      dnsServer?: string;
       launchHook?: string;
       password?: string;
     }) => {
@@ -1173,6 +1174,7 @@ export default function Home() {
                 : undefined),
             ephemeral: profileData.ephemeral,
             dnsBlocklist: profileData.dnsBlocklist,
+            dnsServer: profileData.dnsServer,
             launchHook: profileData.launchHook,
           },
         );

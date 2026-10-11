@@ -38,6 +38,11 @@ export interface ApiProfile {
   is_running: boolean;
   proxy_bypass_rules: string[];
   vpn_id?: string | null;
+  /**
+   * The DNS server the profile resolves names with, through its own proxy or
+   * VPN. `null` when the proxy resolves them.
+   */
+  dns_server?: string | null;
   extension_group_id?: string | null;
   ephemeral: boolean;
   temporary: boolean;

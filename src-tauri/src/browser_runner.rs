@@ -361,6 +361,10 @@ impl BrowserRunner {
       });
 
       emit_launch_stage(profile, "network", None);
+      // Checked before any worker starts. A setting the worker cannot use would
+      // otherwise fail the launch late, as an untranslated worker error.
+      let dns_server = crate::profile_dns::normalize_dns_server(profile.dns_server.clone())
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
       // Always start a local proxy for Wayfern (for traffic monitoring and geoip support)
       let mut upstream_proxy = self
         .resolve_launch_proxy(profile)
@@ -526,6 +530,7 @@ impl BrowserRunner {
           profile.proxy_bypass_rules.clone(),
           blocklist_file,
           dns_allowlist_mode,
+          dns_server.as_deref(),
           Self::records_site_history(profile),
           // Wayfern (Chromium) uses a local SOCKS5 proxy so QUIC and WebRTC
           // UDP can be routed through it (via SOCKS5 UDP ASSOCIATE) without

@@ -1448,7 +1448,8 @@
       "cookieCount": "Cookies stockés",
       "localDataTransfer": "Transfert de données local",
       "created": "Créé le",
-      "windowColor": "Couleur de la fenêtre"
+      "windowColor": "Couleur de la fenêtre",
+      "dns": "DNS"
     },
     "values": {
       "none": "Aucun",
@@ -1507,7 +1508,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Configurez l’apparence de ce profil pour les scripts de fingerprinting.",
-      "network": "Gérez le proxy ou le VPN utilisé par ce profil.",
+      "network": "Gérez le proxy ou le VPN utilisé par ce profil, ainsi que le serveur DNS qui résout ses noms.",
       "cookies": "Importer, copier ou effacer les cookies de ce profil.",
       "extensions": "Choisissez les extensions à charger avec ce profil.",
       "sync": "Configurez la réplication de ce profil entre vos appareils.",
@@ -1710,6 +1711,18 @@
     "custom.allowlistModeOff": "Bloquer les domaines listés ; autoriser tout le reste.",
     "custom.allowedOnlyLabel": "Domaines autorisés (uniquement ceux-ci)",
     "custom.allowedOnlyHint": "Les sous-domaines d'un domaine listé sont aussi autorisés. Une liste vide désactive le filtrage."
+  },
+  "dnsServer": {
+    "label": "Serveur DNS",
+    "placeholder": "Saisissez une adresse DNS ou laissez vide",
+    "presets": "Préréglages chiffrés :",
+    "summary": {
+      "default": "Le proxy résout les noms. Définissez un serveur si le proxy ne parvient pas à résoudre certains sites.",
+      "https": "Chiffré avec DNS over HTTPS ({{server}}). Les requêtes passent par le proxy ou le VPN de ce profil. Si le serveur ne répond pas, les pages ne se chargent pas.",
+      "tls": "Chiffré avec DNS over TLS ({{server}}). Les requêtes passent par le proxy ou le VPN de ce profil. Si le serveur ne répond pas, les pages ne se chargent pas.",
+      "tcp": "Non chiffré : DNS simple vers {{server}}. Le proxy peut lire et modifier les réponses. Si le serveur ne répond pas, les pages ne se chargent pas.",
+      "upgraded": "Cette adresse propose aussi un DNS chiffré, Donut l'utilise donc. Commencez par tcp:// pour garder un DNS simple."
+    }
   },
   "vpns": {
     "form": {
@@ -2437,7 +2450,8 @@
     "feedbackInvalid": "L'avis n'a pas été accepté. Vérifiez le message et réessayez.",
     "feedbackRateLimited": "Vous avez envoyé beaucoup d'avis en peu de temps. Réessayez dans quelques minutes.",
     "feedbackSendFailed": "L'avis n'a pas pu être envoyé. Réessayez plus tard.",
-    "feedbackLogsUnreadable": "Les journaux n'ont pas pu être lus. Désactivez « Joindre les journaux récents » et renvoyez."
+    "feedbackLogsUnreadable": "Les journaux n'ont pas pu être lus. Désactivez « Joindre les journaux récents » et renvoyez.",
+    "dnsServerInvalid": "Ce serveur DNS n'est pas valide. Saisissez une adresse IP ou un nom d'hôte, tls://hôte pour DNS over TLS, ou une URL https:// pour DNS over HTTPS."
   },
   "rail": {
     "profiles": "Profils",

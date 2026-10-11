@@ -1448,7 +1448,8 @@
       "cookieCount": "Cookies armazenados",
       "localDataTransfer": "Transferência de dados local",
       "created": "Criado em",
-      "windowColor": "Cor da janela"
+      "windowColor": "Cor da janela",
+      "dns": "DNS"
     },
     "values": {
       "none": "Nenhum",
@@ -1507,7 +1508,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Configure como este perfil aparece para scripts de fingerprinting.",
-      "network": "Gerencie o proxy ou VPN usado por este perfil.",
+      "network": "Gerencie o proxy ou VPN usado por este perfil e o servidor DNS com que ele resolve nomes.",
       "cookies": "Importe, copie ou apague cookies deste perfil.",
       "extensions": "Escolha quais extensões carregar com este perfil.",
       "sync": "Configure como este perfil é espelhado entre seus dispositivos.",
@@ -1710,6 +1711,18 @@
     "custom.allowlistModeOff": "Bloquear os domínios listados; permitir todo o resto.",
     "custom.allowedOnlyLabel": "Domínios permitidos (apenas estes)",
     "custom.allowedOnlyHint": "Subdomínios de um domínio listado também são permitidos. Uma lista vazia desativa a filtragem."
+  },
+  "dnsServer": {
+    "label": "Servidor DNS",
+    "placeholder": "Digite um endereço DNS ou deixe em branco",
+    "presets": "Predefinições criptografadas:",
+    "summary": {
+      "default": "O proxy resolve os nomes. Defina um servidor se o proxy não conseguir resolver alguns sites.",
+      "https": "Criptografado com DNS sobre HTTPS ({{server}}). As consultas passam pelo proxy ou VPN deste perfil. Se o servidor não responder, as páginas não carregam.",
+      "tls": "Criptografado com DNS sobre TLS ({{server}}). As consultas passam pelo proxy ou VPN deste perfil. Se o servidor não responder, as páginas não carregam.",
+      "tcp": "Sem criptografia: DNS simples para {{server}}. O proxy pode ler e alterar as respostas. Se o servidor não responder, as páginas não carregam.",
+      "upgraded": "Este endereço também oferece DNS criptografado, então o Donut o usa. Comece com tcp:// para manter o DNS simples."
+    }
   },
   "vpns": {
     "form": {
@@ -2437,7 +2450,8 @@
     "feedbackInvalid": "O feedback não foi aceito. Verifique a mensagem e tente novamente.",
     "feedbackRateLimited": "Você enviou muito feedback em pouco tempo. Tente novamente em alguns minutos.",
     "feedbackSendFailed": "Não foi possível enviar o feedback. Tente novamente mais tarde.",
-    "feedbackLogsUnreadable": "Não foi possível ler os logs. Desative \"Incluir logs recentes\" e envie novamente."
+    "feedbackLogsUnreadable": "Não foi possível ler os logs. Desative \"Incluir logs recentes\" e envie novamente.",
+    "dnsServerInvalid": "Este servidor DNS não é válido. Digite um endereço IP ou nome de host, tls://host para DNS sobre TLS ou uma URL https:// para DNS sobre HTTPS."
   },
   "rail": {
     "profiles": "Perfis",

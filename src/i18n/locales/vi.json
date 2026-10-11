@@ -1442,7 +1442,8 @@
       "cookieCount": "Cookie đã lưu",
       "localDataTransfer": "Truyền dữ liệu cục bộ",
       "created": "Đã tạo",
-      "windowColor": "Màu cửa sổ"
+      "windowColor": "Màu cửa sổ",
+      "dns": "DNS"
     },
     "values": {
       "none": "Không có",
@@ -1501,7 +1502,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Cấu hình cách profile này hiển thị với các script vân tay.",
-      "network": "Quản lý proxy hoặc VPN mà profile này sử dụng để truy cập internet.",
+      "network": "Quản lý proxy hoặc VPN mà profile này sử dụng để truy cập internet và máy chủ DNS dùng để phân giải tên miền.",
       "cookies": "Nhập, sao chép hoặc xóa cookie cho profile này.",
       "extensions": "Chọn tiện ích nào được tải khi profile này khởi chạy.",
       "sync": "Cấu hình cách profile này được phản chiếu sang các thiết bị khác của bạn.",
@@ -1704,6 +1705,18 @@
     "custom.allowlistModeOff": "Chặn các tên miền trong danh sách; cho phép mọi thứ khác.",
     "custom.allowedOnlyLabel": "Tên miền được phép (chỉ những tên này)",
     "custom.allowedOnlyHint": "Tên miền phụ của tên miền trong danh sách cũng được phép. Danh sách trống sẽ tắt bộ lọc."
+  },
+  "dnsServer": {
+    "label": "Máy chủ DNS",
+    "placeholder": "Nhập địa chỉ DNS hoặc để trống",
+    "presets": "Cài đặt sẵn được mã hóa:",
+    "summary": {
+      "default": "Proxy phân giải tên miền. Đặt một máy chủ nếu proxy không phân giải được một số trang.",
+      "https": "Được mã hóa bằng DNS over HTTPS ({{server}}). Truy vấn đi qua proxy hoặc VPN của profile này. Nếu máy chủ không phản hồi, trang sẽ không tải.",
+      "tls": "Được mã hóa bằng DNS over TLS ({{server}}). Truy vấn đi qua proxy hoặc VPN của profile này. Nếu máy chủ không phản hồi, trang sẽ không tải.",
+      "tcp": "Không mã hóa: DNS thường tới {{server}}. Proxy có thể đọc và thay đổi câu trả lời. Nếu máy chủ không phản hồi, trang sẽ không tải.",
+      "upgraded": "Địa chỉ này cũng hỗ trợ DNS mã hóa nên Donut sử dụng nó. Bắt đầu bằng tcp:// để giữ DNS thường."
+    }
   },
   "vpns": {
     "form": {
@@ -2427,7 +2440,8 @@
     "feedbackInvalid": "Phản hồi không được chấp nhận. Hãy kiểm tra tin nhắn và thử lại.",
     "feedbackRateLimited": "Bạn đã gửi nhiều phản hồi trong thời gian ngắn. Hãy thử lại sau vài phút.",
     "feedbackSendFailed": "Không thể gửi phản hồi. Hãy thử lại sau.",
-    "feedbackLogsUnreadable": "Không thể đọc nhật ký. Hãy tắt \"Đính kèm nhật ký gần đây\" rồi gửi lại."
+    "feedbackLogsUnreadable": "Không thể đọc nhật ký. Hãy tắt \"Đính kèm nhật ký gần đây\" rồi gửi lại.",
+    "dnsServerInvalid": "Máy chủ DNS này không hợp lệ. Nhập địa chỉ IP hoặc tên máy chủ, tls://host cho DNS over TLS, hoặc URL https:// cho DNS over HTTPS."
   },
   "rail": {
     "profiles": "Profile",

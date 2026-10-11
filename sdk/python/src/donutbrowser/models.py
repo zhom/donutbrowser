@@ -117,6 +117,7 @@ class ApiProfile(_ApiProfileRequired, total=False):
     last_launch: int
     group_id: str
     vpn_id: str
+    dns_server: str
     extension_group_id: str
     host_os: str
     fingerprint_os: str

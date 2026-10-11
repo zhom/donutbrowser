@@ -1442,7 +1442,8 @@
       "cookieCount": "存储的 Cookie",
       "localDataTransfer": "本地数据传输",
       "created": "创建时间",
-      "windowColor": "窗口颜色"
+      "windowColor": "窗口颜色",
+      "dns": "DNS"
     },
     "values": {
       "none": "无",
@@ -1501,7 +1502,7 @@
     },
     "sectionDesc": {
       "fingerprint": "配置此配置文件如何对指纹脚本显示。",
-      "network": "管理此配置文件使用的代理或 VPN。",
+      "network": "管理此配置文件使用的代理或 VPN，以及用于解析域名的 DNS 服务器。",
       "cookies": "导入、复制或清除此配置文件的 Cookie。",
       "extensions": "选择启动此配置文件时加载的扩展。",
       "sync": "配置此配置文件如何在设备间同步。",
@@ -1704,6 +1705,18 @@
     "custom.allowlistModeOff": "拦截列表中的域名，允许其余所有域名。",
     "custom.allowedOnlyLabel": "允许的域名（仅限这些）",
     "custom.allowedOnlyHint": "列表中域名的子域名也会被允许。列表为空时将禁用过滤。"
+  },
+  "dnsServer": {
+    "label": "DNS 服务器",
+    "placeholder": "输入 DNS 地址或留空",
+    "presets": "加密预设：",
+    "summary": {
+      "default": "由代理解析域名。如果代理无法解析某些网站，请设置服务器。",
+      "https": "已通过 DNS over HTTPS 加密（{{server}}）。查询经由此配置文件的代理或 VPN。如果服务器无响应，页面将无法加载。",
+      "tls": "已通过 DNS over TLS 加密（{{server}}）。查询经由此配置文件的代理或 VPN。如果服务器无响应，页面将无法加载。",
+      "tcp": "未加密：发往 {{server}} 的普通 DNS。代理可以读取并篡改应答。如果服务器无响应，页面将无法加载。",
+      "upgraded": "此地址也提供加密 DNS，因此 Donut 会使用它。以 tcp:// 开头可保留普通 DNS。"
+    }
   },
   "vpns": {
     "form": {
@@ -2427,7 +2440,8 @@
     "feedbackInvalid": "反馈未被接受。请检查消息后重试。",
     "feedbackRateLimited": "你在短时间内发送了大量反馈。请几分钟后再试。",
     "feedbackSendFailed": "无法发送反馈。请稍后再试。",
-    "feedbackLogsUnreadable": "无法读取日志。请关闭“附上最近的日志”后重新发送。"
+    "feedbackLogsUnreadable": "无法读取日志。请关闭“附上最近的日志”后重新发送。",
+    "dnsServerInvalid": "此 DNS 服务器无效。请输入 IP 地址或主机名、用于 DNS over TLS 的 tls://host，或用于 DNS over HTTPS 的 https:// URL。"
   },
   "rail": {
     "profiles": "配置文件",

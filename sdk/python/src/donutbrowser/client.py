@@ -288,12 +288,17 @@ class DonutClient:
         tags: Optional[Sequence[str]] = None,
         ephemeral: Optional[bool] = None,
         temporary: Optional[bool] = None,
+        dns_server: Optional[str] = None,
     ) -> ApiProfileResponse:
         """POST /v1/profiles
 
         ``browser`` must be ``"wayfern"``; anything else is refused with 400.
         ``version`` must already be downloaded, so omit it (or pass
-        ``"latest"``) to take the newest local build.
+        ``"latest"``) to take the newest local build. ``dns_server`` resolves
+        names through the profile's proxy or VPN: ``https://host/path``,
+        ``tls://host[:port]``, ``tcp://host[:port]`` or a bare ``host[:port]``;
+        a bare address of a well-known resolver such as ``"1.1.1.1"`` uses its
+        DNS over HTTPS endpoint.
         """
         return self._request(
             "POST",
@@ -311,6 +316,7 @@ class DonutClient:
                 tags=list(tags) if tags is not None else None,
                 ephemeral=ephemeral,
                 temporary=temporary,
+                dns_server=dns_server,
             ),
         )
 
@@ -330,12 +336,14 @@ class DonutClient:
         proxy_bypass_rules: Optional[Sequence[str]] = None,
         sync_mode: Optional[str] = None,
         clear_on_close: Optional[bool] = None,
+        dns_server: Optional[str] = None,
     ) -> ApiProfileResponse:
         """PUT /v1/profiles/{id}
 
         A profile's browser engine is fixed at creation, so there is no
         ``browser`` argument. Pass ``proxy_id=""`` or ``vpn_id=""`` to detach
-        one; leaving either unset changes nothing.
+        one; leaving either unset changes nothing. ``dns_server=""`` lets the
+        proxy resolve names again.
         """
         return self._request(
             "PUT",
@@ -355,6 +363,7 @@ class DonutClient:
                 ),
                 sync_mode=sync_mode,
                 clear_on_close=clear_on_close,
+                dns_server=dns_server,
             ),
         )
 

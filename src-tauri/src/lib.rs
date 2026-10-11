@@ -108,6 +108,7 @@ pub mod log_streak;
 mod platform_browser;
 mod process_report;
 mod profile;
+mod profile_dns;
 mod profile_generation_limiter;
 mod profile_import;
 mod profile_importer;
@@ -165,9 +166,9 @@ use browser_runner::{
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
   list_browser_profiles, rename_profile, update_profile_clear_on_close,
-  update_profile_dns_blocklist, update_profile_launch_hook, update_profile_note,
-  update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_profile_window_color, update_wayfern_config,
+  update_profile_dns_blocklist, update_profile_dns_server, update_profile_launch_hook,
+  update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
+  update_profile_tags, update_profile_vpn, update_profile_window_color, update_wayfern_config,
 };
 
 use profile::trash::{
@@ -1866,6 +1867,7 @@ async fn generate_sample_fingerprint(
     created_by_id: None,
     created_by_email: None,
     dns_blocklist: None,
+    dns_server: None,
     password_protected: false,
     clear_on_close: false,
     created_at: None,
@@ -3324,6 +3326,8 @@ pub fn run_with_builder(
       update_profile_window_color,
       update_profile_proxy_bypass_rules,
       update_profile_dns_blocklist,
+      update_profile_dns_server,
+      profile_dns::describe_dns_server,
       check_browser_status,
       kill_browser_profile,
       rename_profile,

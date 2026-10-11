@@ -1442,7 +1442,8 @@
       "cookieCount": "Saklanan çerezler",
       "localDataTransfer": "Yerel veri aktarımı",
       "created": "Oluşturulma",
-      "windowColor": "Pencere rengi"
+      "windowColor": "Pencere rengi",
+      "dns": "DNS"
     },
     "values": {
       "none": "Yok",
@@ -1501,7 +1502,7 @@
     },
     "sectionDesc": {
       "fingerprint": "Bu profilin parmak izi tarama betiklerine nasıl görüneceğini yapılandırın.",
-      "network": "Bu profilin internete erişmek için kullandığı proxy veya VPN'i yönetin.",
+      "network": "Bu profilin internete erişmek için kullandığı proxy veya VPN'i ve adları çözümlediği DNS sunucusunu yönetin.",
       "cookies": "Bu profil için çerezleri içe aktarın, kopyalayın veya silin.",
       "extensions": "Bu profil başlatıldığında hangi uzantıların yükleneceğini seçin.",
       "sync": "Bu profilin diğer cihazlarınıza nasıl yansıtılacağını yapılandırın.",
@@ -1704,6 +1705,18 @@
     "custom.allowlistModeOff": "Listelenen alan adlarını engelle; diğer her şeye izin ver.",
     "custom.allowedOnlyLabel": "İzin verilen alan adları (yalnızca bunlar)",
     "custom.allowedOnlyHint": "Listelenen bir alan adının alt alan adlarına da izin verilir. Boş liste filtrelemeyi devre dışı bırakır."
+  },
+  "dnsServer": {
+    "label": "DNS sunucusu",
+    "placeholder": "Bir DNS adresi girin veya boş bırakın",
+    "presets": "Şifreli hazır ayarlar:",
+    "summary": {
+      "default": "Adları proxy çözümler. Proxy bazı siteleri çözemiyorsa bir sunucu belirleyin.",
+      "https": "DNS over HTTPS ile şifreli ({{server}}). Sorgular bu profilin proxy'si veya VPN'i üzerinden gider. Sunucu yanıt vermezse sayfalar yüklenmez.",
+      "tls": "DNS over TLS ile şifreli ({{server}}). Sorgular bu profilin proxy'si veya VPN'i üzerinden gider. Sunucu yanıt vermezse sayfalar yüklenmez.",
+      "tcp": "Şifresiz: {{server}} adresine düz DNS. Proxy yanıtları okuyabilir ve değiştirebilir. Sunucu yanıt vermezse sayfalar yüklenmez.",
+      "upgraded": "Bu adres şifreli DNS de sunduğu için Donut onu kullanır. Düz DNS kullanmak için tcp:// ile başlayın."
+    }
   },
   "vpns": {
     "form": {
@@ -2427,7 +2440,8 @@
     "feedbackInvalid": "Geri bildirim kabul edilmedi. Mesajı kontrol edip tekrar deneyin.",
     "feedbackRateLimited": "Kısa sürede çok fazla geri bildirim gönderdiniz. Birkaç dakika sonra tekrar deneyin.",
     "feedbackSendFailed": "Geri bildirim gönderilemedi. Daha sonra tekrar deneyin.",
-    "feedbackLogsUnreadable": "Günlükler okunamadı. \"Son günlükleri ekle\" seçeneğini kapatıp tekrar gönderin."
+    "feedbackLogsUnreadable": "Günlükler okunamadı. \"Son günlükleri ekle\" seçeneğini kapatıp tekrar gönderin.",
+    "dnsServerInvalid": "Bu DNS sunucusu geçerli değil. Bir IP adresi veya ana bilgisayar adı, DNS over TLS için tls://host ya da DNS over HTTPS için bir https:// URL'si girin."
   },
   "rail": {
     "profiles": "Profiller",

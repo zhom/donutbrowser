@@ -86,6 +86,8 @@ pub struct ProxyInfo {
   // Optional profile ID to which this proxy instance is logically tied
   pub profile_id: Option<String>,
   pub blocklist_file: Option<String>,
+  #[serde(default)]
+  pub dns_server: Option<String>,
 }
 
 // Proxy check result cache
@@ -1953,6 +1955,7 @@ impl ProxyManager {
     bypass_rules: Vec<String>,
     blocklist_file: Option<String>,
     dns_allowlist_mode: bool,
+    dns_server: Option<&str>,
     record_domains: bool,
     // Protocol the local worker serves the browser: "socks5" (Wayfern). Reflected in
     // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
@@ -1983,7 +1986,8 @@ impl ProxyManager {
 
           let is_same_upstream = existing.upstream_type == desired_type
             && existing.upstream_host == desired_host
-            && existing.upstream_port == desired_port;
+            && existing.upstream_port == desired_port
+            && existing.dns_server.as_deref() == dns_server;
 
           if is_same_upstream {
             // Settings match - can reuse existing proxy
@@ -2020,7 +2024,8 @@ impl ProxyManager {
 
         let is_same_upstream = existing.upstream_type == desired_type
           && existing.upstream_host == desired_host
-          && existing.upstream_port == desired_port;
+          && existing.upstream_port == desired_port
+          && existing.dns_server.as_deref() == dns_server;
 
         if is_same_upstream {
           // Check if profile_id matches
@@ -2101,6 +2106,10 @@ impl ProxyManager {
       }
     }
 
+    if let Some(dns_server) = dns_server {
+      proxy_cmd = proxy_cmd.arg("--dns-server").arg(dns_server);
+    }
+
     if !record_domains {
       proxy_cmd = proxy_cmd.arg("--no-domain-history");
     }
@@ -2154,6 +2163,7 @@ impl ProxyManager {
       local_port,
       profile_id: profile_id.map(|s| s.to_string()),
       blocklist_file: blocklist_file.clone(),
+      dns_server: dns_server.map(str::to_string),
     };
 
     // Wait for the local proxy port to be ready to accept connections
@@ -2968,6 +2978,7 @@ mod tests {
           local_port: (8000 + i) as u16,
           profile_id: None,
           blocklist_file: None,
+          dns_server: None,
         };
 
         // Add proxy
@@ -3237,6 +3248,7 @@ mod tests {
       local_port: port,
       profile_id: profile_id.map(|s| s.to_string()),
       blocklist_file: None,
+      dns_server: None,
     }
   }
 
@@ -3632,6 +3644,7 @@ mod tests {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       dns_allowlist_mode: false,
+      dns_server: None,
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
@@ -3648,6 +3661,7 @@ mod tests {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       dns_allowlist_mode: false,
+      dns_server: None,
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
@@ -3692,6 +3706,7 @@ mod tests {
       bypass_rules: vec!["*.local".to_string(), "192.168.*".to_string()],
       blocklist_file: None,
       dns_allowlist_mode: false,
+      dns_server: None,
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
@@ -3827,6 +3842,7 @@ mod tests {
       local_port: 9201,
       profile_id: Some("profile_alpha".to_string()),
       blocklist_file: None,
+      dns_server: None,
     };
     let info_b = ProxyInfo {
       id: "px_shared_b".to_string(),
@@ -3837,6 +3853,7 @@ mod tests {
       local_port: 9202,
       profile_id: Some("profile_beta".to_string()),
       blocklist_file: None,
+      dns_server: None,
     };
 
     pm.insert_active_proxy(3001, info_a);
@@ -4373,6 +4390,7 @@ mod tests {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       dns_allowlist_mode: false,
+      dns_server: None,
       local_protocol: None,
       browser_pid: None,
       browser_pid_start_time: None,
@@ -4601,6 +4619,7 @@ mod tests {
         local_port: 9300 + i as u16,
         profile_id: Some(format!("profile_{ptype}")),
         blocklist_file: None,
+        dns_server: None,
       };
       pm.insert_active_proxy(4000 + i as u32, info);
     }

@@ -2548,6 +2548,10 @@ impl McpServer {
             "temporary": {
               "type": "boolean",
               "description": "Create a profile for one run: implies ephemeral, is deleted when its browser stops, and is swept at startup if it outlived a crash (default: false)"
+            },
+            "dns_server": {
+              "type": "string",
+              "description": "Optional. DNS server the profile resolves names with, through its own proxy or VPN: https://host/path (DNS over HTTPS), tls://host[:port] (DNS over TLS), tcp://host[:port] (plain DNS) or a bare host[:port]. A bare address of a well-known public resolver such as 1.1.1.1 uses its DNS over HTTPS endpoint. If the server does not answer, connections fail instead of falling back to the proxy's resolver. Omit it to let the proxy resolve names."
             }
           },
           "required": ["name", "browser"]
@@ -2662,6 +2666,10 @@ impl McpServer {
             "clear_on_close": {
               "type": "boolean",
               "description": "Wipe browsing data (keeping extensions and bookmarks) when the browser exits. Not available for ephemeral or password-protected profiles."
+            },
+            "dns_server": {
+              "type": "string",
+              "description": "DNS server the profile resolves names with, through its own proxy or VPN: https://host/path (DNS over HTTPS), tls://host[:port] (DNS over TLS), tcp://host[:port] (plain DNS) or a bare host[:port]. A bare address of a well-known public resolver such as 1.1.1.1 uses its DNS over HTTPS endpoint. If the server does not answer, connections fail instead of falling back to the proxy's resolver. Empty string to let the proxy resolve names again. Takes effect at the next launch."
             }
           },
           "required": ["profile_id"]
@@ -5296,6 +5304,10 @@ impl McpServer {
         group_id,
         ephemeral,
         None,
+        arguments
+          .get("dns_server")
+          .and_then(|v| v.as_str())
+          .map(str::to_string),
         launch_hook,
       )
       .await
@@ -5486,6 +5498,15 @@ impl McpServer {
         .map_err(|e| McpError {
           code: -32000,
           message: format!("Failed to update clear-on-close: {e}"),
+          data: None,
+        })?;
+    }
+
+    if let Some(dns_server) = arguments.get("dns_server").and_then(|v| v.as_str()) {
+      pm.update_profile_dns_server(profile_id, Some(dns_server.to_string()))
+        .map_err(|e| McpError {
+          code: -32602,
+          message: format!("Failed to update DNS server: {e}"),
           data: None,
         })?;
     }

@@ -314,6 +314,48 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         profileId: profile.id,
         dnsBlocklist: "light",
       });
+      // A plain address of a known resolver is described as its encrypted
+      // endpoint, blank means the proxy resolves, and junk is refused.
+      assert.deepEqual(
+        await app.invoke("describe_dns_server", { value: "1.1.1.1" }),
+        {
+          transport: "https",
+          server: "cloudflare-dns.com",
+          encrypted: true,
+          upgraded: true,
+        },
+      );
+      assert.deepEqual(
+        await app.invoke("describe_dns_server", { value: "tcp://10.0.0.53" }),
+        {
+          transport: "tcp",
+          server: "10.0.0.53",
+          encrypted: false,
+          upgraded: false,
+        },
+      );
+      assert.equal(
+        await app.invoke("describe_dns_server", { value: "  " }),
+        null,
+      );
+      assert.match(
+        await app.invokeError("describe_dns_server", {
+          value: "udp://1.1.1.1",
+        }),
+        /DNS_SERVER_INVALID/,
+      );
+      assert.match(
+        await app.invokeError("update_profile_dns_server", {
+          profileId: profile.id,
+          dnsServer: "udp://9.9.9.9",
+        }),
+        /DNS_SERVER_INVALID/,
+      );
+      const withDns = await app.invoke("update_profile_dns_server", {
+        profileId: profile.id,
+        dnsServer: " https://dns.quad9.net/dns-query ",
+      });
+      assert.equal(withDns.dns_server, "https://dns.quad9.net/dns-query");
       await app.invoke("update_profile_clear_on_close", {
         profileId: profile.id,
         clearOnClose: true,
@@ -330,6 +372,7 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         "*.internal.example",
       ]);
       assert.equal(changed.dns_blocklist, "light");
+      assert.equal(changed.dns_server, "https://dns.quad9.net/dns-query");
       assert.equal(changed.clear_on_close, true);
       assert.deepEqual((await app.invoke("get_all_tags")).sort(), [
         "alpha",
@@ -579,12 +622,50 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       });
       assert.notEqual(clone.id, profile.id);
       assert.equal(clone.name, "Cloned Profile");
+      assert.equal(clone.dns_server, "https://dns.quad9.net/dns-query");
       const counts = await app.invoke("get_groups_with_profile_counts");
       assert.equal(counts.find((item) => item.id === group.id).count, 2);
       assert.equal((await app.invoke("get_profile_groups")).length, 1);
 
+      const createDnsArgs = {
+        name: "DNS Profile",
+        browserStr: "wayfern",
+        version: "150.0.7871.100",
+        releaseType: "stable",
+        proxyId: null,
+        vpnId: null,
+        wayfernConfig: { fingerprint: "{}" },
+        groupId: null,
+        ephemeral: false,
+        dnsBlocklist: null,
+        launchHook: null,
+      };
+      assert.match(
+        await app.invokeError("create_browser_profile_new", {
+          ...createDnsArgs,
+          dnsServer: "quic://dns.example",
+        }),
+        /DNS_SERVER_INVALID/,
+      );
+      assert.ok(
+        !(await app.invoke("list_browser_profiles")).some(
+          (item) => item.name === "DNS Profile",
+        ),
+        "a refused DNS server must not leave a profile behind",
+      );
+      const dnsProfile = await app.invoke("create_browser_profile_new", {
+        ...createDnsArgs,
+        dnsServer: "9.9.9.9",
+      });
+      assert.equal(dnsProfile.dns_server, "9.9.9.9");
+      const cleared = await app.invoke("update_profile_dns_server", {
+        profileId: dnsProfile.id,
+        dnsServer: "",
+      });
+      assert.equal(cleared.dns_server, null);
+
       await app.invoke("delete_selected_profiles", {
-        profileIds: [profile.id, clone.id, imported.profile_id],
+        profileIds: [profile.id, clone.id, imported.profile_id, dnsProfile.id],
       });
       assert.deepEqual(await app.invoke("list_browser_profiles"), []);
       await app.invoke("delete_profile_group", { groupId: group.id });

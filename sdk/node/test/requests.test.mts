@@ -62,10 +62,23 @@ const CASES: Case[] = [
   },
   {
     method: "updateProfile",
-    args: ["p1", { name: "Renamed", proxy_id: "", clear_on_close: false }],
+    args: [
+      "p1",
+      {
+        name: "Renamed",
+        proxy_id: "",
+        clear_on_close: false,
+        dns_server: "9.9.9.9",
+      },
+    ],
     verb: "PUT",
     path: "/v1/profiles/p1",
-    body: { name: "Renamed", proxy_id: "", clear_on_close: false },
+    body: {
+      name: "Renamed",
+      proxy_id: "",
+      clear_on_close: false,
+      dns_server: "9.9.9.9",
+    },
     operation: "PUT /v1/profiles/{id}",
   },
   {

@@ -639,6 +639,7 @@ async fn test_xray_reality_chain_and_local_traffic_monitoring(
     Vec::new(),
     None,
     false,
+    None,
     Some("http".to_string()),
     true,
   )
@@ -1728,11 +1729,23 @@ async fn test_no_bypass_rules_all_through_upstream(
 /// Start a minimal SOCKS5 proxy that tunnels connections to the real destination.
 /// Returns (port, JoinHandle).
 async fn start_mock_socks5_server() -> (u16, tokio::task::JoinHandle<()>) {
+  let (port, _, handle) = start_recording_socks5_server().await;
+  (port, handle)
+}
+
+type SeenTargets = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// `start_mock_socks5_server`, also recording every requested target as
+/// `host:port`, exactly as the client named it.
+async fn start_recording_socks5_server() -> (u16, SeenTargets, tokio::task::JoinHandle<()>) {
   let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
   let port = listener.local_addr().unwrap().port();
+  let seen = SeenTargets::default();
+  let recorder = seen.clone();
 
   let handle = tokio::spawn(async move {
     while let Ok((mut client, _)) = listener.accept().await {
+      let recorder = recorder.clone();
       tokio::spawn(async move {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -1778,6 +1791,10 @@ async fn start_mock_socks5_server() -> (u16, tokio::task::JoinHandle<()>) {
           }
           _ => return,
         };
+        recorder
+          .lock()
+          .unwrap()
+          .push(format!("{target_host}:{target_port}"));
 
         // Connect to target
         let target =
@@ -1810,7 +1827,7 @@ async fn start_mock_socks5_server() -> (u16, tokio::task::JoinHandle<()>) {
   });
 
   sleep(Duration::from_millis(100)).await;
-  (port, handle)
+  (port, seen, handle)
 }
 
 /// Test that a SOCKS5 upstream proxy works end-to-end through donut-proxy.
@@ -2146,6 +2163,7 @@ async fn start_lifecycle_worker(
     Vec::new(),
     None,
     false,
+    None,
     Some("http".to_string()),
     true,
   )
@@ -2567,5 +2585,237 @@ async fn test_xray_cli_contract() -> Result<(), Box<dyn std::error::Error + Send
     false
   );
 
+  Ok(())
+}
+
+/// A DNS-over-TCP server that answers every A query with 127.0.0.1 and every
+/// other query with no records.
+async fn start_mock_dns_server() -> (u16, tokio::task::JoinHandle<()>) {
+  let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let port = listener.local_addr().unwrap().port();
+  let handle = tokio::spawn(async move {
+    while let Ok((mut stream, _)) = listener.accept().await {
+      tokio::spawn(async move {
+        loop {
+          let mut len = [0u8; 2];
+          if stream.read_exact(&mut len).await.is_err() {
+            return;
+          }
+          let mut query = vec![0u8; usize::from(u16::from_be_bytes(len))];
+          if stream.read_exact(&mut query).await.is_err() {
+            return;
+          }
+          let mut end = 12;
+          while query[end] != 0 {
+            end += 1 + query[end] as usize;
+          }
+          let qtype = u16::from_be_bytes([query[end + 1], query[end + 2]]);
+          let mut reply = query[..end + 5].to_vec();
+          reply[2] = 0x81;
+          reply[3] = 0x80;
+          reply[10..12].copy_from_slice(&[0, 0]);
+          if qtype == 1 {
+            reply[6..8].copy_from_slice(&1u16.to_be_bytes());
+            reply.extend_from_slice(&[0xC0, 12, 0, 1, 0, 1, 0, 0, 0, 60, 0, 4, 127, 0, 0, 1]);
+          }
+          let mut framed = (reply.len() as u16).to_be_bytes().to_vec();
+          framed.extend_from_slice(&reply);
+          if stream.write_all(&framed).await.is_err() {
+            return;
+          }
+        }
+      });
+    }
+  });
+  (port, handle)
+}
+
+async fn start_worker_with_dns_server(
+  binary_path: &std::path::PathBuf,
+  socks_port: u16,
+  dns_server: &str,
+  local_protocol: &str,
+) -> Result<(String, u16), Box<dyn std::error::Error + Send + Sync>> {
+  let output = TestUtils::execute_command(
+    binary_path,
+    &[
+      "proxy",
+      "start",
+      "--host",
+      "127.0.0.1",
+      "--proxy-port",
+      &socks_port.to_string(),
+      "--type",
+      "socks5",
+      "--dns-server",
+      dns_server,
+      "--local-protocol",
+      local_protocol,
+    ],
+  )
+  .await?;
+  if !output.status.success() {
+    return Err(
+      format!(
+        "Proxy start failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+      )
+      .into(),
+    );
+  }
+  let config: Value = serde_json::from_str(&String::from_utf8(output.stdout)?)?;
+  let id = config["id"].as_str().unwrap().to_string();
+  let port = config["localPort"].as_u64().unwrap() as u16;
+  if !wait_for_port_open(port, Duration::from_secs(5)).await {
+    return Err("worker did not start listening".into());
+  }
+  Ok((id, port))
+}
+
+/// Everything the stream sends until it closes, or what arrived in 10s.
+async fn read_until_closed(stream: &mut TcpStream) -> String {
+  let mut response = Vec::new();
+  let _ = tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut response)).await;
+  String::from_utf8_lossy(&response).to_string()
+}
+
+/// A profile DNS server resolves every destination, and both the query and
+/// the connection go through the upstream: the upstream sees addresses only,
+/// never the name. A server that does not answer fails the request closed.
+#[tokio::test]
+#[serial]
+async fn test_profile_dns_server_resolves_through_the_upstream(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let binary_path = setup_test().await?;
+  let mut tracker = ProxyTestTracker::new(binary_path.clone());
+  let (target_port, target_handle) = start_mock_http_server("PROFILE-DNS-TARGET").await;
+  let (dns_port, dns_handle) = start_mock_dns_server().await;
+  let (socks_port, seen, socks_handle) = start_recording_socks5_server().await;
+  let name = "profile-dns.test";
+  let dns_server = format!("tcp://127.0.0.1:{dns_port}");
+  let request =
+    format!("GET / HTTP/1.1\r\nHost: {name}:{target_port}\r\nConnection: close\r\n\r\n");
+
+  // HTTP front end, plain HTTP.
+  let (id, http_port) =
+    start_worker_with_dns_server(&binary_path, socks_port, &dns_server, "http").await?;
+  tracker.track_proxy(id);
+  let mut stream = TcpStream::connect(("127.0.0.1", http_port)).await?;
+  stream
+    .write_all(
+      format!(
+        "GET http://{name}:{target_port}/ HTTP/1.1\r\nHost: {name}:{target_port}\r\nConnection: close\r\n\r\n"
+      )
+      .as_bytes(),
+    )
+    .await?;
+  let response = read_until_closed(&mut stream).await;
+  assert!(
+    response.contains("PROFILE-DNS-TARGET"),
+    "plain HTTP must reach the resolved address, got: {response}"
+  );
+
+  // HTTP front end, CONNECT.
+  let mut stream = TcpStream::connect(("127.0.0.1", http_port)).await?;
+  stream
+    .write_all(
+      format!("CONNECT {name}:{target_port} HTTP/1.1\r\nHost: {name}:{target_port}\r\n\r\n")
+        .as_bytes(),
+    )
+    .await?;
+  let mut established = [0u8; 39];
+  stream.read_exact(&mut established).await?;
+  assert!(String::from_utf8_lossy(&established).starts_with("HTTP/1.1 200"));
+  stream.write_all(request.as_bytes()).await?;
+  let response = read_until_closed(&mut stream).await;
+  assert!(
+    response.contains("PROFILE-DNS-TARGET"),
+    "CONNECT must reach the resolved address, got: {response}"
+  );
+
+  // SOCKS5 front end, as Wayfern uses it.
+  let (id, socks5_local_port) =
+    start_worker_with_dns_server(&binary_path, socks_port, &dns_server, "socks5").await?;
+  tracker.track_proxy(id);
+  let mut stream = TcpStream::connect(("127.0.0.1", socks5_local_port)).await?;
+  stream.write_all(&[0x05, 0x01, 0x00]).await?;
+  let mut method = [0u8; 2];
+  stream.read_exact(&mut method).await?;
+  assert_eq!(method, [0x05, 0x00]);
+  let mut connect = vec![0x05, 0x01, 0x00, 0x03, name.len() as u8];
+  connect.extend_from_slice(name.as_bytes());
+  connect.extend_from_slice(&target_port.to_be_bytes());
+  stream.write_all(&connect).await?;
+  let mut reply = [0u8; 10];
+  stream.read_exact(&mut reply).await?;
+  assert_eq!(reply[1], 0x00, "SOCKS5 CONNECT to the name must succeed");
+  stream.write_all(request.as_bytes()).await?;
+  let response = read_until_closed(&mut stream).await;
+  assert!(
+    response.contains("PROFILE-DNS-TARGET"),
+    "SOCKS5 CONNECT must reach the resolved address, got: {response}"
+  );
+
+  let targets = seen.lock().unwrap().clone();
+  assert!(
+    targets.contains(&format!("127.0.0.1:{dns_port}")),
+    "the DNS query must travel through the upstream: {targets:?}"
+  );
+  assert!(
+    targets.contains(&format!("127.0.0.1:{target_port}")),
+    "the upstream must be asked for the resolved address: {targets:?}"
+  );
+  assert!(
+    !targets.iter().any(|target| target.contains(name)),
+    "the upstream must never see the name: {targets:?}"
+  );
+
+  // A DNS server that does not answer: no fallback to the upstream's resolver.
+  let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+  let closed_port = closed.local_addr()?.port();
+  drop(closed);
+  let (id, failing_port) = start_worker_with_dns_server(
+    &binary_path,
+    socks_port,
+    &format!("tcp://127.0.0.1:{closed_port}"),
+    "http",
+  )
+  .await?;
+  tracker.track_proxy(id);
+  let mut stream = TcpStream::connect(("127.0.0.1", failing_port)).await?;
+  stream
+    .write_all(
+      format!(
+        "GET http://{name}:{target_port}/ HTTP/1.1\r\nHost: {name}:{target_port}\r\nConnection: close\r\n\r\n"
+      )
+      .as_bytes(),
+    )
+    .await?;
+  let response = read_until_closed(&mut stream).await;
+  assert!(
+    response.starts_with("HTTP/1.1 502") && !response.contains("PROFILE-DNS-TARGET"),
+    "a dead DNS server must fail the request, got: {response}"
+  );
+  assert!(
+    !seen
+      .lock()
+      .unwrap()
+      .iter()
+      .any(|target| target.contains(name)),
+    "a dead DNS server must not hand the name to the upstream"
+  );
+
+  // An unusable value is refused before a worker starts.
+  let output = TestUtils::execute_command(
+    &binary_path,
+    &["proxy", "start", "--dns-server", "udp://1.1.1.1"],
+  )
+  .await?;
+  assert!(!output.status.success(), "udp:// must be rejected");
+
+  tracker.cleanup_all().await;
+  target_handle.abort();
+  dns_handle.abort();
+  socks_handle.abort();
   Ok(())
 }

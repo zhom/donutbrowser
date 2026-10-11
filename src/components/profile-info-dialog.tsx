@@ -39,6 +39,7 @@ import {
   LuUsers,
   LuX,
 } from "react-icons/lu";
+import { DnsServerField } from "@/components/dns-server-field";
 import { ProfileHandoffStatus } from "@/components/profile-handoff-status";
 import { ProfileLaunchActivity } from "@/components/profile-launch-activity";
 import { ProfileMetadataCard } from "@/components/profile-metadata-card";
@@ -1750,11 +1751,44 @@ function NetworkSectionInline({
   const [vpnId, setVpnId] = React.useState<string | null>(
     profile.vpn_id ?? null,
   );
+  const dnsServerId = React.useId();
+  const [savedDnsServer, setSavedDnsServer] = React.useState(
+    profile.dns_server ?? "",
+  );
+  const [dnsServer, setDnsServer] = React.useState(profile.dns_server ?? "");
+  const [dnsServerValid, setDnsServerValid] = React.useState(true);
+  const dnsServerChanged = dnsServer.trim() !== savedDnsServer;
 
   React.useEffect(() => {
     setProxyId(profile.proxy_id ?? null);
     setVpnId(profile.vpn_id ?? null);
   }, [profile.proxy_id, profile.vpn_id]);
+
+  React.useEffect(() => {
+    setSavedDnsServer(profile.dns_server ?? "");
+    setDnsServer(profile.dns_server ?? "");
+  }, [profile.dns_server]);
+
+  const onDnsServerSave = async () => {
+    if (!dnsServerChanged || !dnsServerValid) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await invoke<BrowserProfile>(
+        "update_profile_dns_server",
+        {
+          profileId: profile.id,
+          dnsServer: dnsServer.trim() || null,
+        },
+      );
+      setSavedDnsServer(updated.dns_server ?? "");
+      setDnsServer(updated.dns_server ?? "");
+    } catch (e) {
+      setError(translateBackendError(t as never, e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const onProxyChange = async (value: string) => {
     const nextId = value === "__none__" ? null : value;
@@ -1857,6 +1891,41 @@ function NetworkSectionInline({
           </SelectContent>
         </Select>
       </div>
+
+      <form
+        className="flex items-start gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onDnsServerSave();
+        }}
+      >
+        <label
+          htmlFor={dnsServerId}
+          className="w-12 shrink-0 pt-2.5 text-[10px] tracking-wide text-muted-foreground uppercase"
+        >
+          {t("profileInfo.fields.dns")}
+        </label>
+        <div className="min-w-0 flex-1">
+          <DnsServerField
+            id={dnsServerId}
+            value={dnsServer}
+            onChange={setDnsServer}
+            onValidityChange={setDnsServerValid}
+            disabled={isDisabled || isSaving}
+            action={
+              dnsServerChanged && (
+                <Button
+                  type="submit"
+                  className="shrink-0"
+                  disabled={isDisabled || isSaving || !dnsServerValid}
+                >
+                  {t("common.buttons.save")}
+                </Button>
+              )
+            }
+          />
+        </div>
+      </form>
 
       {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>

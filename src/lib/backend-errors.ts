@@ -24,6 +24,7 @@ export type BackendErrorCode =
   | "INVALID_PROFILE_ID"
   | "PASSWORD_TOO_SHORT"
   | "INVALID_LAUNCH_HOOK_URL"
+  | "DNS_SERVER_INVALID"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -358,6 +359,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
     }
     case "INVALID_LAUNCH_HOOK_URL":
       return t("backendErrors.invalidLaunchHookUrl");
+    case "DNS_SERVER_INVALID":
+      return t("backendErrors.dnsServerInvalid");
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

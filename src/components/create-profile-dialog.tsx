@@ -19,6 +19,7 @@ import {
   LuShieldCheck,
   LuTriangleAlert,
 } from "react-icons/lu";
+import { DnsServerField } from "@/components/dns-server-field";
 import { LoadingButton } from "@/components/loading-button";
 import { ProfileGlyph } from "@/components/profile-glyph";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
@@ -111,6 +112,7 @@ interface CreateProfileDialogProps {
     extensionGroupId?: string;
     ephemeral?: boolean;
     dnsBlocklist?: string;
+    dnsServer?: string;
     launchHook?: string;
     password?: string;
   }) => Promise<void>;
@@ -142,6 +144,8 @@ export function CreateProfileDialog({
   const [osPopoverOpen, setOsPopoverOpen] = useState(false);
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [dnsBlocklist, setDnsBlocklist] = useState("");
+  const [dnsServer, setDnsServer] = useState("");
+  const [dnsServerValid, setDnsServerValid] = useState(true);
   const [launchHook, setLaunchHook] = useState("");
   const [wayfernConfig, setWayfernConfig] =
     useState<WayfernConfig>(defaultWayfernConfig);
@@ -269,7 +273,8 @@ export function CreateProfileDialog({
     !creatableVersion ||
     downloading ||
     isCreating ||
-    hourlyCapReached;
+    hourlyCapReached ||
+    !dnsServerValid;
   const selectedVpn = selectedProxyId?.startsWith("vpn-")
     ? vpnConfigs.find((vpn) => vpn.id === selectedProxyId.slice(4))
     : undefined;
@@ -300,6 +305,7 @@ export function CreateProfileDialog({
     setOsPopoverOpen(false);
     setShowProxyForm(false);
     setDnsBlocklist("");
+    setDnsServer("");
     setLaunchHook("");
     setSelectedExtensionGroupId(undefined);
     setReleaseTypes({});
@@ -344,6 +350,7 @@ export function CreateProfileDialog({
         extensionGroupId: selectedExtensionGroupId,
         ephemeral,
         dnsBlocklist: dnsBlocklist || undefined,
+        dnsServer: dnsServer.trim() || undefined,
         launchHook: launchHook.trim() || undefined,
         password: enablePassword && !ephemeral ? password : undefined,
       });
@@ -983,6 +990,21 @@ export function CreateProfileDialog({
                         </Select>
                       </div>
                     )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="profile-dns-server"
+                      className={FIELD_LABEL_CLASS}
+                    >
+                      {t("dnsServer.label")}
+                    </Label>
+                    <DnsServerField
+                      id="profile-dns-server"
+                      value={dnsServer}
+                      onChange={setDnsServer}
+                      onValidityChange={setDnsServerValid}
+                      disabled={isCreating}
+                    />
                   </div>
                   <div className="space-y-4 pt-1">
                     {creatableVersion && (

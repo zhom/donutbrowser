@@ -46,6 +46,9 @@ pub struct ApiProfile {
   pub is_running: bool,
   pub proxy_bypass_rules: Vec<String>,
   pub vpn_id: Option<String>,
+  /// The DNS server the profile resolves names with, through its own proxy
+  /// or VPN. `null` when the proxy resolves them.
+  pub dns_server: Option<String>,
   /// Extension group loaded into the browser at launch. Settable via
   /// `PUT /v1/profiles/{id}`; exposed here so a caller can read back what it
   /// set instead of having to go through the desktop app.
@@ -98,6 +101,7 @@ impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
       is_running: profile.process_id.is_some(),
       proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
       vpn_id: profile.vpn_id.clone(),
+      dns_server: profile.dns_server.clone(),
       extension_group_id: profile.extension_group_id.clone(),
       ephemeral: profile.ephemeral,
       temporary: profile.temporary,
@@ -156,6 +160,14 @@ pub struct CreateProfileRequest {
   /// its browser stops, and is swept at startup if it outlived a crash.
   /// Defaults to false.
   pub temporary: Option<bool>,
+  /// DNS server to resolve names with, through the profile's proxy or VPN:
+  /// `https://host/path` (DNS over HTTPS), `tls://host[:port]` (DNS over TLS),
+  /// `tcp://host[:port]` (plain DNS), or a bare `host[:port]`. A bare address
+  /// of a well-known public resolver such as `1.1.1.1` uses its DNS over
+  /// HTTPS endpoint. Omit it, send `null`, or send an empty string to let the
+  /// proxy resolve names. Anything else is rejected with 400.
+  #[serde(default)]
+  pub dns_server: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -182,6 +194,10 @@ pub struct UpdateProfileRequest {
   /// Wipe browsing data (keeping extensions and bookmarks) when the browser
   /// exits. Rejected (400) for ephemeral or password-protected profiles.
   pub clear_on_close: Option<bool>,
+  /// Omitted or `null` leaves the DNS server unchanged; an empty string
+  /// clears it, so the proxy resolves names again. Same formats as on create.
+  /// Takes effect at the next launch.
+  pub dns_server: Option<String>,
 }
 
 #[derive(Clone)]
@@ -1465,7 +1481,7 @@ async fn get_profile(
   request_body = CreateProfileRequest,
   responses(
     (status = 200, description = "Profile created successfully", body = ApiProfileResponse),
-    (status = 400, description = "Invalid browser, invalid wayfern_config, or no downloaded version available"),
+    (status = 400, description = "Invalid browser, invalid wayfern_config, invalid dns_server, or no downloaded version available"),
     (status = 401, description = "Unauthorized"),
     (status = 402, description = "Selected proxy requires payment, or a cross-OS fingerprint or custom launch arguments require Pro"),
     (status = 429, description = "Hourly profile generation limit reached; the body carries retryAfterSeconds"),
@@ -1583,6 +1599,7 @@ async fn create_profile(
       request.group_id.clone(),
       request.ephemeral.unwrap_or(false) || request.temporary.unwrap_or(false),
       None,
+      request.dns_server.clone(),
       request.launch_hook.clone(),
     )
     .await
@@ -1672,6 +1689,11 @@ async fn update_profile(
       StatusCode::BAD_REQUEST,
       "Cannot set both proxy_id and vpn_id".to_string(),
     ));
+  }
+  // Checked before any field changes, so a bad value leaves the profile as it was.
+  if let Some(dns_server) = &request.dns_server {
+    crate::profile_dns::normalize_dns_server(Some(dns_server.clone()))
+      .map_err(manager_error_response)?;
   }
 
   // Update profile fields
@@ -1790,6 +1812,12 @@ async fn update_profile(
     if let Err(e) =
       profile_manager.update_profile_clear_on_close(&state.app_handle, &id, clear_on_close)
     {
+      return Err(manager_error_response(e));
+    }
+  }
+
+  if let Some(dns_server) = request.dns_server {
+    if let Err(e) = profile_manager.update_profile_dns_server(&id, Some(dns_server)) {
       return Err(manager_error_response(e));
     }
   }
@@ -5618,6 +5646,33 @@ mod tests {
         "{always} is always reported and must stay required"
       );
     }
+  }
+
+  #[test]
+  fn openapi_documents_the_profile_dns_server() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for schema in ["CreateProfileRequest", "UpdateProfileRequest", "ApiProfile"] {
+      let property = &spec["components"]["schemas"][schema]["properties"]["dns_server"];
+      assert_eq!(
+        property["type"],
+        serde_json::json!(["string", "null"]),
+        "{schema}.dns_server must be a nullable string, got: {property}"
+      );
+      assert!(
+        !schema_required(&spec, schema)
+          .iter()
+          .any(|f| f == "dns_server"),
+        "{schema}.dns_server must be optional"
+      );
+    }
+    let create =
+      spec["components"]["schemas"]["CreateProfileRequest"]["properties"]["dns_server"].to_string();
+    assert!(
+      create.contains("https://") && create.contains("tls://") && create.contains("empty string")
+    );
+    let update =
+      spec["components"]["schemas"]["UpdateProfileRequest"]["properties"]["dns_server"].to_string();
+    assert!(update.contains("empty string"));
   }
 
   #[test]

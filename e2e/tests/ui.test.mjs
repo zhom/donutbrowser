@@ -328,6 +328,49 @@ test("profile creation stays compact and saves basic, protected, and ephemeral p
         "#profile-dns-blocklist",
         en.dnsBlocklist.normal,
       );
+      // The DNS field reads the value back from the backend: a value it cannot
+      // use blocks creation, a plain address says it is not encrypted, and a
+      // preset is encrypted.
+      const dnsStatus = (state) =>
+        app.waitFor(
+          () =>
+            app.execute(
+              `return document.querySelector('[data-slot="dns-server-status"]')?.dataset.state === arguments[0];`,
+              [state],
+            ),
+          { description: `DNS server status ${state}` },
+        );
+      const createEnabled = () =>
+        app.execute(
+          `return [...document.querySelectorAll('[role="dialog"] button')].some(button => button.textContent.trim() === arguments[0] && !button.disabled);`,
+          [en.common.buttons.create],
+        );
+      await dnsStatus("default");
+      await app.waitForText(en.dnsServer.summary.default);
+      await app.fillSelector("#profile-dns-server", "udp://1.1.1.1");
+      await dnsStatus("invalid");
+      await app.waitForText(en.backendErrors.dnsServerInvalid);
+      await app.waitFor(async () => !(await createEnabled()), {
+        description: "an invalid DNS server blocks creation",
+      });
+      await app.fillSelector("#profile-dns-server", "10.0.0.53");
+      await dnsStatus("valid");
+      await app.waitForText(
+        en.dnsServer.summary.tcp.replace("{{server}}", "10.0.0.53"),
+      );
+      await app.clickText("Quad9", { roles: ["button"] });
+      await app.waitForText(
+        en.dnsServer.summary.https.replace("{{server}}", "dns.quad9.net"),
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-dns-server').value;`,
+        ),
+        "https://dns.quad9.net/dns-query",
+      );
+      await app.waitFor(createEnabled, {
+        description: "a valid DNS server allows creation",
+      });
       await chooseSelectOption(
         app,
         "#profile-extension-group",
@@ -410,6 +453,10 @@ test("profile creation stays compact and saves basic, protected, and ephemeral p
       assert.equal(protectedRequest.vpnId, undefined);
       assert.equal(protectedProfile.dns_blocklist, "normal");
       assert.equal(
+        protectedProfile.dns_server,
+        "https://dns.quad9.net/dns-query",
+      );
+      assert.equal(
         protectedProfile.launch_hook,
         "https://example.com/hooks/created",
       );
@@ -443,6 +490,12 @@ test("profile creation stays compact and saves basic, protected, and ephemeral p
           `return document.querySelector('#profile-dns-blocklist').textContent.trim();`,
         ),
         en.dnsBlocklist.none,
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelector('#profile-dns-server').value;`,
+        ),
+        "",
       );
       assert.equal(
         await app.execute(
@@ -4072,6 +4125,73 @@ test("a freshly paid account is welcomed once and walked to its plan tips", asyn
     } finally {
       await restoreStubs(app);
     }
+  });
+});
+
+test("the profile network section saves, refuses and clears a DNS server", async () => {
+  await withApp("ui-dns-server", async (app) => {
+    const profile = await createUiProfile(app, "Profile DNS Server");
+    await app.waitForText(profile.name);
+    const stored = async () =>
+      (await app.invoke("list_browser_profiles")).find(
+        (item) => item.id === profile.id,
+      ).dns_server ?? null;
+    const field = '[data-slot="dns-server-field"] input';
+    const saveEnabled = () =>
+      app.execute(
+        `return [...document.querySelectorAll('[data-slot="dns-server-field"] button[type="submit"]')].some((button) => !button.disabled);`,
+      );
+
+    await app.clickSelector(
+      `[data-slot="profile-inspect-trigger"][data-profile-id="${profile.id}"]`,
+    );
+    await app.clickSelector(
+      '[data-slot="profile-info-section"][data-section="network"]',
+    );
+    await app.waitForText(en.profileInfo.sectionDesc.network);
+    await app.waitForText(en.dnsServer.summary.default);
+
+    await app.fillSelector(field, "1.1.1.1");
+    await app.waitForText(
+      `${en.dnsServer.summary.https.replace("{{server}}", "cloudflare-dns.com")} ${en.dnsServer.summary.upgraded}`,
+    );
+    await app.capture("profile-dns-server-upgraded");
+    await app.clickText(en.common.buttons.save, { exact: true });
+    await app.waitFor(async () => (await stored()) === "1.1.1.1", {
+      description: "the saved DNS server",
+    });
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return !document.querySelector('[data-slot="dns-server-field"] button[type="submit"]');`,
+        ),
+      { description: "nothing left to save" },
+    );
+
+    await app.fillSelector(field, "not a server");
+    await app.waitForText(en.backendErrors.dnsServerInvalid);
+    assert.equal(await saveEnabled(), false);
+    assert.equal(await stored(), "1.1.1.1");
+
+    await app.fillSelector(field, "tcp://1.1.1.1");
+    await app.waitForText(
+      en.dnsServer.summary.tcp.replace("{{server}}", "1.1.1.1"),
+    );
+    await app.capture("profile-dns-server-plain");
+    // Typed away rather than cleared, so the field sees real input events.
+    await app.fillSelector(field, "x");
+    await app.session.sendKeys(
+      await app.execute("return document.querySelector(arguments[0]);", [
+        field,
+      ]),
+      "\uE003",
+    );
+    await app.waitForText(en.dnsServer.summary.default);
+    await app.clickText(en.common.buttons.save, { exact: true });
+    await app.waitFor(async () => (await stored()) === null, {
+      description: "the cleared DNS server",
+    });
+    await app.clickSelector('[data-slot="profile-info-close"]');
   });
 });
 

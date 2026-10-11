@@ -75,6 +75,10 @@ pub struct BrowserProfile {
   pub created_by_email: Option<String>,
   #[serde(default)]
   pub dns_blocklist: Option<String>,
+  /// The DNS server this profile resolves names with, through its own proxy
+  /// or VPN (see `profile_dns`). `None` lets the proxy resolve them.
+  #[serde(default)]
+  pub dns_server: Option<String>,
   /// True when the on-disk profile dir is encrypted with a per-profile password.
   /// Decryption goes to a RAM-backed ephemeral dir, never to disk.
   #[serde(default)]

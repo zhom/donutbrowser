@@ -46,6 +46,7 @@ export interface BrowserProfile {
    * profiles created before this field existed. */
   created_at?: number;
   dns_blocklist?: string;
+  dns_server?: string | null;
   password_protected?: boolean;
 }
 

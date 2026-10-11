@@ -196,6 +196,7 @@ impl ProfileManager {
     group_id: Option<String>,
     ephemeral: bool,
     dns_blocklist: Option<String>,
+    dns_server: Option<String>,
     launch_hook: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     if name.trim().is_empty() {
@@ -205,6 +206,7 @@ impl ProfileManager {
           .into(),
       );
     }
+    let dns_server = crate::profile_dns::normalize_dns_server(dns_server)?;
 
     // Normalize before the mutual-exclusion check, not per caller: REST, MCP,
     // the importer and the Tauri commands all funnel through here, and a client
@@ -376,6 +378,7 @@ impl ProfileManager {
           created_by_id: None,
           created_by_email: None,
           dns_blocklist: None,
+          dns_server: None,
           password_protected: false,
           clear_on_close: false,
           created_at: None,
@@ -495,6 +498,7 @@ impl ProfileManager {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist,
+      dns_server,
       password_protected: false,
       clear_on_close: false,
       created_at: Some(
@@ -1428,6 +1432,33 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Takes effect at the next launch: a running browser keeps the worker it
+  /// started with.
+  pub fn update_profile_dns_server(
+    &self,
+    profile_id: &str,
+    dns_server: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let dns_server = crate::profile_dns::normalize_dns_server(dns_server)?;
+    let mut profile = self.find_profile(profile_id)?;
+    if profile.dns_server == dns_server {
+      return Ok(profile);
+    }
+
+    profile.dns_server = dns_server;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+
+    self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
+    }
+
+    Ok(profile)
+  }
+
   /// Trash several profiles at once. Every profile is checked before any of
   /// them moves, so one running browser blocks the whole batch instead of
   /// leaving it half done.
@@ -1540,6 +1571,7 @@ impl ProfileManager {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist: source.dns_blocklist,
+      dns_server: source.dns_server,
       password_protected: false,
       clear_on_close: false,
       created_at: Some(
@@ -2444,6 +2476,7 @@ pub async fn create_browser_profile_with_group(
   group_id: Option<String>,
   ephemeral: bool,
   dns_blocklist: Option<String>,
+  dns_server: Option<String>,
   launch_hook: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
@@ -2460,6 +2493,7 @@ pub async fn create_browser_profile_with_group(
       group_id,
       ephemeral,
       dns_blocklist,
+      dns_server,
       launch_hook,
     )
     .await
@@ -2604,6 +2638,16 @@ pub fn update_profile_dns_blocklist(
 }
 
 #[tauri::command]
+pub fn update_profile_dns_server(
+  profile_id: String,
+  dns_server: Option<String>,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_dns_server(&profile_id, dns_server)
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to update DNS server"))
+}
+
+#[tauri::command]
 pub async fn check_browser_status(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
@@ -2641,6 +2685,7 @@ pub async fn create_browser_profile_new(
   group_id: Option<String>,
   ephemeral: Option<bool>,
   dns_blocklist: Option<String>,
+  dns_server: Option<String>,
   launch_hook: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
@@ -2670,6 +2715,7 @@ pub async fn create_browser_profile_new(
     group_id,
     ephemeral.unwrap_or(false),
     dns_blocklist,
+    dns_server,
     launch_hook,
   )
   .await
