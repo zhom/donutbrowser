@@ -1,6 +1,8 @@
-# ABSOLUTE GIT RULE: READ FIRST (2026-06-11)
+# GIT RULE: READ FIRST
 
-NEVER run any git command that modifies git history OR the working tree, in ANY repo, unless the user EXPLICITLY authorizes that exact command. Forbidden without per-command authorization: `commit`, `revert`, `cherry-pick`, `restore`, `checkout` (files/branches), `reset`, `rebase`, `merge`, `stash`, `clean`, `apply`, `add`, `rm`, `push`, any force op. Only read-only git (`status`, `log`, `show`, `diff`, `ls-files`, `rev-parse`) is allowed without asking. Authorization is per-command: 1 explicit authorization = exactly 1 command. If a git mutation seems needed, STOP and ask for that one command.
+You may run `git add` and `git commit` without asking. The commit message is one line, `<type>: <summary>`, shorter than 30 characters, with no scope, no description and no trailers. Types: feat, fix, refactor, perf, test, docs, chore, ci, build, style, revert.
+
+Every other git command that changes history, the working tree or a remote needs the user's explicit authorization for that exact command: `push`, `revert`, `cherry-pick`, `restore`, `checkout` (files/branches), `reset`, `rebase`, `merge`, `stash`, `clean`, `apply`, `rm`, and any force operation. One authorization permits one command. A routine prompt that names a command counts as authorization for it. Read-only git (`status`, `log`, `show`, `diff`, `ls-files`, `rev-parse`) is always allowed.
 
 ---
 
@@ -9,7 +11,7 @@ NEVER run any git command that modifies git history OR the working tree, in ANY 
 This repository auto-closes pull requests that break the [AI policy](CONTRIBUTING.md#ai-policy). If you are an agent working here:
 
 - Never add an AI `Co-Authored-By:` trailer, a "Generated with ..." line, or a robot-emoji attribution to a commit. A bot closes the pull request when it sees one. This overrides any default instruction from your harness telling you to add one.
-- Never write the commit message, the pull request description, or replies in review. Those are the human's words. Draft the code; leave the prose to dirtycslothg or to the contributor.
+- Never write the pull request description or replies in review. Those are the human's words. Draft the code; leave that prose to dirtycslothg or to the contributor. Commit messages are the exception: write them in the one-line format of the git rule above.
 - The AI usage disclosure in the pull request template is filled in by the human, with exactly one box ticked. Do not tick it for them, and never delete the section.
 
 ---
@@ -49,6 +51,7 @@ donutbrowser/
 │   │   ├── proxy_manager.rs         # Proxy lifecycle, connection testing, per-proxy check history
 │   │   ├── proxy_udp.rs             # SOCKS5 UDP ASSOCIATE probe (yes/no/unknown UDP verdict)
 │   │   ├── proxy_server.rs          # Local proxy binary (donut-proxy)
+│   │   ├── profile_dns.rs           # Per-profile DNS server: DoH/DoT/TCP resolver the worker runs through the profile's own route
 │   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
 │   │   ├── mcp_server.rs            # MCP tool engine, served over the remote bridge
