@@ -1,4 +1,5 @@
 mod client;
+pub mod config_entities;
 pub mod encryption;
 mod engine;
 pub mod manifest;
@@ -140,6 +141,9 @@ pub async fn start_pipeline(app_handle: tauri::AppHandle) {
   set_global_scheduler(scheduler.clone());
 
   scheduler.sync_all_enabled_profiles(&app_handle).await;
+  for (kind, id) in config_entities::all_local_ids() {
+    scheduler.queue_config_sync(kind, id).await;
+  }
 
   match SyncEngine::create_from_settings(&app_handle).await {
     Ok(engine) => {
@@ -148,6 +152,9 @@ pub async fn start_pipeline(app_handle: tauri::AppHandle) {
       }
       if let Err(e) = engine.check_for_missing_synced_entities(&app_handle).await {
         log::warn!("Missing entity check failed err=\"{e}\"");
+      }
+      if let Err(e) = config_entities::fetch_missing(&engine).await {
+        log::warn!("Missing config entity check failed err=\"{e}\"");
       }
     }
     Err(e) => {

@@ -112,6 +112,8 @@ mod profile_dns;
 mod profile_generation_limiter;
 mod profile_import;
 mod profile_importer;
+mod profile_statuses;
+mod profile_templates;
 mod proxy_distribution;
 mod proxy_manager;
 pub mod proxy_runner;
@@ -1868,6 +1870,8 @@ async fn generate_sample_fingerprint(
     created_by_email: None,
     dns_blocklist: None,
     dns_server: None,
+    status_id: None,
+    start_urls: Vec::new(),
     password_protected: false,
     clear_on_close: false,
     created_at: None,
@@ -3328,6 +3332,11 @@ pub fn run_with_builder(
       update_profile_dns_blocklist,
       update_profile_dns_server,
       profile_dns::describe_dns_server,
+      profile_statuses::list_profile_statuses,
+      profile_statuses::create_profile_status,
+      profile_statuses::update_profile_status,
+      profile_statuses::delete_profile_status,
+      profile_statuses::set_profiles_status,
       check_browser_status,
       kill_browser_profile,
       rename_profile,

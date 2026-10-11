@@ -296,7 +296,8 @@
       "locked": "Protégé par mot de passe",
       "ephemeral": "Profil éphémère",
       "created": "Date de création",
-      "launched": "Date du dernier lancement"
+      "launched": "Date du dernier lancement",
+      "state": "Statut du profil"
     },
     "operators": {
       "negate": "Exclut ce qui correspond",
@@ -1724,6 +1725,29 @@
       "upgraded": "Cette adresse propose aussi un DNS chiffré, Donut l'utilise donc. Commencez par tcp:// pour garder un DNS simple."
     }
   },
+  "profileStatuses": {
+    "column": "Statut",
+    "none": "Aucun statut",
+    "search": "Rechercher un statut…",
+    "noMatch": "Aucun statut correspondant",
+    "manage": "Gérer les statuts…",
+    "title": "Statuts des profils",
+    "description": "Indiquez pour chaque profil où en est son compte. Les statuts se synchronisent avec vos autres appareils et votre équipe.",
+    "empty": "Aucun statut pour l'instant. Commencez par un jeu courant ou ajoutez les vôtres ci-dessous.",
+    "addStarter": "Ajouter Actif, En préchauffe, À vérifier et Banni",
+    "starter": {
+      "active": "Actif",
+      "warming": "En préchauffe",
+      "review": "À vérifier",
+      "banned": "Banni"
+    },
+    "namePlaceholder": "Nom du statut",
+    "color": "Couleur du statut",
+    "customColor": "Couleur personnalisée",
+    "delete": "Supprimer le statut",
+    "deleteTitle": "Supprimer « {{name}} » ?",
+    "deleteDescription": "Les profils ayant ce statut n'auront plus de statut. Cette action est irréversible."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Modifier le VPN",
@@ -2451,7 +2475,12 @@
     "feedbackRateLimited": "Vous avez envoyé beaucoup d'avis en peu de temps. Réessayez dans quelques minutes.",
     "feedbackSendFailed": "L'avis n'a pas pu être envoyé. Réessayez plus tard.",
     "feedbackLogsUnreadable": "Les journaux n'ont pas pu être lus. Désactivez « Joindre les journaux récents » et renvoyez.",
-    "dnsServerInvalid": "Ce serveur DNS n'est pas valide. Saisissez une adresse IP ou un nom d'hôte, tls://hôte pour DNS over TLS, ou une URL https:// pour DNS over HTTPS."
+    "dnsServerInvalid": "Ce serveur DNS n'est pas valide. Saisissez une adresse IP ou un nom d'hôte, tls://hôte pour DNS over TLS, ou une URL https:// pour DNS over HTTPS.",
+    "profileStatusExists": "Un statut portant ce nom existe déjà.",
+    "profileStatusNotFound": "Ce statut n'existe plus.",
+    "profileStatusColorInvalid": "Choisissez une couleur pour le statut.",
+    "profileStatusNameTooLong": "Le nom d'un statut ne peut pas dépasser 40 caractères.",
+    "profileStatusLimitReached": "Vous avez 100 statuts, le maximum. Supprimez-en un pour en ajouter un autre."
   },
   "rail": {
     "profiles": "Profils",

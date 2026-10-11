@@ -47,6 +47,8 @@ export interface BrowserProfile {
   created_at?: number;
   dns_blocklist?: string;
   dns_server?: string | null;
+  status_id?: string | null;
+  start_urls?: string[];
   password_protected?: boolean;
 }
 
@@ -346,6 +348,16 @@ export interface ProfileGroup {
   bookmarks?: GroupBookmark[];
   sync_enabled?: boolean;
   last_sync?: number;
+}
+
+/** A named, colored label for where a profile's account stands. */
+export interface ProfileStatus {
+  id: string;
+  name: string;
+  /** `#rrggbb`, picked by the person. */
+  color: string;
+  position: number;
+  updated_at: number;
 }
 
 export interface GroupWithCount {

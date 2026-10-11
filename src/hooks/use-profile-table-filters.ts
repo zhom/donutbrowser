@@ -39,6 +39,18 @@ export function useProfileTableFilters(
         ],
       },
       {
+        id: "state",
+        label: t("profileStatuses.column"),
+        value: (row) => row.status_id ?? "",
+        options: [
+          { value: "", label: t("profileStatuses.none") },
+          ...[...context.statusNames].map(([value, label]) => ({
+            value,
+            label,
+          })),
+        ],
+      },
+      {
         id: "tag",
         label: t("profileTable.tagsHeader"),
         value: (row) => (row.tags?.length ? row.tags : [""]),

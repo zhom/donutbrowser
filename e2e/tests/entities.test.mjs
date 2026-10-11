@@ -356,6 +356,72 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
         dnsServer: " https://dns.quad9.net/dns-query ",
       });
       assert.equal(withDns.dns_server, "https://dns.quad9.net/dns-query");
+
+      // Statuses: a set the person defines, one per profile, removed from
+      // every profile when deleted.
+      const warming = await app.invoke("create_profile_status", {
+        name: " Warming up ",
+        color: "#EAB308",
+      });
+      assert.equal(warming.name, "Warming up");
+      assert.equal(warming.color, "#eab308");
+      const banned = await app.invoke("create_profile_status", {
+        name: "Banned",
+        color: "#ef4444",
+      });
+      assert.match(
+        await app.invokeError("create_profile_status", {
+          name: "banned",
+          color: "#000000",
+        }),
+        /PROFILE_STATUS_EXISTS/,
+      );
+      assert.match(
+        await app.invokeError("create_profile_status", {
+          name: "Paused",
+          color: "red",
+        }),
+        /PROFILE_STATUS_COLOR_INVALID/,
+      );
+      const renamed = await app.invoke("update_profile_status", {
+        statusId: banned.id,
+        name: "Suspended",
+        color: "#ef4444",
+      });
+      assert.equal(renamed.name, "Suspended");
+      assert.deepEqual(
+        (await app.invoke("list_profile_statuses")).map((item) => item.name),
+        ["Warming up", "Suspended"],
+      );
+      assert.match(
+        await app.invokeError("set_profiles_status", {
+          profileIds: [profile.id],
+          statusId: "missing",
+        }),
+        /PROFILE_STATUS_NOT_FOUND/,
+      );
+      await app.invoke("set_profiles_status", {
+        profileIds: [profile.id],
+        statusId: banned.id,
+      });
+      assert.equal(
+        (await app.invoke("list_browser_profiles")).find(
+          (item) => item.id === profile.id,
+        ).status_id,
+        banned.id,
+      );
+      await app.invoke("delete_profile_status", { statusId: banned.id });
+      assert.equal(
+        (await app.invoke("list_browser_profiles")).find(
+          (item) => item.id === profile.id,
+        ).status_id,
+        null,
+        "deleting a status takes it off its profiles",
+      );
+      await app.invoke("set_profiles_status", {
+        profileIds: [profile.id],
+        statusId: warming.id,
+      });
       await app.invoke("update_profile_clear_on_close", {
         profileId: profile.id,
         clearOnClose: true,
@@ -373,6 +439,7 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       ]);
       assert.equal(changed.dns_blocklist, "light");
       assert.equal(changed.dns_server, "https://dns.quad9.net/dns-query");
+      assert.equal(changed.status_id, warming.id);
       assert.equal(changed.clear_on_close, true);
       assert.deepEqual((await app.invoke("get_all_tags")).sort(), [
         "alpha",
@@ -623,6 +690,7 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       assert.notEqual(clone.id, profile.id);
       assert.equal(clone.name, "Cloned Profile");
       assert.equal(clone.dns_server, "https://dns.quad9.net/dns-query");
+      assert.equal(clone.status_id, warming.id, "a clone keeps the status");
       const counts = await app.invoke("get_groups_with_profile_counts");
       assert.equal(counts.find((item) => item.id === group.id).count, 2);
       assert.equal((await app.invoke("get_profile_groups")).length, 1);

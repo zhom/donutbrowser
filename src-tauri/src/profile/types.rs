@@ -79,6 +79,12 @@ pub struct BrowserProfile {
   /// or VPN (see `profile_dns`). `None` lets the proxy resolve them.
   #[serde(default)]
   pub dns_server: Option<String>,
+  /// The profile's status (see `profile_statuses`), by id.
+  #[serde(default)]
+  pub status_id: Option<String>,
+  /// Pages a launch opens, in order. An explicit launch URL replaces them.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub start_urls: Vec<String>,
   /// True when the on-disk profile dir is encrypted with a per-profile password.
   /// Decryption goes to a RAM-backed ephemeral dir, never to disk.
   #[serde(default)]

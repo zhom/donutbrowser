@@ -776,7 +776,19 @@ export class SyncService implements OnModuleInit {
     ctx: UserContext,
     pollIntervalMs = 5000,
   ): Observable<SubscribeEventDto> {
-    const basePrefixes = ["profiles/", "proxies/", "groups/", "tombstones/"];
+    // Every key prefix the desktop reacts to. Filtering happens after the one
+    // LIST per scope, so a prefix added here costs no extra S3 call.
+    const basePrefixes = [
+      "profiles/",
+      "proxies/",
+      "groups/",
+      "vpns/",
+      "extensions/",
+      "extension_groups/",
+      "statuses/",
+      "templates/",
+      "tombstones/",
+    ];
     const scopes = this.scopesFor(ctx);
 
     // Per-connection state (not shared across subscribers).
@@ -839,7 +851,7 @@ export class SyncService implements OnModuleInit {
         }
 
         // Phase 2 — one LIST per scope (not per base prefix). Filter to the
-        // four base prefixes client-side. This is the cost we pay only when
+        // base prefixes client-side. This is the cost we pay only when
         // a manifest told us there's something new to look at.
         const currentState = new Map<string, string>();
         for (const scope of scopes) {
@@ -862,7 +874,7 @@ export class SyncService implements OnModuleInit {
                   ? fullKey.substring(scope.length)
                   : fullKey;
                 // Skip the manifest object itself + anything outside the
-                // four data prefixes.
+                // data prefixes.
                 if (relativeKey === MANIFEST_KEY) continue;
                 if (!basePrefixes.some((bp) => relativeKey.startsWith(bp))) {
                   continue;

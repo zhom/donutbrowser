@@ -295,7 +295,8 @@
       "locked": "Password protected",
       "ephemeral": "Ephemeral profile",
       "created": "Creation date",
-      "launched": "Last launch date"
+      "launched": "Last launch date",
+      "state": "Profile status"
     },
     "operators": {
       "negate": "Excludes what matches",
@@ -1718,6 +1719,29 @@
       "upgraded": "This address also serves encrypted DNS, so Donut uses it. Start with tcp:// to keep plain DNS."
     }
   },
+  "profileStatuses": {
+    "column": "Status",
+    "none": "No status",
+    "search": "Search statuses…",
+    "noMatch": "No matching status",
+    "manage": "Manage statuses…",
+    "title": "Profile statuses",
+    "description": "Label each profile by where its account stands. Statuses sync to your other devices and to your team.",
+    "empty": "No statuses yet. Start with a common set, or add your own below.",
+    "addStarter": "Add Active, Warming up, Needs review and Banned",
+    "starter": {
+      "active": "Active",
+      "warming": "Warming up",
+      "review": "Needs review",
+      "banned": "Banned"
+    },
+    "namePlaceholder": "Status name",
+    "color": "Status color",
+    "customColor": "Custom color",
+    "delete": "Delete status",
+    "deleteTitle": "Delete \"{{name}}\"?",
+    "deleteDescription": "Profiles with this status will have no status. You cannot undo this."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Edit VPN",
@@ -2441,7 +2465,12 @@
     "feedbackRateLimited": "You sent a lot of feedback in a short time. Try again in a few minutes.",
     "feedbackSendFailed": "The feedback could not be sent. Try again later.",
     "feedbackLogsUnreadable": "The logs could not be read. Turn off \"Include recent logs\" and send again.",
-    "dnsServerInvalid": "This DNS server is not valid. Enter an IP address or host name, tls://host for DNS over TLS, or an https:// URL for DNS over HTTPS."
+    "dnsServerInvalid": "This DNS server is not valid. Enter an IP address or host name, tls://host for DNS over TLS, or an https:// URL for DNS over HTTPS.",
+    "profileStatusExists": "A status with this name already exists.",
+    "profileStatusNotFound": "This status no longer exists.",
+    "profileStatusColorInvalid": "Pick a color for the status.",
+    "profileStatusNameTooLong": "A status name can have at most 40 characters.",
+    "profileStatusLimitReached": "You have 100 statuses, the maximum. Delete one to add another."
   },
   "rail": {
     "profiles": "Profiles",

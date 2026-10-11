@@ -379,6 +379,8 @@ impl ProfileManager {
           created_by_email: None,
           dns_blocklist: None,
           dns_server: None,
+          status_id: None,
+          start_urls: Vec::new(),
           password_protected: false,
           clear_on_close: false,
           created_at: None,
@@ -499,6 +501,8 @@ impl ProfileManager {
       created_by_email: None,
       dns_blocklist,
       dns_server,
+      status_id: None,
+      start_urls: Vec::new(),
       password_protected: false,
       clear_on_close: false,
       created_at: Some(
@@ -1459,6 +1463,46 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Give the listed profiles one status, or none. A running profile can
+  /// take a status: it is a label, not a launch setting.
+  pub fn set_profiles_status(
+    &self,
+    profile_ids: &[String],
+    status_id: Option<String>,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut changed = Vec::new();
+    for profile_id in profile_ids {
+      let profile = self.find_profile(profile_id)?;
+      if profile.status_id != status_id {
+        changed.push(profile);
+      }
+    }
+    for mut profile in changed {
+      profile.status_id = status_id.clone();
+      profile.updated_at = Some(crate::proxy_manager::now_secs());
+      self.save_profile(&profile)?;
+      crate::sync::queue_profile_sync_if_eligible(&profile);
+    }
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
+    }
+    Ok(())
+  }
+
+  /// Take a deleted status off every profile that pointed at it.
+  pub fn clear_status_references(&self, status_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let ids: Vec<String> = self
+      .list_profiles()?
+      .into_iter()
+      .filter(|p| p.status_id.as_deref() == Some(status_id))
+      .map(|p| p.id.to_string())
+      .collect();
+    if ids.is_empty() {
+      return Ok(());
+    }
+    self.set_profiles_status(&ids, None)
+  }
+
   /// Trash several profiles at once. Every profile is checked before any of
   /// them moves, so one running browser blocks the whole batch instead of
   /// leaving it half done.
@@ -1572,6 +1616,8 @@ impl ProfileManager {
       created_by_email: None,
       dns_blocklist: source.dns_blocklist,
       dns_server: source.dns_server,
+      status_id: source.status_id,
+      start_urls: source.start_urls,
       password_protected: false,
       clear_on_close: false,
       created_at: Some(

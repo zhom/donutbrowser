@@ -4128,6 +4128,66 @@ test("a freshly paid account is welcomed once and walked to its plan tips", asyn
   });
 });
 
+test("profile statuses start from a common set and are picked from the table", async () => {
+  await withApp("ui-profile-statuses", async (app) => {
+    const profile = await createUiProfile(app, "Profile With Status");
+    await app.waitForText(profile.name);
+    const cell = '[data-slot="profile-status-cell"]';
+    const statusOf = async () =>
+      (await app.invoke("list_browser_profiles")).find(
+        (item) => item.id === profile.id,
+      ).status_id ?? null;
+
+    await app.clickSelector(cell);
+    await app.clickText(en.profileStatuses.manage, { roles: ["option"] });
+    await app.waitForText(en.profileStatuses.empty);
+    await app.capture("profile-statuses-empty");
+    await app.clickText(en.profileStatuses.addStarter, { roles: ["button"] });
+    await app.waitFor(
+      async () => (await app.invoke("list_profile_statuses")).length === 4,
+      { description: "the starter statuses" },
+    );
+    assert.deepEqual(
+      (await app.invoke("list_profile_statuses")).map((item) => item.name),
+      [
+        en.profileStatuses.starter.active,
+        en.profileStatuses.starter.warming,
+        en.profileStatuses.starter.review,
+        en.profileStatuses.starter.banned,
+      ],
+    );
+    await app.capture("profile-statuses-starter");
+    await dismissSurface(app);
+
+    await app.clickSelector(cell);
+    await app.clickText(en.profileStatuses.starter.banned, {
+      exact: false,
+      roles: ["option"],
+    });
+    const banned = (await app.invoke("list_profile_statuses")).find(
+      (item) => item.name === en.profileStatuses.starter.banned,
+    );
+    await app.waitFor(async () => (await statusOf()) === banned.id, {
+      description: "the picked status",
+    });
+    await app.waitFor(
+      () =>
+        app.execute(
+          `return document.querySelector(arguments[0])?.textContent.includes(arguments[1]);`,
+          [cell, en.profileStatuses.starter.banned],
+        ),
+      { description: "the cell shows the status" },
+    );
+    await app.capture("profile-status-cell");
+
+    await app.clickSelector(cell);
+    await app.clickText(en.profileStatuses.none, { roles: ["option"] });
+    await app.waitFor(async () => (await statusOf()) === null, {
+      description: "the status cleared",
+    });
+  });
+});
+
 test("the profile network section saves, refuses and clears a DNS server", async () => {
   await withApp("ui-dns-server", async (app) => {
     const profile = await createUiProfile(app, "Profile DNS Server");

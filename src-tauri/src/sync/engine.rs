@@ -524,7 +524,7 @@ pub fn is_sync_configured() -> bool {
 }
 
 pub struct SyncEngine {
-  client: SyncClient,
+  pub(super) client: SyncClient,
 }
 
 impl SyncEngine {
@@ -588,7 +588,7 @@ impl SyncEngine {
   /// decrypting the small JSON body and reading its embedded `updated_at` (for
   /// older self-hosted servers that don't surface metadata). Legacy objects with
   /// neither resolve to 0, so any real local edit (`updated_at` > 0) wins.
-  async fn remote_updated_at(&self, stat: &StatResponse, remote_key: &str) -> u64 {
+  pub(super) async fn remote_updated_at(&self, stat: &StatResponse, remote_key: &str) -> u64 {
     if let Some(meta) = &stat.metadata {
       if let Some(v) = meta
         .get(UPDATED_AT_META_KEY)
@@ -617,7 +617,7 @@ impl SyncEngine {
   /// future reconciles can compare via HEAD without downloading the body. The
   /// body is sealed (E2E) exactly as before; only a plaintext unix timestamp
   /// lives in the object metadata.
-  async fn upload_config_json(
+  pub(super) async fn upload_config_json(
     &self,
     remote_key: &str,
     json: &str,
@@ -655,7 +655,7 @@ impl SyncEngine {
   /// failed rather than as a silent success. A caller that cannot propagate
   /// treats the error as blocking: a skipped pass is retried, a resurrection is
   /// not self-correcting.
-  async fn tombstone_blocks(
+  pub(super) async fn tombstone_blocks(
     &self,
     kind: &str,
     id: &str,

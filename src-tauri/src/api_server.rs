@@ -49,6 +49,8 @@ pub struct ApiProfile {
   /// The DNS server the profile resolves names with, through its own proxy
   /// or VPN. `null` when the proxy resolves them.
   pub dns_server: Option<String>,
+  /// The profile's status id (see `/v1/statuses`), or `null`.
+  pub status_id: Option<String>,
   /// Extension group loaded into the browser at launch. Settable via
   /// `PUT /v1/profiles/{id}`; exposed here so a caller can read back what it
   /// set instead of having to go through the desktop app.
@@ -102,6 +104,7 @@ impl From<&crate::profile::types::BrowserProfile> for ApiProfile {
       proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
       vpn_id: profile.vpn_id.clone(),
       dns_server: profile.dns_server.clone(),
+      status_id: profile.status_id.clone(),
       extension_group_id: profile.extension_group_id.clone(),
       ephemeral: profile.ephemeral,
       temporary: profile.temporary,
@@ -168,6 +171,9 @@ pub struct CreateProfileRequest {
   /// proxy resolve names. Anything else is rejected with 400.
   #[serde(default)]
   pub dns_server: Option<String>,
+  /// Optional status id from `/v1/statuses`.
+  #[serde(default)]
+  pub status_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -198,6 +204,8 @@ pub struct UpdateProfileRequest {
   /// clears it, so the proxy resolves names again. Same formats as on create.
   /// Takes effect at the next launch.
   pub dns_server: Option<String>,
+  /// Omitted or `null` leaves the status unchanged; an empty string clears it.
+  pub status_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -220,6 +228,34 @@ struct CreateGroupRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 struct UpdateGroupRequest {
   name: String,
+}
+
+/// A profile status: a named, colored label for where a profile's account
+/// stands.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+struct ApiStatusResponse {
+  id: String,
+  name: String,
+  /// `#rrggbb`.
+  color: String,
+}
+
+impl From<crate::profile_statuses::ProfileStatus> for ApiStatusResponse {
+  fn from(status: crate::profile_statuses::ProfileStatus) -> Self {
+    Self {
+      id: status.id,
+      name: status.name,
+      color: status.color,
+    }
+  }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct StatusRequest {
+  /// 1 to 40 characters, unique (case-insensitive).
+  name: String,
+  /// `#rrggbb`.
+  color: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -659,6 +695,10 @@ struct ImportProxiesResponse {
     create_group,
     update_group,
     delete_group,
+    get_statuses,
+    create_status,
+    update_status,
+    delete_status,
     get_tags,
     get_proxies,
     get_proxy,
@@ -704,6 +744,8 @@ struct ImportProxiesResponse {
     ApiGroupResponse,
     CreateGroupRequest,
     UpdateGroupRequest,
+    ApiStatusResponse,
+    StatusRequest,
     ApiProxyResponse,
     CreateProxyRequest,
     UpdateProxyRequest,
@@ -798,6 +840,7 @@ struct ImportProxiesResponse {
   tags(
     (name = "profiles", description = "Profile management endpoints"),
     (name = "groups", description = "Group management endpoints"),
+    (name = "statuses", description = "Profile status management endpoints"),
     (name = "tags", description = "Tag management endpoints"),
     (name = "proxies", description = "Proxy management endpoints"),
     (name = "vpns", description = "VPN management endpoints"),
@@ -990,6 +1033,8 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(import_profile_cookies))
     .routes(routes!(get_groups, create_group))
     .routes(routes!(get_group, update_group, delete_group))
+    .routes(routes!(get_statuses, create_status))
+    .routes(routes!(update_status, delete_status))
     .routes(routes!(get_tags))
     .routes(routes!(get_proxies, create_proxy))
     .routes(routes!(import_proxies_api))
@@ -1585,6 +1630,14 @@ async fn create_profile(
     });
   }
 
+  if let Some(status_id) = request.status_id.as_deref().filter(|id| !id.is_empty()) {
+    if !crate::profile_statuses::exists(status_id) {
+      return Err(manager_error_response(crate::backend_error(
+        "PROFILE_STATUS_NOT_FOUND",
+      )));
+    }
+  }
+
   // Create profile using the async create_profile_with_group method
   match profile_manager
     .create_profile_with_group(
@@ -1605,6 +1658,14 @@ async fn create_profile(
     .await
   {
     Ok(mut profile) => {
+      if let Some(status_id) = request.status_id.clone().filter(|id| !id.is_empty()) {
+        if let Err(e) =
+          profile_manager.set_profiles_status(&[profile.id.to_string()], Some(status_id.clone()))
+        {
+          return Err(manager_error_response(e));
+        }
+        profile.status_id = Some(status_id);
+      }
       if request.temporary.unwrap_or(false) {
         match profile_manager.mark_profile_temporary(&profile.id.to_string()) {
           Ok(updated) => profile = updated,
@@ -1694,6 +1755,13 @@ async fn update_profile(
   if let Some(dns_server) = &request.dns_server {
     crate::profile_dns::normalize_dns_server(Some(dns_server.clone()))
       .map_err(manager_error_response)?;
+  }
+  if let Some(status_id) = request.status_id.as_deref().filter(|id| !id.is_empty()) {
+    if !crate::profile_statuses::exists(status_id) {
+      return Err(manager_error_response(crate::backend_error(
+        "PROFILE_STATUS_NOT_FOUND",
+      )));
+    }
   }
 
   // Update profile fields
@@ -1818,6 +1886,13 @@ async fn update_profile(
 
   if let Some(dns_server) = request.dns_server {
     if let Err(e) = profile_manager.update_profile_dns_server(&id, Some(dns_server)) {
+      return Err(manager_error_response(e));
+    }
+  }
+
+  if let Some(status_id) = request.status_id {
+    let status_id = Some(status_id).filter(|id| !id.is_empty());
+    if let Err(e) = profile_manager.set_profiles_status(std::slice::from_ref(&id), status_id) {
       return Err(manager_error_response(e));
     }
   }
@@ -2040,6 +2115,99 @@ async fn delete_group(
       "group manager unavailable".to_string(),
     )),
   }
+}
+
+// API Handlers - Statuses
+#[utoipa::path(
+  get,
+  path = "/v1/statuses",
+  responses(
+    (status = 200, description = "Every profile status, in their order", body = Vec<ApiStatusResponse>),
+    (status = 401, description = "Unauthorized")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "statuses"
+)]
+async fn get_statuses() -> Json<Vec<ApiStatusResponse>> {
+  Json(
+    crate::profile_statuses::list()
+      .into_iter()
+      .map(ApiStatusResponse::from)
+      .collect(),
+  )
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/statuses",
+  request_body = StatusRequest,
+  responses(
+    (status = 200, description = "Status created", body = ApiStatusResponse),
+    (status = 400, description = "Empty, too long or duplicate name, invalid color, or 100 statuses already"),
+    (status = 401, description = "Unauthorized")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "statuses"
+)]
+async fn create_status(
+  Json(request): Json<StatusRequest>,
+) -> Result<Json<ApiStatusResponse>, (StatusCode, String)> {
+  crate::profile_statuses::create(&request.name, &request.color)
+    .map(|status| Json(status.into()))
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
+  put,
+  path = "/v1/statuses/{id}",
+  params(
+    ("id" = String, Path, description = "Status ID")
+  ),
+  request_body = StatusRequest,
+  responses(
+    (status = 200, description = "Status updated", body = ApiStatusResponse),
+    (status = 400, description = "Empty, too long or duplicate name, or invalid color"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Status not found")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "statuses"
+)]
+async fn update_status(
+  Path(id): Path<String>,
+  Json(request): Json<StatusRequest>,
+) -> Result<Json<ApiStatusResponse>, (StatusCode, String)> {
+  crate::profile_statuses::update(&id, &request.name, &request.color)
+    .map(|status| Json(status.into()))
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
+  delete,
+  path = "/v1/statuses/{id}",
+  params(
+    ("id" = String, Path, description = "Status ID")
+  ),
+  responses(
+    (status = 204, description = "Status deleted and taken off every profile that had it"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Status not found")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "statuses"
+)]
+async fn delete_status(Path(id): Path<String>) -> Result<StatusCode, (StatusCode, String)> {
+  crate::profile_statuses::delete(&id)
+    .map(|()| StatusCode::NO_CONTENT)
+    .map_err(manager_error_response)
 }
 
 // API Handlers - Tags
@@ -5644,6 +5812,30 @@ mod tests {
       assert!(
         required.iter().any(|r| r == always),
         "{always} is always reported and must stay required"
+      );
+    }
+  }
+
+  #[test]
+  fn openapi_documents_profile_statuses() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for path in ["/v1/statuses", "/v1/statuses/{id}"] {
+      assert!(
+        spec["paths"][path].is_object(),
+        "{path} must be in the spec"
+      );
+    }
+    for schema in ["CreateProfileRequest", "UpdateProfileRequest", "ApiProfile"] {
+      assert_eq!(
+        spec["components"]["schemas"][schema]["properties"]["status_id"]["type"],
+        serde_json::json!(["string", "null"]),
+        "{schema}.status_id must be a nullable string"
+      );
+      assert!(
+        !schema_required(&spec, schema)
+          .iter()
+          .any(|f| f == "status_id"),
+        "{schema}.status_id must be optional"
       );
     }
   }

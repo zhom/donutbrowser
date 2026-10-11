@@ -295,7 +295,8 @@
       "locked": "Được bảo vệ bằng mật khẩu",
       "ephemeral": "Hồ sơ tạm thời",
       "created": "Ngày tạo",
-      "launched": "Ngày khởi chạy gần nhất"
+      "launched": "Ngày khởi chạy gần nhất",
+      "state": "Trạng thái profile"
     },
     "operators": {
       "negate": "Loại trừ những gì khớp",
@@ -1718,6 +1719,29 @@
       "upgraded": "Địa chỉ này cũng hỗ trợ DNS mã hóa nên Donut sử dụng nó. Bắt đầu bằng tcp:// để giữ DNS thường."
     }
   },
+  "profileStatuses": {
+    "column": "Trạng thái",
+    "none": "Không có trạng thái",
+    "search": "Tìm trạng thái…",
+    "noMatch": "Không có trạng thái phù hợp",
+    "manage": "Quản lý trạng thái…",
+    "title": "Trạng thái profile",
+    "description": "Gắn nhãn cho mỗi profile theo tình trạng tài khoản. Trạng thái được đồng bộ với các thiết bị khác và nhóm của bạn.",
+    "empty": "Chưa có trạng thái nào. Hãy bắt đầu với một bộ phổ biến hoặc tự thêm bên dưới.",
+    "addStarter": "Thêm Hoạt động, Đang làm nóng, Cần xem lại và Bị cấm",
+    "starter": {
+      "active": "Hoạt động",
+      "warming": "Đang làm nóng",
+      "review": "Cần xem lại",
+      "banned": "Bị cấm"
+    },
+    "namePlaceholder": "Tên trạng thái",
+    "color": "Màu trạng thái",
+    "customColor": "Màu tùy chỉnh",
+    "delete": "Xóa trạng thái",
+    "deleteTitle": "Xóa \"{{name}}\"?",
+    "deleteDescription": "Các profile có trạng thái này sẽ không còn trạng thái. Không thể hoàn tác."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Chỉnh sửa VPN",
@@ -2441,7 +2465,12 @@
     "feedbackRateLimited": "Bạn đã gửi nhiều phản hồi trong thời gian ngắn. Hãy thử lại sau vài phút.",
     "feedbackSendFailed": "Không thể gửi phản hồi. Hãy thử lại sau.",
     "feedbackLogsUnreadable": "Không thể đọc nhật ký. Hãy tắt \"Đính kèm nhật ký gần đây\" rồi gửi lại.",
-    "dnsServerInvalid": "Máy chủ DNS này không hợp lệ. Nhập địa chỉ IP hoặc tên máy chủ, tls://host cho DNS over TLS, hoặc URL https:// cho DNS over HTTPS."
+    "dnsServerInvalid": "Máy chủ DNS này không hợp lệ. Nhập địa chỉ IP hoặc tên máy chủ, tls://host cho DNS over TLS, hoặc URL https:// cho DNS over HTTPS.",
+    "profileStatusExists": "Đã có trạng thái với tên này.",
+    "profileStatusNotFound": "Trạng thái này không còn tồn tại.",
+    "profileStatusColorInvalid": "Hãy chọn màu cho trạng thái.",
+    "profileStatusNameTooLong": "Tên trạng thái tối đa 40 ký tự.",
+    "profileStatusLimitReached": "Bạn đã có 100 trạng thái, mức tối đa. Hãy xóa một trạng thái để thêm mới."
   },
   "rail": {
     "profiles": "Profile",

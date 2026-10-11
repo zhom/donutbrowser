@@ -295,7 +295,8 @@
       "locked": "密码保护",
       "ephemeral": "临时配置文件",
       "created": "创建日期",
-      "launched": "上次启动日期"
+      "launched": "上次启动日期",
+      "state": "配置文件状态"
     },
     "operators": {
       "negate": "排除匹配的结果",
@@ -1718,6 +1719,29 @@
       "upgraded": "此地址也提供加密 DNS，因此 Donut 会使用它。以 tcp:// 开头可保留普通 DNS。"
     }
   },
+  "profileStatuses": {
+    "column": "状态",
+    "none": "无状态",
+    "search": "搜索状态…",
+    "noMatch": "没有匹配的状态",
+    "manage": "管理状态…",
+    "title": "配置文件状态",
+    "description": "按账号情况为每个配置文件加上标签。状态会同步到你的其他设备和团队。",
+    "empty": "还没有状态。可以从常用的一组开始，或在下方自行添加。",
+    "addStarter": "添加“活跃”“养号中”“待检查”和“已封禁”",
+    "starter": {
+      "active": "活跃",
+      "warming": "养号中",
+      "review": "待检查",
+      "banned": "已封禁"
+    },
+    "namePlaceholder": "状态名称",
+    "color": "状态颜色",
+    "customColor": "自定义颜色",
+    "delete": "删除状态",
+    "deleteTitle": "删除“{{name}}”？",
+    "deleteDescription": "具有此状态的配置文件将不再有状态。此操作无法撤销。"
+  },
   "vpns": {
     "form": {
       "titleEdit": "编辑 VPN",
@@ -2441,7 +2465,12 @@
     "feedbackRateLimited": "你在短时间内发送了大量反馈。请几分钟后再试。",
     "feedbackSendFailed": "无法发送反馈。请稍后再试。",
     "feedbackLogsUnreadable": "无法读取日志。请关闭“附上最近的日志”后重新发送。",
-    "dnsServerInvalid": "此 DNS 服务器无效。请输入 IP 地址或主机名、用于 DNS over TLS 的 tls://host，或用于 DNS over HTTPS 的 https:// URL。"
+    "dnsServerInvalid": "此 DNS 服务器无效。请输入 IP 地址或主机名、用于 DNS over TLS 的 tls://host，或用于 DNS over HTTPS 的 https:// URL。",
+    "profileStatusExists": "已存在同名状态。",
+    "profileStatusNotFound": "此状态已不存在。",
+    "profileStatusColorInvalid": "请为状态选择颜色。",
+    "profileStatusNameTooLong": "状态名称最多 40 个字符。",
+    "profileStatusLimitReached": "状态数量已达上限 100 个。请删除一个后再添加。"
   },
   "rail": {
     "profiles": "配置文件",

@@ -22,6 +22,10 @@ const ctx = {
   proxyNames: new Map([["p1", "Frankfurt residential"]]),
   vpnNames: new Map([["v1", "Office WireGuard"]]),
   extensionGroupNames: new Map([["e1", "Ad blockers"]]),
+  statusNames: new Map([
+    ["s1", "Warming up"],
+    ["s2", "Banned"],
+  ]),
   runningProfiles: new Set(["shop"]),
   now: NOW,
 };
@@ -71,6 +75,21 @@ test("plain text also matches the id by prefix, so the table's short id works", 
   assert.equal(hit("a1b2c3d4-1111-2222-3333-444455556666", profile()), true);
   // A slice from the middle is not a prefix and must not match.
   assert.equal(hit("2222", profile()), false);
+});
+
+test("state: matches the status name, and none finds profiles without one", () => {
+  const warming = profile({ status_id: "s1" });
+  const unlabelled = profile();
+  assert.equal(hit("state:warming", warming), true);
+  assert.equal(hit("stage:warm", warming), true);
+  assert.equal(hit("state:banned", warming), false);
+  assert.equal(hit("state:none", unlabelled), true);
+  assert.equal(hit("state:none", warming), false);
+  assert.equal(hit("state:any", warming), true);
+  // A status deleted on another device still counts as set until it syncs away.
+  assert.equal(hit("state:any", profile({ status_id: "gone" })), true);
+  // The running state keeps its own field.
+  assert.equal(hit("status:stopped", warming), true);
 });
 
 test("a colon inside an ordinary word stays free text", () => {

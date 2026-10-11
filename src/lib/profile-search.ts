@@ -70,6 +70,12 @@ export const PROFILE_SEARCH_FIELDS: readonly ProfileSearchField[] = [
     labelKey: "search.fields.group",
   },
   {
+    key: "state",
+    aliases: ["stage"],
+    kind: "lookup",
+    labelKey: "search.fields.state",
+  },
+  {
     key: "proxy",
     aliases: [],
     kind: "lookup",
@@ -217,6 +223,8 @@ export interface ProfileSearchContext {
   readonly proxyNames: ReadonlyMap<string, string>;
   readonly vpnNames: ReadonlyMap<string, string>;
   readonly extensionGroupNames: ReadonlyMap<string, string>;
+  /** Profile status id to its name. */
+  readonly statusNames: ReadonlyMap<string, string>;
   readonly runningProfiles: ReadonlySet<string>;
   /** Epoch ms the relative dates count back from. Defaults to the wall clock. */
   readonly now?: number;
@@ -635,6 +643,8 @@ function fieldValue(
     }
     case "group":
       return lookupValue(profile.group_id, ctx.groupNames);
+    case "state":
+      return lookupValue(profile.status_id ?? undefined, ctx.statusNames);
     case "proxy":
       return lookupValue(profile.proxy_id, ctx.proxyNames);
     case "vpn":

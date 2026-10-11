@@ -295,7 +295,8 @@
       "locked": "Parola korumalı",
       "ephemeral": "Geçici profil",
       "created": "Oluşturulma tarihi",
-      "launched": "Son başlatma tarihi"
+      "launched": "Son başlatma tarihi",
+      "state": "Profil durumu"
     },
     "operators": {
       "negate": "Eşleşenleri hariç tutar",
@@ -1718,6 +1719,29 @@
       "upgraded": "Bu adres şifreli DNS de sunduğu için Donut onu kullanır. Düz DNS kullanmak için tcp:// ile başlayın."
     }
   },
+  "profileStatuses": {
+    "column": "Durum",
+    "none": "Durum yok",
+    "search": "Durum ara…",
+    "noMatch": "Eşleşen durum yok",
+    "manage": "Durumları yönet…",
+    "title": "Profil durumları",
+    "description": "Her profili hesabının durumuna göre etiketleyin. Durumlar diğer cihazlarınızla ve ekibinizle eşitlenir.",
+    "empty": "Henüz durum yok. Yaygın bir setle başlayın veya aşağıdan kendinizinkini ekleyin.",
+    "addStarter": "Aktif, Isınıyor, İncelenmeli ve Yasaklı ekle",
+    "starter": {
+      "active": "Aktif",
+      "warming": "Isınıyor",
+      "review": "İncelenmeli",
+      "banned": "Yasaklı"
+    },
+    "namePlaceholder": "Durum adı",
+    "color": "Durum rengi",
+    "customColor": "Özel renk",
+    "delete": "Durumu sil",
+    "deleteTitle": "\"{{name}}\" silinsin mi?",
+    "deleteDescription": "Bu durumdaki profillerin durumu kalmaz. Bu işlem geri alınamaz."
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN'i Düzenle",
@@ -2441,7 +2465,12 @@
     "feedbackRateLimited": "Kısa sürede çok fazla geri bildirim gönderdiniz. Birkaç dakika sonra tekrar deneyin.",
     "feedbackSendFailed": "Geri bildirim gönderilemedi. Daha sonra tekrar deneyin.",
     "feedbackLogsUnreadable": "Günlükler okunamadı. \"Son günlükleri ekle\" seçeneğini kapatıp tekrar gönderin.",
-    "dnsServerInvalid": "Bu DNS sunucusu geçerli değil. Bir IP adresi veya ana bilgisayar adı, DNS over TLS için tls://host ya da DNS over HTTPS için bir https:// URL'si girin."
+    "dnsServerInvalid": "Bu DNS sunucusu geçerli değil. Bir IP adresi veya ana bilgisayar adı, DNS over TLS için tls://host ya da DNS over HTTPS için bir https:// URL'si girin.",
+    "profileStatusExists": "Bu adda bir durum zaten var.",
+    "profileStatusNotFound": "Bu durum artık yok.",
+    "profileStatusColorInvalid": "Durum için bir renk seçin.",
+    "profileStatusNameTooLong": "Durum adı en fazla 40 karakter olabilir.",
+    "profileStatusLimitReached": "En fazla sayı olan 100 durumunuz var. Yenisini eklemek için birini silin."
   },
   "rail": {
     "profiles": "Profiller",

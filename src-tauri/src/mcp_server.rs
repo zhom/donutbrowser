@@ -2549,6 +2549,10 @@ impl McpServer {
               "type": "boolean",
               "description": "Create a profile for one run: implies ephemeral, is deleted when its browser stops, and is swept at startup if it outlived a crash (default: false)"
             },
+            "status_id": {
+              "type": "string",
+              "description": "Optional status id from list_profile_statuses"
+            },
             "dns_server": {
               "type": "string",
               "description": "Optional. DNS server the profile resolves names with, through its own proxy or VPN: https://host/path (DNS over HTTPS), tls://host[:port] (DNS over TLS), tcp://host[:port] (plain DNS) or a bare host[:port]. A bare address of a well-known public resolver such as 1.1.1.1 uses its DNS over HTTPS endpoint. If the server does not answer, connections fail instead of falling back to the proxy's resolver. Omit it to let the proxy resolve names."
@@ -2667,6 +2671,10 @@ impl McpServer {
               "type": "boolean",
               "description": "Wipe browsing data (keeping extensions and bookmarks) when the browser exits. Not available for ephemeral or password-protected profiles."
             },
+            "status_id": {
+              "type": "string",
+              "description": "Status id from list_profile_statuses (empty string to remove)"
+            },
             "dns_server": {
               "type": "string",
               "description": "DNS server the profile resolves names with, through its own proxy or VPN: https://host/path (DNS over HTTPS), tls://host[:port] (DNS over TLS), tcp://host[:port] (plain DNS) or a bare host[:port]. A bare address of a well-known public resolver such as 1.1.1.1 uses its DNS over HTTPS endpoint. If the server does not answer, connections fail instead of falling back to the proxy's resolver. Empty string to let the proxy resolve names again. Takes effect at the next launch."
@@ -2719,6 +2727,15 @@ impl McpServer {
             }
           },
           "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "list_profile_statuses".to_string(),
+        description: "List the profile statuses (named, colored labels such as Active or Banned) in their order. Set one on a profile with update_profile's status_id.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
         }),
       },
       // Group management tools
@@ -4505,6 +4522,12 @@ impl McpServer {
       "get_profile_status" => self.handle_get_profile_status(arguments).await,
       // Group management
       "list_groups" => self.handle_list_groups().await,
+      "list_profile_statuses" => Ok(serde_json::json!({
+        "content": [{
+          "type": "text",
+          "text": serde_json::to_string_pretty(&crate::profile_statuses::list()).unwrap_or_default()
+        }]
+      })),
       "get_group" => self.handle_get_group(arguments).await,
       "create_group" => self.handle_create_group(arguments).await,
       "update_group" => self.handle_update_group(arguments).await,
@@ -5281,6 +5304,18 @@ impl McpServer {
         .clone()
     };
 
+    if let Some(status_id) = arguments
+      .get("status_id")
+      .and_then(|v| v.as_str())
+      .filter(|id| !id.is_empty() && !crate::profile_statuses::exists(id))
+    {
+      return Err(McpError {
+        code: -32602,
+        message: format!("Unknown status id: {status_id}"),
+        data: None,
+      });
+    }
+
     let temporary = arguments
       .get("temporary")
       .and_then(serde_json::Value::as_bool)
@@ -5332,6 +5367,15 @@ impl McpServer {
           message: format!("Profile created but could not be marked temporary: {e}"),
           data: None,
         })?;
+    }
+
+    if let Some(status_id) = arguments
+      .get("status_id")
+      .and_then(|v| v.as_str())
+      .filter(|id| !id.is_empty())
+    {
+      let _ = ProfileManager::instance()
+        .set_profiles_status(&[profile.id.to_string()], Some(status_id.to_string()));
     }
 
     if let Some(tags) = tags {
@@ -5498,6 +5542,26 @@ impl McpServer {
         .map_err(|e| McpError {
           code: -32000,
           message: format!("Failed to update clear-on-close: {e}"),
+          data: None,
+        })?;
+    }
+
+    if let Some(status_id) = arguments.get("status_id").and_then(|v| v.as_str()) {
+      let status_id = Some(status_id.to_string()).filter(|id| !id.is_empty());
+      if status_id
+        .as_deref()
+        .is_some_and(|id| !crate::profile_statuses::exists(id))
+      {
+        return Err(McpError {
+          code: -32602,
+          message: format!("Unknown status id: {}", status_id.unwrap_or_default()),
+          data: None,
+        });
+      }
+      pm.set_profiles_status(&[profile_id.to_string()], status_id)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update status: {e}"),
           data: None,
         })?;
     }
@@ -9827,7 +9891,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      93,
+      94,
       "the tool list is a published contract; update this number deliberately"
     );
 

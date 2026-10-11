@@ -1,3 +1,4 @@
+use super::config_entities::{self, ConfigKind};
 use super::engine::SyncEngine;
 use super::subscription::SyncWorkItem;
 use crate::events;
@@ -102,6 +103,8 @@ pub struct SyncScheduler {
   pending_extensions: Arc<Mutex<HashSet<String>>>,
   pending_extension_groups: Arc<Mutex<HashSet<String>>>,
   pending_tombstones: Arc<Mutex<Vec<(String, String)>>>,
+  pending_configs: Arc<Mutex<HashSet<(ConfigKind, String)>>>,
+  pending_config_deletes: Arc<Mutex<HashSet<(ConfigKind, String)>>>,
   running_profiles: Arc<Mutex<HashSet<String>>>,
   in_flight_profiles: Arc<Mutex<HashSet<String>>>,
 }
@@ -124,6 +127,8 @@ impl SyncScheduler {
       pending_extensions: Arc::new(Mutex::new(HashSet::new())),
       pending_extension_groups: Arc::new(Mutex::new(HashSet::new())),
       pending_tombstones: Arc::new(Mutex::new(Vec::new())),
+      pending_configs: Arc::new(Mutex::new(HashSet::new())),
+      pending_config_deletes: Arc::new(Mutex::new(HashSet::new())),
       running_profiles: Arc::new(Mutex::new(HashSet::new())),
       in_flight_profiles: Arc::new(Mutex::new(HashSet::new())),
     }
@@ -179,6 +184,12 @@ impl SyncScheduler {
       return true;
     }
     drop(pending_proxies);
+
+    if !self.pending_configs.lock().await.is_empty()
+      || !self.pending_config_deletes.lock().await.is_empty()
+    {
+      return true;
+    }
 
     let pending_groups = self.pending_groups.lock().await;
     if !pending_groups.is_empty() {
@@ -318,6 +329,19 @@ impl SyncScheduler {
   pub async fn queue_extension_group_sync(&self, extension_group_id: String) {
     let mut pending = self.pending_extension_groups.lock().await;
     pending.insert(extension_group_id);
+  }
+
+  pub async fn queue_config_sync(&self, kind: ConfigKind, id: String) {
+    self.pending_configs.lock().await.insert((kind, id));
+  }
+
+  pub async fn queue_config_delete(&self, kind: ConfigKind, id: String) {
+    self
+      .pending_configs
+      .lock()
+      .await
+      .remove(&(kind, id.clone()));
+    self.pending_config_deletes.lock().await.insert((kind, id));
   }
 
   pub async fn queue_tombstone(&self, entity_type: String, entity_id: String) {
@@ -468,6 +492,7 @@ impl SyncScheduler {
                 SyncWorkItem::Vpn(id) => scheduler.queue_vpn_sync(id).await,
                 SyncWorkItem::Extension(id) => scheduler.queue_extension_sync(id).await,
                 SyncWorkItem::ExtensionGroup(id) => scheduler.queue_extension_group_sync(id).await,
+                SyncWorkItem::Config(kind, id) => scheduler.queue_config_sync(kind, id).await,
                 SyncWorkItem::Tombstone(entity_type, entity_id) => {
                   scheduler.queue_tombstone(entity_type, entity_id).await
                 }
@@ -503,6 +528,43 @@ impl SyncScheduler {
     self.process_pending_vpns(app_handle).await;
     self.process_pending_extensions(app_handle).await;
     self.process_pending_extension_groups(app_handle).await;
+    self.process_pending_configs(app_handle).await;
+  }
+
+  async fn process_pending_configs(&self, app_handle: &tauri::AppHandle) {
+    let deletes: Vec<(ConfigKind, String)> =
+      self.pending_config_deletes.lock().await.drain().collect();
+    let syncs: Vec<(ConfigKind, String)> = self.pending_configs.lock().await.drain().collect();
+    if deletes.is_empty() && syncs.is_empty() {
+      return;
+    }
+    let engine = match SyncEngine::create_from_settings(app_handle).await {
+      Ok(engine) => {
+        SYNC_ENGINE.succeeded();
+        engine
+      }
+      Err(e) => {
+        SYNC_ENGINE.failed(e);
+        return;
+      }
+    };
+    for (kind, id) in deletes {
+      // Not retried, as for groups: the tombstone check at the next start
+      // keeps a copy that missed this from coming back on other devices only
+      // once the delete has reached the cloud.
+      if let Err(e) = engine.delete_config(kind, &id).await {
+        log::warn!(
+          "Remote {} delete failed id={id} err=\"{e}\"",
+          kind.tombstone_type()
+        );
+      }
+    }
+    for (kind, id) in syncs {
+      match config_entities::sync_one(&engine, kind, &id).await {
+        Ok(()) => log_sync_success(kind.tombstone_type(), &id),
+        Err(e) => log_sync_failure(kind.tombstone_type(), &id, &e),
+      }
+    }
   }
 
   async fn process_pending_profiles(&self, app_handle: &tauri::AppHandle) {
@@ -908,7 +970,15 @@ impl SyncScheduler {
       "extension_group" => {
         self.pending_extension_groups.lock().await.remove(entity_id);
       }
-      _ => {}
+      other => {
+        if let Some(kind) = ConfigKind::from_tombstone_type(other) {
+          self
+            .pending_configs
+            .lock()
+            .await
+            .remove(&(kind, entity_id.to_string()));
+        }
+      }
     }
   }
 
@@ -1037,7 +1107,11 @@ impl SyncScheduler {
             }
           }
         }
-        _ => {}
+        other => {
+          if let Some(kind) = ConfigKind::from_tombstone_type(other) {
+            config_entities::apply_remote_delete(kind, &entity_id);
+          }
+        }
       }
     }
   }

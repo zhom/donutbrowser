@@ -68,6 +68,10 @@ import {
   ProfileLaunchHookDialog,
 } from "@/components/profile-info-dialog";
 import {
+  ProfileStatusChip,
+  ProfileStatusesDialog,
+} from "@/components/profile-statuses-dialog";
+import {
   DATA_TABLE_CLASSES,
   TableColumnResizer,
   TableRowCheckbox,
@@ -83,6 +87,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import { CopyToClipboard } from "@/components/ui/copy-to-clipboard";
 import {
@@ -149,6 +154,7 @@ import type {
   ExtensionGroup,
   LocationItem,
   ProfileBotState,
+  ProfileStatus,
   StoredProxy,
   SyncSessionInfo,
   TrafficSnapshot,
@@ -272,6 +278,9 @@ interface TableMeta {
 
   // Extension groups (for Ext column lookup)
   extensionGroups: ExtensionGroup[];
+
+  profileStatuses: ProfileStatus[];
+  onManageStatuses: () => void;
 
   // Click handlers for inline Ext / DNS cell editing
   onAssignExtensionGroup?: (profileIds: string[]) => void;
@@ -682,6 +691,104 @@ function DnsCell({
                   </span>
                 </CommandItem>
               ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Inline status dropdown, same Popover/Command pattern as DNS. A status is a
+// label, so it stays editable while the profile runs.
+function StatusCell({
+  profile,
+  meta,
+}: {
+  profile: BrowserProfile;
+  meta: TableMeta;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const current =
+    meta.profileStatuses.find((status) => status.id === profile.status_id) ??
+    null;
+
+  const onPick = async (statusId: string | null) => {
+    setIsSaving(true);
+    try {
+      await invoke("set_profiles_status", {
+        profileIds: [profile.id],
+        statusId,
+      });
+    } catch (error) {
+      showErrorToast(translateBackendError(meta.t as never, error));
+    } finally {
+      setIsSaving(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-slot="profile-status-cell"
+          disabled={isSaving}
+          className="flex h-6 w-full min-w-0 items-center rounded-md px-2 text-left text-sm transition-colors duration-100 hover:bg-foreground/6 disabled:opacity-50"
+        >
+          {current ? (
+            <ProfileStatusChip status={current} />
+          ) : (
+            <EmptyCellValue label={meta.t("profileStatuses.none")} />
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-0" align="start">
+        <Command>
+          {meta.profileStatuses.length > 8 && (
+            <CommandInput placeholder={meta.t("profileStatuses.search")} />
+          )}
+          <CommandList>
+            <CommandEmpty>{meta.t("profileStatuses.noMatch")}</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value="__none__" onSelect={() => void onPick(null)}>
+                {current === null && <LuCheck className="mr-2 size-3.5" />}
+                <span className={current === null ? "" : "ml-5"}>
+                  {meta.t("profileStatuses.none")}
+                </span>
+              </CommandItem>
+              {meta.profileStatuses.map((status) => (
+                <CommandItem
+                  key={status.id}
+                  value={`${status.name} ${status.id}`}
+                  onSelect={() => void onPick(status.id)}
+                >
+                  {current?.id === status.id && (
+                    <LuCheck className="mr-2 size-3.5" />
+                  )}
+                  <span
+                    className={
+                      current?.id === status.id ? "min-w-0" : "ml-5 min-w-0"
+                    }
+                  >
+                    <ProfileStatusChip status={status} />
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup>
+              <CommandItem
+                value="__manage__"
+                onSelect={() => {
+                  setOpen(false);
+                  meta.onManageStatuses();
+                }}
+              >
+                <span className="ml-5">{meta.t("profileStatuses.manage")}</span>
+              </CommandItem>
             </CommandGroup>
           </CommandList>
         </Command>
@@ -1545,6 +1652,8 @@ interface ProfilesDataTableProps {
    * `ext:` to a group name and needs the same list. One invoke, one listener.
    */
   extensionGroups: ExtensionGroup[];
+  /** Loaded by the page for the same reason: `state:` resolves to names. */
+  profileStatuses?: ProfileStatus[];
   isUpdating: (browser: string) => boolean;
   onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
   onAssignProfilesToGroup: (profileIds: string[]) => void;
@@ -1595,6 +1704,8 @@ interface ProfilesDataTableProps {
   onImportProfiles?: () => void;
 }
 
+const EMPTY_STATUSES: ProfileStatus[] = [];
+
 export function ProfilesDataTable({
   filterControls,
   onClearFilters,
@@ -1610,6 +1721,7 @@ export function ProfilesDataTable({
   onOpenCookieManagement,
   runningProfiles,
   extensionGroups,
+  profileStatuses = EMPTY_STATUSES,
   isUpdating,
   onAssignProfilesToGroup,
   onAssignProfilesToProxy,
@@ -1703,6 +1815,7 @@ export function ProfilesDataTable({
   }, [allProfiles, profileForInfoDialog, setProfileForInfoDialog]);
   const [bypassRulesProfile, setBypassRulesProfile] =
     React.useState<BrowserProfile | null>(null);
+  const [statusesDialogOpen, setStatusesDialogOpen] = React.useState(false);
   const [dnsBlocklistProfile, setDnsBlocklistProfile] =
     React.useState<BrowserProfile | null>(null);
   const [launchHookProfile, setLaunchHookProfile] =
@@ -2388,6 +2501,9 @@ export function ProfilesDataTable({
       onAssignExtensionGroup,
       setDnsBlocklistProfile,
 
+      profileStatuses,
+      onManageStatuses: () => setStatusesDialogOpen(true),
+
       // Rename helpers
       handleRename,
       setProfileToRename,
@@ -2530,6 +2646,7 @@ export function ProfilesDataTable({
       handleBotStopRun,
       handleBotViewActivity,
       botFixHandler,
+      profileStatuses,
     ],
   );
 
@@ -3000,6 +3117,18 @@ export function ProfilesDataTable({
         },
       },
       {
+        id: "state",
+        size: 100,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profileStatuses.column");
+        },
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          return <StatusCell profile={row.original} meta={meta} />;
+        },
+      },
+      {
         id: "tags",
         size: 100,
         header: ({ table }) => {
@@ -3416,6 +3545,7 @@ export function ProfilesDataTable({
       { id: "name", label: t("common.labels.name"), hideable: false },
       { id: "created_at", label: t("search.fields.created"), hideable: false },
       { id: "profileId", label: t("profiles.table.profileId") },
+      { id: "state", label: t("profileStatuses.column") },
       { id: "tags", label: t("profileTable.tagsHeader") },
       { id: "note", label: t("profileTable.noteHeader") },
       { id: "proxy", label: t("profiles.table.proxy") },
@@ -3452,6 +3582,11 @@ export function ProfilesDataTable({
               )?.name ?? ""
             );
           if (id === "dns") return row.dns_blocklist ?? "";
+          if (id === "state")
+            return (
+              profileStatuses.find((status) => status.id === row.status_id)
+                ?.name ?? ""
+            );
           return row.id;
         };
         return {
@@ -3460,7 +3595,15 @@ export function ProfilesDataTable({
           enableResizing: !fixed && id !== "created_at",
           minSize: fixed ? column.size : 48,
           maxSize: 1600,
-          ...(["tags", "note", "proxy", "ext", "dns", "profileId"].includes(id)
+          ...([
+            "state",
+            "tags",
+            "note",
+            "proxy",
+            "ext",
+            "dns",
+            "profileId",
+          ].includes(id)
             ? {
                 accessorFn: accessor,
                 enableSorting: true,
@@ -3469,7 +3612,7 @@ export function ProfilesDataTable({
             : {}),
         };
       }),
-    [columns, storedProxies, vpnConfigs, extensionGroups],
+    [columns, storedProxies, vpnConfigs, extensionGroups, profileStatuses],
   );
 
   const table = useReactTable({
@@ -3530,6 +3673,7 @@ export function ProfilesDataTable({
           : `${Math.max(84, Math.round(containerWidth * 0.09))}px`;
       }
       const proportions: Record<string, { pct: number; floor: number }> = {
+        state: { pct: 0.1, floor: 90 },
         tags: { pct: 0.12, floor: 100 },
         note: { pct: 0.1, floor: 80 },
         proxy: { pct: 0.13, floor: 110 },
@@ -3559,6 +3703,7 @@ export function ProfilesDataTable({
           profileId: w >= PROFILE_ID_MIN_WIDTH,
           dns: w >= 768,
           ext: w >= 672,
+          state: w >= 560,
           note: w >= 576,
           tags: w >= 512,
           // Bot state survives further down than the other content columns:
@@ -4126,6 +4271,12 @@ export function ProfilesDataTable({
         }}
         profileId={bypassRulesProfile?.id ?? null}
         initialRules={bypassRulesProfile?.proxy_bypass_rules ?? []}
+      />
+      <ProfileStatusesDialog
+        isOpen={statusesDialogOpen}
+        onClose={() => setStatusesDialogOpen(false)}
+        statuses={profileStatuses}
+        profiles={allProfiles}
       />
       <ProfileDnsBlocklistDialog
         isOpen={dnsBlocklistProfile !== null}

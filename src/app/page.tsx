@@ -72,6 +72,7 @@ import { useKonamiCode } from "@/hooks/use-konami-code";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
+import { useProfileStatuses } from "@/hooks/use-profile-statuses";
 import { useProfileTableFilters } from "@/hooks/use-profile-table-filters";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useSyncSessions } from "@/hooks/use-sync-session";
@@ -283,6 +284,7 @@ export default function Home() {
     error: groupsError,
     loadGroups,
   } = useGroupEvents();
+  const profileStatuses = useProfileStatuses();
 
   const {
     storedProxies,
@@ -2266,9 +2268,17 @@ export default function Home() {
       proxyNames: new Map(storedProxies.map((p) => [p.id, p.name])),
       vpnNames: new Map(vpnConfigs.map((v) => [v.id, v.name])),
       extensionGroupNames: new Map(extensionGroups.map((e) => [e.id, e.name])),
+      statusNames: new Map(profileStatuses.map((s) => [s.id, s.name])),
       runningProfiles,
     }),
-    [groupsData, storedProxies, vpnConfigs, extensionGroups, runningProfiles],
+    [
+      groupsData,
+      storedProxies,
+      vpnConfigs,
+      extensionGroups,
+      profileStatuses,
+      runningProfiles,
+    ],
   );
 
   const clearTableSelection = useCallback(() => setSelectedProfiles([]), []);
@@ -2346,6 +2356,7 @@ export default function Home() {
                   onSessionChanged={applySession}
                 />
                 <ProfilesDataTable
+                  profileStatuses={profileStatuses}
                   isLoading={isLoading && profiles.length === 0}
                   showOnboardingEmptyState={profiles.length === 0}
                   profiles={profileFilters.rows}

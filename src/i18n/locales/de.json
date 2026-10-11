@@ -295,7 +295,8 @@
       "locked": "Passwortgeschützt",
       "ephemeral": "Flüchtiges Profil",
       "created": "Erstellungsdatum",
-      "launched": "Datum des letzten Starts"
+      "launched": "Datum des letzten Starts",
+      "state": "Profilstatus"
     },
     "operators": {
       "negate": "Schließt Treffer aus",
@@ -1718,6 +1719,29 @@
       "upgraded": "Diese Adresse bietet auch verschlüsseltes DNS, daher verwendet Donut es. Beginnen Sie mit tcp://, um einfaches DNS zu behalten."
     }
   },
+  "profileStatuses": {
+    "column": "Status",
+    "none": "Kein Status",
+    "search": "Status suchen…",
+    "noMatch": "Kein passender Status",
+    "manage": "Status verwalten…",
+    "title": "Profilstatus",
+    "description": "Kennzeichnen Sie jedes Profil danach, wie es um sein Konto steht. Status werden mit Ihren anderen Geräten und Ihrem Team synchronisiert.",
+    "empty": "Noch keine Status. Beginnen Sie mit einer üblichen Auswahl oder fügen Sie unten eigene hinzu.",
+    "addStarter": "Aktiv, Aufwärmen, Prüfen und Gesperrt hinzufügen",
+    "starter": {
+      "active": "Aktiv",
+      "warming": "Aufwärmen",
+      "review": "Prüfen",
+      "banned": "Gesperrt"
+    },
+    "namePlaceholder": "Name des Status",
+    "color": "Farbe des Status",
+    "customColor": "Eigene Farbe",
+    "delete": "Status löschen",
+    "deleteTitle": "„{{name}}“ löschen?",
+    "deleteDescription": "Profile mit diesem Status haben danach keinen Status. Dies lässt sich nicht rückgängig machen."
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN bearbeiten",
@@ -2441,7 +2465,12 @@
     "feedbackRateLimited": "Sie haben in kurzer Zeit viel Feedback gesendet. Versuchen Sie es in ein paar Minuten erneut.",
     "feedbackSendFailed": "Das Feedback konnte nicht gesendet werden. Versuchen Sie es später erneut.",
     "feedbackLogsUnreadable": "Die Protokolle konnten nicht gelesen werden. Schalten Sie „Aktuelle Protokolle anhängen“ aus und senden Sie erneut.",
-    "dnsServerInvalid": "Dieser DNS-Server ist ungültig. Geben Sie eine IP-Adresse oder einen Hostnamen ein, tls://host für DNS over TLS oder eine https://-URL für DNS over HTTPS."
+    "dnsServerInvalid": "Dieser DNS-Server ist ungültig. Geben Sie eine IP-Adresse oder einen Hostnamen ein, tls://host für DNS over TLS oder eine https://-URL für DNS over HTTPS.",
+    "profileStatusExists": "Ein Status mit diesem Namen existiert bereits.",
+    "profileStatusNotFound": "Dieser Status existiert nicht mehr.",
+    "profileStatusColorInvalid": "Wählen Sie eine Farbe für den Status.",
+    "profileStatusNameTooLong": "Ein Statusname darf höchstens 40 Zeichen haben.",
+    "profileStatusLimitReached": "Sie haben 100 Status, das Maximum. Löschen Sie einen, um einen weiteren hinzuzufügen."
   },
   "rail": {
     "profiles": "Profile",

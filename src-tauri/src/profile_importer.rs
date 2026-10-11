@@ -1001,6 +1001,8 @@ impl ProfileImporter {
           created_by_email: None,
           dns_blocklist: None,
           dns_server: None,
+          status_id: None,
+          start_urls: Vec::new(),
           password_protected: false,
           clear_on_close: false,
           created_at: None,
@@ -1083,6 +1085,8 @@ impl ProfileImporter {
       created_by_email: None,
       dns_blocklist: None,
       dns_server: None,
+      status_id: None,
+      start_urls: Vec::new(),
       password_protected: false,
       clear_on_close: false,
       created_at: Some(

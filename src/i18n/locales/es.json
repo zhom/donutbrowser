@@ -296,7 +296,8 @@
       "locked": "Protegido con contraseña",
       "ephemeral": "Perfil efímero",
       "created": "Fecha de creación",
-      "launched": "Fecha del último inicio"
+      "launched": "Fecha del último inicio",
+      "state": "Estado del perfil"
     },
     "operators": {
       "negate": "Excluye lo que coincide",
@@ -1724,6 +1725,29 @@
       "upgraded": "Esta dirección también ofrece DNS cifrado, así que Donut lo usa. Empieza con tcp:// para mantener DNS simple."
     }
   },
+  "profileStatuses": {
+    "column": "Estado",
+    "none": "Sin estado",
+    "search": "Buscar estados…",
+    "noMatch": "Ningún estado coincide",
+    "manage": "Gestionar estados…",
+    "title": "Estados de perfil",
+    "description": "Etiqueta cada perfil según la situación de su cuenta. Los estados se sincronizan con tus otros dispositivos y con tu equipo.",
+    "empty": "Aún no hay estados. Empieza con un conjunto habitual o añade los tuyos abajo.",
+    "addStarter": "Añadir Activo, Calentando, Revisar y Baneado",
+    "starter": {
+      "active": "Activo",
+      "warming": "Calentando",
+      "review": "Revisar",
+      "banned": "Baneado"
+    },
+    "namePlaceholder": "Nombre del estado",
+    "color": "Color del estado",
+    "customColor": "Color personalizado",
+    "delete": "Eliminar estado",
+    "deleteTitle": "¿Eliminar «{{name}}»?",
+    "deleteDescription": "Los perfiles con este estado quedarán sin estado. No se puede deshacer."
+  },
   "vpns": {
     "form": {
       "titleEdit": "Editar VPN",
@@ -2451,7 +2475,12 @@
     "feedbackRateLimited": "Enviaste muchos comentarios en poco tiempo. Inténtalo de nuevo en unos minutos.",
     "feedbackSendFailed": "No se pudieron enviar los comentarios. Inténtalo más tarde.",
     "feedbackLogsUnreadable": "No se pudieron leer los registros. Desactiva «Incluir registros recientes» y envía de nuevo.",
-    "dnsServerInvalid": "Este servidor DNS no es válido. Introduce una dirección IP o un nombre de host, tls://host para DNS sobre TLS o una URL https:// para DNS sobre HTTPS."
+    "dnsServerInvalid": "Este servidor DNS no es válido. Introduce una dirección IP o un nombre de host, tls://host para DNS sobre TLS o una URL https:// para DNS sobre HTTPS.",
+    "profileStatusExists": "Ya existe un estado con este nombre.",
+    "profileStatusNotFound": "Este estado ya no existe.",
+    "profileStatusColorInvalid": "Elige un color para el estado.",
+    "profileStatusNameTooLong": "El nombre de un estado puede tener como máximo 40 caracteres.",
+    "profileStatusLimitReached": "Tienes 100 estados, el máximo. Elimina uno para añadir otro."
   },
   "rail": {
     "profiles": "Perfiles",

@@ -25,6 +25,11 @@ export type BackendErrorCode =
   | "PASSWORD_TOO_SHORT"
   | "INVALID_LAUNCH_HOOK_URL"
   | "DNS_SERVER_INVALID"
+  | "PROFILE_STATUS_EXISTS"
+  | "PROFILE_STATUS_NOT_FOUND"
+  | "PROFILE_STATUS_COLOR_INVALID"
+  | "PROFILE_STATUS_NAME_TOO_LONG"
+  | "PROFILE_STATUS_LIMIT_REACHED"
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "COOKIE_IMPORT_BROWSER_RUNNING"
@@ -361,6 +366,16 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.invalidLaunchHookUrl");
     case "DNS_SERVER_INVALID":
       return t("backendErrors.dnsServerInvalid");
+    case "PROFILE_STATUS_EXISTS":
+      return t("backendErrors.profileStatusExists");
+    case "PROFILE_STATUS_NOT_FOUND":
+      return t("backendErrors.profileStatusNotFound");
+    case "PROFILE_STATUS_COLOR_INVALID":
+      return t("backendErrors.profileStatusColorInvalid");
+    case "PROFILE_STATUS_NAME_TOO_LONG":
+      return t("backendErrors.profileStatusNameTooLong");
+    case "PROFILE_STATUS_LIMIT_REACHED":
+      return t("backendErrors.profileStatusLimitReached");
     case "COOKIE_DB_LOCKED":
       return t("backendErrors.cookieDbLocked");
     case "COOKIE_DB_UNAVAILABLE":

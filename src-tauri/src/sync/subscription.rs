@@ -27,6 +27,7 @@ pub enum SyncWorkItem {
   Vpn(String),
   Extension(String),
   ExtensionGroup(String),
+  Config(super::config_entities::ConfigKind, String),
   Tombstone(String, String),
 }
 
@@ -391,6 +392,14 @@ impl SyncSubscription {
     key
   }
 
+  /// `statuses/<id>.json` and the other config-entity keys.
+  fn config_key(key: &str) -> Option<(super::config_entities::ConfigKind, &str)> {
+    let (folder, rest) = key.split_once('/')?;
+    let kind = super::config_entities::ConfigKind::from_folder(folder)?;
+    let id = rest.strip_suffix(".json")?;
+    crate::app_dirs::is_plain_path_part(id).then_some((kind, id))
+  }
+
   fn handle_event(event: &SubscribeEvent, work_tx: &mpsc::UnboundedSender<SyncWorkItem>) {
     let Some(raw_key) = &event.key else {
       return;
@@ -438,9 +447,16 @@ impl SyncSubscription {
         .strip_prefix("extension_groups/")
         .and_then(|s| s.strip_suffix(".json"))
         .map(|s| SyncWorkItem::ExtensionGroup(s.to_string()))
+    } else if let Some((kind, id)) = Self::config_key(key) {
+      Some(SyncWorkItem::Config(kind, id.to_string()))
     } else if key.starts_with("tombstones/") {
       key.strip_prefix("tombstones/").and_then(|rest| {
-        if rest.starts_with("profiles/") {
+        if let Some((kind, id)) = Self::config_key(rest) {
+          Some(SyncWorkItem::Tombstone(
+            kind.tombstone_type().to_string(),
+            id.to_string(),
+          ))
+        } else if rest.starts_with("profiles/") {
           rest
             .strip_prefix("profiles/")
             .and_then(|s| s.strip_suffix(".json"))
@@ -550,6 +566,47 @@ impl SubscriptionManager {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  fn work_for(key: &str) -> Option<SyncWorkItem> {
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let event = SubscribeEvent {
+      event_type: "change".to_string(),
+      key: Some(key.to_string()),
+      last_modified: None,
+      size: None,
+    };
+    SyncSubscription::handle_event(&event, &tx);
+    rx.try_recv().ok()
+  }
+
+  #[test]
+  fn config_entity_keys_become_work_and_tombstones() {
+    use crate::sync::config_entities::ConfigKind;
+    assert!(matches!(
+      work_for("statuses/s1.json"),
+      Some(SyncWorkItem::Config(ConfigKind::Status, id)) if id == "s1"
+    ));
+    assert!(matches!(
+      work_for("teams/t9/templates/t1.json"),
+      Some(SyncWorkItem::Config(ConfigKind::Template, id)) if id == "t1"
+    ));
+    assert!(matches!(
+      work_for("tombstones/statuses/s1.json"),
+      Some(SyncWorkItem::Tombstone(kind, id)) if kind == "status" && id == "s1"
+    ));
+    assert!(matches!(
+      work_for("tombstones/templates/t1.json"),
+      Some(SyncWorkItem::Tombstone(kind, id)) if kind == "template" && id == "t1"
+    ));
+    for key in [
+      "statuses/../x.json",
+      "statuses/a/b.json",
+      "statuses/s1.txt",
+      "unknown/x.json",
+    ] {
+      assert!(work_for(key).is_none(), "{key}");
+    }
+  }
 
   #[test]
   fn reconnects_back_off_from_six_seconds_to_ten_minutes() {

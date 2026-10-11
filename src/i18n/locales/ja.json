@@ -295,7 +295,8 @@
       "locked": "パスワード保護",
       "ephemeral": "一時プロファイル",
       "created": "作成日",
-      "launched": "最終起動日"
+      "launched": "最終起動日",
+      "state": "プロファイルのステータス"
     },
     "operators": {
       "negate": "一致するものを除外します",
@@ -1718,6 +1719,29 @@
       "upgraded": "このアドレスは暗号化 DNS にも対応しているため、Donut はそれを使用します。通常の DNS を使うには先頭に tcp:// を付けてください。"
     }
   },
+  "profileStatuses": {
+    "column": "ステータス",
+    "none": "ステータスなし",
+    "search": "ステータスを検索…",
+    "noMatch": "一致するステータスはありません",
+    "manage": "ステータスを管理…",
+    "title": "プロファイルのステータス",
+    "description": "各プロファイルにアカウントの状況を示すラベルを付けます。ステータスは他のデバイスとチームに同期されます。",
+    "empty": "ステータスはまだありません。よく使うセットから始めるか、下で独自に追加してください。",
+    "addStarter": "アクティブ、ウォームアップ中、要確認、BAN を追加",
+    "starter": {
+      "active": "アクティブ",
+      "warming": "ウォームアップ中",
+      "review": "要確認",
+      "banned": "BAN"
+    },
+    "namePlaceholder": "ステータス名",
+    "color": "ステータスの色",
+    "customColor": "カスタムカラー",
+    "delete": "ステータスを削除",
+    "deleteTitle": "「{{name}}」を削除しますか？",
+    "deleteDescription": "このステータスのプロファイルはステータスなしになります。元に戻すことはできません。"
+  },
   "vpns": {
     "form": {
       "titleEdit": "VPN を編集",
@@ -2441,7 +2465,12 @@
     "feedbackRateLimited": "短時間に多くのフィードバックが送信されました。数分後にもう一度お試しください。",
     "feedbackSendFailed": "フィードバックを送信できませんでした。しばらくしてからもう一度お試しください。",
     "feedbackLogsUnreadable": "ログを読み込めませんでした。「最近のログを添付」をオフにして、もう一度送信してください。",
-    "dnsServerInvalid": "この DNS サーバーは無効です。IP アドレスまたはホスト名、DNS over TLS の場合は tls://host、DNS over HTTPS の場合は https:// URL を入力してください。"
+    "dnsServerInvalid": "この DNS サーバーは無効です。IP アドレスまたはホスト名、DNS over TLS の場合は tls://host、DNS over HTTPS の場合は https:// URL を入力してください。",
+    "profileStatusExists": "この名前のステータスはすでに存在します。",
+    "profileStatusNotFound": "このステータスはもう存在しません。",
+    "profileStatusColorInvalid": "ステータスの色を選択してください。",
+    "profileStatusNameTooLong": "ステータス名は 40 文字以内にしてください。",
+    "profileStatusLimitReached": "ステータスが上限の 100 個に達しています。追加するには 1 つ削除してください。"
   },
   "rail": {
     "profiles": "プロファイル",
