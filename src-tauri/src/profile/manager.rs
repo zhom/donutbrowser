@@ -79,6 +79,15 @@ pub struct ProfileManager {
   wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
 }
 
+/// A clone is created on this machine, but its fingerprint keeps the OS its
+/// source claimed. An unset `os` means the source's native OS, which the
+/// clone's own native OS, this machine, would otherwise replace.
+fn keep_source_claim(config: &mut WayfernConfig, source_native_os: String) {
+  if config.os.is_none() && source_native_os != get_host_os() {
+    config.os = Some(source_native_os);
+  }
+}
+
 fn merge_submitted_wayfern_config(
   stored: Option<&WayfernConfig>,
   mut config: WayfernConfig,
@@ -1482,6 +1491,7 @@ impl ProfileManager {
     }
 
     let new_id = uuid::Uuid::new_v4();
+    let source_native_os = source.native_os();
     let clone_name = match custom_name {
       Some(name) if !name.trim().is_empty() => name.trim().to_string(),
       _ => self.generate_clone_name(&source.name)?,
@@ -1559,6 +1569,7 @@ impl ProfileManager {
       // byte-identical to its source forever, not just until the next upgrade.
       cfg.identity_id = None;
       cfg.identity_baseline = None;
+      keep_source_claim(cfg, source_native_os);
     }
 
     self.save_profile(&new_profile)?;
@@ -2226,6 +2237,34 @@ mod tests {
 
     let profile_manager = ProfileManager::instance();
     (profile_manager, temp_dir)
+  }
+
+  #[test]
+  fn a_clone_keeps_the_os_its_source_claimed() {
+    let host = get_host_os();
+    let other = if host == "windows" {
+      "macos"
+    } else {
+      "windows"
+    };
+
+    let mut from_elsewhere = WayfernConfig::default();
+    keep_source_claim(&mut from_elsewhere, other.to_string());
+    assert_eq!(from_elsewhere.os.as_deref(), Some(other));
+
+    let mut from_here = WayfernConfig::default();
+    keep_source_claim(&mut from_here, host.clone());
+    assert_eq!(
+      from_here.os, None,
+      "a clone made where its source was made is unchanged"
+    );
+
+    let mut explicit = WayfernConfig {
+      os: Some("android".to_string()),
+      ..WayfernConfig::default()
+    };
+    keep_source_claim(&mut explicit, other.to_string());
+    assert_eq!(explicit.os.as_deref(), Some("android"));
   }
 
   fn temporary_profile(name: &str, process_id: Option<u32>) -> BrowserProfile {
