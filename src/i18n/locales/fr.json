@@ -2102,7 +2102,10 @@
       "later": "Plus tard",
       "uploading": "Envoi",
       "downloading": "Téléchargement",
-      "startingUpdate": "Démarrage de la mise à jour..."
+      "startingUpdate": "Démarrage de la mise à jour...",
+      "packageManagerUpdate": "Mise à jour disponible via le gestionnaire de paquets",
+      "updateAvailable": "Mise à jour disponible",
+      "installUpdate": "Installer la mise à jour"
     }
   },
   "browserDownload": {
@@ -2436,7 +2439,9 @@
     "feedbackInvalid": "L'avis n'a pas été accepté. Vérifiez le message et réessayez.",
     "feedbackRateLimited": "Vous avez envoyé beaucoup d'avis en peu de temps. Réessayez dans quelques minutes.",
     "feedbackSendFailed": "L'avis n'a pas pu être envoyé. Réessayez plus tard.",
-    "feedbackLogsUnreadable": "Les journaux n'ont pas pu être lus. Désactivez « Joindre les journaux récents » et renvoyez."
+    "feedbackLogsUnreadable": "Les journaux n'ont pas pu être lus. Désactivez « Joindre les journaux récents » et renvoyez.",
+    "updateManualRequired": "Mettez à jour via votre gestionnaire de paquets ou téléchargez la version depuis GitHub Releases.",
+    "updateConfirmationRequired": "Cliquez sur Installer la mise à jour pour autoriser l’installation du paquet."
   },
   "rail": {
     "profiles": "Profils",

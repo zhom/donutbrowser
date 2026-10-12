@@ -137,3 +137,18 @@ test("an unknown code still renders something rather than throwing", () => {
   assert.equal(typeof rendered, "string");
   assert.ok(rendered.length > 0);
 });
+
+test("Linux update refusal codes are translated in every locale", () => {
+  for (const [locale, bundle] of localeFiles()) {
+    const t = translatorFor(bundle, locale);
+    for (const code of [
+      "UPDATE_MANUAL_REQUIRED",
+      "UPDATE_CONFIRMATION_REQUIRED",
+    ]) {
+      const envelope = JSON.stringify({ code });
+      const rendered = translateBackendError(t, envelope);
+      assert.notEqual(rendered, envelope);
+      assert.ok(rendered.length > 0);
+    }
+  }
+});

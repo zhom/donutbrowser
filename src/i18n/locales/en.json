@@ -2092,7 +2092,10 @@
       "later": "Later",
       "uploading": "Uploading",
       "downloading": "Downloading",
-      "startingUpdate": "Starting update..."
+      "startingUpdate": "Starting update...",
+      "packageManagerUpdate": "Update available via package manager",
+      "updateAvailable": "Update available",
+      "installUpdate": "Install update"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "The feedback was not accepted. Check the message and try again.",
     "feedbackRateLimited": "You sent a lot of feedback in a short time. Try again in a few minutes.",
     "feedbackSendFailed": "The feedback could not be sent. Try again later.",
-    "feedbackLogsUnreadable": "The logs could not be read. Turn off \"Include recent logs\" and send again."
+    "feedbackLogsUnreadable": "The logs could not be read. Turn off \"Include recent logs\" and send again.",
+    "updateManualRequired": "Update using your package manager or download from GitHub Releases.",
+    "updateConfirmationRequired": "Click Install update to allow package installation."
   },
   "rail": {
     "profiles": "Profiles",

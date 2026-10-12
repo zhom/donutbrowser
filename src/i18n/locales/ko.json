@@ -2092,7 +2092,10 @@
       "later": "나중에",
       "uploading": "업로드 중",
       "downloading": "다운로드 중",
-      "startingUpdate": "업데이트를 시작하는 중..."
+      "startingUpdate": "업데이트를 시작하는 중...",
+      "packageManagerUpdate": "패키지 관리자로 업데이트할 수 있습니다",
+      "updateAvailable": "업데이트 사용 가능",
+      "installUpdate": "업데이트 설치"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "피드백이 접수되지 않았습니다. 메시지를 확인하고 다시 시도하세요.",
     "feedbackRateLimited": "짧은 시간에 피드백을 너무 많이 보냈습니다. 몇 분 후에 다시 시도하세요.",
     "feedbackSendFailed": "피드백을 보낼 수 없습니다. 나중에 다시 시도하세요.",
-    "feedbackLogsUnreadable": "로그를 읽을 수 없습니다. '최근 로그 첨부'를 끄고 다시 보내세요."
+    "feedbackLogsUnreadable": "로그를 읽을 수 없습니다. '최근 로그 첨부'를 끄고 다시 보내세요.",
+    "updateManualRequired": "패키지 관리자로 업데이트하거나 GitHub Releases에서 다운로드하세요.",
+    "updateConfirmationRequired": "패키지 설치를 허용하려면 업데이트 설치를 클릭하세요."
   },
   "rail": {
     "profiles": "프로필",

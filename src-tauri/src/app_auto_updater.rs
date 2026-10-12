@@ -20,12 +20,12 @@ across multiple operating systems and installation methods.
 - **Architecture**: Supports both x64 and x86_64
 
 ### Linux
-- **Formats**: DEB, RPM, AppImage, TAR.GZ
+- **Formats**: DEB and RPM, only for confirmed package installations
 - **Installation Methods**:
   - **DEB**: Uses dpkg or apt with pkexec for privilege escalation
   - **RPM**: Uses rpm, dnf, yum, or zypper with pkexec
-  - **AppImage**: Direct replacement or installation to ~/.local/bin
-  - **TAR.GZ**: Binary extraction and replacement
+  - **External/manual installs**: Notification only, no download or installation
+  - **Authorization**: Package installation requires an explicit user action
 - **Architecture**: Supports x64, x86_64, amd64, aarch64, arm64
 
 ## Linux Installation Detection
@@ -73,14 +73,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(target_os = "linux")]
-#[derive(Debug, Clone)]
-enum LinuxInstallationMethod {
-  Deb,      // Installed via DEB package
-  Rpm,      // Installed via RPM package
-  AppImage, // Running from AppImage
-  Manual,   // Manually installed (e.g., extracted tarball)
-  Unknown,  // Cannot determine
-}
+mod linux;
+#[cfg(target_os = "linux")]
+use linux::{detect_installation, InstallationFacts, LinuxInstallationMethod};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppReleaseAsset {
@@ -112,6 +107,9 @@ pub struct AppUpdateInfo {
   pub is_nightly: bool,
   pub published_at: String,
   pub manual_update_required: bool,
+  /// Linux package installation may prompt for privileges and requires a click.
+  #[serde(default)]
+  pub user_confirmation_required: bool,
   pub release_page_url: Option<String>,
   /// True when a system package manager repo is configured (apt/dnf/zypper)
   pub repo_update: bool,
@@ -305,6 +303,7 @@ impl AppAutoUpdater {
         is_nightly,
         published_at: latest_release.published_at.clone(),
         manual_update_required,
+        user_confirmation_required: true,
         release_page_url: Some(release_page_url),
         repo_update,
         checksums_url,
@@ -329,6 +328,7 @@ impl AppAutoUpdater {
         is_nightly,
         published_at: latest_release.published_at.clone(),
         manual_update_required: false,
+        user_confirmation_required: false,
         release_page_url: Some(release_page_url),
         repo_update: false,
         checksums_url,
@@ -440,77 +440,24 @@ impl AppAutoUpdater {
   /// Detect how the application was installed on Linux
   #[cfg(target_os = "linux")]
   fn detect_linux_installation_method(&self) -> LinuxInstallationMethod {
-    // First check if we're running from an AppImage
-    if self.is_running_from_appimage() {
-      return LinuxInstallationMethod::AppImage;
-    }
-
-    // Get current executable path
-    let exe_path = match std::env::current_exe() {
-      Ok(path) => path,
-      Err(_) => return LinuxInstallationMethod::Unknown,
+    let exe = std::env::current_exe().ok();
+    let owned_by = |tool: &str, args: &[&str]| -> Option<bool> {
+      let exe = exe.as_ref()?;
+      let output = Command::new(tool).args(args).arg(exe).output().ok()?;
+      Some(output.status.success() && !output.stdout.is_empty())
     };
-
-    let exe_path_str = exe_path.to_string_lossy();
-
-    // Check if installed via package manager by querying package databases
-    if let Some(exe_name) = exe_path.file_name().and_then(|n| n.to_str()) {
-      // Try to find the package that owns this file
-
-      // Check DEB systems (dpkg)
-      if let Ok(output) = Command::new("dpkg").args(["-S", &exe_path_str]).output() {
-        if output.status.success() {
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          if !stdout.trim().is_empty() && !stdout.contains("no path found") {
-            return LinuxInstallationMethod::Deb;
-          }
-        }
-      }
-
-      // Check RPM systems (rpm)
-      if let Ok(output) = Command::new("rpm").args(["-qf", &exe_path_str]).output() {
-        if output.status.success() {
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          if !stdout.trim().is_empty() && !stdout.contains("not owned") {
-            return LinuxInstallationMethod::Rpm;
-          }
-        }
-      }
-
-      // Alternative RPM check with different systems
-      for rpm_cmd in &["dnf", "yum", "zypper"] {
-        if let Ok(output) = Command::new(rpm_cmd)
-          .args(["provides", &exe_path_str])
-          .output()
-        {
-          if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if !stdout.trim().is_empty() && stdout.contains(exe_name) {
-              return LinuxInstallationMethod::Rpm;
-            }
-          }
-        }
-      }
-    }
-
-    // Check installation location to infer method
-    if exe_path_str.starts_with("/usr/bin/") || exe_path_str.starts_with("/usr/local/bin/") {
-      // Likely installed via package manager or system-wide installation
-
-      // Try to determine which package system is available
-      if Command::new("dpkg").arg("--version").output().is_ok() {
-        return LinuxInstallationMethod::Deb;
-      } else if Command::new("rpm").arg("--version").output().is_ok() {
-        return LinuxInstallationMethod::Rpm;
-      }
-
-      return LinuxInstallationMethod::Manual;
-    } else if exe_path_str.contains("/.local/") || exe_path_str.starts_with("/home/") {
-      // User-local installation
-      return LinuxInstallationMethod::Manual;
-    }
-
-    LinuxInstallationMethod::Unknown
+    let snap = std::env::var_os("SNAP").map(PathBuf::from);
+    detect_installation(&InstallationFacts {
+      exe: exe.as_deref(),
+      appimage: self.is_running_from_appimage(),
+      flatpak: Path::new("/.flatpak-info").exists()
+        || std::env::var_os("FLATPAK_ID").is_some_and(|id| !id.is_empty()),
+      snap: snap.as_deref(),
+      pacman_owned: owned_by("pacman", &["-Qo"]),
+      dpkg_owned: owned_by("dpkg", &["-S"]),
+      rpm_owned: owned_by("rpm", &["-qf"]),
+      deb_repo: Self::is_deb_repo_configured(),
+    })
   }
 
   /// Check if the APT repository is configured
@@ -539,6 +486,7 @@ impl AppAutoUpdater {
     match installation_method {
       LinuxInstallationMethod::Deb => Self::is_deb_repo_configured(),
       LinuxInstallationMethod::Rpm => Self::is_rpm_repo_configured(),
+      LinuxInstallationMethod::ManagedExternally => true,
       _ => false,
     }
   }
@@ -704,18 +652,19 @@ impl AppAutoUpdater {
     let installation_method = self.detect_linux_installation_method();
     log::debug!("Linux install detected method={installation_method:?}");
 
-    // Priority order based on installation method
-    let extensions = match installation_method {
-      LinuxInstallationMethod::Deb => vec!["deb", "tar.gz"],
-      LinuxInstallationMethod::Rpm => vec!["rpm", "tar.gz"],
-      LinuxInstallationMethod::AppImage => {
-        // AppImages should not auto-update for safety
-        return None;
-      }
-      LinuxInstallationMethod::Manual | LinuxInstallationMethod::Unknown => {
-        vec!["deb", "rpm", "tar.gz"]
-      }
-    };
+    if self.is_repo_configured() {
+      return None;
+    }
+    Self::linux_download_url_for(assets, arch, installation_method)
+  }
+
+  #[cfg(target_os = "linux")]
+  fn linux_download_url_for(
+    assets: &[AppReleaseAsset],
+    arch: &str,
+    installation_method: LinuxInstallationMethod,
+  ) -> Option<String> {
+    let extensions = [installation_method.package_extension()?];
 
     for ext in &extensions {
       // Look for exact architecture match
@@ -953,7 +902,11 @@ impl AppAutoUpdater {
     &self,
     _app_handle: &tauri::AppHandle,
     update_info: &AppUpdateInfo,
+    _user_initiated: bool,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    #[cfg(target_os = "linux")]
+    self.validate_linux_update(Path::new(&update_info.download_url), _user_initiated)?;
+
     let started = std::time::Instant::now();
     let mut stage = "checksums";
     match self.download_and_prepare(update_info, &mut stage).await {
@@ -1375,6 +1328,7 @@ impl AppAutoUpdater {
 
     #[cfg(target_os = "linux")]
     {
+      self.validate_linux_update(installer_path, true)?;
       let file_name = installer_path
         .file_name()
         .and_then(|name| name.to_str())
@@ -1402,6 +1356,22 @@ impl AppAutoUpdater {
     {
       Err("Auto-update installation not supported on this platform".into())
     }
+  }
+
+  #[cfg(target_os = "linux")]
+  fn validate_linux_update(
+    &self,
+    package: &Path,
+    user_initiated: bool,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    self
+      .detect_linux_installation_method()
+      .validate_update(
+        self.is_repo_configured(),
+        package.extension().and_then(|ext| ext.to_str()),
+        user_initiated,
+      )
+      .map_err(|code| serde_json::json!({ "code": code }).to_string().into())
   }
 
   /// Install Linux DEB package
@@ -2067,10 +2037,11 @@ pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
 pub async fn download_and_prepare_app_update(
   app_handle: tauri::AppHandle,
   update_info: AppUpdateInfo,
+  user_initiated: Option<bool>,
 ) -> Result<(), String> {
   let updater = AppAutoUpdater::instance();
   updater
-    .download_and_prepare_update(&app_handle, &update_info)
+    .download_and_prepare_update(&app_handle, &update_info, user_initiated.unwrap_or(false))
     .await
     .map_err(|e| {
       let msg = e.to_string();
@@ -2388,6 +2359,7 @@ mod tests {
 
     // Test that the method returns a URL for the current platform
     let url = updater.get_download_url_for_platform(&all_assets);
+    #[cfg(not(target_os = "linux"))]
     assert!(
       url.is_some(),
       "Should find a suitable download URL for current platform"
@@ -2411,14 +2383,27 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     {
-      let url = url.unwrap();
-      assert!(
-        url.contains(".deb")
-          || url.contains(".rpm")
-          || url.contains(".appimage")
-          || url.contains(".tar.gz"),
-        "Linux should prefer DEB, RPM, AppImage, or TAR.GZ files"
-      );
+      for (method, suffix) in [
+        (LinuxInstallationMethod::Deb, ".deb"),
+        (LinuxInstallationMethod::Rpm, ".rpm"),
+      ] {
+        let url = AppAutoUpdater::linux_download_url_for(&all_assets, "x64", method).unwrap();
+        assert!(url.ends_with(suffix));
+      }
+      for method in [
+        LinuxInstallationMethod::Manual,
+        LinuxInstallationMethod::Unknown,
+        LinuxInstallationMethod::ManagedExternally,
+        LinuxInstallationMethod::AppImage,
+      ] {
+        assert_eq!(
+          AppAutoUpdater::linux_download_url_for(&all_assets, "x64", method),
+          None
+        );
+      }
+      if let Some(url) = url {
+        assert!(url.ends_with(".deb") || url.ends_with(".rpm"));
+      }
     }
   }
 

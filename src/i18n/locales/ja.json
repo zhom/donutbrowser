@@ -2092,7 +2092,10 @@
       "later": "後で",
       "uploading": "アップロード中",
       "downloading": "ダウンロード中",
-      "startingUpdate": "更新を開始しています..."
+      "startingUpdate": "更新を開始しています...",
+      "packageManagerUpdate": "パッケージマネージャーで更新できます",
+      "updateAvailable": "更新があります",
+      "installUpdate": "更新をインストール"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "フィードバックを受け付けられませんでした。メッセージを確認して、もう一度お試しください。",
     "feedbackRateLimited": "短時間に多くのフィードバックが送信されました。数分後にもう一度お試しください。",
     "feedbackSendFailed": "フィードバックを送信できませんでした。しばらくしてからもう一度お試しください。",
-    "feedbackLogsUnreadable": "ログを読み込めませんでした。「最近のログを添付」をオフにして、もう一度送信してください。"
+    "feedbackLogsUnreadable": "ログを読み込めませんでした。「最近のログを添付」をオフにして、もう一度送信してください。",
+    "updateManualRequired": "パッケージマネージャーで更新するか、GitHub Releases からダウンロードしてください。",
+    "updateConfirmationRequired": "パッケージのインストールを許可するには「更新をインストール」をクリックしてください。"
   },
   "rail": {
     "profiles": "プロファイル",

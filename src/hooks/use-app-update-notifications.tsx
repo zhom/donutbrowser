@@ -20,6 +20,7 @@ export function useAppUpdateNotifications() {
   const [isClient, setIsClient] = useState(false);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const autoDownloadedVersion = useRef<string | null>(null);
+  const updateInFlight = useRef(false);
 
   // Ensure we're on the client side to prevent hydration mismatches
   useEffect(() => {
@@ -64,7 +65,9 @@ export function useAppUpdateNotifications() {
   }, [isClient]);
 
   const handleAppUpdate = useCallback(
-    async (appUpdateInfo: AppUpdateInfo) => {
+    async (appUpdateInfo: AppUpdateInfo, userInitiated = false) => {
+      if (updateInFlight.current) return;
+      updateInFlight.current = true;
       try {
         setIsUpdating(true);
         setUpdateProgress({
@@ -77,6 +80,7 @@ export function useAppUpdateNotifications() {
 
         await invoke("download_and_prepare_app_update", {
           updateInfo: appUpdateInfo,
+          userInitiated,
         });
       } catch (error) {
         console.error("Failed to update app:", error);
@@ -93,6 +97,8 @@ export function useAppUpdateNotifications() {
         // false, so clearing the marker now would retry in a tight loop.
         // Retries are re-armed when the next backend check delivers a fresh
         // update event instead.
+      } finally {
+        updateInFlight.current = false;
       }
     },
     [t],
@@ -176,6 +182,7 @@ export function useAppUpdateNotifications() {
       !isClient ||
       !updateInfo ||
       updateInfo.manual_update_required ||
+      updateInfo.user_confirmation_required ||
       isUpdating ||
       updateReady ||
       autoDownloadedVersion.current === updateInfo.new_version
@@ -191,8 +198,12 @@ export function useAppUpdateNotifications() {
   useEffect(() => {
     if (!isClient) return;
 
-    const showManualToast = updateInfo?.manual_update_required && !isUpdating;
+    const showManualToast =
+      (updateInfo?.manual_update_required ||
+        updateInfo?.user_confirmation_required) &&
+      !isUpdating;
     if (!updateReady && !showManualToast) {
+      toast.dismiss("app-update");
       return;
     }
     if (!updateInfo) return;
@@ -202,6 +213,7 @@ export function useAppUpdateNotifications() {
         <AppUpdateToast
           updateInfo={updateInfo}
           onRestart={handleRestart}
+          onUpdate={() => handleAppUpdate(updateInfo, true)}
           onDismiss={dismissAppUpdate}
           updateReady={updateReady}
         />
@@ -219,6 +231,7 @@ export function useAppUpdateNotifications() {
     );
   }, [
     updateInfo,
+    handleAppUpdate,
     handleRestart,
     dismissAppUpdate,
     updateReady,

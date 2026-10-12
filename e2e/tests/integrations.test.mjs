@@ -1421,7 +1421,12 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
           },
         },
       );
-      assert.match(prepareError, /checksum|verif|Failed to download/i);
+      assert.match(
+        prepareError,
+        process.platform === "linux"
+          ? /UPDATE_MANUAL_REQUIRED/
+          : /checksum|verif|Failed to download/i,
+      );
       const versionStatus = await app.invoke("get_version_update_status");
       assert.ok(versionStatus && typeof versionStatus === "object");
       assert.equal(typeof (await app.invoke("is_default_browser")), "boolean");
@@ -1629,4 +1634,34 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
     },
     { wayfernTermsAccepted: false },
   );
+});
+
+test("Linux updater refuses packages for an unmanaged executable before downloading", {
+  skip: process.platform !== "linux",
+}, async () => {
+  await withApp("integrations-linux-update-guard", async (app) => {
+    const updateInfo = {
+      current_version: "v0.31.2",
+      new_version: "v99.0.0",
+      release_notes: "Local installation guard regression",
+      download_url: "https://example.invalid/Donut_99.0.0_amd64.deb",
+      is_nightly: false,
+      published_at: "2026-01-01T00:00:00Z",
+      // Caller metadata must not override the actual installation method.
+      manual_update_required: false,
+      user_confirmation_required: false,
+      repo_update: false,
+    };
+    for (const userInitiated of [undefined, false, true]) {
+      await assertCommandErrorCode(
+        app,
+        "download_and_prepare_app_update",
+        "UPDATE_MANUAL_REQUIRED",
+        {
+          updateInfo,
+          ...(userInitiated === undefined ? {} : { userInitiated }),
+        },
+      );
+    }
+  });
 });

@@ -2092,7 +2092,10 @@
       "later": "Später",
       "uploading": "Wird hochgeladen",
       "downloading": "Wird heruntergeladen",
-      "startingUpdate": "Update wird gestartet..."
+      "startingUpdate": "Update wird gestartet...",
+      "packageManagerUpdate": "Update über die Paketverwaltung verfügbar",
+      "updateAvailable": "Update verfügbar",
+      "installUpdate": "Update installieren"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "Das Feedback wurde nicht angenommen. Prüfen Sie die Nachricht und versuchen Sie es erneut.",
     "feedbackRateLimited": "Sie haben in kurzer Zeit viel Feedback gesendet. Versuchen Sie es in ein paar Minuten erneut.",
     "feedbackSendFailed": "Das Feedback konnte nicht gesendet werden. Versuchen Sie es später erneut.",
-    "feedbackLogsUnreadable": "Die Protokolle konnten nicht gelesen werden. Schalten Sie „Aktuelle Protokolle anhängen“ aus und senden Sie erneut."
+    "feedbackLogsUnreadable": "Die Protokolle konnten nicht gelesen werden. Schalten Sie „Aktuelle Protokolle anhängen“ aus und senden Sie erneut.",
+    "updateManualRequired": "Aktualisieren Sie über Ihre Paketverwaltung oder laden Sie die Version von GitHub Releases herunter.",
+    "updateConfirmationRequired": "Klicken Sie auf „Update installieren“, um die Paketinstallation zu erlauben."
   },
   "rail": {
     "profiles": "Profile",

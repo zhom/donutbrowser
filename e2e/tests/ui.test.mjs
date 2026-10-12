@@ -4532,3 +4532,84 @@ test("feedback goes from the More menu to the team, with the logs the person pre
     await capture.close();
   }
 });
+
+test("Linux app updates wait for a click and external installs only notify", async () => {
+  await withApp("ui-linux-app-update", async (app) => {
+    await app.waitForText("No profiles yet");
+    const update = {
+      current_version: "v0.31.2",
+      new_version: "v99.0.0",
+      release_notes: "Update notification regression test",
+      download_url: "https://example.invalid/Donut_99.0.0_amd64.deb",
+      is_nightly: false,
+      published_at: "2026-01-01T00:00:00Z",
+      manual_update_required: false,
+      user_confirmation_required: true,
+      release_page_url: "https://github.com/zhom/donutbrowser/releases",
+      repo_update: false,
+    };
+    try {
+      // Record the request without ever downloading or installing a package.
+      await stubCommand(app, "download_and_prepare_app_update", null);
+      const calls = () =>
+        app.execute(
+          `return (window.__donutStubbedCalls ?? []).filter((call) => call.command === "download_and_prepare_app_update");`,
+        );
+      await app.invoke("plugin:event|emit", {
+        event: "app-update-available",
+        payload: { ...update, manual_update_required: true, repo_update: true },
+      });
+      await app.waitForText(en.appUpdate.toast.packageManagerUpdate);
+      assert.equal(
+        await app.visibleTextIncludes(en.appUpdate.toast.installUpdate),
+        false,
+      );
+      assert.ok(await app.visibleTextIncludes(en.appUpdate.toast.viewRelease));
+      assert.deepEqual(await calls(), []);
+      await app.capture("external-package-update");
+      await app.clickText(en.appUpdate.toast.later, { roles: ["button"] });
+      await app.waitFor(() =>
+        app.execute(
+          `return document.querySelector("[data-sonner-toast]") === null;`,
+        ),
+      );
+
+      await app.invoke("plugin:event|emit", {
+        event: "app-update-available",
+        payload: update,
+      });
+      await app.waitForText(en.appUpdate.toast.installUpdate);
+      // Let both React effects and a repeated background notification settle.
+      await app.invoke("plugin:event|emit", {
+        event: "app-update-available",
+        payload: update,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.deepEqual(
+        await calls(),
+        [],
+        "background notifications must never start a Linux install",
+      );
+      await app.capture("update-awaiting-click");
+      await app.clickText(en.appUpdate.toast.installUpdate, {
+        roles: ["button"],
+      });
+      await app.waitFor(async () => (await calls()).length === 1);
+      const [call] = await calls();
+      assert.equal(call.payload.userInitiated, true);
+      assert.equal(call.payload.updateInfo.new_version, update.new_version);
+      await app.waitFor(() =>
+        app.execute(
+          `return document.querySelector("[data-sonner-toast]") === null;`,
+        ),
+      );
+      await app.invoke("plugin:event|emit", {
+        event: "app-update-ready",
+        payload: update.new_version,
+      });
+      await app.waitForText(en.appUpdate.toast.restartNow);
+    } finally {
+      await restoreStubs(app);
+    }
+  });
+});

@@ -10,6 +10,7 @@ import { RippleButton } from "./ui/ripple";
 interface AppUpdateToastProps {
   updateInfo: AppUpdateInfo;
   onRestart: () => Promise<void>;
+  onUpdate: () => Promise<void>;
   onDismiss: () => void;
   updateReady?: boolean;
 }
@@ -17,6 +18,7 @@ interface AppUpdateToastProps {
 export function AppUpdateToast({
   updateInfo,
   onRestart,
+  onUpdate,
   onDismiss,
   updateReady = false,
 }: AppUpdateToastProps) {
@@ -47,8 +49,10 @@ export function AppUpdateToast({
               {updateReady
                 ? t("appUpdate.toast.updateReady")
                 : updateInfo.repo_update
-                  ? "Update available via package manager"
-                  : t("appUpdate.toast.manualDownloadRequired")}
+                  ? t("appUpdate.toast.packageManagerUpdate")
+                  : updateInfo.manual_update_required
+                    ? t("appUpdate.toast.manualDownloadRequired")
+                    : t("appUpdate.toast.updateAvailable")}
             </span>
             <div className="text-xs text-muted-foreground">
               {updateInfo.current_version} → {updateInfo.new_version}
@@ -75,9 +79,16 @@ export function AppUpdateToast({
               <LuCheckCheck className="size-3" />
               {t("appUpdate.toast.restartNow")}
             </RippleButton>
+          ) : !updateInfo.manual_update_required ? (
+            <RippleButton
+              onClick={() => void onUpdate()}
+              size="sm"
+              className="text-xs"
+            >
+              {t("appUpdate.toast.installUpdate")}
+            </RippleButton>
           ) : (
-            !updateInfo.repo_update &&
-            updateInfo.manual_update_required && (
+            updateInfo.release_page_url && (
               <RippleButton
                 onClick={handleViewRelease}
                 size="sm"

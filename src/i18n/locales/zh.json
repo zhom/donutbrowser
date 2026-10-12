@@ -2092,7 +2092,10 @@
       "later": "稍后",
       "uploading": "上传中",
       "downloading": "下载中",
-      "startingUpdate": "正在开始更新..."
+      "startingUpdate": "正在开始更新...",
+      "packageManagerUpdate": "可通过软件包管理器更新",
+      "updateAvailable": "有可用更新",
+      "installUpdate": "安装更新"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "反馈未被接受。请检查消息后重试。",
     "feedbackRateLimited": "你在短时间内发送了大量反馈。请几分钟后再试。",
     "feedbackSendFailed": "无法发送反馈。请稍后再试。",
-    "feedbackLogsUnreadable": "无法读取日志。请关闭“附上最近的日志”后重新发送。"
+    "feedbackLogsUnreadable": "无法读取日志。请关闭“附上最近的日志”后重新发送。",
+    "updateManualRequired": "请通过软件包管理器更新，或从 GitHub Releases 下载。",
+    "updateConfirmationRequired": "点击“安装更新”以允许安装软件包。"
   },
   "rail": {
     "profiles": "配置文件",

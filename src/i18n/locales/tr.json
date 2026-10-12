@@ -2092,7 +2092,10 @@
       "later": "Daha Sonra",
       "uploading": "Yükleniyor",
       "downloading": "İndiriliyor",
-      "startingUpdate": "Güncelleme başlatılıyor..."
+      "startingUpdate": "Güncelleme başlatılıyor...",
+      "packageManagerUpdate": "Paket yöneticisi üzerinden güncelleme mevcut",
+      "updateAvailable": "Güncelleme mevcut",
+      "installUpdate": "Güncellemeyi yükle"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "Geri bildirim kabul edilmedi. Mesajı kontrol edip tekrar deneyin.",
     "feedbackRateLimited": "Kısa sürede çok fazla geri bildirim gönderdiniz. Birkaç dakika sonra tekrar deneyin.",
     "feedbackSendFailed": "Geri bildirim gönderilemedi. Daha sonra tekrar deneyin.",
-    "feedbackLogsUnreadable": "Günlükler okunamadı. \"Son günlükleri ekle\" seçeneğini kapatıp tekrar gönderin."
+    "feedbackLogsUnreadable": "Günlükler okunamadı. \"Son günlükleri ekle\" seçeneğini kapatıp tekrar gönderin.",
+    "updateManualRequired": "Paket yöneticinizle güncelleyin veya GitHub Releases üzerinden indirin.",
+    "updateConfirmationRequired": "Paket kurulumuna izin vermek için Güncellemeyi yükle düğmesine tıklayın."
   },
   "rail": {
     "profiles": "Profiller",

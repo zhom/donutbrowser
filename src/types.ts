@@ -468,6 +468,7 @@ export interface AppUpdateInfo {
   is_nightly: boolean;
   published_at: string;
   manual_update_required: boolean;
+  user_confirmation_required: boolean;
   release_page_url?: string;
   repo_update: boolean;
   /** URL of the release's SHA256SUMS.txt; downloads are verified against it. */

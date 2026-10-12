@@ -78,6 +78,8 @@ export type BackendErrorCode =
   | "PROFILE_ROUTE_UNAVAILABLE"
   | "UPDATE_PROFILES_RUNNING"
   | "UPDATE_PREPARATION_FAILED"
+  | "UPDATE_MANUAL_REQUIRED"
+  | "UPDATE_CONFIRMATION_REQUIRED"
   | "PROFILE_NAME_EXISTS"
   | "IMPORT_SOURCE_NOT_FOUND"
   | "IMPORT_SOURCE_NOT_CHROMIUM"
@@ -489,6 +491,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "UPDATE_PROFILES_RUNNING":
       return t("backendErrors.updateProfilesRunning");
+    case "UPDATE_MANUAL_REQUIRED":
+      return t("backendErrors.updateManualRequired");
+    case "UPDATE_CONFIRMATION_REQUIRED":
+      return t("backendErrors.updateConfirmationRequired");
     case "UPDATE_PREPARATION_FAILED":
       return t("backendErrors.updatePreparationFailed");
     case "PROFILE_NAME_EXISTS":

@@ -2102,7 +2102,10 @@
       "later": "Mais tarde",
       "uploading": "Enviando",
       "downloading": "Baixando",
-      "startingUpdate": "Iniciando atualização..."
+      "startingUpdate": "Iniciando atualização...",
+      "packageManagerUpdate": "Atualização disponível pelo gerenciador de pacotes",
+      "updateAvailable": "Atualização disponível",
+      "installUpdate": "Instalar atualização"
     }
   },
   "browserDownload": {
@@ -2436,7 +2439,9 @@
     "feedbackInvalid": "O feedback não foi aceito. Verifique a mensagem e tente novamente.",
     "feedbackRateLimited": "Você enviou muito feedback em pouco tempo. Tente novamente em alguns minutos.",
     "feedbackSendFailed": "Não foi possível enviar o feedback. Tente novamente mais tarde.",
-    "feedbackLogsUnreadable": "Não foi possível ler os logs. Desative \"Incluir logs recentes\" e envie novamente."
+    "feedbackLogsUnreadable": "Não foi possível ler os logs. Desative \"Incluir logs recentes\" e envie novamente.",
+    "updateManualRequired": "Atualize pelo gerenciador de pacotes ou baixe a versão no GitHub Releases.",
+    "updateConfirmationRequired": "Clique em Instalar atualização para permitir a instalação do pacote."
   },
   "rail": {
     "profiles": "Perfis",

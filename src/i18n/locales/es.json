@@ -2102,7 +2102,10 @@
       "later": "Más tarde",
       "uploading": "Subiendo",
       "downloading": "Descargando",
-      "startingUpdate": "Iniciando actualización..."
+      "startingUpdate": "Iniciando actualización...",
+      "packageManagerUpdate": "Actualización disponible mediante el gestor de paquetes",
+      "updateAvailable": "Actualización disponible",
+      "installUpdate": "Instalar actualización"
     }
   },
   "browserDownload": {
@@ -2436,7 +2439,9 @@
     "feedbackInvalid": "Los comentarios no se aceptaron. Revisa el mensaje e inténtalo de nuevo.",
     "feedbackRateLimited": "Enviaste muchos comentarios en poco tiempo. Inténtalo de nuevo en unos minutos.",
     "feedbackSendFailed": "No se pudieron enviar los comentarios. Inténtalo más tarde.",
-    "feedbackLogsUnreadable": "No se pudieron leer los registros. Desactiva «Incluir registros recientes» y envía de nuevo."
+    "feedbackLogsUnreadable": "No se pudieron leer los registros. Desactiva «Incluir registros recientes» y envía de nuevo.",
+    "updateManualRequired": "Actualiza mediante tu gestor de paquetes o descarga la versión desde GitHub Releases.",
+    "updateConfirmationRequired": "Haz clic en Instalar actualización para permitir la instalación del paquete."
   },
   "rail": {
     "profiles": "Perfiles",

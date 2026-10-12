@@ -2092,7 +2092,10 @@
       "later": "Để sau",
       "uploading": "Đang tải lên",
       "downloading": "Đang tải xuống",
-      "startingUpdate": "Đang bắt đầu cập nhật..."
+      "startingUpdate": "Đang bắt đầu cập nhật...",
+      "packageManagerUpdate": "Có bản cập nhật qua trình quản lý gói",
+      "updateAvailable": "Có bản cập nhật",
+      "installUpdate": "Cài đặt bản cập nhật"
     }
   },
   "browserDownload": {
@@ -2426,7 +2429,9 @@
     "feedbackInvalid": "Phản hồi không được chấp nhận. Hãy kiểm tra tin nhắn và thử lại.",
     "feedbackRateLimited": "Bạn đã gửi nhiều phản hồi trong thời gian ngắn. Hãy thử lại sau vài phút.",
     "feedbackSendFailed": "Không thể gửi phản hồi. Hãy thử lại sau.",
-    "feedbackLogsUnreadable": "Không thể đọc nhật ký. Hãy tắt \"Đính kèm nhật ký gần đây\" rồi gửi lại."
+    "feedbackLogsUnreadable": "Không thể đọc nhật ký. Hãy tắt \"Đính kèm nhật ký gần đây\" rồi gửi lại.",
+    "updateManualRequired": "Cập nhật bằng trình quản lý gói hoặc tải xuống từ GitHub Releases.",
+    "updateConfirmationRequired": "Nhấn Cài đặt bản cập nhật để cho phép cài đặt gói."
   },
   "rail": {
     "profiles": "Profile",
