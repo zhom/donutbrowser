@@ -2666,7 +2666,14 @@
     "teamRoleReadOnly": "Tu rol en el equipo puede abrir perfiles, pero no cambiarlos. Pídelo a un propietario o administrador del equipo.",
     "teamActivityForbidden": "Solo los propietarios y administradores del equipo pueden ver su actividad.",
     "teamActivityNotEntitled": "El registro de actividad necesita un plan Team o Enterprise activo.",
-    "teamActivityInvalid": "La solicitud del registro de actividad no era válida."
+    "teamActivityInvalid": "La solicitud del registro de actividad no era válida.",
+    "teamActivityExportFailed": "No se pudo guardar el archivo de actividad.",
+    "teamAccessForbidden": "Solo los propietarios y administradores del equipo pueden cambiar el acceso.",
+    "teamAccessInvalid": "Esta configuración de acceso no es válida.",
+    "teamMemberNotFound": "Este miembro ya no está en el equipo.",
+    "teamGroupAccessDenied": "No tienes acceso al grupo de este perfil.",
+    "teamAccessNotEntitled": "El acceso por grupo necesita un plan Team o Enterprise activo.",
+    "replayRecipeNotFound": "Esta receta ya no existe."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2756,7 +2763,8 @@
       "account": "Cuenta",
       "selfHosted": "Autoalojado",
       "teamUsage": "Uso del equipo",
-      "teamActivity": "Actividad del equipo"
+      "teamActivity": "Actividad del equipo",
+      "teamAccess": "Acceso del equipo"
     },
     "selfHosted": {
       "title": "Servidor de sincronización autoalojado",
@@ -3723,6 +3731,20 @@
         "partial": "Hecho en parte",
         "failed": "Falló",
         "cancelled": "Cancelado"
+      },
+      "notices": {
+        "title": "Avisos",
+        "email": "Enviarme un correo cuando falle una ejecución",
+        "webhook": "URL del webhook",
+        "webhookPlaceholder": "URL del webhook (opcional, https)",
+        "webhookInvalid": "Usa una dirección https sin usuario ni contraseña.",
+        "secret": "Secreto de firma:",
+        "copySecret": "Copiar el secreto de firma",
+        "rotate": "Nuevo secreto",
+        "test": "Enviar un aviso de prueba",
+        "testSent": "Aviso de prueba enviado.",
+        "testFailed": "El aviso de prueba falló (estado del webhook {{status}}).",
+        "secretRotated": "Se creó un nuevo secreto de firma."
       }
     }
   },
@@ -4040,7 +4062,8 @@
       "statusCreate": "creó el estado {{target}}",
       "statusUpdate": "cambió el estado {{target}}",
       "statusDelete": "eliminó el estado {{target}}",
-      "other": "hizo {{action}} en {{target}}"
+      "other": "hizo {{action}} en {{target}}",
+      "memberAccessChange": "cambió el acceso de {{target}}"
     },
     "fields": {
       "name": "Nombre",
@@ -4068,6 +4091,43 @@
       "mcp": "mediante un agente MCP",
       "service": "con una clave de API",
       "remote_vm": "desde un navegador en la nube"
+    },
+    "exportCsv": "Exportar CSV",
+    "exported_one": "{{count}} entrada guardada.",
+    "exported_many": "{{count}} entradas guardadas.",
+    "exported_other": "{{count}} entradas guardadas.",
+    "filterMember": "Miembro",
+    "filterType": "Tipo de elemento",
+    "filterPeriod": "Periodo",
+    "anyMember": "Todos los miembros",
+    "anyType": "Todos los elementos",
+    "types": {
+      "profile": "Perfiles",
+      "proxy": "Proxies",
+      "group": "Grupos",
+      "vpn": "VPN",
+      "extension": "Extensiones",
+      "template": "Plantillas",
+      "status": "Estados",
+      "member": "Miembros"
+    },
+    "periods": {
+      "1": "Últimas 24 horas",
+      "7": "Últimos 7 días",
+      "30": "Últimos 30 días",
+      "all": "Todo"
     }
+  },
+  "teamAccess": {
+    "title": "Acceso por grupo",
+    "description": "Limita a un miembro a algunos grupos de perfiles. Los nombres de los grupos se quedan en este equipo; la nube solo guarda los ID de grupo.",
+    "allGroups": "Todos los grupos",
+    "onlyThese": "Solo estos grupos",
+    "ungrouped": "Perfiles sin grupo",
+    "change": "Cambiar",
+    "saved": "Acceso guardado.",
+    "someGroups_one": "{{count}} grupo",
+    "someGroups_many": "{{count}} grupos",
+    "someGroups_other": "{{count}} grupos"
   }
 }

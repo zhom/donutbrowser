@@ -1618,6 +1618,24 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         /"code":"TEAM_ACTIVITY_FORBIDDEN"/,
       );
       assert.match(
+        await app.invokeError("export_team_activity_csv", {
+          path: "/nonexistent/activity.csv",
+          filter: { targetType: "profile" },
+        }),
+        /"code":"TEAM_ACTIVITY_FORBIDDEN"/,
+      );
+      assert.match(
+        await app.invokeError("list_team_members"),
+        /"code":"TEAM_ACCESS_FORBIDDEN"/,
+      );
+      assert.match(
+        await app.invokeError("set_team_member_access", {
+          userId: "u-1",
+          groups: ["g1"],
+        }),
+        /"code":"TEAM_ACCESS_FORBIDDEN"/,
+      );
+      assert.match(
         await app.invokeError("create_agent_schedule", {
           schedule: {
             name: "Nightly",
@@ -1655,6 +1673,10 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       );
       assert.match(
         await app.invokeError("list_agent_schedule_runs", { id: scheduleId }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("test_agent_schedule_notice", { id: scheduleId }),
         notSignedIn,
       );
 

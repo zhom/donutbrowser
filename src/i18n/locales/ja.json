@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "あなたのチームロールはプロファイルを開けますが、変更はできません。チームのオーナーか管理者に依頼してください。",
     "teamActivityForbidden": "チームのアクティビティを見られるのは、オーナーと管理者だけです。",
     "teamActivityNotEntitled": "アクティビティログには、有効な Team または Enterprise プランが必要です。",
-    "teamActivityInvalid": "アクティビティログのリクエストが無効でした。"
+    "teamActivityInvalid": "アクティビティログのリクエストが無効でした。",
+    "teamActivityExportFailed": "アクティビティファイルを保存できませんでした。",
+    "teamAccessForbidden": "アクセスを変更できるのは、チームのオーナーと管理者だけです。",
+    "teamAccessInvalid": "このアクセス設定は無効です。",
+    "teamMemberNotFound": "このメンバーはもうチームにいません。",
+    "teamGroupAccessDenied": "このプロファイルのグループにアクセスできません。",
+    "teamAccessNotEntitled": "グループ別のアクセスには、有効な Team または Enterprise プランが必要です。",
+    "replayRecipeNotFound": "このレシピはもう存在しません。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2736,7 +2743,8 @@
       "account": "アカウント",
       "selfHosted": "セルフホスト",
       "teamUsage": "チームの使用状況",
-      "teamActivity": "チームのアクティビティ"
+      "teamActivity": "チームのアクティビティ",
+      "teamAccess": "チームのアクセス"
     },
     "selfHosted": {
       "title": "セルフホスト同期サーバー",
@@ -3680,6 +3688,20 @@
         "partial": "一部完了",
         "failed": "失敗",
         "cancelled": "キャンセル済み"
+      },
+      "notices": {
+        "title": "通知",
+        "email": "実行が失敗したらメールで知らせる",
+        "webhook": "Webhook URL",
+        "webhookPlaceholder": "Webhook URL（任意、https）",
+        "webhookInvalid": "ユーザー名やパスワードを含まない https アドレスを使ってください。",
+        "secret": "署名シークレット:",
+        "copySecret": "署名シークレットをコピー",
+        "rotate": "新しいシークレット",
+        "test": "テスト通知を送信",
+        "testSent": "テスト通知を送信しました。",
+        "testFailed": "テスト通知に失敗しました（Webhook のステータス {{status}}）。",
+        "secretRotated": "新しい署名シークレットを作成しました。"
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "がステータス {{target}} を作成しました",
       "statusUpdate": "がステータス {{target}} を変更しました",
       "statusDelete": "がステータス {{target}} を削除しました",
-      "other": "が {{target}} に {{action}} を実行しました"
+      "other": "が {{target}} に {{action}} を実行しました",
+      "memberAccessChange": "が {{target}} のアクセスを変更しました"
     },
     "fields": {
       "name": "名前",
@@ -4025,6 +4048,41 @@
       "mcp": "MCP エージェントによって",
       "service": "API キーで",
       "remote_vm": "クラウドブラウザから"
+    },
+    "exportCsv": "CSV をエクスポート",
+    "exported_one": "{{count}} 件を保存しました。",
+    "exported_other": "{{count}} 件を保存しました。",
+    "filterMember": "メンバー",
+    "filterType": "項目の種類",
+    "filterPeriod": "期間",
+    "anyMember": "すべてのメンバー",
+    "anyType": "すべての項目",
+    "types": {
+      "profile": "プロファイル",
+      "proxy": "プロキシ",
+      "group": "グループ",
+      "vpn": "VPN",
+      "extension": "拡張機能",
+      "template": "テンプレート",
+      "status": "ステータス",
+      "member": "メンバー"
+    },
+    "periods": {
+      "1": "過去 24 時間",
+      "7": "過去 7 日間",
+      "30": "過去 30 日間",
+      "all": "すべての期間"
     }
+  },
+  "teamAccess": {
+    "title": "グループ別のアクセス",
+    "description": "メンバーを一部のプロファイルグループに制限します。グループ名はこのコンピューターに残り、クラウドにはグループ ID だけが保存されます。",
+    "allGroups": "すべてのグループ",
+    "onlyThese": "これらのグループのみ",
+    "ungrouped": "グループのないプロファイル",
+    "change": "変更",
+    "saved": "アクセスを保存しました。",
+    "someGroups_one": "{{count}} グループ",
+    "someGroups_other": "{{count}} グループ"
   }
 }

@@ -163,39 +163,144 @@ async fn flush() {
   }
 }
 
+/// What part of the team's log to read. Every field is optional.
+#[derive(Debug, Default, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityFilter {
+  /// An action (`profile.delete`) or every action of a kind (`profile.*`).
+  pub action: Option<String>,
+  pub actor_user_id: Option<String>,
+  pub target_type: Option<String>,
+  /// The oldest time to include, ISO 8601.
+  pub since: Option<String>,
+}
+
+const TARGET_TYPES: &[&str] = &[
+  "profile",
+  "proxy",
+  "group",
+  "vpn",
+  "extension",
+  "template",
+  "status",
+  "member",
+  "invitation",
+];
+
+impl ActivityFilter {
+  /// The query pairs this filter adds, or `TEAM_ACTIVITY_INVALID`.
+  fn query(&self) -> Result<Vec<String>, String> {
+    let invalid = || crate::backend_error("TEAM_ACTIVITY_INVALID");
+    let present = |value: &Option<String>| value.clone().filter(|v| !v.is_empty());
+    let mut query = Vec::new();
+    if let Some(action) = present(&self.action) {
+      let (kind, verb) = action.split_once('.').ok_or_else(invalid)?;
+      let word = |w: &str| !w.is_empty() && w.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
+      if action.len() > 64 || !word(kind) || !(verb == "*" || word(verb)) {
+        return Err(invalid());
+      }
+      query.push(format!("action={}", urlencoding::encode(&action)));
+    }
+    if let Some(actor) = present(&self.actor_user_id) {
+      if actor.len() > 128
+        || !actor
+          .bytes()
+          .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+      {
+        return Err(invalid());
+      }
+      query.push(format!("actorUserId={actor}"));
+    }
+    if let Some(target_type) = present(&self.target_type) {
+      if !TARGET_TYPES.contains(&target_type.as_str()) {
+        return Err(invalid());
+      }
+      query.push(format!("targetType={target_type}"));
+    }
+    if let Some(since) = present(&self.since) {
+      let at = chrono::DateTime::parse_from_rfc3339(&since).map_err(|_| invalid())?;
+      query.push(format!(
+        "since={}",
+        urlencoding::encode(
+          &at
+            .to_utc()
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        )
+      ));
+    }
+    Ok(query)
+  }
+}
+
+async fn signed_in_team() -> Result<String, String> {
+  crate::cloud_auth::CLOUD_AUTH
+    .get_user()
+    .await
+    .and_then(|auth| auth.user.team_id)
+    .ok_or_else(|| crate::backend_error("TEAM_ACTIVITY_FORBIDDEN"))
+}
+
+fn activity_failure(err: crate::cloud_errors::BackendFailure) -> String {
+  log::warn!(
+    "Team activity request failed code={} status={}",
+    err.code,
+    err.status
+  );
+  err.to_error_json()
+}
+
 /// A page of the team's log, newest first. Owners and admins only; the cloud
 /// checks the role and the plan.
 #[tauri::command]
 pub async fn list_team_activity(
   cursor: Option<String>,
   limit: Option<u32>,
-  action: Option<String>,
+  filter: Option<ActivityFilter>,
 ) -> Result<Value, String> {
-  let Some(team_id) = crate::cloud_auth::CLOUD_AUTH
-    .get_user()
-    .await
-    .and_then(|auth| auth.user.team_id)
-  else {
-    return Err(crate::backend_error("TEAM_ACTIVITY_FORBIDDEN"));
-  };
-  let url = activity_url(&team_id, cursor.as_deref(), limit, action.as_deref())?;
+  let team_id = signed_in_team().await?;
+  let url = activity_url(
+    &team_id,
+    "activity",
+    cursor.as_deref(),
+    limit,
+    &filter.unwrap_or_default(),
+  )?;
   crate::cloud_api::call::<Value>(reqwest::Method::GET, url, None, ACTIVITY_CODES)
     .await
-    .map_err(|err| {
-      log::warn!(
-        "Team activity request failed code={} status={}",
-        err.code,
-        err.status
-      );
-      err.to_error_json()
-    })
+    .map_err(activity_failure)
+}
+
+/// The filtered log as a CSV file at `path`, which the person chose. Returns
+/// how many rows it holds.
+#[tauri::command]
+pub async fn export_team_activity_csv(
+  path: String,
+  filter: Option<ActivityFilter>,
+) -> Result<u64, String> {
+  let team_id = signed_in_team().await?;
+  let url = activity_url(
+    &team_id,
+    "activity.csv",
+    None,
+    None,
+    &filter.unwrap_or_default(),
+  )?;
+  let csv = crate::cloud_api::call_text(reqwest::Method::GET, url, ACTIVITY_CODES)
+    .await
+    .map_err(activity_failure)?;
+  std::fs::write(&path, csv.as_bytes())
+    .map_err(|e| crate::backend_error_with_detail("TEAM_ACTIVITY_EXPORT_FAILED", e))?;
+  let rows = csv.lines().count().saturating_sub(1) as u64;
+  log::info!("Team activity exported rows={rows}");
+  Ok(rows)
 }
 
 fn activity_url(
   team_id: &str,
+  resource: &str,
   cursor: Option<&str>,
   limit: Option<u32>,
-  action: Option<&str>,
+  filter: &ActivityFilter,
 ) -> Result<String, String> {
   let mut query = Vec::new();
   if let Some(cursor) = cursor.filter(|cursor| !cursor.is_empty()) {
@@ -207,11 +312,9 @@ fn activity_url(
   if let Some(limit) = limit {
     query.push(format!("limit={}", limit.clamp(1, 200)));
   }
-  if let Some(action) = action.filter(|action| !action.is_empty()) {
-    query.push(format!("action={}", urlencoding::encode(&clip(action, 64))));
-  }
+  query.extend(filter.query()?);
   let mut url = format!(
-    "{}/api/teams/{}/activity",
+    "{}/api/teams/{}/{resource}",
     crate::cloud_auth::CLOUD_API_URL,
     urlencoding::encode(team_id)
   );
@@ -264,14 +367,52 @@ mod tests {
 
   #[test]
   fn the_activity_url_keeps_the_team_id_one_segment() {
-    let url = activity_url("a/b", Some("42"), Some(500), Some("profile.delete")).unwrap();
+    let filter = ActivityFilter {
+      action: Some("profile.*".into()),
+      actor_user_id: Some("u-1".into()),
+      target_type: Some("proxy".into()),
+      since: Some("2026-10-01T12:00:00+02:00".into()),
+    };
+    let url = activity_url("a/b", "activity", Some("42"), Some(500), &filter).unwrap();
     assert!(url.contains("/api/teams/a%2Fb/activity?"), "{url}");
     assert!(url.contains("cursor=42"));
     assert!(url.contains("limit=200"));
-    assert!(url.contains("action=profile.delete"));
-    assert!(activity_url("t1", None, None, None)
+    assert!(url.contains("action=profile.%2A"), "{url}");
+    assert!(url.contains("actorUserId=u-1"));
+    assert!(url.contains("targetType=proxy"));
+    assert!(url.contains("since=2026-10-01T10%3A00%3A00Z"), "{url}");
+    let plain = ActivityFilter::default();
+    assert!(activity_url("t1", "activity.csv", None, None, &plain)
       .unwrap()
-      .ends_with("/api/teams/t1/activity"));
-    assert!(activity_url("t1", Some("1;drop"), None, None).is_err());
+      .ends_with("/api/teams/t1/activity.csv"));
+    assert!(activity_url("t1", "activity", Some("1;drop"), None, &plain).is_err());
+  }
+
+  #[test]
+  fn a_filter_the_cloud_would_refuse_is_refused_here() {
+    for filter in [
+      ActivityFilter {
+        action: Some("Profile.delete".into()),
+        ..Default::default()
+      },
+      ActivityFilter {
+        action: Some("profile".into()),
+        ..Default::default()
+      },
+      ActivityFilter {
+        actor_user_id: Some("a&b=c".into()),
+        ..Default::default()
+      },
+      ActivityFilter {
+        target_type: Some("planet".into()),
+        ..Default::default()
+      },
+      ActivityFilter {
+        since: Some("yesterday".into()),
+        ..Default::default()
+      },
+    ] {
+      assert!(filter.query().is_err(), "{filter:?}");
+    }
   }
 }

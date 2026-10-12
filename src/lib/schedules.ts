@@ -25,6 +25,12 @@ export interface AgentSchedule {
   intervalMinutes: number | null;
   nextRunAt: string | null;
   lastRunAt: string | null;
+  /** Email the owner when a run fails, and when it works again. */
+  notifyEmail: boolean;
+  /** An https address the cloud posts the same notices to. */
+  webhookUrl: string | null;
+  /** Signs each webhook body (`X-Donut-Signature: sha256=<HMAC>`). */
+  webhookSecret: string | null;
 }
 
 export interface AgentScheduleRun {
@@ -47,6 +53,9 @@ export interface ScheduleInput {
   runOnceAt?: string;
   intervalMinutes?: number;
   enabled?: boolean;
+  notifyEmail?: boolean;
+  /** Null clears the webhook. */
+  webhookUrl?: string | null;
 }
 
 /** The cloud's own limits, so the form never offers what it refuses. */
@@ -102,6 +111,10 @@ export function scheduleBody(input: ScheduleInput): Record<string, unknown> {
     cadence: input.cadence,
   };
   if (input.enabled !== undefined) body.enabled = input.enabled;
+  if (input.notifyEmail !== undefined) body.notifyEmail = input.notifyEmail;
+  if (input.webhookUrl !== undefined) {
+    body.webhookUrl = input.webhookUrl?.trim() || null;
+  }
   if (input.cadence === "weekly") {
     body.daysMask = input.daysMask;
     body.runAtMinute = input.runAtMinute;
@@ -139,6 +152,37 @@ export function deleteSchedule(id: string): Promise<void> {
 
 export function runScheduleNow(id: string): Promise<unknown> {
   return invoke("run_agent_schedule_now", { id });
+}
+
+/** Whether `url` is an address the cloud takes for a webhook. It checks again. */
+export function isWebhookUrl(url: string): boolean {
+  const value = url.trim();
+  if (!value) return true;
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === "https:" &&
+      !parsed.username &&
+      !parsed.password &&
+      value.length <= 2048
+    );
+  } catch {
+    return false;
+  }
+}
+
+export interface NoticeTestResult {
+  email: "sent" | "off" | "failed";
+  webhook: "sent" | "off" | "failed";
+  webhookStatus: number | null;
+}
+
+export function testScheduleNotice(id: string): Promise<NoticeTestResult> {
+  return invoke<NoticeTestResult>("test_agent_schedule_notice", { id });
+}
+
+export function rotateWebhookSecret(id: string): Promise<AgentSchedule> {
+  return updateSchedule(id, { rotateWebhookSecret: true });
 }
 
 export function listScheduleRuns(id: string): Promise<AgentScheduleRun[]> {

@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "Deine Teamrolle kann Profile öffnen, aber nicht ändern. Frag einen Teambesitzer oder Admin.",
     "teamActivityForbidden": "Nur Teambesitzer und Admins sehen die Aktivität des Teams.",
     "teamActivityNotEntitled": "Das Aktivitätsprotokoll braucht einen aktiven Team- oder Enterprise-Plan.",
-    "teamActivityInvalid": "Die Anfrage für das Aktivitätsprotokoll war ungültig."
+    "teamActivityInvalid": "Die Anfrage für das Aktivitätsprotokoll war ungültig.",
+    "teamActivityExportFailed": "Die Aktivitätsdatei konnte nicht gespeichert werden.",
+    "teamAccessForbidden": "Nur Teambesitzer und Admins können den Zugriff ändern.",
+    "teamAccessInvalid": "Diese Zugriffseinstellung ist ungültig.",
+    "teamMemberNotFound": "Dieses Mitglied ist nicht mehr im Team.",
+    "teamGroupAccessDenied": "Du hast keinen Zugriff auf die Gruppe dieses Profils.",
+    "teamAccessNotEntitled": "Zugriff nach Gruppe braucht einen aktiven Team- oder Enterprise-Plan.",
+    "replayRecipeNotFound": "Dieses Rezept gibt es nicht mehr."
   },
   "rail": {
     "profiles": "Profile",
@@ -2736,7 +2743,8 @@
       "account": "Konto",
       "selfHosted": "Selbst gehostet",
       "teamUsage": "Team-Nutzung",
-      "teamActivity": "Teamaktivität"
+      "teamActivity": "Teamaktivität",
+      "teamAccess": "Teamzugriff"
     },
     "selfHosted": {
       "title": "Selbst gehosteter Sync-Server",
@@ -3680,6 +3688,20 @@
         "partial": "Teilweise fertig",
         "failed": "Fehlgeschlagen",
         "cancelled": "Abgebrochen"
+      },
+      "notices": {
+        "title": "Benachrichtigungen",
+        "email": "Mir eine E-Mail senden, wenn ein Lauf fehlschlägt",
+        "webhook": "Webhook-URL",
+        "webhookPlaceholder": "Webhook-URL (optional, https)",
+        "webhookInvalid": "Verwende eine https-Adresse ohne Benutzernamen oder Passwort.",
+        "secret": "Signaturschlüssel:",
+        "copySecret": "Signaturschlüssel kopieren",
+        "rotate": "Neuer Schlüssel",
+        "test": "Testbenachrichtigung senden",
+        "testSent": "Testbenachrichtigung gesendet.",
+        "testFailed": "Die Testbenachrichtigung ist fehlgeschlagen (Webhook-Status {{status}}).",
+        "secretRotated": "Neuer Signaturschlüssel erstellt."
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "hat den Status {{target}} erstellt",
       "statusUpdate": "hat den Status {{target}} geändert",
       "statusDelete": "hat den Status {{target}} gelöscht",
-      "other": "hat {{action}} für {{target}} ausgeführt"
+      "other": "hat {{action}} für {{target}} ausgeführt",
+      "memberAccessChange": "hat den Zugriff von {{target}} geändert"
     },
     "fields": {
       "name": "Name",
@@ -4025,6 +4048,41 @@
       "mcp": "durch einen MCP-Agenten",
       "service": "mit einem API-Schlüssel",
       "remote_vm": "in einem Cloud-Browser"
+    },
+    "exportCsv": "CSV exportieren",
+    "exported_one": "{{count}} Eintrag gespeichert.",
+    "exported_other": "{{count}} Einträge gespeichert.",
+    "filterMember": "Mitglied",
+    "filterType": "Elementtyp",
+    "filterPeriod": "Zeitraum",
+    "anyMember": "Alle Mitglieder",
+    "anyType": "Alle Elemente",
+    "types": {
+      "profile": "Profile",
+      "proxy": "Proxys",
+      "group": "Gruppen",
+      "vpn": "VPNs",
+      "extension": "Erweiterungen",
+      "template": "Vorlagen",
+      "status": "Status",
+      "member": "Mitglieder"
+    },
+    "periods": {
+      "1": "Letzte 24 Stunden",
+      "7": "Letzte 7 Tage",
+      "30": "Letzte 30 Tage",
+      "all": "Gesamter Zeitraum"
     }
+  },
+  "teamAccess": {
+    "title": "Zugriff nach Gruppe",
+    "description": "Beschränke ein Mitglied auf einige Profilgruppen. Gruppennamen bleiben auf diesem Computer; die Cloud speichert nur Gruppen-IDs.",
+    "allGroups": "Alle Gruppen",
+    "onlyThese": "Nur diese Gruppen",
+    "ungrouped": "Profile ohne Gruppe",
+    "change": "Ändern",
+    "saved": "Zugriff gespeichert.",
+    "someGroups_one": "{{count}} Gruppe",
+    "someGroups_other": "{{count}} Gruppen"
   }
 }

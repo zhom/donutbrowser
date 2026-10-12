@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "내 팀 역할은 프로필을 열 수 있지만 변경할 수는 없습니다. 팀 소유자나 관리자에게 요청하세요.",
     "teamActivityForbidden": "팀 활동은 팀 소유자와 관리자만 볼 수 있습니다.",
     "teamActivityNotEntitled": "활동 기록에는 활성 Team 또는 Enterprise 요금제가 필요합니다.",
-    "teamActivityInvalid": "활동 기록 요청이 올바르지 않습니다."
+    "teamActivityInvalid": "활동 기록 요청이 올바르지 않습니다.",
+    "teamActivityExportFailed": "활동 파일을 저장할 수 없습니다.",
+    "teamAccessForbidden": "접근 권한은 팀 소유자와 관리자만 변경할 수 있습니다.",
+    "teamAccessInvalid": "이 접근 설정은 올바르지 않습니다.",
+    "teamMemberNotFound": "이 멤버는 더 이상 팀에 없습니다.",
+    "teamGroupAccessDenied": "이 프로필의 그룹에 접근할 수 없습니다.",
+    "teamAccessNotEntitled": "그룹별 접근 권한에는 활성 Team 또는 Enterprise 요금제가 필요합니다.",
+    "replayRecipeNotFound": "이 레시피는 더 이상 없습니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -2736,7 +2743,8 @@
       "account": "계정",
       "selfHosted": "자체 호스팅",
       "teamUsage": "팀 사용량",
-      "teamActivity": "팀 활동"
+      "teamActivity": "팀 활동",
+      "teamAccess": "팀 접근 권한"
     },
     "selfHosted": {
       "title": "자체 호스팅 동기화 서버",
@@ -3680,6 +3688,20 @@
         "partial": "일부 완료",
         "failed": "실패",
         "cancelled": "취소됨"
+      },
+      "notices": {
+        "title": "알림",
+        "email": "실행이 실패하면 이메일 보내기",
+        "webhook": "웹훅 URL",
+        "webhookPlaceholder": "웹훅 URL(선택, https)",
+        "webhookInvalid": "사용자 이름이나 비밀번호가 없는 https 주소를 사용하세요.",
+        "secret": "서명 비밀 값:",
+        "copySecret": "서명 비밀 값 복사",
+        "rotate": "새 비밀 값",
+        "test": "테스트 알림 보내기",
+        "testSent": "테스트 알림을 보냈습니다.",
+        "testFailed": "테스트 알림이 실패했습니다(웹훅 상태 {{status}}).",
+        "secretRotated": "새 서명 비밀 값을 만들었습니다."
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "님이 상태 {{target}}을(를) 만들었습니다",
       "statusUpdate": "님이 상태 {{target}}을(를) 변경했습니다",
       "statusDelete": "님이 상태 {{target}}을(를) 삭제했습니다",
-      "other": "님이 {{target}}에 {{action}}을(를) 실행했습니다"
+      "other": "님이 {{target}}에 {{action}}을(를) 실행했습니다",
+      "memberAccessChange": "님이 {{target}} 님의 접근 권한을 변경했습니다"
     },
     "fields": {
       "name": "이름",
@@ -4025,6 +4048,41 @@
       "mcp": "MCP 에이전트가",
       "service": "API 키로",
       "remote_vm": "클라우드 브라우저에서"
+    },
+    "exportCsv": "CSV 내보내기",
+    "exported_one": "{{count}}개 항목을 저장했습니다.",
+    "exported_other": "{{count}}개 항목을 저장했습니다.",
+    "filterMember": "멤버",
+    "filterType": "항목 유형",
+    "filterPeriod": "기간",
+    "anyMember": "모든 멤버",
+    "anyType": "모든 항목",
+    "types": {
+      "profile": "프로필",
+      "proxy": "프록시",
+      "group": "그룹",
+      "vpn": "VPN",
+      "extension": "확장 프로그램",
+      "template": "템플릿",
+      "status": "상태",
+      "member": "멤버"
+    },
+    "periods": {
+      "1": "지난 24시간",
+      "7": "지난 7일",
+      "30": "지난 30일",
+      "all": "전체 기간"
     }
+  },
+  "teamAccess": {
+    "title": "그룹별 접근 권한",
+    "description": "멤버를 일부 프로필 그룹으로 제한합니다. 그룹 이름은 이 컴퓨터에 남고, 클라우드에는 그룹 ID만 저장됩니다.",
+    "allGroups": "모든 그룹",
+    "onlyThese": "이 그룹만",
+    "ungrouped": "그룹이 없는 프로필",
+    "change": "변경",
+    "saved": "접근 권한을 저장했습니다.",
+    "someGroups_one": "{{count}}개 그룹",
+    "someGroups_other": "{{count}}개 그룹"
   }
 }

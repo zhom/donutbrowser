@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "Your team role can open profiles but not change them. Ask a team owner or admin.",
     "teamActivityForbidden": "Only team owners and admins can see the team's activity.",
     "teamActivityNotEntitled": "The activity log needs an active Team or Enterprise plan.",
-    "teamActivityInvalid": "The activity request was not valid."
+    "teamActivityInvalid": "The activity request was not valid.",
+    "teamActivityExportFailed": "The activity file could not be saved.",
+    "teamAccessForbidden": "Only team owners and admins can change access.",
+    "teamAccessInvalid": "This access setting is not valid.",
+    "teamMemberNotFound": "This member is no longer on the team.",
+    "teamGroupAccessDenied": "You have no access to the group of this profile.",
+    "teamAccessNotEntitled": "Access by group needs an active Team or Enterprise plan.",
+    "replayRecipeNotFound": "This recipe no longer exists."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2736,7 +2743,8 @@
       "account": "Account",
       "selfHosted": "Self-hosted",
       "teamUsage": "Team usage",
-      "teamActivity": "Team activity"
+      "teamActivity": "Team activity",
+      "teamAccess": "Team access"
     },
     "selfHosted": {
       "title": "Self-hosted sync server",
@@ -3680,6 +3688,20 @@
         "partial": "Partly done",
         "failed": "Failed",
         "cancelled": "Cancelled"
+      },
+      "notices": {
+        "title": "Notices",
+        "email": "Email me when a run fails",
+        "webhook": "Webhook URL",
+        "webhookPlaceholder": "Webhook URL (optional, https)",
+        "webhookInvalid": "Use an https address without a user name or password.",
+        "secret": "Signing secret:",
+        "copySecret": "Copy the signing secret",
+        "rotate": "New secret",
+        "test": "Send a test notice",
+        "testSent": "Test notice sent.",
+        "testFailed": "The test notice failed (webhook status {{status}}).",
+        "secretRotated": "New signing secret made."
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "created the status {{target}}",
       "statusUpdate": "changed the status {{target}}",
       "statusDelete": "deleted the status {{target}}",
-      "other": "did {{action}} on {{target}}"
+      "other": "did {{action}} on {{target}}",
+      "memberAccessChange": "changed the access of {{target}}"
     },
     "fields": {
       "name": "Name",
@@ -4025,6 +4048,41 @@
       "mcp": "by an MCP agent",
       "service": "with an API key",
       "remote_vm": "from a cloud browser"
+    },
+    "exportCsv": "Export CSV",
+    "exported_one": "{{count}} entry saved.",
+    "exported_other": "{{count}} entries saved.",
+    "filterMember": "Member",
+    "filterType": "Item type",
+    "filterPeriod": "Period",
+    "anyMember": "All members",
+    "anyType": "All items",
+    "types": {
+      "profile": "Profiles",
+      "proxy": "Proxies",
+      "group": "Groups",
+      "vpn": "VPNs",
+      "extension": "Extensions",
+      "template": "Templates",
+      "status": "Statuses",
+      "member": "Members"
+    },
+    "periods": {
+      "1": "Last 24 hours",
+      "7": "Last 7 days",
+      "30": "Last 30 days",
+      "all": "All time"
     }
+  },
+  "teamAccess": {
+    "title": "Access by group",
+    "description": "Limit a member to some profile groups. Group names stay on this computer; the cloud keeps only group IDs.",
+    "allGroups": "All groups",
+    "onlyThese": "Only these groups",
+    "ungrouped": "Profiles in no group",
+    "change": "Change",
+    "saved": "Access saved.",
+    "someGroups_one": "{{count}} group",
+    "someGroups_other": "{{count}} groups"
   }
 }

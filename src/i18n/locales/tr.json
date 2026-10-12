@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "Ekip rolün profilleri açabilir ama değiştiremez. Bir ekip sahibine veya yöneticisine sor.",
     "teamActivityForbidden": "Ekibin etkinliğini yalnızca ekip sahipleri ve yöneticileri görebilir.",
     "teamActivityNotEntitled": "Etkinlik günlüğü için etkin bir Team veya Enterprise planı gerekir.",
-    "teamActivityInvalid": "Etkinlik günlüğü isteği geçerli değildi."
+    "teamActivityInvalid": "Etkinlik günlüğü isteği geçerli değildi.",
+    "teamActivityExportFailed": "Etkinlik dosyası kaydedilemedi.",
+    "teamAccessForbidden": "Erişimi yalnızca ekip sahipleri ve yöneticileri değiştirebilir.",
+    "teamAccessInvalid": "Bu erişim ayarı geçerli değil.",
+    "teamMemberNotFound": "Bu üye artık ekipte değil.",
+    "teamGroupAccessDenied": "Bu profilin grubuna erişimin yok.",
+    "teamAccessNotEntitled": "Gruba göre erişim için etkin bir Team veya Enterprise planı gerekir.",
+    "replayRecipeNotFound": "Bu tarif artık yok."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2736,7 +2743,8 @@
       "account": "Hesap",
       "selfHosted": "Kendi sunucunuz",
       "teamUsage": "Ekip kullanımı",
-      "teamActivity": "Ekip etkinliği"
+      "teamActivity": "Ekip etkinliği",
+      "teamAccess": "Ekip erişimi"
     },
     "selfHosted": {
       "title": "Kendi eşitleme sunucunuz",
@@ -3680,6 +3688,20 @@
         "partial": "Kısmen tamamlandı",
         "failed": "Başarısız",
         "cancelled": "İptal edildi"
+      },
+      "notices": {
+        "title": "Bildirimler",
+        "email": "Bir çalıştırma başarısız olunca bana e-posta gönder",
+        "webhook": "Webhook URL'si",
+        "webhookPlaceholder": "Webhook URL'si (isteğe bağlı, https)",
+        "webhookInvalid": "Kullanıcı adı veya parola içermeyen bir https adresi kullan.",
+        "secret": "İmza anahtarı:",
+        "copySecret": "İmza anahtarını kopyala",
+        "rotate": "Yeni anahtar",
+        "test": "Test bildirimi gönder",
+        "testSent": "Test bildirimi gönderildi.",
+        "testFailed": "Test bildirimi başarısız oldu (webhook durumu {{status}}).",
+        "secretRotated": "Yeni imza anahtarı oluşturuldu."
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "{{target}} durumunu oluşturdu",
       "statusUpdate": "{{target}} durumunu değiştirdi",
       "statusDelete": "{{target}} durumunu sildi",
-      "other": "{{target}} üzerinde {{action}} yaptı"
+      "other": "{{target}} üzerinde {{action}} yaptı",
+      "memberAccessChange": "{{target}} kişisinin erişimini değiştirdi"
     },
     "fields": {
       "name": "Ad",
@@ -4025,6 +4048,41 @@
       "mcp": "bir MCP ajanıyla",
       "service": "bir API anahtarıyla",
       "remote_vm": "bir bulut tarayıcısından"
+    },
+    "exportCsv": "CSV olarak dışa aktar",
+    "exported_one": "{{count}} kayıt kaydedildi.",
+    "exported_other": "{{count}} kayıt kaydedildi.",
+    "filterMember": "Üye",
+    "filterType": "Öğe türü",
+    "filterPeriod": "Dönem",
+    "anyMember": "Tüm üyeler",
+    "anyType": "Tüm öğeler",
+    "types": {
+      "profile": "Profiller",
+      "proxy": "Proxy'ler",
+      "group": "Gruplar",
+      "vpn": "VPN'ler",
+      "extension": "Eklentiler",
+      "template": "Şablonlar",
+      "status": "Durumlar",
+      "member": "Üyeler"
+    },
+    "periods": {
+      "1": "Son 24 saat",
+      "7": "Son 7 gün",
+      "30": "Son 30 gün",
+      "all": "Tüm zamanlar"
     }
+  },
+  "teamAccess": {
+    "title": "Gruba göre erişim",
+    "description": "Bir üyeyi bazı profil gruplarıyla sınırla. Grup adları bu bilgisayarda kalır; bulut yalnızca grup kimliklerini saklar.",
+    "allGroups": "Tüm gruplar",
+    "onlyThese": "Yalnızca bu gruplar",
+    "ungrouped": "Grubu olmayan profiller",
+    "change": "Değiştir",
+    "saved": "Erişim kaydedildi.",
+    "someGroups_one": "{{count}} grup",
+    "someGroups_other": "{{count}} grup"
   }
 }

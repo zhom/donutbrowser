@@ -23,7 +23,10 @@ type TeamScope = {
   teamId: string;
   teamProfileLimit: number;
   role?: string;
+  groupIds?: string[] | null;
 };
+
+const GROUP_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 const TEAM_ROLES = ["owner", "admin", "member", "launcher"] as const;
 type TeamRole = (typeof TEAM_ROLES)[number];
@@ -153,6 +156,7 @@ export class AuthGuard implements CanActivate {
         // fall back to the user's own namespace, never widening to a team one.
         let effectivePrefix = ownPrefix;
         let teamRole: TeamRole | undefined;
+        let groupIds: string[] | undefined;
         let effectiveProfileLimit =
           typeof decoded.profileLimit === "number" ? decoded.profileLimit : 0;
         try {
@@ -160,6 +164,14 @@ export class AuthGuard implements CanActivate {
           if (scope && /^[^/]+$/.test(scope.ownerId)) {
             effectivePrefix = `users/${scope.ownerId}/`;
             teamRole = teamRoleOf(scope.role);
+            // A malformed id cannot name a group, so it grants nothing; it
+            // never turns a limited member into an unlimited one.
+            if (Array.isArray(scope.groupIds)) {
+              groupIds = scope.groupIds.filter(
+                (id): id is string =>
+                  typeof id === "string" && GROUP_ID.test(id),
+              );
+            }
             if (scope.teamProfileLimit > 0) {
               effectiveProfileLimit = scope.teamProfileLimit;
             }
@@ -178,6 +190,7 @@ export class AuthGuard implements CanActivate {
           profileLimit: effectiveProfileLimit,
           sub,
           ...(teamRole ? { teamRole } : {}),
+          ...(groupIds ? { groupIds } : {}),
         } satisfies UserContext;
         return true;
       } catch (err) {

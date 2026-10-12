@@ -2686,7 +2686,14 @@
     "teamRoleReadOnly": "Ваша роль в команде позволяет открывать профили, но не изменять их. Обратитесь к владельцу или администратору команды.",
     "teamActivityForbidden": "Активность команды видят только её владельцы и администраторы.",
     "teamActivityNotEntitled": "Для журнала активности нужен активный план Team или Enterprise.",
-    "teamActivityInvalid": "Запрос журнала активности недействителен."
+    "teamActivityInvalid": "Запрос журнала активности недействителен.",
+    "teamActivityExportFailed": "Не удалось сохранить файл активности.",
+    "teamAccessForbidden": "Изменять доступ могут только владельцы и администраторы команды.",
+    "teamAccessInvalid": "Эта настройка доступа недействительна.",
+    "teamMemberNotFound": "Этого участника больше нет в команде.",
+    "teamGroupAccessDenied": "У вас нет доступа к группе этого профиля.",
+    "teamAccessNotEntitled": "Для доступа по группам нужен активный план Team или Enterprise.",
+    "replayRecipeNotFound": "Этого рецепта больше нет."
   },
   "rail": {
     "profiles": "Профили",
@@ -2776,7 +2783,8 @@
       "account": "Аккаунт",
       "selfHosted": "Свой сервер",
       "teamUsage": "Использование командой",
-      "teamActivity": "Активность команды"
+      "teamActivity": "Активность команды",
+      "teamAccess": "Доступ команды"
     },
     "selfHosted": {
       "title": "Свой сервер синхронизации",
@@ -3766,6 +3774,20 @@
         "partial": "Частично готово",
         "failed": "Ошибка",
         "cancelled": "Отменено"
+      },
+      "notices": {
+        "title": "Уведомления",
+        "email": "Отправлять письмо, если запуск не удался",
+        "webhook": "URL вебхука",
+        "webhookPlaceholder": "URL вебхука (необязательно, https)",
+        "webhookInvalid": "Используйте адрес https без имени пользователя и пароля.",
+        "secret": "Секрет подписи:",
+        "copySecret": "Скопировать секрет подписи",
+        "rotate": "Новый секрет",
+        "test": "Отправить тестовое уведомление",
+        "testSent": "Тестовое уведомление отправлено.",
+        "testFailed": "Тестовое уведомление не отправлено (статус вебхука {{status}}).",
+        "secretRotated": "Создан новый секрет подписи."
       }
     }
   },
@@ -4083,7 +4105,8 @@
       "statusCreate": "создал(а) статус {{target}}",
       "statusUpdate": "изменил(а) статус {{target}}",
       "statusDelete": "удалил(а) статус {{target}}",
-      "other": "выполнил(а) {{action}} для {{target}}"
+      "other": "выполнил(а) {{action}} для {{target}}",
+      "memberAccessChange": "изменил(а) доступ {{target}}"
     },
     "fields": {
       "name": "Название",
@@ -4111,6 +4134,45 @@
       "mcp": "через MCP-агента",
       "service": "с ключом API",
       "remote_vm": "из облачного браузера"
+    },
+    "exportCsv": "Экспорт в CSV",
+    "exported_one": "Сохранена {{count}} запись.",
+    "exported_few": "Сохранено {{count}} записи.",
+    "exported_many": "Сохранено {{count}} записей.",
+    "exported_other": "Сохранено {{count}} записи.",
+    "filterMember": "Участник",
+    "filterType": "Тип элемента",
+    "filterPeriod": "Период",
+    "anyMember": "Все участники",
+    "anyType": "Все элементы",
+    "types": {
+      "profile": "Профили",
+      "proxy": "Прокси",
+      "group": "Группы",
+      "vpn": "VPN",
+      "extension": "Расширения",
+      "template": "Шаблоны",
+      "status": "Статусы",
+      "member": "Участники"
+    },
+    "periods": {
+      "1": "Последние 24 часа",
+      "7": "Последние 7 дней",
+      "30": "Последние 30 дней",
+      "all": "За всё время"
     }
+  },
+  "teamAccess": {
+    "title": "Доступ по группам",
+    "description": "Ограничьте участника некоторыми группами профилей. Названия групп остаются на этом компьютере; облако хранит только ID групп.",
+    "allGroups": "Все группы",
+    "onlyThese": "Только эти группы",
+    "ungrouped": "Профили без группы",
+    "change": "Изменить",
+    "saved": "Доступ сохранён.",
+    "someGroups_one": "{{count}} группа",
+    "someGroups_few": "{{count}} группы",
+    "someGroups_many": "{{count}} групп",
+    "someGroups_other": "{{count}} группы"
   }
 }

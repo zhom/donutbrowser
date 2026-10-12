@@ -23,6 +23,23 @@ use tokio::sync::{Mutex as TokioMutex, Semaphore};
 /// entity's user-edit timestamp in unix seconds. Used to resolve sync conflicts
 /// (last-write-wins) from a HEAD request without downloading the object body.
 const UPDATED_AT_META_KEY: &str = "updated-at";
+/// The profile's group, in plain text on its metadata object, so the sync
+/// server can hold a team member to the groups the owner gave them.
+const GROUP_ID_META_KEY: &str = "group-id";
+
+/// Set when the server signed an upload without `group-id`: an older server
+/// that keeps no group, so asking it again on every sync changes nothing.
+static GROUP_META_UNSUPPORTED: std::sync::atomic::AtomicBool =
+  std::sync::atomic::AtomicBool::new(false);
+
+/// The `group-id` a profile's metadata object carries.
+fn group_meta(profile: &BrowserProfile) -> String {
+  profile
+    .group_id
+    .clone()
+    .filter(|id| !id.is_empty())
+    .unwrap_or_else(|| crate::team_members::UNGROUPED.to_string())
+}
 
 static TOMBSTONE_CHECK: KeyedStreak = KeyedStreak::new(module_path!(), "Sync tombstone check");
 
@@ -598,6 +615,15 @@ impl SyncEngine {
     String::new()
   }
 
+  /// Whether the signed-in account holds a team seat, where access by group
+  /// applies.
+  async fn is_team_seat() -> bool {
+    crate::cloud_auth::CLOUD_AUTH
+      .get_user()
+      .await
+      .is_some_and(|auth| auth.user.team_id.is_some())
+  }
+
   /// Check if this is a self-hosted sync (no cloud login).
   async fn is_self_hosted_sync() -> bool {
     !crate::cloud_auth::CLOUD_AUTH.is_logged_in().await
@@ -644,17 +670,37 @@ impl SyncEngine {
     json: &str,
     updated_at: u64,
   ) -> SyncResult<()> {
+    self
+      .upload_config_json_with(remote_key, json, updated_at, HashMap::new())
+      .await
+  }
+
+  /// `upload_config_json`, with more plain-text object metadata.
+  async fn upload_config_json_with(
+    &self,
+    remote_key: &str,
+    json: &str,
+    updated_at: u64,
+    mut meta: HashMap<String, String>,
+  ) -> SyncResult<()> {
     if self.skips_remote_write(&format!("key={remote_key}")) {
       return Ok(());
     }
     let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
       .map_err(|e| SyncError::InvalidData(format!("Failed to seal config: {e}")))?;
-    let mut meta = HashMap::new();
     meta.insert(UPDATED_AT_META_KEY.to_string(), updated_at.to_string());
+    let wants_group = meta.contains_key(GROUP_ID_META_KEY);
     let presign = self
       .client
       .presign_upload_with_metadata(remote_key, Some(content_type), Some(meta))
       .await?;
+    if wants_group {
+      let kept = presign
+        .metadata
+        .as_ref()
+        .is_some_and(|signed| signed.contains_key(GROUP_ID_META_KEY));
+      GROUP_META_UNSUPPORTED.store(!kept, std::sync::atomic::Ordering::Relaxed);
+    }
     self
       .client
       .upload_bytes_with_metadata(
@@ -1255,7 +1301,13 @@ impl SyncEngine {
     let local_updated = profile.updated_at.unwrap_or(0);
     let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
     if !self.remote_wins(local_updated, remote_updated) {
-      if local_updated > remote_updated {
+      // An object an older app wrote has no group, and a member limited to
+      // some groups cannot reach it until it has one.
+      let group_differs = stat.metadata.as_ref().is_some_and(|meta| {
+        meta.get(GROUP_ID_META_KEY).map(String::as_str) != Some(group_meta(profile).as_str())
+      }) && !GROUP_META_UNSUPPORTED.load(std::sync::atomic::Ordering::Relaxed)
+        && Self::is_team_seat().await;
+      if local_updated > remote_updated || group_differs {
         self
           .upload_profile_metadata(&profile_id, profile, &key_prefix)
           .await?;
@@ -1322,8 +1374,9 @@ impl SyncEngine {
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize profile: {e}")))?;
 
     let remote_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
+    let meta = HashMap::from([(GROUP_ID_META_KEY.to_string(), group_meta(&sanitized))]);
     self
-      .upload_config_json(&remote_key, &json, sanitized.updated_at.unwrap_or(0))
+      .upload_config_json_with(&remote_key, &json, sanitized.updated_at.unwrap_or(0), meta)
       .await?;
 
     Ok(())

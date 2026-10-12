@@ -29,12 +29,16 @@ fn url_for(id: &str, tail: &str) -> Result<String, String> {
   Ok(format!("{}/{}{tail}", base(), urlencoding::encode(id)))
 }
 
-fn failure(action: &str, err: BackendFailure) -> String {
+fn failure(action: &str, mut err: BackendFailure) -> String {
   log::warn!(
     "Schedule request failed action={action} code={} status={}",
     err.code,
     err.status
   );
+  // The cloud names a schedule a job; the app has one word for it.
+  if err.code == "AGENT_JOB_NOT_FOUND" {
+    err.code = "AGENT_SCHEDULE_NOT_FOUND".to_string();
+  }
   err.to_error_json()
 }
 
@@ -108,6 +112,18 @@ pub async fn run_agent_schedule_now(id: String) -> Result<Value, String> {
 #[tauri::command]
 pub async fn list_agent_schedule_runs(id: String) -> Result<Value, String> {
   call("runs", reqwest::Method::GET, url_for(&id, "/runs")?, None).await
+}
+
+/// Send a test email and webhook for the schedule `id`, as a failed run would.
+#[tauri::command]
+pub async fn test_agent_schedule_notice(id: String) -> Result<Value, String> {
+  call(
+    "test_notice",
+    reqwest::Method::POST,
+    url_for(&id, "/test-notice")?,
+    Some(serde_json::json!({})),
+  )
+  .await
 }
 
 #[cfg(test)]

@@ -1,19 +1,39 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { translateBackendError } from "@/lib/backend-errors";
 import {
+  ACTIVITY_PERIODS,
+  ACTIVITY_TARGET_TYPES,
+  type ActivityFilter,
+  type ActivityPeriod,
   actionKey,
   actorKind,
+  exportTeamActivityCsv,
   fieldKeys,
   listTeamActivity,
+  listTeamMembers,
+  sinceFor,
   type TeamActivityItem,
+  type TeamMember,
   targetLabel,
 } from "@/lib/team-activity";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+
+/** The value a filter Select holds for "no filter". */
+const ANY = "any";
 
 interface Named {
   id: string;
@@ -55,14 +75,34 @@ export function TeamActivityLog() {
   );
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [members, setMembers] = React.useState<TeamMember[]>([]);
+  const [actor, setActor] = React.useState(ANY);
+  const [targetType, setTargetType] = React.useState(ANY);
+  const [period, setPeriod] = React.useState<ActivityPeriod>("all");
+
+  const filter = React.useMemo<ActivityFilter>(
+    () => ({
+      actorUserId: actor === ANY ? undefined : actor,
+      targetType: targetType === ANY ? undefined : targetType,
+      since: sinceFor(period),
+    }),
+    [actor, targetType, period],
+  );
+
+  React.useEffect(() => {
+    void listTeamMembers()
+      .then(setMembers)
+      .catch(() => setMembers([]));
+  }, []);
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const [page, names] = await Promise.all([
-        listTeamActivity(null),
+        listTeamActivity(null, filter),
         loadLocalNames(),
       ]);
       setItems(page.items);
@@ -73,17 +113,34 @@ export function TeamActivityLog() {
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  }, [t, filter]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
 
+  const exportCsv = async () => {
+    const path = await save({
+      defaultPath: `team-activity-${new Date().toISOString().slice(0, 10)}.csv`,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!path) return;
+    setIsExporting(true);
+    try {
+      const rows = await exportTeamActivityCsv(path, filter);
+      showSuccessToast(t("teamActivity.exported", { count: rows }));
+    } catch (err) {
+      showErrorToast(translateBackendError(t, err));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const loadMore = async () => {
     if (!nextCursor) return;
     setIsLoadingMore(true);
     try {
-      const page = await listTeamActivity(nextCursor);
+      const page = await listTeamActivity(nextCursor, filter);
       setItems((current) => [...current, ...page.items]);
       setNextCursor(page.nextCursor);
     } catch (err) {
@@ -112,14 +169,23 @@ export function TeamActivityLog() {
           ? t("sync.team.roleLauncher")
           : t("sync.team.roleMember");
 
-  /** "Member → Launcher" for a role change, when the log says both. */
-  const roleChange = (item: TeamActivityItem) => {
-    const { from, to } = item.detail ?? {};
-    return item.action === "member.role_change" &&
+  /** "Member → Launcher" for a role change, or the groups an access change gave. */
+  const memberChange = (item: TeamActivityItem) => {
+    const { from, to, groups } = item.detail ?? {};
+    if (
+      item.action === "member.role_change" &&
       typeof from === "string" &&
       typeof to === "string"
-      ? `${roleLabel(from)} → ${roleLabel(to)}`
-      : null;
+    ) {
+      return `${roleLabel(from)} → ${roleLabel(to)}`;
+    }
+    if (item.action === "member.access_change") {
+      if (groups === "all") return t("teamAccess.allGroups");
+      if (typeof groups === "number") {
+        return t("teamAccess.someGroups", { count: groups });
+      }
+    }
+    return null;
   };
 
   const describe = (item: TeamActivityItem) => {
@@ -140,14 +206,87 @@ export function TeamActivityLog() {
             {t("teamActivity.description")}
           </p>
         </div>
-        <Button
-          variant="soft"
-          size="sm"
-          onClick={() => void load()}
-          disabled={isLoading}
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="soft"
+            size="sm"
+            onClick={() => void exportCsv()}
+            disabled={isExporting || isLoading}
+            data-testid="team-activity-export"
+          >
+            {t("teamActivity.exportCsv")}
+          </Button>
+          <Button
+            variant="soft"
+            size="sm"
+            onClick={() => void load()}
+            disabled={isLoading}
+          >
+            {t("common.buttons.refresh")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Select value={actor} onValueChange={setActor}>
+          <SelectTrigger
+            size="sm"
+            variant="soft"
+            className="w-[200px]"
+            aria-label={t("teamActivity.filterMember")}
+            data-testid="team-activity-member"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY}>{t("teamActivity.anyMember")}</SelectItem>
+            {members.map((member) => (
+              <SelectItem key={member.userId} value={member.userId}>
+                {member.email ?? member.userId}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={targetType} onValueChange={setTargetType}>
+          <SelectTrigger
+            size="sm"
+            variant="soft"
+            className="w-[160px]"
+            aria-label={t("teamActivity.filterType")}
+            data-testid="team-activity-type"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY}>{t("teamActivity.anyType")}</SelectItem>
+            {ACTIVITY_TARGET_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {t(`teamActivity.types.${type}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={period}
+          onValueChange={(value) => setPeriod(value as ActivityPeriod)}
         >
-          {t("common.buttons.refresh")}
-        </Button>
+          <SelectTrigger
+            size="sm"
+            variant="soft"
+            className="w-[150px]"
+            aria-label={t("teamActivity.filterPeriod")}
+            data-testid="team-activity-period"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACTIVITY_PERIODS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {t(`teamActivity.periods.${value}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading ? (
@@ -170,7 +309,7 @@ export function TeamActivityLog() {
             const fields = fieldKeys(item.detail);
             const kind = actorKind(item.actor.kind);
             const notes = [
-              roleChange(item),
+              memberChange(item),
               fields.length > 0 &&
                 t("teamActivity.changedFields", {
                   fields: fields

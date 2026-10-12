@@ -3083,6 +3083,23 @@ test("scheduled recipes stay behind the plan, and a schedule is built from the f
       await app.clickSelector('[data-slot="agent-schedule-new"]');
       await app.fillSelector("#agent-schedule-name", "Weekday check");
       await app.clickSelector(`#agent-schedule-profile-${profile.id}`);
+      // A webhook must be https; the form says so and does not save.
+      const saveDisabled = () =>
+        app.execute(
+          `return document.querySelector('[data-slot="agent-schedule-save"]').disabled;`,
+        );
+      await app.fillSelector(
+        "#agent-schedule-webhook",
+        "http://hooks.example.test/donut",
+      );
+      await app.waitFor(saveDisabled, { description: "save refused" });
+      await app.fillSelector(
+        "#agent-schedule-webhook",
+        "https://hooks.example.test/donut",
+      );
+      await app.waitFor(async () => !(await saveDisabled()), {
+        description: "save allowed",
+      });
       await app.capture("agent-schedule-editor");
       await app.clickSelector('[data-slot="agent-schedule-save"]');
       await app.waitFor(
@@ -3105,6 +3122,11 @@ test("scheduled recipes stay behind the plan, and a schedule is built from the f
       assert.equal(created.schedule.runAtMinute, 9 * 60);
       assert.ok(created.schedule.timezone);
       assert.equal(created.schedule.enabled, true);
+      assert.equal(created.schedule.notifyEmail, true, "email on by default");
+      assert.equal(
+        created.schedule.webhookUrl,
+        "https://hooks.example.test/donut",
+      );
       assert.equal(
         created.schedule.intervalMinutes,
         undefined,
@@ -3120,6 +3142,12 @@ test("a launcher seat opens the team's profiles but cannot change them, and an o
     "ui-team-roles",
     async (app) => {
       const profile = await createUiProfile(app, "Team Profile");
+      const group = await app.invoke("create_profile_group", { name: "Shop" });
+      const calls = (command) =>
+        app.execute(
+          "return (window.__donutStubbedCalls ?? []).filter((c) => c.command === arguments[0]).map((c) => c.payload);",
+          [command],
+        );
       const user = (teamRole) => ({
         logged_in_at: new Date().toISOString(),
         user: {
@@ -3249,6 +3277,26 @@ test("a launcher seat opens the team's profiles but cannot change them, and an o
         nextCursor: null,
       });
       await rm(launcherSeat);
+      await stubCommand(app, "list_team_members", [
+        {
+          userId: "ui-team-seat",
+          email: "seat@example.test",
+          role: "owner",
+          groupAccess: null,
+        },
+        {
+          userId: "u-admin",
+          email: "admin@example.test",
+          role: "admin",
+          groupAccess: null,
+        },
+        {
+          userId: "u-launcher",
+          email: "launcher@example.test",
+          role: "launcher",
+          groupAccess: null,
+        },
+      ]);
       await signIn("owner");
       await closeWelcome();
       await app.clickSelector(`[aria-label="${en.rail.account}"]`);
@@ -3286,6 +3334,72 @@ test("a launcher seat opens the team's profiles but cannot change them, and an o
       );
       assert.match(rows[2], new RegExp(en.teamActivity.actions.memberJoin));
       await app.capture("team-activity-log");
+
+      // A filter reads the log again, narrowed in the cloud.
+      await app.clickSelector('[data-testid="team-activity-member"]');
+      await app.clickText("launcher@example.test", { roles: ["option"] });
+      await app.waitFor(
+        async () =>
+          (await calls("list_team_activity")).some(
+            (payload) => payload?.filter?.actorUserId === "u-launcher",
+          ),
+        { description: "the log read for one member" },
+      );
+
+      // The export saves what the filters show.
+      await stubCommand(app, "plugin:dialog|save", "/tmp/team-activity.csv");
+      await stubCommand(app, "export_team_activity_csv", 3);
+      await app.clickSelector('[data-testid="team-activity-export"]');
+      await app.waitFor(
+        async () => (await calls("export_team_activity_csv")).length === 1,
+        { description: "the CSV export" },
+      );
+      const [exported] = await calls("export_team_activity_csv");
+      assert.equal(exported.path, "/tmp/team-activity.csv");
+      assert.equal(exported.filter.actorUserId, "u-launcher");
+
+      // Access by group: the owner limits the launcher to one group.
+      await app.clickText(en.account.tabs.teamAccess, { roles: ["tab"] });
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelectorAll('[data-testid="team-access"] li').length === 3;`,
+          ),
+        { description: "the team's members" },
+      );
+      assert.equal(
+        await app.execute(
+          `return document.querySelectorAll('[data-member="ui-team-seat"] button').length;`,
+        ),
+        0,
+        "the owner is never limited",
+      );
+      await stubCommand(app, "set_team_member_access", {
+        userId: "u-launcher",
+        email: "launcher@example.test",
+        role: "launcher",
+        groupAccess: [group.id],
+      });
+      await app.clickSelector('[data-member="u-launcher"] button');
+      await app.clickSelector('label[for="access-some-u-launcher"]');
+      await app.clickSelector(`#access-u-launcher-${group.id}`);
+      await app.capture("team-access-editor");
+      await app.clickSelector('[data-testid="team-access-save"]');
+      await app.waitFor(
+        async () => (await calls("set_team_member_access")).length === 1,
+        { description: "the access sent to the cloud" },
+      );
+      const [access] = await calls("set_team_member_access");
+      assert.deepEqual(access, { userId: "u-launcher", groups: [group.id] });
+      await app.waitFor(
+        async () =>
+          (
+            await app.execute(
+              `return document.querySelector('[data-member="u-launcher"]')?.innerText ?? "";`,
+            )
+          ).includes(en.teamAccess.someGroups_one.replace("{{count}}", "1")),
+        { description: "the new access on the row" },
+      );
       await dismissSurface(app);
     },
     { seedDownloadedBrowser: true },

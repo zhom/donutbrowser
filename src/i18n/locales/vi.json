@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "Vai trò nhóm của bạn có thể mở hồ sơ nhưng không thể thay đổi chúng. Hãy nhờ chủ sở hữu hoặc quản trị viên của nhóm.",
     "teamActivityForbidden": "Chỉ chủ sở hữu và quản trị viên của nhóm mới xem được hoạt động của nhóm.",
     "teamActivityNotEntitled": "Nhật ký hoạt động cần gói Team hoặc Enterprise đang hoạt động.",
-    "teamActivityInvalid": "Yêu cầu nhật ký hoạt động không hợp lệ."
+    "teamActivityInvalid": "Yêu cầu nhật ký hoạt động không hợp lệ.",
+    "teamActivityExportFailed": "Không thể lưu tệp hoạt động.",
+    "teamAccessForbidden": "Chỉ chủ sở hữu và quản trị viên của nhóm mới đổi được quyền truy cập.",
+    "teamAccessInvalid": "Cài đặt quyền truy cập này không hợp lệ.",
+    "teamMemberNotFound": "Thành viên này không còn trong nhóm.",
+    "teamGroupAccessDenied": "Bạn không có quyền truy cập nhóm của hồ sơ này.",
+    "teamAccessNotEntitled": "Quyền truy cập theo nhóm cần gói Team hoặc Enterprise đang hoạt động.",
+    "replayRecipeNotFound": "Công thức này không còn nữa."
   },
   "rail": {
     "profiles": "Profile",
@@ -2736,7 +2743,8 @@
       "account": "Tài khoản",
       "selfHosted": "Tự lưu trữ",
       "teamUsage": "Mức dùng của nhóm",
-      "teamActivity": "Hoạt động của nhóm"
+      "teamActivity": "Hoạt động của nhóm",
+      "teamAccess": "Quyền truy cập của nhóm"
     },
     "selfHosted": {
       "title": "Máy chủ đồng bộ tự lưu trữ",
@@ -3680,6 +3688,20 @@
         "partial": "Xong một phần",
         "failed": "Thất bại",
         "cancelled": "Đã hủy"
+      },
+      "notices": {
+        "title": "Thông báo",
+        "email": "Gửi email cho tôi khi một lần chạy thất bại",
+        "webhook": "URL webhook",
+        "webhookPlaceholder": "URL webhook (tùy chọn, https)",
+        "webhookInvalid": "Dùng địa chỉ https không có tên người dùng hoặc mật khẩu.",
+        "secret": "Khóa ký:",
+        "copySecret": "Sao chép khóa ký",
+        "rotate": "Khóa mới",
+        "test": "Gửi thông báo thử",
+        "testSent": "Đã gửi thông báo thử.",
+        "testFailed": "Thông báo thử thất bại (trạng thái webhook {{status}}).",
+        "secretRotated": "Đã tạo khóa ký mới."
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "đã tạo trạng thái {{target}}",
       "statusUpdate": "đã thay đổi trạng thái {{target}}",
       "statusDelete": "đã xóa trạng thái {{target}}",
-      "other": "đã thực hiện {{action}} với {{target}}"
+      "other": "đã thực hiện {{action}} với {{target}}",
+      "memberAccessChange": "đã đổi quyền truy cập của {{target}}"
     },
     "fields": {
       "name": "Tên",
@@ -4025,6 +4048,41 @@
       "mcp": "bởi một tác tử MCP",
       "service": "bằng khóa API",
       "remote_vm": "từ trình duyệt đám mây"
+    },
+    "exportCsv": "Xuất CSV",
+    "exported_one": "Đã lưu {{count}} mục.",
+    "exported_other": "Đã lưu {{count}} mục.",
+    "filterMember": "Thành viên",
+    "filterType": "Loại mục",
+    "filterPeriod": "Khoảng thời gian",
+    "anyMember": "Tất cả thành viên",
+    "anyType": "Tất cả mục",
+    "types": {
+      "profile": "Hồ sơ",
+      "proxy": "Proxy",
+      "group": "Nhóm",
+      "vpn": "VPN",
+      "extension": "Tiện ích",
+      "template": "Mẫu",
+      "status": "Trạng thái",
+      "member": "Thành viên"
+    },
+    "periods": {
+      "1": "24 giờ qua",
+      "7": "7 ngày qua",
+      "30": "30 ngày qua",
+      "all": "Mọi thời gian"
     }
+  },
+  "teamAccess": {
+    "title": "Quyền truy cập theo nhóm",
+    "description": "Giới hạn một thành viên trong một số nhóm hồ sơ. Tên nhóm ở lại trên máy tính này; đám mây chỉ giữ ID nhóm.",
+    "allGroups": "Tất cả nhóm",
+    "onlyThese": "Chỉ các nhóm này",
+    "ungrouped": "Hồ sơ không có nhóm",
+    "change": "Thay đổi",
+    "saved": "Đã lưu quyền truy cập.",
+    "someGroups_one": "{{count}} nhóm",
+    "someGroups_other": "{{count}} nhóm"
   }
 }

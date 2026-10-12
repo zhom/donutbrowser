@@ -160,6 +160,7 @@ mod navigation_watch;
 mod tag_manager;
 pub mod team_activity;
 mod team_lock;
+mod team_members;
 pub mod team_roles;
 mod totp;
 mod vault;
@@ -3557,6 +3558,7 @@ pub fn run_with_builder(
       agent_schedules::delete_agent_schedule,
       agent_schedules::run_agent_schedule_now,
       agent_schedules::list_agent_schedule_runs,
+      agent_schedules::test_agent_schedule_notice,
       start_mcp_remote_bridge,
       stop_mcp_remote_bridge,
       get_mcp_remote_status,
@@ -3658,6 +3660,9 @@ pub fn run_with_builder(
       lock_profile,
       is_profile_locked,
       team_activity::list_team_activity,
+      team_activity::export_team_activity_csv,
+      team_members::list_team_members,
+      team_members::set_team_member_access,
     ]))
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

@@ -22,6 +22,7 @@ const ACTION_KEYS: Record<string, string> = {
   "member.join": "memberJoin",
   "member.remove": "memberRemove",
   "member.role_change": "memberRoleChange",
+  "member.access_change": "memberAccessChange",
   "invitation.cancel": "invitationCancel",
   "profile.launch": "profileLaunch",
   "profile.stop": "profileStop",
@@ -125,11 +126,90 @@ function shortId(id: string): string {
 
 export const ACTIVITY_PAGE = 50;
 
+/** Which part of the log to read. Empty fields read everything. */
+export interface ActivityFilter {
+  actorUserId?: string;
+  targetType?: string;
+  /** ISO 8601: the oldest entry to include. */
+  since?: string;
+}
+
+/** The item types the log can be narrowed to, as the cloud names them. */
+export const ACTIVITY_TARGET_TYPES = [
+  "profile",
+  "proxy",
+  "group",
+  "vpn",
+  "extension",
+  "template",
+  "status",
+  "member",
+] as const;
+
+/** How far back the log reads, in days, or every entry. */
+export const ACTIVITY_PERIODS = ["1", "7", "30", "all"] as const;
+export type ActivityPeriod = (typeof ACTIVITY_PERIODS)[number];
+
+/** The `since` for a period, counted back from `now`. */
+export function sinceFor(
+  period: ActivityPeriod,
+  now: Date = new Date(),
+): string | undefined {
+  if (period === "all") return undefined;
+  return new Date(now.getTime() - Number(period) * 86_400_000).toISOString();
+}
+
 export function listTeamActivity(
   cursor: string | null,
+  filter: ActivityFilter = {},
 ): Promise<TeamActivityPage> {
   return invoke<TeamActivityPage>("list_team_activity", {
     cursor,
     limit: ACTIVITY_PAGE,
+    filter,
   });
+}
+
+/** Saves the filtered log as CSV at `path`; resolves to the row count. */
+export function exportTeamActivityCsv(
+  path: string,
+  filter: ActivityFilter = {},
+): Promise<number> {
+  return invoke<number>("export_team_activity_csv", { path, filter });
+}
+
+/** A team member, as the cloud lists them. */
+export interface TeamMember {
+  userId: string;
+  email: string | null;
+  role: string;
+  /** The groups this member may reach, or null for every group. */
+  groupAccess: string[] | null;
+}
+
+/** The access entry for profiles in no group. */
+export const UNGROUPED_ACCESS = "__ungrouped__";
+
+export function listTeamMembers(): Promise<TeamMember[]> {
+  return invoke<TeamMember[] | null>("list_team_members").then(
+    (members) => members ?? [],
+  );
+}
+
+/** Limits a member to `groups`, or gives back every group with null. */
+export function setTeamMemberAccess(
+  userId: string,
+  groups: string[] | null,
+): Promise<TeamMember> {
+  return invoke<TeamMember>("set_team_member_access", { userId, groups });
+}
+
+/** Whether `actor` may change the access of `member`. The cloud checks again. */
+export function canChangeAccess(
+  actorRole: string | undefined,
+  member: TeamMember,
+): boolean {
+  if (member.role === "owner") return false;
+  if (actorRole === "owner") return true;
+  return actorRole === "admin" && member.role !== "admin";
 }

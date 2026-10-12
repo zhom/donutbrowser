@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   isoToLocalInput,
+  isWebhookUrl,
   minuteToTime,
   scheduleBody,
   timeToMinute,
@@ -47,4 +48,28 @@ test("a schedule sends only the fields its cadence reads", () => {
   const interval = scheduleBody({ ...base, cadence: "interval" });
   assert.equal(interval.intervalMinutes, 60);
   assert.equal(interval.timezone, undefined);
+});
+
+test("a webhook is https without credentials, and an empty one clears it", () => {
+  assert.equal(isWebhookUrl(""), true);
+  assert.equal(isWebhookUrl("https://hooks.example.com/donut"), true);
+  for (const bad of [
+    "http://hooks.example.com/donut",
+    "https://user:pass@hooks.example.com/",
+    "not a url",
+  ]) {
+    assert.equal(isWebhookUrl(bad), false, bad);
+  }
+  const body = scheduleBody({
+    name: "n",
+    recipeId: "r",
+    target: "fleet",
+    profileIds: ["p"],
+    cadence: "interval",
+    intervalMinutes: 60,
+    notifyEmail: false,
+    webhookUrl: "  ",
+  });
+  assert.equal(body.notifyEmail, false);
+  assert.equal(body.webhookUrl, null);
 });

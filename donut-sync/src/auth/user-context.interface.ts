@@ -11,4 +11,7 @@ export interface UserContext {
   // backend. A `launcher` may run profiles and sync what a session changed,
   // never change a profile's settings, proxies or groups.
   teamRole?: "owner" | "admin" | "member" | "launcher";
+  // The profile groups this member may reach, when the owner limited them.
+  // Absent means every group. `__ungrouped__` stands for profiles in no group.
+  groupIds?: string[];
 }

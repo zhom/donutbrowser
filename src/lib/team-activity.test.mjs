@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   actionKey,
   actorKind,
+  canChangeAccess,
   fieldKeys,
+  sinceFor,
   targetLabel,
 } from "./team-activity.ts";
 
@@ -47,4 +49,25 @@ test("a target reads as its local name first, then the log's, then a short id", 
 test("an actor kind this build does not know is not shown", () => {
   assert.equal(actorKind("mcp"), "mcp");
   assert.equal(actorKind("satellite"), null);
+});
+
+test("a period reads back that many days, and all reads everything", () => {
+  const now = new Date("2026-10-12T12:00:00Z");
+  assert.equal(sinceFor("1", now), "2026-10-11T12:00:00.000Z");
+  assert.equal(sinceFor("30", now), "2026-09-12T12:00:00.000Z");
+  assert.equal(sinceFor("all", now), undefined);
+});
+
+test("the owner is never limited, and an admin limits only members below it", () => {
+  const member = (role) => ({
+    userId: "u",
+    email: null,
+    role,
+    groupAccess: null,
+  });
+  assert.equal(canChangeAccess("owner", member("owner")), false);
+  assert.equal(canChangeAccess("owner", member("admin")), true);
+  assert.equal(canChangeAccess("admin", member("admin")), false);
+  assert.equal(canChangeAccess("admin", member("launcher")), true);
+  assert.equal(canChangeAccess("member", member("launcher")), false);
 });

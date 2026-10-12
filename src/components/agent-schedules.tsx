@@ -7,6 +7,7 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CopyToClipboard } from "@/components/ui/copy-to-clipboard";
 import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ import {
   createSchedule,
   deleteSchedule,
   isoToLocalInput,
+  isWebhookUrl,
   listScheduleRuns,
   listSchedules,
   localTimezone,
@@ -36,10 +38,12 @@ import {
   MAX_SCHEDULE_PROFILES,
   MIN_INTERVAL_MINUTES,
   minuteToTime,
+  rotateWebhookSecret,
   runScheduleNow,
   type ScheduleCadence,
   type ScheduleTarget,
   scheduleBody,
+  testScheduleNotice,
   timeToMinute,
   updateSchedule,
   WEEKDAYS,
@@ -428,6 +432,13 @@ function ScheduleEditor({
     String(schedule?.intervalMinutes ?? 60),
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState(schedule?.notifyEmail ?? true);
+  const [webhookUrl, setWebhookUrl] = useState(schedule?.webhookUrl ?? "");
+  const [webhookSecret, setWebhookSecret] = useState(
+    schedule?.webhookSecret ?? null,
+  );
+  const [isTesting, setIsTesting] = useState(false);
+  const webhookValid = isWebhookUrl(webhookUrl);
 
   const minute = timeToMinute(time);
   const interval = Number.parseInt(intervalMinutes, 10);
@@ -448,7 +459,41 @@ function ScheduleEditor({
     profileIds.length > 0 &&
     (target === "fleet" || canRunOnDesktop) &&
     cadenceReady &&
+    webhookValid &&
     !isSaving;
+
+  const sendTestNotice = async () => {
+    if (!schedule) return;
+    setIsTesting(true);
+    try {
+      const result = await testScheduleNotice(schedule.id);
+      const failed = result.email === "failed" || result.webhook === "failed";
+      if (failed) {
+        showErrorToast(
+          t("agent.schedules.notices.testFailed", {
+            status: result.webhookStatus ?? "-",
+          }),
+        );
+      } else {
+        showSuccessToast(t("agent.schedules.notices.testSent"));
+      }
+    } catch (testError) {
+      showErrorToast(translateBackendError(t, testError));
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const newSecret = async () => {
+    if (!schedule) return;
+    try {
+      const updated = await rotateWebhookSecret(schedule.id);
+      setWebhookSecret(updated.webhookSecret);
+      showSuccessToast(t("agent.schedules.notices.secretRotated"));
+    } catch (rotateError) {
+      showErrorToast(translateBackendError(t, rotateError));
+    }
+  };
 
   const toggleProfile = (id: string, on: boolean) => {
     setProfileIds((current) =>
@@ -472,6 +517,8 @@ function ScheduleEditor({
       timezone,
       runOnceAt: onceDate?.toISOString(),
       intervalMinutes: interval,
+      notifyEmail,
+      webhookUrl: webhookUrl.trim() || null,
     };
     try {
       if (schedule) {
@@ -684,6 +731,76 @@ function ScheduleEditor({
           />
         </div>
       )}
+
+      <div className="flex flex-col gap-2" data-slot="agent-schedule-notices">
+        <Label className={labelClass}>
+          {t("agent.schedules.notices.title")}
+        </Label>
+        <label
+          htmlFor="agent-schedule-notify-email"
+          className="flex cursor-pointer items-center gap-2 text-sm"
+        >
+          <Checkbox
+            id="agent-schedule-notify-email"
+            checked={notifyEmail}
+            onCheckedChange={(checked) => setNotifyEmail(checked === true)}
+          />
+          {t("agent.schedules.notices.email")}
+        </label>
+        <Input
+          id="agent-schedule-webhook"
+          type="url"
+          inputMode="url"
+          value={webhookUrl}
+          placeholder={t("agent.schedules.notices.webhookPlaceholder")}
+          aria-label={t("agent.schedules.notices.webhook")}
+          aria-invalid={!webhookValid}
+          onChange={(event) => setWebhookUrl(event.target.value)}
+        />
+        {!webhookValid && (
+          <p className="text-xs text-destructive-text">
+            {t("agent.schedules.notices.webhookInvalid")}
+          </p>
+        )}
+        {schedule &&
+          webhookSecret &&
+          webhookUrl.trim() === schedule.webhookUrl && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="min-w-0 truncate">
+                {t("agent.schedules.notices.secret")}{" "}
+                <code className="font-mono">{webhookSecret}</code>
+              </span>
+              <CopyToClipboard
+                variant="subtle"
+                className="size-7 shrink-0 rounded-lg"
+                text={webhookSecret}
+                aria-label={t("agent.schedules.notices.copySecret")}
+              />
+              <Button
+                variant="subtle"
+                size="sm"
+                type="button"
+                className="h-7 rounded-lg text-xs"
+                onClick={() => void newSecret()}
+              >
+                {t("agent.schedules.notices.rotate")}
+              </Button>
+            </div>
+          )}
+        {schedule && (
+          <Button
+            variant="subtle"
+            size="sm"
+            type="button"
+            className="h-8 self-start rounded-lg text-xs"
+            disabled={isTesting}
+            onClick={() => void sendTestNotice()}
+            data-slot="agent-schedule-test-notice"
+          >
+            {t("agent.schedules.notices.test")}
+          </Button>
+        )}
+      </div>
 
       <div className="flex items-center justify-end gap-2">
         <Button

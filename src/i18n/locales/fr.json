@@ -2666,7 +2666,14 @@
     "teamRoleReadOnly": "Votre rôle dans l’équipe peut ouvrir des profils, mais pas les modifier. Demandez à un propriétaire ou un administrateur de l’équipe.",
     "teamActivityForbidden": "Seuls les propriétaires et administrateurs de l’équipe voient son activité.",
     "teamActivityNotEntitled": "Le journal d’activité nécessite un forfait Team ou Enterprise actif.",
-    "teamActivityInvalid": "La demande du journal d’activité n’était pas valide."
+    "teamActivityInvalid": "La demande du journal d’activité n’était pas valide.",
+    "teamActivityExportFailed": "Le fichier d’activité n’a pas pu être enregistré.",
+    "teamAccessForbidden": "Seuls les propriétaires et administrateurs de l’équipe peuvent modifier l’accès.",
+    "teamAccessInvalid": "Ce réglage d’accès n’est pas valide.",
+    "teamMemberNotFound": "Ce membre ne fait plus partie de l’équipe.",
+    "teamGroupAccessDenied": "Vous n’avez pas accès au groupe de ce profil.",
+    "teamAccessNotEntitled": "L’accès par groupe nécessite un forfait Team ou Enterprise actif.",
+    "replayRecipeNotFound": "Cette recette n’existe plus."
   },
   "rail": {
     "profiles": "Profils",
@@ -2756,7 +2763,8 @@
       "account": "Compte",
       "selfHosted": "Auto-hébergé",
       "teamUsage": "Utilisation de l'équipe",
-      "teamActivity": "Activité de l’équipe"
+      "teamActivity": "Activité de l’équipe",
+      "teamAccess": "Accès de l’équipe"
     },
     "selfHosted": {
       "title": "Serveur de synchronisation auto-hébergé",
@@ -3723,6 +3731,20 @@
         "partial": "Terminé en partie",
         "failed": "Échec",
         "cancelled": "Annulé"
+      },
+      "notices": {
+        "title": "Notifications",
+        "email": "M’envoyer un e-mail quand une exécution échoue",
+        "webhook": "URL du webhook",
+        "webhookPlaceholder": "URL du webhook (facultative, https)",
+        "webhookInvalid": "Utilisez une adresse https sans nom d’utilisateur ni mot de passe.",
+        "secret": "Secret de signature :",
+        "copySecret": "Copier le secret de signature",
+        "rotate": "Nouveau secret",
+        "test": "Envoyer une notification de test",
+        "testSent": "Notification de test envoyée.",
+        "testFailed": "La notification de test a échoué (statut du webhook {{status}}).",
+        "secretRotated": "Nouveau secret de signature créé."
       }
     }
   },
@@ -4040,7 +4062,8 @@
       "statusCreate": "a créé le statut {{target}}",
       "statusUpdate": "a modifié le statut {{target}}",
       "statusDelete": "a supprimé le statut {{target}}",
-      "other": "a effectué {{action}} sur {{target}}"
+      "other": "a effectué {{action}} sur {{target}}",
+      "memberAccessChange": "a modifié l’accès de {{target}}"
     },
     "fields": {
       "name": "Nom",
@@ -4068,6 +4091,43 @@
       "mcp": "par un agent MCP",
       "service": "avec une clé d’API",
       "remote_vm": "depuis un navigateur cloud"
+    },
+    "exportCsv": "Exporter en CSV",
+    "exported_one": "{{count}} entrée enregistrée.",
+    "exported_many": "{{count}} entrées enregistrées.",
+    "exported_other": "{{count}} entrées enregistrées.",
+    "filterMember": "Membre",
+    "filterType": "Type d’élément",
+    "filterPeriod": "Période",
+    "anyMember": "Tous les membres",
+    "anyType": "Tous les éléments",
+    "types": {
+      "profile": "Profils",
+      "proxy": "Proxys",
+      "group": "Groupes",
+      "vpn": "VPN",
+      "extension": "Extensions",
+      "template": "Modèles",
+      "status": "Statuts",
+      "member": "Membres"
+    },
+    "periods": {
+      "1": "Dernières 24 heures",
+      "7": "7 derniers jours",
+      "30": "30 derniers jours",
+      "all": "Toute la période"
     }
+  },
+  "teamAccess": {
+    "title": "Accès par groupe",
+    "description": "Limitez un membre à certains groupes de profils. Les noms des groupes restent sur cet ordinateur ; le cloud ne garde que les ID de groupe.",
+    "allGroups": "Tous les groupes",
+    "onlyThese": "Seulement ces groupes",
+    "ungrouped": "Profils sans groupe",
+    "change": "Modifier",
+    "saved": "Accès enregistré.",
+    "someGroups_one": "{{count}} groupe",
+    "someGroups_many": "{{count}} groupes",
+    "someGroups_other": "{{count}} groupes"
   }
 }

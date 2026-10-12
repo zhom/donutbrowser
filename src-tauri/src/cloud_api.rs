@@ -28,6 +28,28 @@ pub(crate) async fn call<T: DeserializeOwned>(
   body: Option<serde_json::Value>,
   codes: FailureCodes,
 ) -> Result<T, BackendFailure> {
+  let bytes = send(method, url, body, codes).await?;
+  decode_body::<T>(&bytes)
+    .map_err(|e| cloud_errors::classify_message(&format!("decode response: {e}"), codes))
+}
+
+/// `call` for an answer that is text (a CSV file), not JSON.
+pub(crate) async fn call_text(
+  method: reqwest::Method,
+  url: String,
+  codes: FailureCodes,
+) -> Result<String, BackendFailure> {
+  let bytes = send(method, url, None, codes).await?;
+  String::from_utf8(bytes)
+    .map_err(|e| cloud_errors::classify_message(&format!("decode response: {e}"), codes))
+}
+
+async fn send(
+  method: reqwest::Method,
+  url: String,
+  body: Option<serde_json::Value>,
+  codes: FailureCodes,
+) -> Result<Vec<u8>, BackendFailure> {
   crate::cloud_auth::CLOUD_AUTH
     .api_call_with_retry(|token| {
       let method = method.clone();
@@ -48,11 +70,11 @@ pub(crate) async fn call<T: DeserializeOwned>(
           // api_call_with_retry and classify_message read the status from this prefix.
           return Err(format!("({status}) {text}"));
         }
-        let bytes = response
+        response
           .bytes()
           .await
-          .map_err(|e| format!("decode response: {e}"))?;
-        decode_body::<T>(&bytes).map_err(|e| format!("decode response: {e}"))
+          .map(|bytes| bytes.to_vec())
+          .map_err(|e| format!("decode response: {e}"))
       }
     })
     .await

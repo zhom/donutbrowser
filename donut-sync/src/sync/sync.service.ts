@@ -65,8 +65,9 @@ function clampExpiresIn(requested: number | undefined): number {
   return Math.min(v, MAX_PRESIGN_EXPIRES_IN);
 }
 
-/** Only this metadata key is meaningful to sync (LWW conflict resolution).
- * Whitelisting prevents a client from signing arbitrary x-amz-meta-* values. */
+/** Only these metadata keys are meaningful to sync: `updated-at` for LWW
+ * conflict resolution, `group-id` for team access by group. Whitelisting
+ * prevents a client from signing arbitrary x-amz-meta-* values. */
 function sanitizeMetadata(
   metadata: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
@@ -75,8 +76,25 @@ function sanitizeMetadata(
   if (typeof metadata["updated-at"] === "string") {
     out["updated-at"] = metadata["updated-at"];
   }
+  if (
+    typeof metadata["group-id"] === "string" &&
+    GROUP_ID.test(metadata["group-id"])
+  ) {
+    out["group-id"] = metadata["group-id"];
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
+
+/** The `group-id` a profile without a group carries. */
+export const UNGROUPED = "__ungrouped__";
+const GROUP_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** A profile's objects, relative to the namespace: its root and its id. */
+const PROFILE_KEY = /^((?:teams\/[^/]+\/)?profiles\/([^/]+)\/)/;
+/** A group's config object, relative to the namespace. */
+const GROUP_KEY = /^(?:teams\/[^/]+\/)?groups\/([^/]+)\.json$/;
+/** How long a profile's group is trusted before it is read again. */
+const GROUP_CACHE_MS = 30_000;
+const GROUP_CACHE_MAX = 10_000;
 
 /**
  * What a launcher's session may write, relative to the team namespace. Team
@@ -103,6 +121,11 @@ export class SyncService implements OnModuleInit {
   private static readonly MAX_BATCH_ITEMS = 1000;
 
   private changeSubject = new Subject<SubscribeEventDto>();
+  /** A profile's group by the full key of its metadata object. */
+  private groupCache = new Map<
+    string,
+    { group: string | null | undefined; expires: number }
+  >();
   private s3Ready = false;
   private backendInternalUrl: string | undefined;
   private backendInternalKey: string | undefined;
@@ -384,9 +407,122 @@ export class SyncService implements OnModuleInit {
     });
   }
 
+  /**
+   * The group of the profile whose root is `root` (relative), read from the
+   * `group-id` of its metadata object. `undefined` when the profile has no
+   * metadata object yet, `null` when it has one without a group id (written
+   * by an older app), so no group can be checked.
+   */
+  private async profileGroup(
+    ctx: UserContext,
+    root: string,
+  ): Promise<string | null | undefined> {
+    const key = `${ctx.prefix}${root}metadata.json`;
+    const now = Date.now();
+    const cached = this.groupCache.get(key);
+    if (cached && cached.expires > now) return cached.group;
+    let group: string | null | undefined;
+    try {
+      const head = await this.s3Client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const value = head.Metadata?.["group-id"];
+      group = typeof value === "string" && GROUP_ID.test(value) ? value : null;
+    } catch (error: unknown) {
+      const name =
+        error && typeof error === "object" && "name" in error
+          ? error.name
+          : undefined;
+      if (name !== "NotFound" && name !== "NoSuchKey") throw error;
+      group = undefined;
+    }
+    if (this.groupCache.size > GROUP_CACHE_MAX) this.groupCache.clear();
+    this.groupCache.set(key, { group, expires: now + GROUP_CACHE_MS });
+    return group;
+  }
+
+  /**
+   * Whether a member limited to some groups may see the object at the scoped
+   * `key`. A profile's objects follow its group; a group's config object
+   * follows the group itself; everything else is shared team config.
+   */
+  private async canReach(ctx: UserContext, key: string): Promise<boolean> {
+    if (!ctx.groupIds) return true;
+    const relative = key.slice(ctx.prefix.length);
+    const groupConfig = GROUP_KEY.exec(relative);
+    if (groupConfig) return ctx.groupIds.includes(groupConfig[1]);
+    const profile = PROFILE_KEY.exec(relative);
+    if (!profile) return true;
+    const group = await this.profileGroup(ctx, profile[1]);
+    return typeof group === "string" && ctx.groupIds.includes(group);
+  }
+
+  private async assertReachable(ctx: UserContext, key: string): Promise<void> {
+    if (await this.canReach(ctx, key)) return;
+    throw new ForbiddenException({
+      code: "TEAM_GROUP_ACCESS_DENIED",
+      message: "This member has no access to the group of this profile",
+    });
+  }
+
+  /**
+   * A limited member may change a profile only inside its groups: the group
+   * the profile is in now, and the group a new metadata object names. A new
+   * profile starts with its metadata, so its first write names its group.
+   */
+  private async assertGroupWrite(
+    ctx: UserContext,
+    key: string,
+    metadata?: Record<string, string>,
+  ): Promise<void> {
+    if (!ctx.groupIds) return;
+    const relative = key.slice(ctx.prefix.length);
+    const groupConfig = GROUP_KEY.exec(relative);
+    const profile = PROFILE_KEY.exec(relative);
+    let allowed = true;
+    if (groupConfig) {
+      allowed = ctx.groupIds.includes(groupConfig[1]);
+    } else if (profile) {
+      const current = await this.profileGroup(ctx, profile[1]);
+      const isMetadata = relative === `${profile[1]}metadata.json`;
+      const named = metadata?.["group-id"];
+      if (current === null) allowed = false;
+      if (typeof current === "string" && !ctx.groupIds.includes(current)) {
+        allowed = false;
+      }
+      if (current === undefined && !isMetadata) allowed = false;
+      if (isMetadata && !(named && ctx.groupIds.includes(named))) {
+        allowed = false;
+      }
+      if (allowed && isMetadata && named) {
+        // The next read must see the group this write gives the profile.
+        this.groupCache.delete(`${ctx.prefix}${profile[1]}metadata.json`);
+      }
+    }
+    if (allowed) return;
+    throw new ForbiddenException({
+      code: "TEAM_GROUP_ACCESS_DENIED",
+      message: "This member has no access to the group of this profile",
+    });
+  }
+
+  /** `items` without the ones a limited member may not see. */
+  private async reachableOnly<T>(
+    ctx: UserContext,
+    items: T[],
+    keyOf: (item: T) => string,
+  ): Promise<T[]> {
+    if (!ctx.groupIds) return items;
+    const verdicts = await Promise.all(
+      items.map((item) => this.canReach(ctx, keyOf(item))),
+    );
+    return items.filter((_, index) => verdicts[index]);
+  }
+
   async stat(dto: StatRequestDto, ctx: UserContext): Promise<StatResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
     this.validateKeyAccess(ctx, key);
+    await this.assertReachable(ctx, key);
 
     try {
       const response = await this.s3Client.send(
@@ -424,6 +560,10 @@ export class SyncService implements OnModuleInit {
   ): Promise<PresignUploadResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
     this.validateWriteAccess(ctx, key);
+    // Whitelist metadata to the keys sync relies on, so a client can't sign
+    // arbitrary x-amz-meta-* values into its objects.
+    const metadata = sanitizeMetadata(dto.metadata);
+    await this.assertGroupWrite(ctx, key, metadata);
 
     // Check profile limit for cloud users
     if (ctx.mode === "cloud" && ctx.profileLimit > 0) {
@@ -433,9 +573,6 @@ export class SyncService implements OnModuleInit {
     const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-    // Whitelist metadata to the single key sync relies on, so a client can't
-    // sign arbitrary x-amz-meta-* values into its objects.
-    const metadata = sanitizeMetadata(dto.metadata);
     const command = new PutCmd({
       Bucket: this.bucket,
       Key: key,
@@ -481,6 +618,7 @@ export class SyncService implements OnModuleInit {
   ): Promise<PresignDownloadResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
     this.validateKeyAccess(ctx, key);
+    await this.assertReachable(ctx, key);
 
     const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
@@ -504,6 +642,7 @@ export class SyncService implements OnModuleInit {
   ): Promise<DeleteResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
     this.validateWriteAccess(ctx, key);
+    await this.assertGroupWrite(ctx, key);
     const scopedTombstoneKey = dto.tombstoneKey
       ? this.scopeKey(ctx, dto.tombstoneKey)
       : undefined;
@@ -585,7 +724,13 @@ export class SyncService implements OnModuleInit {
       });
 
     return {
-      objects,
+      objects: ctx
+        ? await this.reachableOnly(
+            ctx,
+            objects,
+            (object) => `${userPrefix}${object.key}`,
+          )
+        : objects,
       isTruncated: response.IsTruncated || false,
       nextContinuationToken: response.NextContinuationToken,
     };
@@ -617,6 +762,7 @@ export class SyncService implements OnModuleInit {
       dto.items.map(async (item) => {
         const key = this.scopeKey(ctx, item.key);
         this.validateWriteAccess(ctx, key);
+        await this.assertGroupWrite(ctx, key);
 
         const command = new PutCmd({
           Bucket: this.bucket,
@@ -680,6 +826,7 @@ export class SyncService implements OnModuleInit {
       dto.keys.map(async (rawKey) => {
         const key = this.scopeKey(ctx, rawKey);
         this.validateKeyAccess(ctx, key);
+        await this.assertReachable(ctx, key);
 
         const command = new GetObjectCommand({
           Bucket: this.bucket,
@@ -712,6 +859,7 @@ export class SyncService implements OnModuleInit {
     // verbatim) could wipe an entire shared namespace. Enforce scope, and
     // refuse an empty scoped prefix (which would match the whole scope).
     this.validateWriteAccess(ctx, prefix);
+    await this.assertGroupWrite(ctx, prefix);
     if (ctx.mode === "cloud" && prefix.length === 0) {
       throw new ForbiddenException("Refusing to delete an empty prefix");
     }
@@ -941,7 +1089,13 @@ export class SyncService implements OnModuleInit {
 
         lastKnownState = currentState;
         initialized = true;
-        return events;
+        // A limited member learns nothing about profiles outside its groups,
+        // not even that they changed.
+        return this.reachableOnly(
+          ctx,
+          events,
+          (event) => `${ctx.prefix}${event.key ?? ""}`,
+        );
       }),
       switchMap((events) => of(...events)),
       filter((event): event is SubscribeEventDto => event !== null),

@@ -137,3 +137,133 @@ describe("SyncService team roles", () => {
     ).resolves.toHaveProperty("deletedCount", 0);
   });
 });
+
+describe("SyncService access by group", () => {
+  const groups: Record<string, string | null> = {
+    p1: "g1",
+    p2: "g2",
+    p3: null,
+  };
+
+  function limitedService(): { service: SyncService; send: jest.Mock } {
+    const { service, send } = serviceWithStubbedS3();
+    send.mockImplementation(
+      async (command: { input: Record<string, unknown> }) => {
+        const name = command.constructor.name;
+        const key = String(command.input.Key ?? "");
+        if (name === "HeadObjectCommand") {
+          const match = /profiles\/([^/]+)\/metadata\.json$/.exec(key);
+          const id = match?.[1];
+          if (!id || !(id in groups)) {
+            throw Object.assign(new Error("not found"), { name: "NotFound" });
+          }
+          const group = groups[id];
+          return { Metadata: group ? { "group-id": group } : {} };
+        }
+        if (name === "ListObjectsV2Command") {
+          return {
+            Contents: [
+              "profiles/p1/manifest.json",
+              "profiles/p2/manifest.json",
+              "teams/t1/profiles/p1/files/Default/Cookies",
+              "groups/g1.json",
+              "groups/g2.json",
+              "proxies/x.json",
+            ].map((relative) => ({ Key: `${OWNER_PREFIX}${relative}` })),
+          };
+        }
+        return {};
+      },
+    );
+    return { service, send };
+  }
+
+  const limited: UserContext = {
+    mode: "cloud",
+    prefix: OWNER_PREFIX,
+    profileLimit: 0,
+    teamRole: "member",
+    groupIds: ["g1"],
+  };
+
+  async function denialCode(promise: Promise<unknown>): Promise<unknown> {
+    return refusalCode(promise);
+  }
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("shows a limited member only the profiles and groups it may reach", async () => {
+    const { service } = limitedService();
+    await expect(
+      service.stat({ key: "profiles/p1/manifest.json" }, limited),
+    ).resolves.toBeDefined();
+    for (const key of [
+      "profiles/p2/manifest.json",
+      "profiles/p3/manifest.json",
+      "groups/g2.json",
+    ]) {
+      await expect(denialCode(service.stat({ key }, limited))).resolves.toBe(
+        "TEAM_GROUP_ACCESS_DENIED",
+      );
+    }
+    await expect(
+      service.presignDownload({ key: "proxies/x.json" }, limited),
+    ).resolves.toHaveProperty("url");
+
+    const listed = await service.list({ prefix: "" }, limited);
+    expect(listed.objects.map((object) => object.key)).toEqual([
+      "profiles/p1/manifest.json",
+      "teams/t1/profiles/p1/files/Default/Cookies",
+      "groups/g1.json",
+      "proxies/x.json",
+    ]);
+  });
+
+  it("lets a limited member change profiles only inside its groups", async () => {
+    const { service } = limitedService();
+    await expect(
+      service.presignUpload(
+        { key: "profiles/new/metadata.json", metadata: { "group-id": "g1" } },
+        limited,
+      ),
+    ).resolves.toHaveProperty("url");
+    await expect(
+      service.presignUpload(
+        { key: "profiles/p1/files/Default/Cookies" },
+        limited,
+      ),
+    ).resolves.toHaveProperty("url");
+
+    for (const [key, metadata] of [
+      ["profiles/new/metadata.json", { "group-id": "g2" }],
+      ["profiles/new/metadata.json", undefined],
+      ["profiles/new/files/Default/Cookies", undefined],
+      ["profiles/p1/metadata.json", { "group-id": "g2" }],
+      ["profiles/p2/files/Default/Cookies", undefined],
+      ["groups/g2.json", undefined],
+    ] as const) {
+      await expect(
+        denialCode(service.presignUpload({ key, metadata }, limited)),
+      ).resolves.toBe("TEAM_GROUP_ACCESS_DENIED");
+    }
+    await expect(
+      denialCode(service.deletePrefix({ prefix: "profiles/p2/" }, limited)),
+    ).resolves.toBe("TEAM_GROUP_ACCESS_DENIED");
+  });
+
+  it("leaves a member without a limit free to reach every group", async () => {
+    const { service } = limitedService();
+    const everyGroup: UserContext = { ...limited, groupIds: undefined };
+    await expect(
+      service.stat({ key: "profiles/p2/manifest.json" }, everyGroup),
+    ).resolves.toBeDefined();
+    const listed = await service.list({ prefix: "" }, everyGroup);
+    expect(listed.objects).toHaveLength(6);
+  });
+});

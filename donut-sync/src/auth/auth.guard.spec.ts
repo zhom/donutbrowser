@@ -129,6 +129,36 @@ describe("AuthGuard", () => {
     expect(unknown.request.user?.teamRole).toBe("member");
   });
 
+  it("keeps the groups a limited member may reach, and drops malformed ids", async () => {
+    const answers = [["g1", "bad/id", 7], null];
+    jest.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const groupIds = answers.shift();
+      return new Response(
+        JSON.stringify({
+          ownerId: "99999999-8888-7777-6666-555555555555",
+          teamId: "team-1",
+          teamProfileLimit: 0,
+          role: "member",
+          groupIds,
+        }),
+      );
+    });
+    const guard = () =>
+      guardWith({
+        SYNC_JWT_PUBLIC_KEY: signingKeys.publicKey,
+        BACKEND_INTERNAL_URL: "http://backend.internal",
+        BACKEND_INTERNAL_KEY: "internal-key",
+      });
+
+    const limited = contextFor(syncToken());
+    await expect(guard().canActivate(limited.context)).resolves.toBe(true);
+    expect(limited.request.user?.groupIds).toEqual(["g1"]);
+
+    const everyGroup = contextFor(syncToken());
+    await expect(guard().canActivate(everyGroup.context)).resolves.toBe(true);
+    expect(everyGroup.request.user?.groupIds).toBeUndefined();
+  });
+
   it("refuses an account access token signed with the same key", async () => {
     const accessToken = sign({
       sub: USER_ID,

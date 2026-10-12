@@ -375,12 +375,18 @@ export const commandCoverage = {
       "agent_schedules::delete_agent_schedule",
       "agent_schedules::run_agent_schedule_now",
       "agent_schedules::list_agent_schedule_runs",
+      "agent_schedules::test_agent_schedule_notice",
     ],
   },
   teamActivity: {
     suite: "integrations",
     level: "contract",
-    commands: ["team_activity::list_team_activity"],
+    commands: [
+      "team_activity::list_team_activity",
+      "team_activity::export_team_activity_csv",
+      "team_members::list_team_members",
+      "team_members::set_team_member_access",
+    ],
   },
   feedback: {
     suite: "ui",

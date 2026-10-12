@@ -129,6 +129,13 @@ export type BackendErrorCode =
   | "TEAM_ACTIVITY_FORBIDDEN"
   | "TEAM_ACTIVITY_NOT_ENTITLED"
   | "TEAM_ACTIVITY_INVALID"
+  | "TEAM_ACTIVITY_EXPORT_FAILED"
+  | "TEAM_ACCESS_FORBIDDEN"
+  | "TEAM_ACCESS_INVALID"
+  | "TEAM_MEMBER_NOT_FOUND"
+  | "TEAM_GROUP_ACCESS_DENIED"
+  | "TEAM_ACCESS_NOT_ENTITLED"
+  | "REPLAY_RECIPE_NOT_FOUND"
   | "LOCAL_STORAGE_EPHEMERAL"
   | "LOCAL_STORAGE_PROFILE_PROTECTED"
   | "LOCAL_STORAGE_UNREADABLE"
@@ -694,6 +701,20 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.teamActivityNotEntitled");
     case "TEAM_ACTIVITY_INVALID":
       return t("backendErrors.teamActivityInvalid");
+    case "TEAM_ACTIVITY_EXPORT_FAILED":
+      return t("backendErrors.teamActivityExportFailed");
+    case "TEAM_ACCESS_FORBIDDEN":
+      return t("backendErrors.teamAccessForbidden");
+    case "TEAM_ACCESS_INVALID":
+      return t("backendErrors.teamAccessInvalid");
+    case "TEAM_MEMBER_NOT_FOUND":
+      return t("backendErrors.teamMemberNotFound");
+    case "TEAM_GROUP_ACCESS_DENIED":
+      return t("backendErrors.teamGroupAccessDenied");
+    case "TEAM_ACCESS_NOT_ENTITLED":
+      return t("backendErrors.teamAccessNotEntitled");
+    case "REPLAY_RECIPE_NOT_FOUND":
+      return t("backendErrors.replayRecipeNotFound");
     case "MCP_TOOLSET_UNKNOWN":
       return t("backendErrors.mcpToolsetUnknown");
     case "MCP_AGENT_UNKNOWN":

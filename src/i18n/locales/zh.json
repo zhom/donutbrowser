@@ -2646,7 +2646,14 @@
     "teamRoleReadOnly": "你的团队角色可以打开配置文件，但不能更改它们。请联系团队所有者或管理员。",
     "teamActivityForbidden": "只有团队所有者和管理员可以查看团队活动。",
     "teamActivityNotEntitled": "活动日志需要有效的 Team 或 Enterprise 套餐。",
-    "teamActivityInvalid": "活动日志请求无效。"
+    "teamActivityInvalid": "活动日志请求无效。",
+    "teamActivityExportFailed": "无法保存活动文件。",
+    "teamAccessForbidden": "只有团队所有者和管理员可以更改权限。",
+    "teamAccessInvalid": "此权限设置无效。",
+    "teamMemberNotFound": "此成员已不在团队中。",
+    "teamGroupAccessDenied": "你无权访问此配置文件所在的分组。",
+    "teamAccessNotEntitled": "按分组的权限需要有效的 Team 或 Enterprise 套餐。",
+    "replayRecipeNotFound": "此配方已不存在。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2736,7 +2743,8 @@
       "account": "账户",
       "selfHosted": "自托管",
       "teamUsage": "团队用量",
-      "teamActivity": "团队活动"
+      "teamActivity": "团队活动",
+      "teamAccess": "团队权限"
     },
     "selfHosted": {
       "title": "自托管同步服务器",
@@ -3680,6 +3688,20 @@
         "partial": "部分完成",
         "failed": "失败",
         "cancelled": "已取消"
+      },
+      "notices": {
+        "title": "通知",
+        "email": "运行失败时给我发邮件",
+        "webhook": "Webhook URL",
+        "webhookPlaceholder": "Webhook URL（可选，https）",
+        "webhookInvalid": "请使用不含用户名或密码的 https 地址。",
+        "secret": "签名密钥：",
+        "copySecret": "复制签名密钥",
+        "rotate": "新密钥",
+        "test": "发送测试通知",
+        "testSent": "测试通知已发送。",
+        "testFailed": "测试通知失败（Webhook 状态 {{status}}）。",
+        "secretRotated": "已生成新的签名密钥。"
       }
     }
   },
@@ -3997,7 +4019,8 @@
       "statusCreate": "创建了状态 {{target}}",
       "statusUpdate": "更改了状态 {{target}}",
       "statusDelete": "删除了状态 {{target}}",
-      "other": "对 {{target}} 执行了 {{action}}"
+      "other": "对 {{target}} 执行了 {{action}}",
+      "memberAccessChange": "更改了 {{target}} 的权限"
     },
     "fields": {
       "name": "名称",
@@ -4025,6 +4048,41 @@
       "mcp": "由 MCP 代理",
       "service": "使用 API 密钥",
       "remote_vm": "来自云端浏览器"
+    },
+    "exportCsv": "导出 CSV",
+    "exported_one": "已保存 {{count}} 条记录。",
+    "exported_other": "已保存 {{count}} 条记录。",
+    "filterMember": "成员",
+    "filterType": "项目类型",
+    "filterPeriod": "时间范围",
+    "anyMember": "所有成员",
+    "anyType": "所有项目",
+    "types": {
+      "profile": "配置文件",
+      "proxy": "代理",
+      "group": "分组",
+      "vpn": "VPN",
+      "extension": "扩展",
+      "template": "模板",
+      "status": "状态",
+      "member": "成员"
+    },
+    "periods": {
+      "1": "过去 24 小时",
+      "7": "过去 7 天",
+      "30": "过去 30 天",
+      "all": "全部时间"
     }
+  },
+  "teamAccess": {
+    "title": "按分组的权限",
+    "description": "将成员限制在部分配置文件分组内。分组名称保留在这台电脑上；云端只保存分组 ID。",
+    "allGroups": "所有分组",
+    "onlyThese": "仅这些分组",
+    "ungrouped": "没有分组的配置文件",
+    "change": "更改",
+    "saved": "权限已保存。",
+    "someGroups_one": "{{count}} 个分组",
+    "someGroups_other": "{{count}} 个分组"
   }
 }

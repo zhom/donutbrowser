@@ -2666,7 +2666,14 @@
     "teamRoleReadOnly": "Sua função na equipe pode abrir perfis, mas não alterá-los. Peça a um proprietário ou administrador da equipe.",
     "teamActivityForbidden": "Só os proprietários e administradores da equipe veem a atividade dela.",
     "teamActivityNotEntitled": "O registro de atividade precisa de um plano Team ou Enterprise ativo.",
-    "teamActivityInvalid": "A solicitação do registro de atividade não era válida."
+    "teamActivityInvalid": "A solicitação do registro de atividade não era válida.",
+    "teamActivityExportFailed": "Não foi possível salvar o arquivo de atividade.",
+    "teamAccessForbidden": "Só os proprietários e administradores da equipe podem alterar o acesso.",
+    "teamAccessInvalid": "Esta configuração de acesso não é válida.",
+    "teamMemberNotFound": "Este membro não está mais na equipe.",
+    "teamGroupAccessDenied": "Você não tem acesso ao grupo deste perfil.",
+    "teamAccessNotEntitled": "O acesso por grupo precisa de um plano Team ou Enterprise ativo.",
+    "replayRecipeNotFound": "Esta receita não existe mais."
   },
   "rail": {
     "profiles": "Perfis",
@@ -2756,7 +2763,8 @@
       "account": "Conta",
       "selfHosted": "Auto-hospedado",
       "teamUsage": "Uso da equipe",
-      "teamActivity": "Atividade da equipe"
+      "teamActivity": "Atividade da equipe",
+      "teamAccess": "Acesso da equipe"
     },
     "selfHosted": {
       "title": "Servidor de sincronização auto-hospedado",
@@ -3723,6 +3731,20 @@
         "partial": "Concluído em parte",
         "failed": "Falhou",
         "cancelled": "Cancelado"
+      },
+      "notices": {
+        "title": "Avisos",
+        "email": "Enviar-me um e-mail quando uma execução falhar",
+        "webhook": "URL do webhook",
+        "webhookPlaceholder": "URL do webhook (opcional, https)",
+        "webhookInvalid": "Use um endereço https sem nome de usuário ou senha.",
+        "secret": "Segredo de assinatura:",
+        "copySecret": "Copiar o segredo de assinatura",
+        "rotate": "Novo segredo",
+        "test": "Enviar um aviso de teste",
+        "testSent": "Aviso de teste enviado.",
+        "testFailed": "O aviso de teste falhou (status do webhook {{status}}).",
+        "secretRotated": "Novo segredo de assinatura criado."
       }
     }
   },
@@ -4040,7 +4062,8 @@
       "statusCreate": "criou o status {{target}}",
       "statusUpdate": "alterou o status {{target}}",
       "statusDelete": "excluiu o status {{target}}",
-      "other": "fez {{action}} em {{target}}"
+      "other": "fez {{action}} em {{target}}",
+      "memberAccessChange": "alterou o acesso de {{target}}"
     },
     "fields": {
       "name": "Nome",
@@ -4068,6 +4091,43 @@
       "mcp": "por um agente MCP",
       "service": "com uma chave de API",
       "remote_vm": "de um navegador na nuvem"
+    },
+    "exportCsv": "Exportar CSV",
+    "exported_one": "{{count}} entrada salva.",
+    "exported_many": "{{count}} entradas salvas.",
+    "exported_other": "{{count}} entradas salvas.",
+    "filterMember": "Membro",
+    "filterType": "Tipo de item",
+    "filterPeriod": "Período",
+    "anyMember": "Todos os membros",
+    "anyType": "Todos os itens",
+    "types": {
+      "profile": "Perfis",
+      "proxy": "Proxies",
+      "group": "Grupos",
+      "vpn": "VPNs",
+      "extension": "Extensões",
+      "template": "Modelos",
+      "status": "Status",
+      "member": "Membros"
+    },
+    "periods": {
+      "1": "Últimas 24 horas",
+      "7": "Últimos 7 dias",
+      "30": "Últimos 30 dias",
+      "all": "Todo o período"
     }
+  },
+  "teamAccess": {
+    "title": "Acesso por grupo",
+    "description": "Limite um membro a alguns grupos de perfis. Os nomes dos grupos ficam neste computador; a nuvem guarda só os IDs dos grupos.",
+    "allGroups": "Todos os grupos",
+    "onlyThese": "Só estes grupos",
+    "ungrouped": "Perfis sem grupo",
+    "change": "Alterar",
+    "saved": "Acesso salvo.",
+    "someGroups_one": "{{count}} grupo",
+    "someGroups_many": "{{count}} grupos",
+    "someGroups_other": "{{count}} grupos"
   }
 }

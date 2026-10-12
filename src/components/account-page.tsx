@@ -21,6 +21,7 @@ import {
   RemoteHoursMeter,
 } from "@/components/cookie-bot-shared";
 import { LoadingButton } from "@/components/loading-button";
+import { TeamAccess } from "@/components/team-access";
 import { TeamActivityLog } from "@/components/team-activity-log";
 import { TeamUsagePanel } from "@/components/team-usage-panel";
 import {
@@ -115,7 +116,10 @@ export function AccountPage({
   // click back to.
   useEffect(() => {
     if (!showTeamUsage && activeTab === "team-usage") setActiveTab("account");
-    if (!showTeamActivity && activeTab === "team-activity") {
+    if (
+      !showTeamActivity &&
+      (activeTab === "team-activity" || activeTab === "team-access")
+    ) {
       setActiveTab("account");
     }
   }, [showTeamUsage, showTeamActivity, activeTab]);
@@ -346,6 +350,11 @@ export function AccountPage({
                     {t("account.tabs.teamActivity")}
                   </AnimatedTabsTrigger>
                 )}
+                {showTeamActivity && (
+                  <AnimatedTabsTrigger value="team-access">
+                    {t("account.tabs.teamAccess")}
+                  </AnimatedTabsTrigger>
+                )}
                 <AnimatedTabsTrigger
                   value="self-hosted"
                   disabled={selfHostedDisabled}
@@ -560,6 +569,12 @@ export function AccountPage({
               {showTeamActivity && (
                 <AnimatedTabsContent value="team-activity" className="mt-4">
                   <TeamActivityLog />
+                </AnimatedTabsContent>
+              )}
+
+              {showTeamActivity && (
+                <AnimatedTabsContent value="team-access" className="mt-4">
+                  <TeamAccess actorRole={user?.teamRole} />
                 </AnimatedTabsContent>
               )}
 
