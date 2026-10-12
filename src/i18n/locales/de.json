@@ -864,6 +864,60 @@
         "cli": "CLI",
         "editor": "Editor",
         "editorExt": "Editor-Erweiterung"
+      },
+      "onThisComputer": "Auf diesem Computer",
+      "addToAll_one": "Zu allen {{count}} hinzufügen",
+      "addToAll_other": "Zu allen {{count}} hinzufügen",
+      "addedToMany_one": "Donut zu {{count}} App hinzugefügt",
+      "addedToMany_other": "Donut zu {{count}} Apps hinzugefügt",
+      "addFailed": "Donut konnte nicht zu {{names}} hinzugefügt werden.",
+      "noneFound": "Auf diesem Computer wurden keine KI-Apps gefunden. Sie können Donut trotzdem zu jeder dieser Apps hinzufügen.",
+      "showMore_one": "{{count}} weiteren Client anzeigen",
+      "showMore_other": "{{count}} weitere Clients anzeigen",
+      "showFewer": "Weniger Clients anzeigen",
+      "toolsets": {
+        "all": "Alle Werkzeuge",
+        "coreOnly": "Nur Kernwerkzeuge",
+        "some_one": "Kern + {{count}} Gruppe",
+        "some_other": "Kern + {{count}} Gruppen",
+        "title": "Werkzeuge, die Agenten sehen",
+        "description": "Ein Agent lädt eine Beschreibung jedes Werkzeugs, das er sieht. Wählen Sie nur die Gruppen, die er braucht – dann startet er schneller und hat mehr Platz zum Arbeiten. Verbundene Apps werden sofort aktualisiert.",
+        "core": "Profile, Browsersteuerung und die Werkzeuge, die Sie auf dem Laufenden halten, sind immer aktiv.",
+        "failed": "{{names}} konnte nicht aktualisiert werden. Entfernen Sie Donut dort und fügen Sie es erneut hinzu.",
+        "names": {
+          "organize": {
+            "label": "Organisieren",
+            "description": "Gruppen erstellen und ändern, Profile importieren"
+          },
+          "network": {
+            "label": "Netzwerk",
+            "description": "Proxys, VPNs, IP-Wechsel und DNS-Regeln"
+          },
+          "fingerprint": {
+            "label": "Fingerabdruck",
+            "description": "Das Gerät eines Profils lesen und ändern"
+          },
+          "extensions": {
+            "label": "Erweiterungen",
+            "description": "Erweiterungen und Erweiterungsgruppen"
+          },
+          "cookies": {
+            "label": "Cookies",
+            "description": "Cookie-Import und der Cookie-Bot"
+          },
+          "sync": {
+            "label": "Synchronisierung",
+            "description": "Team-Sperren und der Synchronizer"
+          },
+          "remote": {
+            "label": "Remote-Flotte",
+            "description": "Profile auf der Remote-Flotte ausführen"
+          },
+          "recipes": {
+            "label": "Rezepte",
+            "description": "Gespeicherte Abläufe, die ein Agent wiederholen kann"
+          }
+        }
       }
     },
     "tabApi": "Lokale API",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "Ein Vorlagenname darf höchstens 60 Zeichen haben.",
     "templateLimitReached": "Sie können höchstens 100 Vorlagen behalten. Löschen Sie zuerst eine.",
     "bulkCreateCountInvalid": "Sie können 1 bis {{max}} Profile auf einmal erstellen.",
-    "bulkCreateBusy": "Es werden bereits Profile erstellt. Warten Sie, bis das abgeschlossen ist."
+    "bulkCreateBusy": "Es werden bereits Profile erstellt. Warten Sie, bis das abgeschlossen ist.",
+    "mcpToolsetUnknown": "Diese Werkzeuggruppe existiert nicht."
   },
   "rail": {
     "profiles": "Profile",

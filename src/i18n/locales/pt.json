@@ -869,6 +869,64 @@
         "cli": "CLI",
         "editor": "Editor",
         "editorExt": "Extensão de editor"
+      },
+      "onThisComputer": "Neste computador",
+      "addToAll_one": "Adicionar aos {{count}}",
+      "addToAll_many": "Adicionar aos {{count}}",
+      "addToAll_other": "Adicionar aos {{count}}",
+      "addedToMany_one": "Donut adicionado a {{count}} app",
+      "addedToMany_many": "Donut adicionado a {{count}} apps",
+      "addedToMany_other": "Donut adicionado a {{count}} apps",
+      "addFailed": "Não foi possível adicionar o Donut a {{names}}.",
+      "noneFound": "Nenhum app de IA encontrado neste computador. Você ainda pode adicionar o Donut a qualquer um destes.",
+      "showMore_one": "Mostrar mais {{count}} cliente",
+      "showMore_many": "Mostrar mais {{count}} clientes",
+      "showMore_other": "Mostrar mais {{count}} clientes",
+      "showFewer": "Mostrar menos clientes",
+      "toolsets": {
+        "all": "Todas as ferramentas",
+        "coreOnly": "Só ferramentas básicas",
+        "some_one": "Básicas + {{count}} grupo",
+        "some_many": "Básicas + {{count}} grupos",
+        "some_other": "Básicas + {{count}} grupos",
+        "title": "Ferramentas que os agentes veem",
+        "description": "Um agente carrega uma descrição de cada ferramenta que vê. Escolha só os grupos de que ele precisa: ele começa mais rápido e tem mais espaço para trabalhar. Os apps conectados são atualizados na hora.",
+        "core": "Perfis, controle do navegador e as ferramentas que mantêm você informado ficam sempre ativos.",
+        "failed": "Não foi possível atualizar {{names}}. Remova o Donut lá e adicione-o de novo.",
+        "names": {
+          "organize": {
+            "label": "Organizar",
+            "description": "Criar e alterar grupos, importar perfis"
+          },
+          "network": {
+            "label": "Rede",
+            "description": "Proxies, VPNs, rotação de IP e regras de DNS"
+          },
+          "fingerprint": {
+            "label": "Impressão digital",
+            "description": "Ler e alterar o dispositivo de um perfil"
+          },
+          "extensions": {
+            "label": "Extensões",
+            "description": "Extensões e grupos de extensões"
+          },
+          "cookies": {
+            "label": "Cookies",
+            "description": "Importação de cookies e o bot de cookies"
+          },
+          "sync": {
+            "label": "Sincronização",
+            "description": "Bloqueios de equipe e o sincronizador"
+          },
+          "remote": {
+            "label": "Frota remota",
+            "description": "Executar perfis na frota remota"
+          },
+          "recipes": {
+            "label": "Receitas",
+            "description": "Fluxos salvos que um agente pode repetir"
+          }
+        }
       }
     },
     "tabApi": "API local",
@@ -2581,7 +2639,8 @@
     "templateNameTooLong": "O nome de um modelo pode ter no máximo 60 caracteres.",
     "templateLimitReached": "Você pode manter no máximo 100 modelos. Exclua um primeiro.",
     "bulkCreateCountInvalid": "Você pode criar de 1 a {{max}} perfis de cada vez.",
-    "bulkCreateBusy": "Já há perfis sendo criados. Aguarde até terminar."
+    "bulkCreateBusy": "Já há perfis sendo criados. Aguarde até terminar.",
+    "mcpToolsetUnknown": "Este grupo de ferramentas não existe."
   },
   "rail": {
     "profiles": "Perfis",

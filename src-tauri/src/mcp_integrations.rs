@@ -1,5 +1,5 @@
 //! MCP client installer: writes the Donut Browser server entry into the global
-//! config of twenty AI clients and reads it back for the Integrations page.
+//! config of twenty-two AI clients and reads it back for the Integrations page.
 //!
 //! The endpoint lives under `CLOUD_API_URL`, needs a bearer credential and is
 //! only offered to accounts with remote control. `server_entry` decides per
@@ -16,6 +16,11 @@
 //! that does not parse aborts the operation with the file untouched: the old
 //! installer treated a parse failure as an empty file and wiped configs that
 //! merely had a comment in them.
+//!
+//! Copilot CLI is the exception: it refuses comments and trailing commas, so a
+//! file that has them is written back as plain JSON. OpenCode keeps servers
+//! either directly under `mcp` or, in its newer layout, under `mcp.servers`;
+//! the entry goes where the file already keeps its servers.
 //!
 //! Claude Desktop has no HTTP entry in its config file; lib.rs installs a
 //! local extension bundle with a node bridge instead. This module only
@@ -47,11 +52,20 @@ pub struct McpTarget {
 }
 
 impl McpTarget {
+  #[cfg(test)]
   pub fn remote(key: String) -> Self {
-    Self {
-      url: remote_mcp_url(),
-      bearer: key,
-    }
+    Self::remote_with(key, &[])
+  }
+
+  /// With toolsets, the client lists only the core tools and those groups
+  /// (`mcp_toolsets`); with none, every tool.
+  pub fn remote_with(key: String, toolsets: &[String]) -> Self {
+    let url = if toolsets.is_empty() {
+      remote_mcp_url()
+    } else {
+      format!("{}?toolsets={}", remote_mcp_url(), toolsets.join(","))
+    };
+    Self { url, bearer: key }
   }
 
   pub fn authorization(&self) -> String {
@@ -132,6 +146,8 @@ pub struct AgentEnv {
   pub grok_home: Option<PathBuf>,
   pub kimi_code_home: Option<PathBuf>,
   pub cline_dir: Option<PathBuf>,
+  pub copilot_home: Option<PathBuf>,
+  pub pi_agent_dir: Option<PathBuf>,
 }
 
 fn env_path(name: &str) -> Option<PathBuf> {
@@ -154,6 +170,8 @@ impl AgentEnv {
       grok_home: env_path("GROK_HOME"),
       kimi_code_home: env_path("KIMI_CODE_HOME"),
       cline_dir: env_path("CLINE_DIR"),
+      copilot_home: env_path("COPILOT_HOME"),
+      pi_agent_dir: env_path("PI_CODING_AGENT_DIR"),
     })
   }
 
@@ -244,6 +262,21 @@ impl AgentEnv {
   fn kilo_config_dir(&self) -> PathBuf {
     self.config_home().join("kilo")
   }
+
+  /// `$COPILOT_HOME`, else `~/.copilot`. Copilot CLI ignores XDG_CONFIG_HOME.
+  fn copilot_home(&self) -> PathBuf {
+    self
+      .copilot_home
+      .clone()
+      .unwrap_or_else(|| self.home.join(".copilot"))
+  }
+
+  fn pi_agent_dir(&self) -> PathBuf {
+    self
+      .pi_agent_dir
+      .clone()
+      .unwrap_or_else(|| self.home.join(".pi").join("agent"))
+  }
 }
 
 /// The first candidate that already exists, else `default`, which the install
@@ -279,12 +312,7 @@ fn config_path(env: &AgentEnv, agent_id: &str) -> Option<PathBuf> {
     "fx" => home.join(".fx").join("mcp.json"),
     "gemini-cli" => home.join(".gemini").join("settings.json"),
     "goose" => env.goose_config_path(),
-    // Copilot joins XDG_CONFIG_HOME directly rather than a subdirectory of it.
-    "github-copilot-cli" => env
-      .xdg_config_home
-      .clone()
-      .unwrap_or_else(|| home.join(".copilot"))
-      .join("mcp-config.json"),
+    "github-copilot-cli" => env.copilot_home().join("mcp-config.json"),
     "grok-build" => env.grok_home().join("config.toml"),
     "kilo-code" => {
       let dir = env.kilo_config_dir();
@@ -295,6 +323,8 @@ fn config_path(env: &AgentEnv, agent_id: &str) -> Option<PathBuf> {
     }
     "kimi-code" => env.kimi_code_home().join("mcp.json"),
     "kiro-cli" => home.join(".kiro").join("settings").join("mcp.json"),
+    "mastracode" => home.join(".mastracode").join("mcp.json"),
+    "pi" => env.pi_agent_dir().join("mcp.json"),
     "mcporter" => {
       let dir = home.join(".mcporter");
       first_existing(
@@ -333,7 +363,10 @@ fn detected(env: &AgentEnv, agent_id: &str) -> bool {
   };
   match agent_id {
     "antigravity" => home.join(".gemini").join("config").exists(),
-    "cline" | "cline-cli" | "github-copilot-cli" => parent_exists(),
+    "cline" | "cline-cli" => parent_exists(),
+    "github-copilot-cli" => env.copilot_home().exists(),
+    "mastracode" => home.join(".mastracode").exists(),
+    "pi" => env.pi_agent_dir().exists(),
     "claude-code" => home.join(".claude").exists(),
     "claude-desktop" => env.claude_desktop_dir().exists(),
     // Codex detection looks at the default directory even when CODEX_HOME
@@ -504,6 +537,21 @@ const AGENT_SPECS: &[AgentSpec] = &[
     config_key: "mcpServers",
     format: ConfigFormat::Json,
   },
+  // Pi reads MCP servers only with its MCP adapter extension installed.
+  AgentSpec {
+    id: "pi",
+    display_name: "Pi",
+    category: AgentCategory::Cli,
+    config_key: "mcpServers",
+    format: ConfigFormat::Json,
+  },
+  AgentSpec {
+    id: "mastracode",
+    display_name: "Mastra Code",
+    category: AgentCategory::Cli,
+    config_key: "mcpServers",
+    format: ConfigFormat::Json,
+  },
 ];
 
 fn spec_for(agent_id: &str) -> Option<&'static AgentSpec> {
@@ -527,7 +575,7 @@ fn server_entry(agent_id: &str, target: &McpTarget) -> Entry {
   let headers = json!({ "Authorization": target.authorization() });
   let mut entry: Entry = match agent_id {
     "antigravity" | "windsurf" => vec![("serverUrl", url)],
-    "cursor" | "kiro-cli" | "grok-build" => vec![("url", url)],
+    "cursor" | "kiro-cli" | "grok-build" | "pi" | "mastracode" => vec![("url", url)],
     "cline" | "cline-cli" => vec![
       ("url", url),
       ("type", json!("streamableHttp")),
@@ -576,9 +624,11 @@ fn server_entry(agent_id: &str, target: &McpTarget) -> Entry {
   entry
 }
 
-/// Whether a URL is Donut's endpoint, a trailing slash tolerated.
+/// Whether a URL is Donut's endpoint, a trailing slash and a query (the
+/// toolsets) tolerated.
 pub fn is_remote_url(url: &str) -> bool {
-  url.trim().trim_end_matches('/') == remote_mcp_url().trim_end_matches('/')
+  let base = url.trim().split(['?', '#']).next().unwrap_or_default();
+  base.trim_end_matches('/') == remote_mcp_url().trim_end_matches('/')
 }
 
 fn points_at_remote(value: &serde_json::Value) -> bool {
@@ -731,8 +781,13 @@ impl Document {
     })
   }
 
+  /// The server map at `key`; a dotted key (`mcp.servers`) is a nested map.
   fn json_servers(root: &CstRootNode, key: &str) -> Option<CstObject> {
-    root.object_value()?.object_value(key)
+    let mut object = root.object_value()?;
+    for part in key.split('.') {
+      object = object.object_value(part)?;
+    }
+    Some(object)
   }
 
   /// Every entry under the server map, as plain JSON for inspection.
@@ -784,12 +839,14 @@ impl Document {
   fn set_entry(&mut self, key: &str, entry: &Entry) -> Result<(), String> {
     match self {
       Self::Json(root) => {
-        let root_object = root
+        let mut servers = root
           .object_value_or_create()
           .ok_or("the file's top level is not a JSON object")?;
-        let servers = root_object
-          .object_value_or_create(key)
-          .ok_or_else(|| format!("\"{key}\" is not a JSON object"))?;
+        for part in key.split('.') {
+          servers = servers
+            .object_value_or_create(part)
+            .ok_or_else(|| format!("\"{key}\" is not a JSON object"))?;
+        }
         match servers.get(SERVER_NAME) {
           Some(prop) => prop.set_value(entry_to_cst(entry)),
           None => {
@@ -948,13 +1005,89 @@ fn restrict_to_owner(_path: &Path) -> Result<(), String> {
   Ok(())
 }
 
+/// OpenCode's newer layout keeps servers under `mcp.servers`.
+const OPENCODE_SERVERS_KEY: &str = "mcp.servers";
+
+/// Every key a client may keep its servers under.
+fn server_keys(spec: &AgentSpec) -> Vec<&'static str> {
+  if spec.id == "opencode" {
+    vec![spec.config_key, OPENCODE_SERVERS_KEY]
+  } else {
+    vec![spec.config_key]
+  }
+}
+
+fn is_opencode_server(value: &serde_json::Value) -> bool {
+  value
+    .get("type")
+    .and_then(|t| t.as_str())
+    .is_some_and(|t| t == "local" || t == "remote")
+    || value.get("url").is_some()
+    || value.get("command").is_some()
+}
+
+/// Where OpenCode's entry goes: where it already is, else the newer map when
+/// the file uses it and keeps nothing in the older place.
+fn opencode_key(document: &Document) -> &'static str {
+  let Document::Json(root) = document else {
+    return "mcp";
+  };
+  let native_map = Document::json_servers(root, "mcp")
+    .and_then(|mcp| mcp.get("servers"))
+    .and_then(|servers| servers.to_serde_value())
+    .is_some_and(|servers| servers.is_object() && !is_opencode_server(&servers));
+  let native = document.entries(OPENCODE_SERVERS_KEY);
+  let legacy: Vec<(String, serde_json::Value)> = document
+    .entries("mcp")
+    .into_iter()
+    .filter(|(name, value)| !(native_map && name == "servers") && is_opencode_server(value))
+    .collect();
+  if native_map && native.iter().any(|(name, _)| name == SERVER_NAME) {
+    OPENCODE_SERVERS_KEY
+  } else if legacy.iter().any(|(name, _)| name == SERVER_NAME) {
+    "mcp"
+  } else if native_map && legacy.is_empty() {
+    OPENCODE_SERVERS_KEY
+  } else {
+    "mcp"
+  }
+}
+
+/// Copilot CLI refuses comments and trailing commas; a file that has them is
+/// written back as plain JSON.
+fn strict_json(text: &str) -> Result<String, String> {
+  if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+    return Ok(text.to_string());
+  }
+  let value = CstRootNode::parse(text, &ParseOptions::default())
+    .map_err(|e| e.to_string())?
+    .to_serde_value()
+    .unwrap_or_else(|| serde_json::json!({}));
+  serde_json::to_string_pretty(&value)
+    .map(|text| text + "\n")
+    .map_err(|e| e.to_string())
+}
+
 fn install_in(env: &AgentEnv, agent_id: &str, target: &McpTarget) -> Result<(), String> {
   let spec = spec_for(agent_id).ok_or_else(|| format!("Unknown agent: {agent_id}"))?;
   let path = config_path(env, agent_id)
     .ok_or_else(|| format!("Unable to resolve config path for {agent_id}"))?;
   let (mut document, was_empty) = read_document(&path, spec.format)?;
-  document.set_entry(spec.config_key, &server_entry(agent_id, target))?;
+  let mut entry = server_entry(agent_id, target);
+  let key = if agent_id == "opencode" {
+    opencode_key(&document)
+  } else {
+    spec.config_key
+  };
+  if key == OPENCODE_SERVERS_KEY {
+    // The newer layout enables a server unless it says `disabled`.
+    entry.retain(|(name, _)| *name != "enabled");
+  }
+  document.set_entry(key, &entry)?;
   let mut text = document.to_text()?;
+  if agent_id == "github-copilot-cli" {
+    text = strict_json(&text)?;
+  }
   if was_empty && !text.ends_with('\n') {
     text.push('\n');
   }
@@ -974,17 +1107,27 @@ fn uninstall_in(env: &AgentEnv, agent_id: &str) -> Result<(), String> {
     return Ok(());
   }
   let (mut document, _) = read_document(&path, spec.format)?;
-  let names: Vec<String> = document
-    .entries(spec.config_key)
-    .into_iter()
-    .filter(|(name, value)| is_donut_entry(name, value))
-    .map(|(name, _)| name)
-    .collect();
-  if names.is_empty() {
+  let mut changed = false;
+  for key in server_keys(spec) {
+    let names: Vec<String> = document
+      .entries(key)
+      .into_iter()
+      .filter(|(name, value)| is_donut_entry(name, value))
+      .map(|(name, _)| name)
+      .collect();
+    if !names.is_empty() {
+      document.remove_entries(key, &names);
+      changed = true;
+    }
+  }
+  if !changed {
     return Ok(());
   }
-  document.remove_entries(spec.config_key, &names);
-  write_text(&path, &document.to_text()?, false)
+  let mut text = document.to_text()?;
+  if agent_id == "github-copilot-cli" {
+    text = strict_json(&text)?;
+  }
+  write_text(&path, &text, false)
 }
 
 /// Whether any entry in a client's config points at the endpoint, so a
@@ -1001,10 +1144,12 @@ fn connected_in(env: &AgentEnv, agent_id: &str) -> bool {
     return false;
   }
   read_document(&path, spec.format).is_ok_and(|(document, _)| {
-    document
-      .entries(spec.config_key)
-      .iter()
-      .any(|(_, value)| points_at_remote(value))
+    server_keys(spec).into_iter().any(|key| {
+      document
+        .entries(key)
+        .iter()
+        .any(|(_, value)| points_at_remote(value))
+    })
   })
 }
 
@@ -1083,6 +1228,8 @@ mod tests {
       grok_home: None,
       kimi_code_home: None,
       cline_dir: None,
+      copilot_home: None,
+      pi_agent_dir: None,
     }
   }
 
@@ -1135,8 +1282,10 @@ mod tests {
         "kilo-code",
         "kimi-code",
         "kiro-cli",
+        "mastracode",
         "mcporter",
         "opencode",
+        "pi",
         "vscode",
         "windsurf",
         "zed",
@@ -1260,7 +1409,22 @@ mod tests {
     expect(&env, "zed", root.join("xdg/zed/settings.json"));
     expect(&env, "goose", root.join("xdg/goose/config.yaml"));
     expect(&env, "kilo-code", root.join("xdg/kilo/kilo.json"));
-    expect(&env, "github-copilot-cli", root.join("xdg/mcp-config.json"));
+    // Copilot ignores XDG_CONFIG_HOME and reads COPILOT_HOME instead.
+    expect(
+      &env,
+      "github-copilot-cli",
+      root.join("home/.copilot/mcp-config.json"),
+    );
+    env.copilot_home = Some(root.join("copilot-home"));
+    expect(
+      &env,
+      "github-copilot-cli",
+      root.join("copilot-home/mcp-config.json"),
+    );
+    expect(&env, "pi", root.join("home/.pi/agent/mcp.json"));
+    env.pi_agent_dir = Some(root.join("pi-dir"));
+    expect(&env, "pi", root.join("pi-dir/mcp.json"));
+    expect(&env, "mastracode", root.join("home/.mastracode/mcp.json"));
     expect(
       &env,
       "claude-desktop",
@@ -1413,6 +1577,8 @@ mod tests {
         "github-copilot-cli",
         json!({ "type": "http", "url": url, "tools": ["*"], "headers": auth }),
       ),
+      ("pi", json!({ "url": url, "headers": auth })),
+      ("mastracode", json!({ "url": url, "headers": auth })),
       (
         "codex",
         json!({ "type": "http", "url": url, "http_headers": auth }),
@@ -1774,5 +1940,76 @@ mod tests {
       0o640
     );
     assert!(!path.parent().unwrap().join(".mcp.json.donut-tmp").exists());
+  }
+
+  #[test]
+  fn copilot_gets_plain_json_and_reads_copilot_home() {
+    let dir = tempfile::tempdir().unwrap();
+    let env = test_env(dir.path(), Platform::Linux);
+    let path = config_path(&env, "github-copilot-cli").unwrap();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+      &path,
+      "{\n  // mine\n  \"mcpServers\": { \"other\": { \"url\": \"https://x.example\" }, },\n}\n",
+    )
+    .unwrap();
+    assert!(detected(&env, "github-copilot-cli"));
+    install_in(&env, "github-copilot-cli", &remote()).unwrap();
+    let text = read(&path);
+    let parsed: serde_json::Value = serde_json::from_str(&text).expect("plain JSON");
+    assert_eq!(parsed["mcpServers"]["other"]["url"], "https://x.example");
+    assert!(connected_in(&env, "github-copilot-cli"));
+    uninstall_in(&env, "github-copilot-cli").unwrap();
+    assert!(serde_json::from_str::<serde_json::Value>(&read(&path)).is_ok());
+    assert!(!connected_in(&env, "github-copilot-cli"));
+  }
+
+  #[test]
+  fn opencode_writes_where_the_file_keeps_its_servers() {
+    let dir = tempfile::tempdir().unwrap();
+    let env = test_env(dir.path(), Platform::Linux);
+    let path = config_path(&env, "opencode").unwrap();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+    // Newer layout: servers under mcp.servers, written without `enabled`.
+    fs::write(
+      &path,
+      "{\n  \"mcp\": { \"servers\": { \"other\": { \"type\": \"remote\", \"url\": \"https://x.example\" } } }\n}\n",
+    )
+    .unwrap();
+    install_in(&env, "opencode", &remote()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&read(&path)).unwrap();
+    let entry = &parsed["mcp"]["servers"][SERVER_NAME];
+    assert_eq!(entry["type"], "remote");
+    assert!(entry.get("enabled").is_none());
+    assert!(parsed["mcp"].get(SERVER_NAME).is_none(), "no mixed layout");
+    assert!(connected_in(&env, "opencode"));
+    uninstall_in(&env, "opencode").unwrap();
+    assert!(!connected_in(&env, "opencode"));
+
+    // Older layout, or a fresh file: directly under mcp, with `enabled`.
+    fs::write(
+      &path,
+      "{\n  \"mcp\": { \"other\": { \"type\": \"local\", \"command\": [\"x\"] } }\n}\n",
+    )
+    .unwrap();
+    install_in(&env, "opencode", &remote()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&read(&path)).unwrap();
+    assert_eq!(parsed["mcp"][SERVER_NAME]["enabled"], true);
+  }
+
+  #[test]
+  fn toolsets_go_into_the_url_and_still_read_as_connected() {
+    let target = McpTarget::remote_with(KEY.to_string(), &["network".into(), "cookies".into()]);
+    assert!(target.url.ends_with("/api/mcp?toolsets=network,cookies"));
+    assert!(is_remote_url(&target.url));
+    assert!(is_remote_url(&format!("{}/", remote_mcp_url())));
+    assert!(!is_remote_url("https://example.com/api/mcp?toolsets=core"));
+
+    let dir = tempfile::tempdir().unwrap();
+    let env = test_env(dir.path(), Platform::MacOs);
+    install_in(&env, "cursor", &target).unwrap();
+    assert!(connected_in(&env, "cursor"));
+    assert_eq!(entry_of(&env, "cursor")["url"], json!(target.url));
   }
 }

@@ -864,6 +864,60 @@
         "cli": "Komut satırı",
         "editor": "Editör",
         "editorExt": "Editör uzantısı"
+      },
+      "onThisComputer": "Bu bilgisayarda",
+      "addToAll_one": "{{count}} uygulamanın hepsine ekle",
+      "addToAll_other": "{{count}} uygulamanın hepsine ekle",
+      "addedToMany_one": "Donut {{count}} uygulamaya eklendi",
+      "addedToMany_other": "Donut {{count}} uygulamaya eklendi",
+      "addFailed": "Donut şuraya eklenemedi: {{names}}.",
+      "noneFound": "Bu bilgisayarda yapay zeka uygulaması bulunamadı. Donut'u yine de bunlardan herhangi birine ekleyebilirsiniz.",
+      "showMore_one": "{{count}} istemci daha göster",
+      "showMore_other": "{{count}} istemci daha göster",
+      "showFewer": "Daha az istemci göster",
+      "toolsets": {
+        "all": "Tüm araçlar",
+        "coreOnly": "Yalnızca temel araçlar",
+        "some_one": "Temel + {{count}} grup",
+        "some_other": "Temel + {{count}} grup",
+        "title": "Ajanların gördüğü araçlar",
+        "description": "Bir ajan, gördüğü her aracın açıklamasını yükler. Yalnızca ihtiyaç duyduğu grupları seçin; daha hızlı başlar ve çalışmak için daha fazla yeri olur. Bağlı uygulamalar hemen güncellenir.",
+        "core": "Profiller, tarayıcı denetimi ve sizi bilgilendiren araçlar her zaman açıktır.",
+        "failed": "{{names}} güncellenemedi. Donut'u oradan kaldırıp yeniden ekleyin.",
+        "names": {
+          "organize": {
+            "label": "Düzenle",
+            "description": "Grup oluşturma ve değiştirme, profil içe aktarma"
+          },
+          "network": {
+            "label": "Ağ",
+            "description": "Proxy'ler, VPN'ler, IP değiştirme ve DNS kuralları"
+          },
+          "fingerprint": {
+            "label": "Parmak izi",
+            "description": "Bir profilin cihazını okuma ve değiştirme"
+          },
+          "extensions": {
+            "label": "Uzantılar",
+            "description": "Uzantılar ve uzantı grupları"
+          },
+          "cookies": {
+            "label": "Çerezler",
+            "description": "Çerez içe aktarma ve çerez botu"
+          },
+          "sync": {
+            "label": "Eşitleme",
+            "description": "Ekip kilitleri ve eşitleyici"
+          },
+          "remote": {
+            "label": "Uzak filo",
+            "description": "Profilleri uzak filoda çalıştırma"
+          },
+          "recipes": {
+            "label": "Tarifler",
+            "description": "Bir ajanın tekrarlayabileceği kayıtlı akışlar"
+          }
+        }
       }
     },
     "tabApi": "Yerel API",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "Şablon adı en fazla 60 karakter olabilir.",
     "templateLimitReached": "En fazla 100 şablon tutabilirsiniz. Önce birini silin.",
     "bulkCreateCountInvalid": "Bir seferde 1 ile {{max}} arasında profil oluşturabilirsiniz.",
-    "bulkCreateBusy": "Profiller zaten oluşturuluyor. Bitmesini bekleyin."
+    "bulkCreateBusy": "Profiller zaten oluşturuluyor. Bitmesini bekleyin.",
+    "mcpToolsetUnknown": "Bu araç grubu yok."
   },
   "rail": {
     "profiles": "Profiller",

@@ -864,6 +864,60 @@
         "cli": "CLI",
         "editor": "エディタ",
         "editorExt": "エディタ拡張"
+      },
+      "onThisComputer": "このコンピューター",
+      "addToAll_one": "{{count}} 件すべてに追加",
+      "addToAll_other": "{{count}} 件すべてに追加",
+      "addedToMany_one": "{{count}} 件のアプリに Donut を追加しました",
+      "addedToMany_other": "{{count}} 件のアプリに Donut を追加しました",
+      "addFailed": "{{names}} に Donut を追加できませんでした。",
+      "noneFound": "このコンピューターに AI アプリが見つかりません。以下のどのアプリにも Donut を追加できます。",
+      "showMore_one": "ほかのクライアントを {{count}} 件表示",
+      "showMore_other": "ほかのクライアントを {{count}} 件表示",
+      "showFewer": "表示するクライアントを減らす",
+      "toolsets": {
+        "all": "すべてのツール",
+        "coreOnly": "基本ツールのみ",
+        "some_one": "基本 + {{count}} グループ",
+        "some_other": "基本 + {{count}} グループ",
+        "title": "エージェントに見せるツール",
+        "description": "エージェントは見えるすべてのツールの説明を読み込みます。必要なグループだけを選ぶと、起動が速くなり作業の余裕も増えます。接続済みのアプリはすぐに更新されます。",
+        "core": "プロファイル、ブラウザー操作、あなたと連携するためのツールは常に有効です。",
+        "failed": "{{names}} を更新できませんでした。そのアプリから Donut を削除して、もう一度追加してください。",
+        "names": {
+          "organize": {
+            "label": "整理",
+            "description": "グループの作成と変更、プロファイルのインポート"
+          },
+          "network": {
+            "label": "ネットワーク",
+            "description": "プロキシ、VPN、IP の切り替え、DNS ルール"
+          },
+          "fingerprint": {
+            "label": "フィンガープリント",
+            "description": "プロファイルのデバイスの確認と変更"
+          },
+          "extensions": {
+            "label": "拡張機能",
+            "description": "拡張機能と拡張機能グループ"
+          },
+          "cookies": {
+            "label": "Cookie",
+            "description": "Cookie のインポートと Cookie ボット"
+          },
+          "sync": {
+            "label": "同期",
+            "description": "チームロックとシンクロナイザー"
+          },
+          "remote": {
+            "label": "リモートフリート",
+            "description": "リモートフリートでプロファイルを実行"
+          },
+          "recipes": {
+            "label": "レシピ",
+            "description": "エージェントが繰り返せる保存済みのフロー"
+          }
+        }
       }
     },
     "tabApi": "ローカル API",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "テンプレート名は60文字以内にしてください。",
     "templateLimitReached": "保存できるテンプレートは最大100件です。先に1件削除してください。",
     "bulkCreateCountInvalid": "一度に作成できるプロファイルは1〜{{max}}件です。",
-    "bulkCreateBusy": "既にプロファイルを作成中です。完了するまでお待ちください。"
+    "bulkCreateBusy": "既にプロファイルを作成中です。完了するまでお待ちください。",
+    "mcpToolsetUnknown": "このツールグループは存在しません。"
   },
   "rail": {
     "profiles": "プロファイル",

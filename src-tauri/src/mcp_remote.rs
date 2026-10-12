@@ -819,6 +819,9 @@ enum BridgeFrame {
   Rpc {
     cid: String,
     session_id: Option<String>,
+    /// The toolsets the agent connected with (`?toolsets=` on the cloud
+    /// endpoint), as the relay received them.
+    toolsets: Option<String>,
     payload: Vec<u8>,
   },
   EndSession {
@@ -852,6 +855,17 @@ fn parse_frame(text: &str) -> Option<BridgeFrame> {
           .get("sessionId")
           .and_then(serde_json::Value::as_str)
           .map(str::to_string),
+        toolsets: match value.get("toolsets") {
+          Some(serde_json::Value::String(list)) => Some(list.clone()),
+          Some(serde_json::Value::Array(names)) => Some(
+            names
+              .iter()
+              .filter_map(serde_json::Value::as_str)
+              .collect::<Vec<_>>()
+              .join(","),
+          ),
+          _ => None,
+        },
         payload: serde_json::to_vec(payload).ok()?,
       })
     }
@@ -906,6 +920,7 @@ fn dispatch(
     BridgeFrame::Rpc {
       cid,
       session_id,
+      toolsets,
       payload,
     } => {
       let Ok(permit) = Arc::clone(permits).try_acquire_owned() else {
@@ -921,7 +936,7 @@ fn dispatch(
       let tx = tx.clone();
       tokio::spawn(async move {
         let outcome = McpServer::instance()
-          .handle_message(session_id.as_deref(), &payload)
+          .handle_message_with(session_id.as_deref(), &payload, toolsets.as_deref())
           .await;
         drop(permit);
         let _ = tx.send(encode(&result_frame(&cid, outcome))).await;
@@ -1684,9 +1699,11 @@ mod tests {
       BridgeFrame::Rpc {
         cid,
         session_id,
+        toolsets,
         payload,
       } => {
         assert_eq!(cid, "c1");
+        assert_eq!(toolsets, None);
         assert_eq!(session_id.as_deref(), Some("s1"));
         let parsed: serde_json::Value = serde_json::from_slice(&payload).expect("payload");
         assert_eq!(parsed["method"], "ping");
@@ -1700,6 +1717,18 @@ mod tests {
     match without {
       BridgeFrame::Rpc { session_id, .. } => assert!(session_id.is_none()),
       _ => panic!("expected an rpc frame"),
+    }
+
+    // The relay passes the toolsets the agent connected with, as a list or
+    // as the comma-separated text from the endpoint URL.
+    for frame in [
+      r#"{"t":"rpc","cid":"c3","toolsets":"core,network","payload":{"jsonrpc":"2.0","id":3,"method":"tools/list"}}"#,
+      r#"{"t":"rpc","cid":"c3","toolsets":["core","network"],"payload":{"jsonrpc":"2.0","id":3,"method":"tools/list"}}"#,
+    ] {
+      match parse_frame(frame).expect("frame") {
+        BridgeFrame::Rpc { toolsets, .. } => assert_eq!(toolsets.as_deref(), Some("core,network")),
+        _ => panic!("expected an rpc frame"),
+      }
     }
   }
 
@@ -1742,6 +1771,7 @@ mod tests {
       BridgeFrame::Rpc {
         cid: "cid-over-cap".to_string(),
         session_id: None,
+        toolsets: None,
         payload: br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(),
       },
       &tx,

@@ -797,6 +797,36 @@ test("MCP clients are installed only against the remote endpoint", async () => {
       "DONUT_MCP_TOKEN",
     );
     assert.equal(agents.find((agent) => agent.id === "cursor").token_env, null);
+    assert.ok(agents.some((agent) => agent.id === "pi"));
+    assert.ok(agents.some((agent) => agent.id === "mastracode"));
+
+    // Toolsets: only known groups, saved in display order; every group is the
+    // same as none (all tools), and core alone is the core tools only.
+    await assertCommandErrorCode(
+      app,
+      "set_mcp_toolsets",
+      "MCP_TOOLSET_UNKNOWN",
+      {
+        toolsets: ["network", "everything"],
+      },
+    );
+    assert.deepEqual(
+      await app.invoke("set_mcp_toolsets", {
+        toolsets: ["cookies", "network"],
+      }),
+      [],
+      "no client is connected, so none can fail",
+    );
+    assert.deepEqual((await app.invoke("get_app_settings")).mcp_toolsets, [
+      "network",
+      "cookies",
+    ]);
+    await app.invoke("set_mcp_toolsets", { toolsets: ["core"] });
+    assert.deepEqual((await app.invoke("get_app_settings")).mcp_toolsets, [
+      "core",
+    ]);
+    await app.invoke("set_mcp_toolsets", { toolsets: [] });
+    assert.deepEqual((await app.invoke("get_app_settings")).mcp_toolsets, []);
 
     await assertCommandErrorCode(app, "add_mcp_to_agent", "MCP_AGENT_UNKNOWN", {
       agentId: "missing-e2e-agent",

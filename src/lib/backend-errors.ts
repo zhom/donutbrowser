@@ -121,6 +121,7 @@ export type BackendErrorCode =
   | "WAYFERN_TERMS_REQUIRED"
   | "API_PORT_UNAVAILABLE"
   | "MCP_AGENT_UNKNOWN"
+  | "MCP_TOOLSET_UNKNOWN"
   | "MCP_AGENT_INSTALL_FAILED"
   | "MCP_AGENT_REMOVE_FAILED"
   | "MCP_REMOTE_REQUIRES_SIGN_IN"
@@ -635,6 +636,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.mcpRemoteKeyLimit");
     case "MCP_REMOTE_KEY_UNAVAILABLE":
       return t("backendErrors.mcpRemoteKeyUnavailable");
+    case "MCP_TOOLSET_UNKNOWN":
+      return t("backendErrors.mcpToolsetUnknown");
     case "MCP_AGENT_UNKNOWN":
       return t("backendErrors.mcpAgentUnknown");
     case "MCP_AGENT_INSTALL_FAILED":

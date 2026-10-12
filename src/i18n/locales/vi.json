@@ -864,6 +864,60 @@
         "cli": "CLI",
         "editor": "Trình soạn thảo",
         "editorExt": "Tiện ích editor"
+      },
+      "onThisComputer": "Trên máy tính này",
+      "addToAll_one": "Thêm vào cả {{count}}",
+      "addToAll_other": "Thêm vào cả {{count}}",
+      "addedToMany_one": "Đã thêm Donut vào {{count}} ứng dụng",
+      "addedToMany_other": "Đã thêm Donut vào {{count}} ứng dụng",
+      "addFailed": "Không thể thêm Donut vào {{names}}.",
+      "noneFound": "Không tìm thấy ứng dụng AI nào trên máy tính này. Bạn vẫn có thể thêm Donut vào bất kỳ ứng dụng nào dưới đây.",
+      "showMore_one": "Hiện thêm {{count}} ứng dụng khách",
+      "showMore_other": "Hiện thêm {{count}} ứng dụng khách",
+      "showFewer": "Hiện ít ứng dụng khách hơn",
+      "toolsets": {
+        "all": "Tất cả công cụ",
+        "coreOnly": "Chỉ công cụ cơ bản",
+        "some_one": "Cơ bản + {{count}} nhóm",
+        "some_other": "Cơ bản + {{count}} nhóm",
+        "title": "Công cụ mà tác tử thấy",
+        "description": "Tác tử tải mô tả của mọi công cụ mà nó thấy. Chỉ chọn những nhóm nó cần để nó khởi động nhanh hơn và có thêm chỗ để làm việc. Các ứng dụng đã kết nối được cập nhật ngay.",
+        "core": "Profile, điều khiển trình duyệt và các công cụ giữ bạn trong vòng làm việc luôn được bật.",
+        "failed": "Không thể cập nhật {{names}}. Hãy gỡ Donut ở đó rồi thêm lại.",
+        "names": {
+          "organize": {
+            "label": "Sắp xếp",
+            "description": "Tạo và đổi nhóm, nhập profile"
+          },
+          "network": {
+            "label": "Mạng",
+            "description": "Proxy, VPN, đổi IP và quy tắc DNS"
+          },
+          "fingerprint": {
+            "label": "Dấu vân tay",
+            "description": "Xem và đổi thiết bị của profile"
+          },
+          "extensions": {
+            "label": "Tiện ích",
+            "description": "Tiện ích và nhóm tiện ích"
+          },
+          "cookies": {
+            "label": "Cookie",
+            "description": "Nhập cookie và bot cookie"
+          },
+          "sync": {
+            "label": "Đồng bộ",
+            "description": "Khóa nhóm và bộ đồng bộ"
+          },
+          "remote": {
+            "label": "Đội máy từ xa",
+            "description": "Chạy profile trên đội máy từ xa"
+          },
+          "recipes": {
+            "label": "Công thức",
+            "description": "Các luồng đã lưu mà tác tử có thể lặp lại"
+          }
+        }
       }
     },
     "tabApi": "API cục bộ",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "Tên mẫu có tối đa 60 ký tự.",
     "templateLimitReached": "Bạn chỉ có thể giữ tối đa 100 mẫu. Hãy xóa một mẫu trước.",
     "bulkCreateCountInvalid": "Mỗi lần bạn có thể tạo từ 1 đến {{max}} profile.",
-    "bulkCreateBusy": "Đang có profile được tạo. Hãy chờ đến khi xong."
+    "bulkCreateBusy": "Đang có profile được tạo. Hãy chờ đến khi xong.",
+    "mcpToolsetUnknown": "Nhóm công cụ này không tồn tại."
   },
   "rail": {
     "profiles": "Profile",

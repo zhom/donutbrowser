@@ -864,6 +864,60 @@
         "cli": "CLI",
         "editor": "에디터",
         "editorExt": "에디터 확장"
+      },
+      "onThisComputer": "이 컴퓨터",
+      "addToAll_one": "{{count}}개 모두에 추가",
+      "addToAll_other": "{{count}}개 모두에 추가",
+      "addedToMany_one": "앱 {{count}}개에 Donut을 추가했습니다",
+      "addedToMany_other": "앱 {{count}}개에 Donut을 추가했습니다",
+      "addFailed": "{{names}}에 Donut을 추가하지 못했습니다.",
+      "noneFound": "이 컴퓨터에서 AI 앱을 찾지 못했습니다. 아래 앱 중 어디에나 Donut을 추가할 수 있습니다.",
+      "showMore_one": "클라이언트 {{count}}개 더 보기",
+      "showMore_other": "클라이언트 {{count}}개 더 보기",
+      "showFewer": "클라이언트 적게 보기",
+      "toolsets": {
+        "all": "모든 도구",
+        "coreOnly": "기본 도구만",
+        "some_one": "기본 + {{count}}개 그룹",
+        "some_other": "기본 + {{count}}개 그룹",
+        "title": "에이전트가 보는 도구",
+        "description": "에이전트는 볼 수 있는 모든 도구의 설명을 불러옵니다. 필요한 그룹만 고르면 더 빨리 시작하고 작업할 여유도 늘어납니다. 연결된 앱은 바로 업데이트됩니다.",
+        "core": "프로필, 브라우저 제어, 사용자와 함께 작업하는 도구는 항상 켜져 있습니다.",
+        "failed": "{{names}}을(를) 업데이트하지 못했습니다. 그곳에서 Donut을 제거한 뒤 다시 추가하세요.",
+        "names": {
+          "organize": {
+            "label": "정리",
+            "description": "그룹 만들기 및 변경, 프로필 가져오기"
+          },
+          "network": {
+            "label": "네트워크",
+            "description": "프록시, VPN, IP 교체, DNS 규칙"
+          },
+          "fingerprint": {
+            "label": "핑거프린트",
+            "description": "프로필의 기기 확인 및 변경"
+          },
+          "extensions": {
+            "label": "확장 프로그램",
+            "description": "확장 프로그램과 확장 프로그램 그룹"
+          },
+          "cookies": {
+            "label": "쿠키",
+            "description": "쿠키 가져오기와 쿠키 봇"
+          },
+          "sync": {
+            "label": "동기화",
+            "description": "팀 잠금과 동기화 도구"
+          },
+          "remote": {
+            "label": "원격 플릿",
+            "description": "원격 플릿에서 프로필 실행"
+          },
+          "recipes": {
+            "label": "레시피",
+            "description": "에이전트가 반복할 수 있는 저장된 흐름"
+          }
+        }
       }
     },
     "tabApi": "로컬 API",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "템플릿 이름은 최대 60자까지 가능합니다.",
     "templateLimitReached": "템플릿은 최대 100개까지 보관할 수 있습니다. 먼저 하나를 삭제하세요.",
     "bulkCreateCountInvalid": "한 번에 1개부터 {{max}}개까지 프로필을 만들 수 있습니다.",
-    "bulkCreateBusy": "이미 프로필을 만드는 중입니다. 끝날 때까지 기다리세요."
+    "bulkCreateBusy": "이미 프로필을 만드는 중입니다. 끝날 때까지 기다리세요.",
+    "mcpToolsetUnknown": "이 도구 그룹은 없습니다."
   },
   "rail": {
     "profiles": "프로필",

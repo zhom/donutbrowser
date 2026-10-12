@@ -864,6 +864,60 @@
         "cli": "CLI",
         "editor": "Editor",
         "editorExt": "Editor ext"
+      },
+      "onThisComputer": "On this computer",
+      "addToAll_one": "Add to all {{count}}",
+      "addToAll_other": "Add to all {{count}}",
+      "addedToMany_one": "Added Donut to {{count}} app",
+      "addedToMany_other": "Added Donut to {{count}} apps",
+      "addFailed": "Could not add Donut to {{names}}.",
+      "noneFound": "No AI apps found on this computer. You can still add Donut to any of these.",
+      "showMore_one": "Show {{count}} more client",
+      "showMore_other": "Show {{count}} more clients",
+      "showFewer": "Show fewer clients",
+      "toolsets": {
+        "all": "All tools",
+        "coreOnly": "Core tools only",
+        "some_one": "Core + {{count}} group",
+        "some_other": "Core + {{count}} groups",
+        "title": "Tools agents see",
+        "description": "An agent loads a description of every tool it can see. Choose only the groups it needs, and it starts faster and has more room to work. Connected apps update at once.",
+        "core": "Profiles, browser control and the tools that keep you in the loop are always on.",
+        "failed": "Could not update {{names}}. Remove Donut there and add it again.",
+        "names": {
+          "organize": {
+            "label": "Organize",
+            "description": "Create and change groups, import profiles"
+          },
+          "network": {
+            "label": "Network",
+            "description": "Proxies, VPNs, IP rotation and DNS rules"
+          },
+          "fingerprint": {
+            "label": "Fingerprint",
+            "description": "Read and change a profile's device"
+          },
+          "extensions": {
+            "label": "Extensions",
+            "description": "Extensions and extension groups"
+          },
+          "cookies": {
+            "label": "Cookies",
+            "description": "Cookie import and the cookie bot"
+          },
+          "sync": {
+            "label": "Sync",
+            "description": "Team locks and the synchronizer"
+          },
+          "remote": {
+            "label": "Remote fleet",
+            "description": "Run profiles on the remote fleet"
+          },
+          "recipes": {
+            "label": "Recipes",
+            "description": "Saved flows an agent can repeat"
+          }
+        }
       }
     },
     "tabApi": "Local API",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "A template name can have at most 60 characters.",
     "templateLimitReached": "You can keep at most 100 templates. Delete one first.",
     "bulkCreateCountInvalid": "You can create from 1 to {{max}} profiles at a time.",
-    "bulkCreateBusy": "Profiles are already being created. Wait until that is done."
+    "bulkCreateBusy": "Profiles are already being created. Wait until that is done.",
+    "mcpToolsetUnknown": "This tool group does not exist."
   },
   "rail": {
     "profiles": "Profiles",

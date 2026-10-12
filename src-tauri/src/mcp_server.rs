@@ -299,6 +299,8 @@ pub struct McpServer {
 pub(crate) struct McpCaller<'a> {
   /// The session id echoed back by the caller, when it opened one at all.
   session: Option<&'a str>,
+  /// The toolsets the caller connected with; `None` is every tool.
+  toolsets: Option<&'a crate::mcp_toolsets::Selection>,
 }
 
 /// The longest a single `type_text` call may plan to spend typing, over the
@@ -2236,7 +2238,20 @@ impl McpServer {
   ///
   /// This is the whole protocol: parse, route `initialize`, absorb
   /// notifications, validate the session, meter the automation tools, dispatch.
+  #[cfg(test)]
   pub(crate) async fn handle_message(&self, session_id: Option<&str>, body: &[u8]) -> McpOutcome {
+    self.handle_message_with(session_id, body, None).await
+  }
+
+  /// `handle_message` for a caller that connected with toolsets
+  /// (`?toolsets=` on the endpoint URL, relayed by the bridge).
+  pub(crate) async fn handle_message_with(
+    &self,
+    session_id: Option<&str>,
+    body: &[u8],
+    toolsets: Option<&str>,
+  ) -> McpOutcome {
+    let toolsets = crate::mcp_toolsets::parse(toolsets);
     if body.len() > Self::MAX_MESSAGE_BYTES {
       return McpOutcome::BadRequest;
     }
@@ -2247,7 +2262,7 @@ impl McpServer {
     };
 
     if request.method == "initialize" {
-      return match self.handle_initialize(request).await {
+      return match self.handle_initialize(request, toolsets.as_ref()).await {
         Ok((new_session_id, (id, result))) => McpOutcome::Body {
           body: serde_json::to_value(McpResponse {
             jsonrpc: "2.0".to_string(),
@@ -2323,6 +2338,7 @@ impl McpServer {
       .handle_request(
         McpCaller {
           session: session_id,
+          toolsets: toolsets.as_ref(),
         },
         request,
       )
@@ -2413,10 +2429,34 @@ impl McpServer {
     vec![
       McpTool {
         name: "list_profiles".to_string(),
-        description: "List all Wayfern browser profiles".to_string(),
+        description: "List Wayfern browser profiles as short summaries: id, name, group, tags, status, route (proxy or VPN, with names), running (local, remote or stopped), last launch and note. Filter with query, group, tag and running; page with limit and cursor. Use get_profile for one profile's settings and get_profile_fingerprint for its device.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
-          "properties": {},
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Text to find in the name, the note or a tag (any case)"
+            },
+            "group": {
+              "type": "string",
+              "description": "A group name or id; \"none\" for profiles in no group"
+            },
+            "tag": { "type": "string", "description": "Only profiles with this tag" },
+            "running": {
+              "type": "boolean",
+              "description": "true: only running profiles (here or on the remote fleet); false: only stopped ones"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "description": "Profiles per page, 50 when left out"
+            },
+            "cursor": {
+              "type": "string",
+              "description": "next_cursor from the previous page"
+            }
+          },
           "required": []
         }),
       },
@@ -4286,6 +4326,7 @@ impl McpServer {
   async fn handle_initialize(
     &self,
     request: McpRequest,
+    toolsets: Option<&crate::mcp_toolsets::Selection>,
   ) -> Result<(String, (serde_json::Value, serde_json::Value)), (serde_json::Value, McpError)> {
     let id = request.id.clone().unwrap_or(serde_json::Value::Null);
 
@@ -4370,6 +4411,16 @@ impl McpServer {
     if !CLOUD_AUTH.can_use_browser_automation().await {
       instructions.push_str(PLAN_WITHOUT_AUTOMATION);
     }
+    if let Some(selection) = toolsets {
+      let missing = selection.missing();
+      if !missing.is_empty() {
+        instructions.push_str(&format!(
+          " This connection lists the toolsets {}. Not listed: {}. To use them, reconnect with ?toolsets= naming them, or with no toolsets for every tool.",
+          selection.names().join(", "),
+          missing.join(", ")
+        ));
+      }
+    }
     let result = serde_json::json!({
       "protocolVersion": negotiated,
       "capabilities": {
@@ -4406,7 +4457,7 @@ impl McpServer {
 
     let result = match request.method.as_str() {
       "ping" => Ok(serde_json::json!({})),
-      "tools/list" => self.handle_tools_list().await,
+      "tools/list" => self.handle_tools_list(caller.toolsets).await,
       "tools/call" => self.handle_tool_call(caller, request.params).await,
       _ => Err(McpError {
         code: -32601,
@@ -4431,10 +4482,24 @@ impl McpServer {
     }
   }
 
-  async fn handle_tools_list(&self) -> Result<serde_json::Value, McpError> {
-    Ok(serde_json::json!({
-      "tools": self.get_tools()
-    }))
+  async fn handle_tools_list(
+    &self,
+    toolsets: Option<&crate::mcp_toolsets::Selection>,
+  ) -> Result<serde_json::Value, McpError> {
+    let tools: Vec<serde_json::Value> = self
+      .get_tools()
+      .into_iter()
+      .filter(|tool| toolsets.is_none_or(|selection| selection.includes_tool(&tool.name)))
+      .map(|tool| {
+        let output_schema = crate::mcp_views::output_schema_for(&tool.name);
+        let mut value = serde_json::to_value(tool).unwrap_or_default();
+        if let Some(schema) = output_schema {
+          value["outputSchema"] = schema;
+        }
+        value
+      })
+      .collect();
+    Ok(serde_json::json!({ "tools": tools }))
   }
 
   async fn handle_tool_call(
@@ -4552,7 +4617,7 @@ impl McpServer {
       }
       "report_progress" => Self::handle_report_progress(caller, arguments),
       "send_feedback" => self.handle_send_feedback(caller, arguments).await,
-      "list_profiles" => self.handle_list_profiles().await,
+      "list_profiles" => self.handle_list_profiles(arguments).await,
       "get_profile" => self.handle_get_profile(arguments).await,
       "run_profile" => {
         Self::require_capability(
@@ -4610,12 +4675,7 @@ impl McpServer {
             message: format!("Proxy IP change failed: {e}"),
             data: None,
           })?;
-        Ok(serde_json::json!({
-          "content": [{
-            "type": "text",
-            "text": serde_json::to_string_pretty(&result).unwrap_or_default()
-          }]
-        }))
+        Self::json_content(&result)
       }
       "get_profile_status" => self.handle_get_profile_status(arguments).await,
       // Group management
@@ -4654,18 +4714,8 @@ impl McpServer {
           }]
         }))
       }
-      "list_profile_statuses" => Ok(serde_json::json!({
-        "content": [{
-          "type": "text",
-          "text": serde_json::to_string_pretty(&crate::profile_statuses::list()).unwrap_or_default()
-        }]
-      })),
-      "list_profile_templates" => Ok(serde_json::json!({
-        "content": [{
-          "type": "text",
-          "text": serde_json::to_string_pretty(&crate::profile_templates::list()).unwrap_or_default()
-        }]
-      })),
+      "list_profile_statuses" => Self::json_content(&crate::profile_statuses::list()),
+      "list_profile_templates" => Self::json_content(&crate::profile_templates::list()),
       "create_profiles_from_template" => self.handle_create_profiles_from_template(arguments).await,
       "get_group" => self.handle_get_group(arguments).await,
       "create_group" => self.handle_create_group(arguments).await,
@@ -4922,7 +4972,16 @@ impl McpServer {
     }
   }
 
-  async fn handle_list_profiles(&self) -> Result<serde_json::Value, McpError> {
+  async fn handle_list_profiles(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let query =
+      crate::mcp_views::ProfileQuery::from_arguments(arguments).map_err(|message| McpError {
+        code: -32602,
+        message,
+        data: None,
+      })?;
     let profiles = ProfileManager::instance()
       .list_profiles()
       .map_err(|e| McpError {
@@ -4930,17 +4989,11 @@ impl McpServer {
         message: format!("Failed to list profiles: {e}"),
         data: None,
       })?;
-
-    // Filter to only Wayfern profiles
-    let filtered: Vec<&BrowserProfile> =
-      profiles.iter().filter(|p| p.browser == "wayfern").collect();
-
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&filtered).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&crate::mcp_views::list_profiles(
+      &profiles,
+      &Self::profile_names(),
+      &query,
+    ))
   }
 
   async fn handle_get_profile(
@@ -4982,12 +5035,10 @@ impl McpServer {
       });
     }
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&profile).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&crate::mcp_views::profile_detail(
+      profile,
+      &Self::profile_names(),
+    ))
   }
 
   async fn handle_run_profile(
@@ -5823,12 +5874,7 @@ impl McpServer {
         data: None,
       })?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&tags).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&tags)
   }
 
   async fn handle_list_proxies(&self) -> Result<serde_json::Value, McpError> {
@@ -5842,12 +5888,7 @@ impl McpServer {
       redact_proxy_secrets(proxy);
     }
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&proxies).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&proxies)
   }
 
   async fn handle_get_profile_status(
@@ -5953,12 +5994,7 @@ impl McpServer {
         data: None,
       })?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&groups).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&groups)
   }
 
   async fn handle_create_profiles_from_template(
@@ -6006,15 +6042,9 @@ impl McpServer {
       .iter()
       .map(|profile| serde_json::json!({ "id": profile.id, "name": profile.name }))
       .collect();
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&serde_json::json!({
-          "created": profiles,
-          "stopped_early": result.error,
-        }))
-        .unwrap_or_default()
-      }]
+    Self::json_content(&serde_json::json!({
+      "created": profiles,
+      "stopped_early": result.error,
     }))
   }
 
@@ -6054,12 +6084,7 @@ impl McpServer {
         data: None,
       })?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&group).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&group)
   }
 
   async fn handle_create_group(
@@ -6346,7 +6371,7 @@ impl McpServer {
         "text": format!(
           "{assigned} of {} profile(s) assigned a proxy:\n{}",
           results.len(),
-          serde_json::to_string_pretty(&results).unwrap_or_default()
+          serde_json::to_string(&results).unwrap_or_default()
         )
       }]
     }))
@@ -6383,12 +6408,7 @@ impl McpServer {
     })?;
     redact_proxy_secrets(&mut proxy);
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&proxy).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&proxy)
   }
 
   async fn handle_create_proxy(
@@ -6866,12 +6886,7 @@ impl McpServer {
       data: None,
     })?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&profiles).unwrap_or_else(|_| "[]".to_string())
-      }]
-    }))
+    Self::json_content(&profiles)
   }
 
   async fn handle_import_browser_profiles(
@@ -6939,7 +6954,7 @@ impl McpServer {
           result.imported_count,
           result.skipped_count,
           result.failed_count,
-          serde_json::to_string_pretty(&result.results).unwrap_or_default()
+          serde_json::to_string(&result.results).unwrap_or_default()
         )
       }]
     }))
@@ -7085,12 +7100,7 @@ impl McpServer {
       data: None,
     })?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&configs).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&configs)
   }
 
   async fn handle_delete_vpn(
@@ -7230,12 +7240,7 @@ impl McpServer {
       last_handshake: None,
     };
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&status).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&status)
   }
 
   // Fingerprint management handlers
@@ -7302,12 +7307,7 @@ impl McpServer {
       }
     };
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&fingerprint_info).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&fingerprint_info)
   }
 
   async fn handle_update_profile_fingerprint(
@@ -7566,12 +7566,7 @@ impl McpServer {
 
   async fn handle_get_dns_blocklist_status(&self) -> Result<serde_json::Value, McpError> {
     let statuses = crate::dns_blocklist::BlocklistManager::get_cache_status();
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&statuses).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&statuses)
   }
 
   async fn handle_list_extensions(&self) -> Result<serde_json::Value, McpError> {
@@ -7986,12 +7981,7 @@ impl McpServer {
       });
     }
     let locks = crate::team_lock::TEAM_LOCK.get_locks().await;
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&locks).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&locks)
   }
 
   async fn handle_get_team_lock_status(
@@ -8016,12 +8006,7 @@ impl McpServer {
     let lock_status = crate::team_lock::TEAM_LOCK
       .get_lock_status(profile_id)
       .await;
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&lock_status).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&lock_status)
   }
 
   // --- CDP utility methods for browser interaction ---
@@ -8276,12 +8261,7 @@ impl McpServer {
       serde_json::json!({ "value": null })
     };
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&value).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&value)
   }
 
   async fn handle_click_element(
@@ -8660,12 +8640,7 @@ impl McpServer {
 
     let info: serde_json::Value = serde_json::from_str(info_str).unwrap_or(serde_json::json!({}));
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&info).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&info)
   }
 
   async fn handle_get_interactive_elements(
@@ -9525,12 +9500,7 @@ impl McpServer {
         data: None,
       })?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&info).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&info)
   }
 
   async fn handle_stop_sync_session(
@@ -9577,12 +9547,7 @@ impl McpServer {
       .get_sessions()
       .await;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": serde_json::to_string_pretty(&sessions).unwrap_or_default()
-      }]
-    }))
+    Self::json_content(&sessions)
   }
 
   async fn handle_remove_sync_follower(
@@ -9639,14 +9604,50 @@ impl McpServer {
   // Nothing here decides when a run happens or what it does. What this file
   // DOES decide is which profiles may be offered to the bot at all.
 
-  /// Render a value as the single text block an MCP tool answers with.
+  /// Render a value as a tool's answer (see `mcp_views::tool_json`).
   fn json_content<T: Serialize>(value: &T) -> Result<serde_json::Value, McpError> {
-    let text = serde_json::to_string_pretty(value).map_err(|e| McpError {
+    let value = serde_json::to_value(value).map_err(|e| McpError {
       code: -32000,
       message: format!("Failed to encode response: {e}"),
       data: None,
     })?;
-    Ok(serde_json::json!({ "content": [{ "type": "text", "text": text }] }))
+    Ok(crate::mcp_views::tool_json(value))
+  }
+
+  /// The names an answer shows next to the ids a profile points at.
+  fn profile_names() -> crate::mcp_views::Names {
+    let groups = GROUP_MANAGER
+      .lock()
+      .ok()
+      .and_then(|manager| manager.get_all_groups().ok())
+      .unwrap_or_default()
+      .into_iter()
+      .map(|group| (group.id, group.name))
+      .collect();
+    let proxies = PROXY_MANAGER
+      .get_stored_proxies()
+      .into_iter()
+      .map(|proxy| (proxy.id, proxy.name))
+      .collect();
+    let vpns = crate::vpn::VPN_STORAGE
+      .lock()
+      .ok()
+      .and_then(|storage| storage.list_configs().ok())
+      .unwrap_or_default()
+      .into_iter()
+      .map(|vpn| (vpn.id, vpn.name))
+      .collect();
+    let statuses = crate::profile_statuses::list()
+      .into_iter()
+      .map(|status| (status.id, status.name))
+      .collect();
+    crate::mcp_views::Names {
+      groups,
+      proxies,
+      vpns,
+      statuses,
+      remote: crate::remote_session::indexed_live_profiles(),
+    }
   }
 
   /// Read a caller-supplied URL and validate its scheme in one step.
@@ -10966,9 +10967,13 @@ mod tests {
     // refusal has to come FIRST, before argument parsing and before anything
     // touches the page.
     let server = McpServer::new();
-    let sessionless = McpCaller { session: None };
+    let sessionless = McpCaller {
+      session: None,
+      toolsets: None,
+    };
     let with_session = McpCaller {
       session: Some("11111111-2222-3333-4444-555555555555"),
+      toolsets: None,
     };
     // Deliberately complete arguments: the refusal must be about the missing
     // session, not about anything the caller forgot to send.
@@ -11785,9 +11790,55 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn every_tool_is_in_a_toolset_and_a_selection_lists_only_its_toolsets() {
+    let server = McpServer::new();
+    let advertised: std::collections::HashSet<String> = server
+      .get_tools()
+      .into_iter()
+      .map(|tool| tool.name)
+      .collect();
+    for name in &advertised {
+      assert!(
+        crate::mcp_toolsets::toolset_of(name).is_some(),
+        "{name} is in no toolset, so a client that picks toolsets never sees it"
+      );
+    }
+    for (set, tools) in crate::mcp_toolsets::TOOLSETS {
+      for tool in *tools {
+        assert!(
+          advertised.contains(*tool),
+          "{set} lists {tool}, which is no tool"
+        );
+      }
+    }
+
+    let selection = crate::mcp_toolsets::parse(Some("network")).unwrap();
+    let listed = server
+      .handle_tools_list(Some(&selection))
+      .await
+      .expect("tools list");
+    let names: Vec<&str> = listed["tools"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .map(|tool| tool["name"].as_str().unwrap())
+      .collect();
+    assert!(names.contains(&"list_profiles") && names.contains(&"rotate_proxy_ip"));
+    assert!(!names.contains(&"list_cookie_bot_schedules"));
+    assert!(names.len() < advertised.len());
+    let list = listed["tools"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .find(|tool| tool["name"] == "list_profiles")
+      .unwrap();
+    assert_eq!(list["outputSchema"]["type"], "object");
+  }
+
+  #[tokio::test]
   async fn the_launch_settings_an_agent_can_set_are_the_ones_it_can_read() {
     let server = McpServer::new();
-    let tools = server.handle_tools_list().await.expect("tools list");
+    let tools = server.handle_tools_list(None).await.expect("tools list");
     let update = tools["tools"]
       .as_array()
       .expect("tools array")

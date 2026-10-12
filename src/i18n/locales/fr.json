@@ -869,6 +869,64 @@
         "cli": "CLI",
         "editor": "Éditeur",
         "editorExt": "Ext. d'éditeur"
+      },
+      "onThisComputer": "Sur cet ordinateur",
+      "addToAll_one": "Ajouter aux {{count}}",
+      "addToAll_many": "Ajouter aux {{count}}",
+      "addToAll_other": "Ajouter aux {{count}}",
+      "addedToMany_one": "Donut ajouté à {{count}} app",
+      "addedToMany_many": "Donut ajouté à {{count}} apps",
+      "addedToMany_other": "Donut ajouté à {{count}} apps",
+      "addFailed": "Impossible d'ajouter Donut à {{names}}.",
+      "noneFound": "Aucune app d'IA trouvée sur cet ordinateur. Vous pouvez quand même ajouter Donut à l'une d'elles.",
+      "showMore_one": "Afficher {{count}} autre client",
+      "showMore_many": "Afficher {{count}} autres clients",
+      "showMore_other": "Afficher {{count}} autres clients",
+      "showFewer": "Afficher moins de clients",
+      "toolsets": {
+        "all": "Tous les outils",
+        "coreOnly": "Outils de base uniquement",
+        "some_one": "Base + {{count}} groupe",
+        "some_many": "Base + {{count}} groupes",
+        "some_other": "Base + {{count}} groupes",
+        "title": "Outils visibles par les agents",
+        "description": "Un agent charge une description de chaque outil qu'il voit. Ne choisissez que les groupes dont il a besoin : il démarre plus vite et a plus de place pour travailler. Les apps connectées sont mises à jour aussitôt.",
+        "core": "Les profils, le contrôle du navigateur et les outils qui vous tiennent informé sont toujours actifs.",
+        "failed": "Impossible de mettre à jour {{names}}. Retirez Donut de cette app et ajoutez-le à nouveau.",
+        "names": {
+          "organize": {
+            "label": "Organiser",
+            "description": "Créer et modifier des groupes, importer des profils"
+          },
+          "network": {
+            "label": "Réseau",
+            "description": "Proxys, VPN, rotation d'IP et règles DNS"
+          },
+          "fingerprint": {
+            "label": "Empreinte",
+            "description": "Lire et modifier l'appareil d'un profil"
+          },
+          "extensions": {
+            "label": "Extensions",
+            "description": "Extensions et groupes d'extensions"
+          },
+          "cookies": {
+            "label": "Cookies",
+            "description": "Import de cookies et le bot de cookies"
+          },
+          "sync": {
+            "label": "Synchronisation",
+            "description": "Verrous d'équipe et le synchroniseur"
+          },
+          "remote": {
+            "label": "Flotte distante",
+            "description": "Lancer des profils sur la flotte distante"
+          },
+          "recipes": {
+            "label": "Recettes",
+            "description": "Flux enregistrés qu'un agent peut répéter"
+          }
+        }
       }
     },
     "tabApi": "API locale",
@@ -2581,7 +2639,8 @@
     "templateNameTooLong": "Le nom d'un modèle peut contenir au plus 60 caractères.",
     "templateLimitReached": "Vous pouvez garder au plus 100 modèles. Supprimez-en un d'abord.",
     "bulkCreateCountInvalid": "Vous pouvez créer de 1 à {{max}} profils à la fois.",
-    "bulkCreateBusy": "Des profils sont déjà en cours de création. Attendez la fin."
+    "bulkCreateBusy": "Des profils sont déjà en cours de création. Attendez la fin.",
+    "mcpToolsetUnknown": "Ce groupe d'outils n'existe pas."
   },
   "rail": {
     "profiles": "Profils",

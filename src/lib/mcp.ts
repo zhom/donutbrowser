@@ -16,6 +16,23 @@ export function fxExportLine(key: string | null | undefined): string | null {
 
 export type AgentCategory = "desktop-app" | "cli" | "editor" | "editor-ext";
 
+/**
+ * The tool groups an agent can list besides the core tools, in display
+ * order. The backend checks every name; `["core"]` is the core tools only and
+ * an empty list is every tool.
+ */
+export const OPTIONAL_TOOLSETS = [
+  "organize",
+  "network",
+  "fingerprint",
+  "extensions",
+  "cookies",
+  "sync",
+  "remote",
+  "recipes",
+] as const;
+export const CORE_TOOLSET = "core";
+
 export interface McpAgentInfo {
   id: string;
   display_name: string;

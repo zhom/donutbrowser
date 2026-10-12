@@ -743,6 +743,12 @@ fn reindex(app: Option<&AppHandle>, sessions: &[RemoteSessionState]) {
   with_index(|map| *map = next);
 }
 
+/// The profiles holding a drivable session, from the in-process index alone:
+/// no cloud round trip, so it can miss a session while the stream is down.
+pub fn indexed_live_profiles() -> std::collections::HashSet<String> {
+  with_index(|map| map.keys().cloned().collect())
+}
+
 /// The drivable session holding `profile_id`, if there is one.
 ///
 /// Consults the in-process index first. Only when the stream is not delivering

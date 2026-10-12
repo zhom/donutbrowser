@@ -151,6 +151,8 @@ pub mod events;
 mod mcp_integrations;
 mod mcp_remote;
 mod mcp_server;
+mod mcp_toolsets;
+mod mcp_views;
 mod tag_manager;
 mod team_lock;
 mod totp;
@@ -1304,14 +1306,48 @@ fn update_claude_extensions_registry(
 /// Minting one is the credential commands' job, so a missing key is reported
 /// rather than created here.
 fn mcp_target() -> Result<mcp_integrations::McpTarget, String> {
-  let stored = settings_manager::SettingsManager::instance()
+  let manager = settings_manager::SettingsManager::instance();
+  let stored = manager
     .get_mcp_remote_key()
     .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?;
   let key = stored
     .map(|stored| stored.key)
     .filter(|key| !key.is_empty())
     .ok_or_else(|| backend_error("MCP_REMOTE_KEY_MISSING"))?;
-  Ok(mcp_integrations::McpTarget::remote(key))
+  let toolsets = manager
+    .load_settings()
+    .map(|settings| settings.mcp_toolsets)
+    .unwrap_or_default();
+  Ok(mcp_integrations::McpTarget::remote_with(key, &toolsets))
+}
+
+/// Choose the toolsets connected clients list, and rewrite every connected
+/// client to match. Returns the ids of the clients that could not be
+/// rewritten.
+#[tauri::command]
+async fn set_mcp_toolsets(toolsets: Vec<String>) -> Result<Vec<String>, String> {
+  let toolsets = mcp_toolsets::normalize_choice(&toolsets)
+    .ok_or_else(|| backend_error("MCP_TOOLSET_UNKNOWN"))?;
+  let manager = settings_manager::SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?;
+  if settings.mcp_toolsets == toolsets {
+    return Ok(Vec::new());
+  }
+  settings.mcp_toolsets = toolsets;
+  manager
+    .save_settings(&settings)
+    .map_err(|e| backend_error_with_detail("INTERNAL_ERROR", e))?;
+  log::info!(
+    "MCP toolsets set toolsets={}",
+    if settings.mcp_toolsets.is_empty() {
+      "all".to_string()
+    } else {
+      settings.mcp_toolsets.join(",")
+    }
+  );
+  Ok(reinstall_mcp_agents())
 }
 
 fn install_mcp_agent(agent_id: &str, target: &mcp_integrations::McpTarget) -> Result<(), String> {
@@ -3501,6 +3537,7 @@ pub fn run_with_builder(
       list_mcp_agents,
       add_mcp_to_agent,
       remove_mcp_from_agent,
+      set_mcp_toolsets,
       start_mcp_remote_bridge,
       stop_mcp_remote_bridge,
       get_mcp_remote_status,

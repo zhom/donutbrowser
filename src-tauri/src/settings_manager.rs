@@ -242,6 +242,10 @@ pub struct AppSettings {
   /// Soft interface sounds for presses, toggles and results.
   #[serde(default = "default_ui_sounds")]
   pub ui_sounds: bool,
+  /// The optional MCP toolsets written into clients' endpoint URLs. Empty is
+  /// every tool.
+  #[serde(default)]
+  pub mcp_toolsets: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -321,6 +325,7 @@ impl Default for AppSettings {
       trash_retention_days: DEFAULT_TRASH_RETENTION_DAYS,
       record_traffic_domains: true,
       ui_sounds: true,
+      mcp_toolsets: Vec::new(),
     }
   }
 }
@@ -1467,6 +1472,7 @@ mod tests {
       trash_retention_days: 7,
       record_traffic_domains: false,
       ui_sounds: false,
+      mcp_toolsets: vec!["network".to_string()],
     };
 
     let save_result = manager.save_settings(&test_settings);

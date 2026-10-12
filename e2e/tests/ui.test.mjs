@@ -1573,6 +1573,95 @@ test("the integrations page ships only the Local API tab and never names remote 
   });
 });
 
+test("MCP clients on this computer come first, and toolsets go to the connected clients", async () => {
+  await withApp("ui-mcp-clients", async (app) => {
+    await stubCommand(app, "get_remote_control_entitlement", true);
+    await stubCommand(app, "get_mcp_remote_status", {
+      enabled: true,
+      connected: true,
+      instanceId: "ui-mcp-clients",
+      lastError: null,
+    });
+    await stubCommand(app, "get_mcp_remote_credential", {
+      present: true,
+      tokenPrefix: "dmk_ui",
+    });
+    const agent = (id, display_name, connected, detected) => ({
+      id,
+      display_name,
+      category: "cli",
+      connected,
+      detected,
+      token_env: null,
+    });
+    await stubCommand(app, "list_mcp_agents", [
+      agent("cursor", "Cursor", false, false),
+      agent("codex", "Codex", false, true),
+      agent("claude-code", "Claude Code", true, true),
+      agent("pi", "Pi", false, true),
+      agent("zed", "Zed", false, false),
+    ]);
+    await stubCommand(app, "add_mcp_to_agent", null);
+    await stubCommand(app, "set_mcp_toolsets", []);
+    const calls = (command) =>
+      app.execute(
+        "return (window.__donutStubbedCalls ?? []).filter((c) => c.command === arguments[0]).map((c) => c.payload);",
+        [command],
+      );
+    const shown = () =>
+      app.execute(
+        `return [...document.querySelectorAll('[data-slot="mcp-client"]')].map((node) => node.dataset.agentId);`,
+      );
+
+    await app.clickSelector('[aria-label="Integrations"]');
+    await app.clickText(en.integrations.tabRemote, { roles: ["tab"] });
+    await app.waitForText(en.integrations.mcp.onThisComputer);
+    assert.deepEqual(
+      await shown(),
+      ["claude-code", "codex", "pi"],
+      "connected first, then the other apps found here; the rest wait",
+    );
+    await app.clickSelector('[data-slot="mcp-show-more"]');
+    await app.waitFor(async () => (await shown()).length === 5, {
+      description: "every client after Show more",
+    });
+
+    await app.clickSelector('[data-slot="mcp-add-all"]');
+    await app.waitFor(
+      async () => (await calls("add_mcp_to_agent")).length === 2,
+      {
+        description: "one add per suggested client",
+      },
+    );
+    assert.deepEqual(
+      (await calls("add_mcp_to_agent")).map((payload) => payload.agentId),
+      ["codex", "pi"],
+    );
+
+    await app.clickSelector('[data-slot="mcp-toolsets"]');
+    await app.waitForText(en.integrations.mcp.toolsets.title);
+    await app.capture("mcp-toolsets");
+    await app.clickSelector('[data-toolset="cookies"]');
+    await app.waitFor(
+      async () => (await calls("set_mcp_toolsets")).length === 1,
+      {
+        description: "the toolset choice saved",
+      },
+    );
+    assert.deepEqual((await calls("set_mcp_toolsets"))[0].toolsets, [
+      "organize",
+      "network",
+      "fingerprint",
+      "extensions",
+      "sync",
+      "remote",
+      "recipes",
+    ]);
+    await dismissSurface(app);
+    await dismissSurface(app);
+  });
+});
+
 test("the local API page shows a one-line example and opens runnable examples in a dialog", async () => {
   await withApp("ui-integrations-examples", async (app) => {
     const settings = await app.invoke("get_app_settings");

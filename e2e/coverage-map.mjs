@@ -253,6 +253,7 @@ export const commandCoverage = {
       "list_mcp_agents",
       "add_mcp_to_agent",
       "remove_mcp_from_agent",
+      "set_mcp_toolsets",
       "start_mcp_remote_bridge",
       "stop_mcp_remote_bridge",
       "get_mcp_remote_status",

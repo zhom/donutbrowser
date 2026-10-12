@@ -11,6 +11,7 @@ import {
   LuEyeOff,
   LuPlug,
   LuRefreshCw,
+  LuSlidersHorizontal,
   LuTrash2,
 } from "react-icons/lu";
 import {
@@ -29,6 +30,7 @@ import {
   AnimatedTabsTrigger,
 } from "@/components/ui/animated-tabs";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CodeSnippet } from "@/components/ui/code-snippet";
 import { ConfirmationMark } from "@/components/ui/confirmation-mark";
 import { CopyToClipboard } from "@/components/ui/copy-to-clipboard";
@@ -41,6 +43,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OperationFlow } from "@/components/ui/operation-flow";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   FeatureIcon,
   SECTION_LABEL_CLASS,
@@ -65,6 +72,7 @@ import { translateBackendError } from "@/lib/backend-errors";
 import { canUseRemoteControl } from "@/lib/entitlements";
 import {
   type AgentCategory,
+  CORE_TOOLSET,
   credentialPrefixOf,
   FX_AGENT_ID,
   fxExportLine,
@@ -72,6 +80,7 @@ import {
   type McpRemoteCredential,
   type McpRemoteCredentialRotation,
   type McpRemoteStatus,
+  OPTIONAL_TOOLSETS,
   REMOTE_MCP_URL,
 } from "@/lib/mcp";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
@@ -83,6 +92,7 @@ interface AppSettings {
   api_token?: string;
   mcp_remote_enabled: boolean;
   mcp_remote_key?: string | null;
+  mcp_toolsets?: string[];
 }
 
 type IntegrationsTab = "api" | "remote";
@@ -128,6 +138,9 @@ export function IntegrationsDialog({
   const [showApiToken, setShowApiToken] = useState(false);
   const [isApiStarting, setIsApiStarting] = useState(false);
   const [agents, setAgents] = useState<McpAgentInfo[]>([]);
+  const [showAllClients, setShowAllClients] = useState(false);
+  const [isAddingAll, setIsAddingAll] = useState(false);
+  const [isSavingToolsets, setIsSavingToolsets] = useState(false);
   const [busyAgentIds, setBusyAgentIds] = useState<Set<string>>(new Set());
   const [apiPortDraft, setApiPortDraft] = useState<string>("10108");
   const [remote, setRemote] = useState<McpRemoteStatus | null>(null);
@@ -442,6 +455,63 @@ export function IntegrationsDialog({
     }
   };
 
+  /** Add Donut to several clients in one go, with one toast for all of them. */
+  const handleAddAll = async (targets: McpAgentInfo[]) => {
+    setIsAddingAll(true);
+    for (const agent of targets) markAgentBusy(agent.id, true);
+    const failed: string[] = [];
+    try {
+      await ensureCredential();
+      for (const agent of targets) {
+        try {
+          await invoke("add_mcp_to_agent", { agentId: agent.id });
+        } catch (e) {
+          console.error(`Failed to add MCP to ${agent.id}:`, e);
+          failed.push(agent.display_name);
+        }
+      }
+      const added = targets.length - failed.length;
+      if (added > 0) {
+        showSuccessToast(t("integrations.mcp.addedToMany", { count: added }));
+      }
+      if (failed.length > 0) {
+        showErrorToast(
+          t("integrations.mcp.addFailed", { names: failed.join(", ") }),
+        );
+      }
+    } catch (e) {
+      showErrorToast(translateBackendError(t, e));
+    } finally {
+      for (const agent of targets) markAgentBusy(agent.id, false);
+      setIsAddingAll(false);
+      void loadCredential();
+      void loadSettings();
+      void loadAgents();
+    }
+  };
+
+  /** Save the toolsets; the backend rewrites every connected client. */
+  const handleSetToolsets = async (toolsets: string[]) => {
+    setIsSavingToolsets(true);
+    try {
+      const failed = await invoke<string[]>("set_mcp_toolsets", { toolsets });
+      setSettings((current) => ({ ...current, mcp_toolsets: toolsets }));
+      if (failed.length > 0) {
+        const names = failed.map(
+          (id) => agents.find((agent) => agent.id === id)?.display_name ?? id,
+        );
+        showErrorToast(
+          t("integrations.mcp.toolsets.failed", { names: names.join(", ") }),
+        );
+      }
+    } catch (e) {
+      showErrorToast(translateBackendError(t, e));
+    } finally {
+      setIsSavingToolsets(false);
+      void loadSettings();
+    }
+  };
+
   const handleRemoveAgent = async (agent: McpAgentInfo) => {
     markAgentBusy(agent.id, true);
     try {
@@ -566,121 +636,185 @@ export function IntegrationsDialog({
   const shownTab: IntegrationsTab =
     activeTab === "remote" && !remoteTabShown ? "api" : activeTab;
 
-  const clientsGrid = (
-    <section className="flex flex-col gap-2">
-      <h3 className={SECTION_LABEL_CLASS}>
-        {t("integrations.mcp.clientsLabel")}
-      </h3>
-      <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2">
-        {agents.map((agent) => {
-          const busy = busyAgentIds.has(agent.id);
-          return (
-            <div
-              key={agent.id}
-              className={cn(
-                "flex flex-col justify-center gap-2 rounded-xl px-3 py-2.5 transition-colors duration-200",
-                agent.connected ? "bg-foreground/5" : "bg-foreground/3",
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <AgentIcon id={agent.id} category={agent.category} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {agent.display_name}
-                  </p>
-                  <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                    {categoryLabel(t, agent.category)}
-                  </p>
-                </div>
-                {agent.connected ? (
-                  <div className="flex items-center gap-1">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
-                      <ConfirmationMark />
-                      {t("appFeedback.configured")}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="subtle"
-                      size="icon"
-                      className="size-8 rounded-lg hover:text-destructive-text"
-                      disabled={busy}
-                      onClick={() => void handleRemoveAgent(agent)}
-                      aria-label={t("integrations.mcp.removeAriaLabel", {
-                        name: agent.display_name,
-                      })}
-                    >
-                      <LuTrash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="soft"
-                    className="h-8 rounded-lg text-xs"
-                    disabled={busy}
-                    aria-busy={busy}
-                    onClick={() => void handleAddAgent(agent)}
-                  >
-                    {t("integrations.mcp.add")}
-                  </Button>
-                )}
-              </div>
-              {agent.connected && (
-                <details data-slot="client-route" className="text-xs">
-                  <summary className="w-fit cursor-pointer rounded-sm py-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                    {t("appFeedback.routeDetails")}
-                  </summary>
-                  <OperationFlow
-                    label={t("appFeedback.routeDetails")}
-                    active={remote?.connected ? 2 : 1}
-                    steps={[
-                      {
-                        id: "client",
-                        label: agent.display_name,
-                        detail: t("appFeedback.configured"),
-                      },
-                      {
-                        id: "endpoint",
-                        label: t("integrations.tabRemote"),
-                        detail: (
-                          <span className="break-all">{REMOTE_MCP_URL}</span>
-                        ),
-                      },
-                      {
-                        id: "device",
-                        label: t("appFeedback.thisDevice"),
-                        detail: t(
-                          remote?.connected
-                            ? "appFeedback.reachable"
-                            : "appFeedback.notVerified",
-                        ),
-                      },
-                    ]}
-                  />
-                  <p className="pt-1 leading-relaxed text-muted-foreground">
-                    {t("appFeedback.remoteProbeScope")}
-                  </p>
-                </details>
-              )}
-              {agent.connected && agent.id === FX_AGENT_ID && (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    {t("integrations.remote.fxHint")}
-                  </p>
-                  {fxLine && (
-                    <CopyToClipboard
-                      variant="subtle"
-                      className="size-8 shrink-0 rounded-lg"
-                      text={fxLine}
-                      successMessage={t("integrations.remote.fxExportCopied")}
-                    />
-                  )}
-                </div>
-              )}
+  const renderAgent = (agent: McpAgentInfo) => {
+    const busy = busyAgentIds.has(agent.id);
+    return (
+      <div
+        key={agent.id}
+        data-slot="mcp-client"
+        data-agent-id={agent.id}
+        className={cn(
+          "flex flex-col justify-center gap-2 rounded-xl px-3 py-2.5 transition-colors duration-200",
+          agent.connected ? "bg-foreground/5" : "bg-foreground/3",
+        )}
+      >
+        <div className="flex items-center gap-3">
+          <AgentIcon id={agent.id} category={agent.category} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{agent.display_name}</p>
+            <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+              {categoryLabel(t, agent.category)}
+            </p>
+          </div>
+          {agent.connected ? (
+            <div className="flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+                <ConfirmationMark />
+                {t("appFeedback.configured")}
+              </span>
+              <Button
+                type="button"
+                variant="subtle"
+                size="icon"
+                className="size-8 rounded-lg hover:text-destructive-text"
+                disabled={busy}
+                onClick={() => void handleRemoveAgent(agent)}
+                aria-label={t("integrations.mcp.removeAriaLabel", {
+                  name: agent.display_name,
+                })}
+              >
+                <LuTrash2 className="size-3.5" />
+              </Button>
             </div>
-          );
-        })}
+          ) : (
+            <Button
+              size="sm"
+              variant="soft"
+              className="h-8 rounded-lg text-xs"
+              disabled={busy}
+              aria-busy={busy}
+              onClick={() => void handleAddAgent(agent)}
+            >
+              {t("integrations.mcp.add")}
+            </Button>
+          )}
+        </div>
+        {agent.connected && (
+          <details data-slot="client-route" className="text-xs">
+            <summary className="w-fit cursor-pointer rounded-sm py-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              {t("appFeedback.routeDetails")}
+            </summary>
+            <OperationFlow
+              label={t("appFeedback.routeDetails")}
+              active={remote?.connected ? 2 : 1}
+              steps={[
+                {
+                  id: "client",
+                  label: agent.display_name,
+                  detail: t("appFeedback.configured"),
+                },
+                {
+                  id: "endpoint",
+                  label: t("integrations.tabRemote"),
+                  detail: <span className="break-all">{REMOTE_MCP_URL}</span>,
+                },
+                {
+                  id: "device",
+                  label: t("appFeedback.thisDevice"),
+                  detail: t(
+                    remote?.connected
+                      ? "appFeedback.reachable"
+                      : "appFeedback.notVerified",
+                  ),
+                },
+              ]}
+            />
+            <p className="pt-1 leading-relaxed text-muted-foreground">
+              {t("appFeedback.remoteProbeScope")}
+            </p>
+          </details>
+        )}
+        {agent.connected && agent.id === FX_AGENT_ID && (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {t("integrations.remote.fxHint")}
+            </p>
+            {fxLine && (
+              <CopyToClipboard
+                variant="subtle"
+                className="size-8 shrink-0 rounded-lg"
+                text={fxLine}
+                successMessage={t("integrations.remote.fxExportCopied")}
+              />
+            )}
+          </div>
+        )}
       </div>
+    );
+  };
+  // The clients on this computer come first; the rest wait behind a toggle,
+  // so the page leads with the apps the person actually has.
+  const onThisComputer = agents
+    .filter((agent) => agent.connected || agent.detected)
+    .sort((a, b) => Number(b.connected) - Number(a.connected));
+  const otherClients = agents.filter(
+    (agent) => !agent.connected && !agent.detected,
+  );
+  const suggestedClients = onThisComputer.filter((agent) => !agent.connected);
+  const clientGridClass = "grid grid-cols-1 gap-2 @2xl:grid-cols-2";
+
+  const clientsGrid = (
+    <section className="flex flex-col gap-2" data-slot="mcp-clients">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className={SECTION_LABEL_CLASS}>
+          {t("integrations.mcp.clientsLabel")}
+        </h3>
+        <ToolsetsPicker
+          value={settings.mcp_toolsets ?? []}
+          onChange={(next) => void handleSetToolsets(next)}
+          disabled={isSavingToolsets}
+        />
+      </div>
+      {onThisComputer.length > 0 ? (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {t("integrations.mcp.onThisComputer")}
+            </p>
+            {suggestedClients.length > 1 && (
+              <Button
+                size="sm"
+                variant="soft"
+                data-slot="mcp-add-all"
+                className="h-7 rounded-lg text-xs"
+                disabled={isAddingAll}
+                aria-busy={isAddingAll}
+                onClick={() => void handleAddAll(suggestedClients)}
+              >
+                {t("integrations.mcp.addToAll", {
+                  count: suggestedClients.length,
+                })}
+              </Button>
+            )}
+          </div>
+          <div className={clientGridClass}>
+            {onThisComputer.map(renderAgent)}
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {t("integrations.mcp.noneFound")}
+        </p>
+      )}
+      {otherClients.length > 0 && onThisComputer.length > 0 && (
+        <Button
+          type="button"
+          variant="subtle"
+          size="sm"
+          data-slot="mcp-show-more"
+          className="h-7 w-fit rounded-lg px-2 text-xs"
+          aria-expanded={showAllClients}
+          onClick={() => setShowAllClients((shown) => !shown)}
+        >
+          {showAllClients
+            ? t("integrations.mcp.showFewer")
+            : t("integrations.mcp.showMore", { count: otherClients.length })}
+        </Button>
+      )}
+      {otherClients.length > 0 &&
+        (onThisComputer.length === 0 || showAllClients) && (
+          <div className={clientGridClass}>{otherClients.map(renderAgent)}</div>
+        )}
     </section>
   );
 
@@ -1100,5 +1234,96 @@ export function IntegrationsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Which tool groups agents list, besides the core tools. */
+function ToolsetsPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  disabled: boolean;
+}) {
+  const { t } = useTranslation();
+  const everything = value.length === 0;
+  const chosen: string[] = everything
+    ? [...OPTIONAL_TOOLSETS]
+    : value.filter((name) => name !== CORE_TOOLSET);
+  const label = everything
+    ? t("integrations.mcp.toolsets.all")
+    : chosen.length === 0
+      ? t("integrations.mcp.toolsets.coreOnly")
+      : t("integrations.mcp.toolsets.some", { count: chosen.length });
+  const toggle = (name: string, on: boolean) => {
+    const next = OPTIONAL_TOOLSETS.filter((set) =>
+      set === name ? on : chosen.includes(set),
+    );
+    onChange(
+      next.length === OPTIONAL_TOOLSETS.length
+        ? []
+        : next.length === 0
+          ? [CORE_TOOLSET]
+          : next,
+    );
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="subtle"
+          size="sm"
+          data-slot="mcp-toolsets"
+          className="h-7 gap-1.5 rounded-lg px-2 text-xs"
+          disabled={disabled}
+        >
+          <LuSlidersHorizontal className="size-3.5" aria-hidden="true" />
+          {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-3">
+        <p className="text-sm font-medium">
+          {t("integrations.mcp.toolsets.title")}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {t("integrations.mcp.toolsets.description")}
+        </p>
+        <div className="mt-2 flex flex-col gap-0.5">
+          {OPTIONAL_TOOLSETS.map((name) => (
+            <div
+              key={name}
+              className="flex items-start gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-foreground/5"
+            >
+              <Checkbox
+                id={`mcp-toolset-${name}`}
+                data-toolset={name}
+                checked={chosen.includes(name)}
+                disabled={disabled}
+                onCheckedChange={(checked) => toggle(name, checked === true)}
+                className="mt-0.5"
+              />
+              <label
+                htmlFor={`mcp-toolset-${name}`}
+                className="min-w-0 cursor-pointer"
+              >
+                <span className="block text-sm">
+                  {t(`integrations.mcp.toolsets.names.${name}.label`)}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {t(`integrations.mcp.toolsets.names.${name}.description`)}
+                </span>
+              </label>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          {t("integrations.mcp.toolsets.core")}
+        </p>
+      </PopoverContent>
+    </Popover>
   );
 }

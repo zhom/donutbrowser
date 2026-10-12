@@ -864,6 +864,60 @@
         "cli": "CLI",
         "editor": "编辑器",
         "editorExt": "编辑器扩展"
+      },
+      "onThisComputer": "此电脑上",
+      "addToAll_one": "全部添加（{{count}} 个）",
+      "addToAll_other": "全部添加（{{count}} 个）",
+      "addedToMany_one": "已将 Donut 添加到 {{count}} 个应用",
+      "addedToMany_other": "已将 Donut 添加到 {{count}} 个应用",
+      "addFailed": "无法将 Donut 添加到 {{names}}。",
+      "noneFound": "此电脑上未找到 AI 应用。你仍可以将 Donut 添加到以下任一应用。",
+      "showMore_one": "再显示 {{count}} 个客户端",
+      "showMore_other": "再显示 {{count}} 个客户端",
+      "showFewer": "少显示一些客户端",
+      "toolsets": {
+        "all": "全部工具",
+        "coreOnly": "仅基础工具",
+        "some_one": "基础 + {{count}} 个分组",
+        "some_other": "基础 + {{count}} 个分组",
+        "title": "代理可见的工具",
+        "description": "代理会加载它能看到的每个工具的说明。只选择它需要的分组，它就能更快启动，也有更多空间工作。已连接的应用会立即更新。",
+        "core": "配置文件、浏览器控制以及让你随时掌握进展的工具始终开启。",
+        "failed": "无法更新 {{names}}。请在其中移除 Donut 后重新添加。",
+        "names": {
+          "organize": {
+            "label": "整理",
+            "description": "创建和修改分组，导入配置文件"
+          },
+          "network": {
+            "label": "网络",
+            "description": "代理、VPN、IP 轮换和 DNS 规则"
+          },
+          "fingerprint": {
+            "label": "指纹",
+            "description": "查看和修改配置文件的设备"
+          },
+          "extensions": {
+            "label": "扩展",
+            "description": "扩展和扩展分组"
+          },
+          "cookies": {
+            "label": "Cookie",
+            "description": "Cookie 导入和 Cookie 机器人"
+          },
+          "sync": {
+            "label": "同步",
+            "description": "团队锁和同步器"
+          },
+          "remote": {
+            "label": "远程机群",
+            "description": "在远程机群上运行配置文件"
+          },
+          "recipes": {
+            "label": "配方",
+            "description": "代理可以重复执行的已保存流程"
+          }
+        }
       }
     },
     "tabApi": "本地 API",
@@ -2565,7 +2619,8 @@
     "templateNameTooLong": "模板名称最多 60 个字符。",
     "templateLimitReached": "最多可保留 100 个模板。请先删除一个。",
     "bulkCreateCountInvalid": "每次可以创建 1 到 {{max}} 个配置文件。",
-    "bulkCreateBusy": "已在创建配置文件。请等待完成。"
+    "bulkCreateBusy": "已在创建配置文件。请等待完成。",
+    "mcpToolsetUnknown": "该工具分组不存在。"
   },
   "rail": {
     "profiles": "配置文件",

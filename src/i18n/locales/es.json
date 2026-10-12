@@ -869,6 +869,64 @@
         "cli": "CLI",
         "editor": "Editor",
         "editorExt": "Extensión de editor"
+      },
+      "onThisComputer": "En este ordenador",
+      "addToAll_one": "Añadir a los {{count}}",
+      "addToAll_many": "Añadir a los {{count}}",
+      "addToAll_other": "Añadir a los {{count}}",
+      "addedToMany_one": "Donut añadido a {{count}} app",
+      "addedToMany_many": "Donut añadido a {{count}} apps",
+      "addedToMany_other": "Donut añadido a {{count}} apps",
+      "addFailed": "No se pudo añadir Donut a {{names}}.",
+      "noneFound": "No se encontraron apps de IA en este ordenador. Aun así puedes añadir Donut a cualquiera de estas.",
+      "showMore_one": "Mostrar {{count}} cliente más",
+      "showMore_many": "Mostrar {{count}} clientes más",
+      "showMore_other": "Mostrar {{count}} clientes más",
+      "showFewer": "Mostrar menos clientes",
+      "toolsets": {
+        "all": "Todas las herramientas",
+        "coreOnly": "Solo herramientas básicas",
+        "some_one": "Básicas + {{count}} grupo",
+        "some_many": "Básicas + {{count}} grupos",
+        "some_other": "Básicas + {{count}} grupos",
+        "title": "Herramientas que ven los agentes",
+        "description": "Un agente carga una descripción de cada herramienta que ve. Elige solo los grupos que necesita: arrancará más rápido y tendrá más espacio para trabajar. Las apps conectadas se actualizan al momento.",
+        "core": "Los perfiles, el control del navegador y las herramientas que te mantienen al tanto están siempre activos.",
+        "failed": "No se pudo actualizar {{names}}. Quita Donut ahí y vuelve a añadirlo.",
+        "names": {
+          "organize": {
+            "label": "Organizar",
+            "description": "Crear y cambiar grupos, importar perfiles"
+          },
+          "network": {
+            "label": "Red",
+            "description": "Proxies, VPN, rotación de IP y reglas DNS"
+          },
+          "fingerprint": {
+            "label": "Huella",
+            "description": "Leer y cambiar el dispositivo de un perfil"
+          },
+          "extensions": {
+            "label": "Extensiones",
+            "description": "Extensiones y grupos de extensiones"
+          },
+          "cookies": {
+            "label": "Cookies",
+            "description": "Importación de cookies y el bot de cookies"
+          },
+          "sync": {
+            "label": "Sincronización",
+            "description": "Bloqueos de equipo y el sincronizador"
+          },
+          "remote": {
+            "label": "Flota remota",
+            "description": "Ejecutar perfiles en la flota remota"
+          },
+          "recipes": {
+            "label": "Recetas",
+            "description": "Flujos guardados que un agente puede repetir"
+          }
+        }
       }
     },
     "tabApi": "API local",
@@ -2581,7 +2639,8 @@
     "templateNameTooLong": "El nombre de una plantilla puede tener como máximo 60 caracteres.",
     "templateLimitReached": "Puedes guardar como máximo 100 plantillas. Elimina una primero.",
     "bulkCreateCountInvalid": "Puedes crear de 1 a {{max}} perfiles a la vez.",
-    "bulkCreateBusy": "Ya se están creando perfiles. Espera a que termine."
+    "bulkCreateBusy": "Ya se están creando perfiles. Espera a que termine.",
+    "mcpToolsetUnknown": "Este grupo de herramientas no existe."
   },
   "rail": {
     "profiles": "Perfiles",
