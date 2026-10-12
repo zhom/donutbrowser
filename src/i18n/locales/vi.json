@@ -1610,6 +1610,13 @@
       "extensionsUnavailable": "Hồ sơ tạm thời bị xoá khi đóng trình duyệt, nên không thể gán nhóm tiện ích mở rộng cho chúng.",
       "syncUnavailable": "Hồ sơ tạm thời bị xoá khi đóng trình duyệt, nên không có gì để đồng bộ lên đám mây.",
       "hint": "Hãy tạo hồ sơ thường nếu bạn cần giữ lại dữ liệu này."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Trang web: {{origins}} · Mục: {{items}}",
+      "hint": "Một tệp storageState của Playwright gồm cookie và Local Storage. Để nhập, trình duyệt phải đóng.",
+      "exported": "Đã xuất trạng thái lưu trữ",
+      "imported": "Đã nhập. Mục Local Storage: {{items}} · Trang web: {{origins}} · Cookie: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2620,7 +2627,18 @@
     "templateLimitReached": "Bạn chỉ có thể giữ tối đa 100 mẫu. Hãy xóa một mẫu trước.",
     "bulkCreateCountInvalid": "Mỗi lần bạn có thể tạo từ 1 đến {{max}} profile.",
     "bulkCreateBusy": "Đang có profile được tạo. Hãy chờ đến khi xong.",
-    "mcpToolsetUnknown": "Nhóm công cụ này không tồn tại."
+    "mcpToolsetUnknown": "Nhóm công cụ này không tồn tại.",
+    "localStorageEphemeral": "Profile tạm thời không lưu Local Storage trên đĩa.",
+    "localStorageProfileProtected": "Profile này được bảo vệ bằng mật khẩu. Local Storage của nó vẫn được niêm phong.",
+    "localStorageUnreadable": "Không thể đọc Local Storage của profile.",
+    "localStorageUnwritable": "Không thể ghi Local Storage của profile.",
+    "localStorageOriginInvalid": "\"{{origin}}\" không phải nguồn web như https://example.com.",
+    "localStorageOriginTooLarge": "Local Storage của {{origin}} lớn hơn 10 MiB mà một trang web được giữ.",
+    "localStorageTooManyOrigins": "Tệp có hơn 10.000 trang web.",
+    "localStorageImportTooLarge": "Tệp lớn hơn 32 MiB.",
+    "storageStateInvalid": "Đây không phải tệp storageState.",
+    "localStorageBrowserRunning": "Hãy đóng trình duyệt trước khi nhập trạng thái lưu trữ.",
+    "localStorageRemoteSession": "Một phiên từ xa đang dùng profile này. Hãy đợi đến khi công việc của nó trở lại đây."
   },
   "rail": {
     "profiles": "Profile",

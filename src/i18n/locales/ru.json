@@ -1632,6 +1632,13 @@
       "extensionsUnavailable": "Временные профили удаляются при закрытии браузера, поэтому назначить им группы расширений нельзя.",
       "syncUnavailable": "Временные профили удаляются при закрытии браузера, поэтому синхронизировать с облаком нечего.",
       "hint": "Создайте обычный профиль, если эти данные должны сохраняться."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Сайты: {{origins}} · Записи: {{items}}",
+      "hint": "Один файл storageState для Playwright с cookie и Local Storage. Для импорта браузер должен быть закрыт.",
+      "exported": "Состояние хранилища экспортировано",
+      "imported": "Импортировано. Записи Local Storage: {{items}} · Сайты: {{origins}} · Cookie: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2660,7 +2667,18 @@
     "templateLimitReached": "Можно хранить не более 100 шаблонов. Сначала удалите один.",
     "bulkCreateCountInvalid": "За один раз можно создать от 1 до {{max}} профилей.",
     "bulkCreateBusy": "Профили уже создаются. Дождитесь окончания.",
-    "mcpToolsetUnknown": "Такой группы инструментов нет."
+    "mcpToolsetUnknown": "Такой группы инструментов нет.",
+    "localStorageEphemeral": "Временный профиль не хранит Local Storage на диске.",
+    "localStorageProfileProtected": "Профиль защищён паролем. Его Local Storage остаётся запечатанным.",
+    "localStorageUnreadable": "Не удалось прочитать Local Storage профиля.",
+    "localStorageUnwritable": "Не удалось записать Local Storage профиля.",
+    "localStorageOriginInvalid": "«{{origin}}» — не веб-источник вида https://example.com.",
+    "localStorageOriginTooLarge": "Local Storage для {{origin}} больше 10 МиБ, которые может хранить сайт.",
+    "localStorageTooManyOrigins": "В файле больше 10 000 сайтов.",
+    "localStorageImportTooLarge": "Файл больше 32 МиБ.",
+    "storageStateInvalid": "Это не файл storageState.",
+    "localStorageBrowserRunning": "Закройте браузер перед импортом состояния хранилища.",
+    "localStorageRemoteSession": "Этот профиль использует удалённая сессия. Дождитесь, пока её работа вернётся сюда."
   },
   "rail": {
     "profiles": "Профили",

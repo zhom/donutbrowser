@@ -274,6 +274,24 @@ impl From<crate::profile_statuses::ProfileStatus> for ApiStatusResponse {
   }
 }
 
+/// Playwright's `storageState`: cookies and each origin's Local Storage.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+struct ApiStorageState {
+  /// Playwright cookies (`name`, `value`, `domain`, `path`, `expires`,
+  /// `httpOnly`, `secure`, `sameSite`).
+  #[serde(default)]
+  #[schema(value_type = Vec<Object>)]
+  cookies: Vec<serde_json::Value>,
+  #[serde(default)]
+  origins: Vec<crate::local_storage::OriginStorage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StorageStateQuery {
+  #[serde(default)]
+  include_cookies: bool,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 struct TemplateRequest {
   /// 1 to 60 characters, unique (case-insensitive).
@@ -762,6 +780,8 @@ struct ImportProxiesResponse {
     detect_import_profiles,
     import_profiles_api,
     import_profile_cookies,
+    export_storage_state,
+    import_storage_state,
     get_groups,
     get_group,
     create_group,
@@ -884,6 +904,10 @@ struct ImportProxiesResponse {
     crate::proxy_distribution::ProxyAssignmentResult,
     OpenUrlRequest,
     ImportCookiesRequest,
+    ApiStorageState,
+    crate::local_storage::OriginStorage,
+    crate::local_storage::StorageItem,
+    crate::local_storage::StorageStateImport,
     ImportCookiesResponse,
     CreateExtensionRequest,
     UpdateExtensionRequest,
@@ -1120,6 +1144,7 @@ fn build_v1_router() -> Router<ApiServerState> {
     .routes(routes!(detect_import_profiles))
     .routes(routes!(import_profiles_api))
     .routes(routes!(import_profile_cookies))
+    .routes(routes!(export_storage_state, import_storage_state))
     .routes(routes!(get_groups, create_group))
     .routes(routes!(get_group, update_group, delete_group))
     .routes(routes!(get_statuses, create_status))
@@ -1440,7 +1465,12 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
     if let Some(code) = value.get("code").and_then(|c| c.as_str()) {
       let status = if code.ends_with("_NOT_FOUND") {
         StatusCode::NOT_FOUND
-      } else if LAUNCH_CONFLICT_CODES.contains(&code) || code == "BULK_CREATE_BUSY" {
+      } else if LAUNCH_CONFLICT_CODES.contains(&code)
+        || code == "BULK_CREATE_BUSY"
+        || code == "LOCAL_STORAGE_BROWSER_RUNNING"
+        || code == "LOCAL_STORAGE_REMOTE_SESSION"
+        || code == "LOCAL_STORAGE_PROFILE_PROTECTED"
+      {
         // Someone or something else holds this profile: another team member, a
         // browser already open, or a remote session whose work has not been
         // pulled back yet. All of them are "try again later", not "your request
@@ -4954,6 +4984,74 @@ async fn import_profiles_api(
 }
 
 #[utoipa::path(
+  get,
+  path = "/v1/profiles/{id}/storage-state",
+  params(
+    ("id" = String, Path, description = "Profile ID"),
+    ("include_cookies" = Option<bool>, Query, description = "Also export the profile's cookies; false when left out")
+  ),
+  responses(
+    (status = 200, description = "Playwright storageState: each origin's Local Storage, and the cookies when asked for. Readable while the browser runs; writes from the last seconds may not be on disk yet", body = ApiStorageState),
+    (status = 400, description = "The profile is ephemeral and keeps no Local Storage on disk"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The profile is password-protected"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookies"
+)]
+async fn export_storage_state(
+  Path(id): Path<String>,
+  Query(query): Query<StorageStateQuery>,
+) -> Result<Json<ApiStorageState>, (StatusCode, String)> {
+  let text = tokio::task::spawn_blocking(move || {
+    crate::local_storage::export_storage_state(&id, query.include_cookies)
+  })
+  .await
+  .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+  .map_err(manager_error_response)?;
+  serde_json::from_str(&text)
+    .map(Json)
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/storage-state",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = ApiStorageState,
+  responses(
+    (status = 200, description = "Imported. An item replaces the one of the same name; the origin's other items stay", body = crate::local_storage::StorageStateImport),
+    (status = 400, description = "Not a storageState, an origin that is not http(s), more than 10 MiB for one origin, or an ephemeral profile"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "The browser is running, the profile is password-protected, or a remote session owns it"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookies"
+)]
+async fn import_storage_state(
+  State(state): State<ApiServerState>,
+  Path(id): Path<String>,
+  Json(body): Json<ApiStorageState>,
+) -> Result<Json<crate::local_storage::StorageStateImport>, (StatusCode, String)> {
+  let content =
+    serde_json::to_string(&body).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+  crate::local_storage::import_storage_state(&state.app_handle, &id, &content)
+    .await
+    .map(Json)
+    .map_err(manager_error_response)
+}
+
+#[utoipa::path(
   post,
   path = "/v1/profiles/{id}/cookies/import",
   params(
@@ -6193,6 +6291,23 @@ mod tests {
       .iter()
       .any(|f| f == "name"));
     assert!(spec["paths"]["/v1/templates/{id}/profiles"]["post"]["responses"]["429"].is_object());
+  }
+
+  #[test]
+  fn openapi_documents_the_storage_state() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let path = &spec["paths"]["/v1/profiles/{id}/storage-state"];
+    assert!(path["get"].is_object() && path["post"].is_object());
+    assert!(path["post"]["responses"]["409"].is_object());
+    let origin = &spec["components"]["schemas"]["OriginStorage"];
+    assert!(
+      origin["properties"]["localStorage"].is_object(),
+      "Playwright's spelling"
+    );
+    assert!(
+      schema_required(&spec, "ApiStorageState").is_empty(),
+      "cookies and origins may each be left out"
+    );
   }
 
   #[test]

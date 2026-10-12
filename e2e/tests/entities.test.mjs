@@ -1354,6 +1354,155 @@ test("cookie import/copy/export, profile encryption, and traffic-stat read/clear
   });
 });
 
+test("a storage state file moves cookies and Local Storage into a closed profile and back out", async () => {
+  await withApp("entities-storage-state", async (app) => {
+    const profile = await createProfile(app, "Storage State");
+    assert.deepEqual(
+      await app.invoke("get_profile_local_storage_stats", {
+        profileId: profile.id,
+      }),
+      { origins: 0, items: 0 },
+      "a new profile has no Local Storage yet",
+    );
+
+    const state = {
+      cookies: [
+        {
+          name: "sid",
+          value: "storage-state-cookie",
+          domain: ".shop.example",
+          path: "/",
+          expires: 2_000_000_000,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [
+        {
+          origin: "https://shop.example",
+          localStorage: [
+            { name: "cart", value: "3 items" },
+            { name: "lang", value: "日本語" },
+          ],
+        },
+        // The same site spelled with its default port and a path.
+        {
+          origin: "https://SHOP.example:443/checkout",
+          localStorage: [{ name: "step", value: "2" }],
+        },
+        {
+          origin: "https://mail.example",
+          localStorage: [{ name: "token", value: "t" }],
+        },
+      ],
+    };
+    const imported = await app.invoke("import_profile_storage_state", {
+      profileId: profile.id,
+      content: JSON.stringify(state),
+    });
+    assert.equal(imported.origins, 2);
+    assert.equal(imported.items, 4);
+    assert.equal(imported.cookies_imported, 1);
+    assert.deepEqual(
+      await app.invoke("get_profile_local_storage_stats", {
+        profileId: profile.id,
+      }),
+      { origins: 2, items: 4 },
+    );
+
+    const exported = JSON.parse(
+      await app.invoke("export_profile_storage_state", {
+        profileId: profile.id,
+        includeCookies: true,
+      }),
+    );
+    const shop = exported.origins.find(
+      (o) => o.origin === "https://shop.example",
+    );
+    assert.deepEqual(
+      Object.fromEntries(shop.localStorage.map((i) => [i.name, i.value])),
+      { cart: "3 items", lang: "日本語", step: "2" },
+    );
+    const cookie = exported.cookies.find((c) => c.name === "sid");
+    assert.equal(cookie.value, "storage-state-cookie");
+    assert.equal(cookie.sameSite, "Lax");
+    assert.equal(cookie.httpOnly, true);
+    const withoutCookies = JSON.parse(
+      await app.invoke("export_profile_storage_state", {
+        profileId: profile.id,
+        includeCookies: false,
+      }),
+    );
+    assert.deepEqual(withoutCookies.cookies, []);
+
+    // A second import replaces an item by name and keeps the others.
+    await app.invoke("import_profile_storage_state", {
+      profileId: profile.id,
+      content: JSON.stringify({
+        origins: [
+          {
+            origin: "https://shop.example",
+            localStorage: [{ name: "cart", value: "empty" }],
+          },
+        ],
+      }),
+    });
+    const again = JSON.parse(
+      await app.invoke("export_profile_storage_state", {
+        profileId: profile.id,
+        includeCookies: false,
+      }),
+    );
+    const shopAgain = again.origins.find(
+      (o) => o.origin === "https://shop.example",
+    );
+    assert.equal(
+      shopAgain.localStorage.find((i) => i.name === "cart").value,
+      "empty",
+    );
+    assert.equal(shopAgain.localStorage.length, 3);
+
+    for (const [content, code] of [
+      ["not json", /STORAGE_STATE_INVALID/],
+      [
+        JSON.stringify({
+          origins: [{ origin: "file:///etc", localStorage: [] }],
+        }),
+        /LOCAL_STORAGE_ORIGIN_INVALID/,
+      ],
+    ]) {
+      assert.match(
+        await app.invokeError("import_profile_storage_state", {
+          profileId: profile.id,
+          content,
+        }),
+        code,
+      );
+    }
+
+    const ephemeral = await app.invoke("create_browser_profile_new", {
+      name: "Storage Ephemeral",
+      browserStr: "wayfern",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+      proxyId: null,
+      vpnId: null,
+      wayfernConfig: { fingerprint: "{}" },
+      groupId: null,
+      ephemeral: true,
+      dnsBlocklist: null,
+      launchHook: null,
+    });
+    assert.match(
+      await app.invokeError("get_profile_local_storage_stats", {
+        profileId: ephemeral.id,
+      }),
+      /LOCAL_STORAGE_EPHEMERAL/,
+    );
+  });
+});
+
 test("2FA keys stay sealed on this device, hand out codes, and go with their profile", async () => {
   await withApp("entities-two-factor", async (app) => {
     const secret = "JBSWY3DPEHPK3PXP";

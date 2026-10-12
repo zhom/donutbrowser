@@ -132,6 +132,7 @@ crossbeam-channel = "0.5"
 sys-locale = "0.3"
 jsonc-parser = { version = "0.34", features = ["cst", "serde_json"] }
 toml_edit = "0.25"
+rusty-leveldb = "4.0.1"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["signal", "process"] }

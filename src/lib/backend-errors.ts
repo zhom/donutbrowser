@@ -122,6 +122,17 @@ export type BackendErrorCode =
   | "API_PORT_UNAVAILABLE"
   | "MCP_AGENT_UNKNOWN"
   | "MCP_TOOLSET_UNKNOWN"
+  | "LOCAL_STORAGE_EPHEMERAL"
+  | "LOCAL_STORAGE_PROFILE_PROTECTED"
+  | "LOCAL_STORAGE_UNREADABLE"
+  | "LOCAL_STORAGE_UNWRITABLE"
+  | "LOCAL_STORAGE_ORIGIN_INVALID"
+  | "LOCAL_STORAGE_ORIGIN_TOO_LARGE"
+  | "LOCAL_STORAGE_TOO_MANY_ORIGINS"
+  | "LOCAL_STORAGE_IMPORT_TOO_LARGE"
+  | "STORAGE_STATE_INVALID"
+  | "LOCAL_STORAGE_BROWSER_RUNNING"
+  | "LOCAL_STORAGE_REMOTE_SESSION"
   | "MCP_AGENT_INSTALL_FAILED"
   | "MCP_AGENT_REMOVE_FAILED"
   | "MCP_REMOTE_REQUIRES_SIGN_IN"
@@ -636,6 +647,32 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.mcpRemoteKeyLimit");
     case "MCP_REMOTE_KEY_UNAVAILABLE":
       return t("backendErrors.mcpRemoteKeyUnavailable");
+    case "LOCAL_STORAGE_EPHEMERAL":
+      return t("backendErrors.localStorageEphemeral");
+    case "LOCAL_STORAGE_PROFILE_PROTECTED":
+      return t("backendErrors.localStorageProfileProtected");
+    case "LOCAL_STORAGE_UNREADABLE":
+      return t("backendErrors.localStorageUnreadable");
+    case "LOCAL_STORAGE_UNWRITABLE":
+      return t("backendErrors.localStorageUnwritable");
+    case "LOCAL_STORAGE_ORIGIN_INVALID":
+      return t("backendErrors.localStorageOriginInvalid", {
+        origin: parsed.params?.origin ?? "",
+      });
+    case "LOCAL_STORAGE_ORIGIN_TOO_LARGE":
+      return t("backendErrors.localStorageOriginTooLarge", {
+        origin: parsed.params?.origin ?? "",
+      });
+    case "LOCAL_STORAGE_TOO_MANY_ORIGINS":
+      return t("backendErrors.localStorageTooManyOrigins");
+    case "LOCAL_STORAGE_IMPORT_TOO_LARGE":
+      return t("backendErrors.localStorageImportTooLarge");
+    case "STORAGE_STATE_INVALID":
+      return t("backendErrors.storageStateInvalid");
+    case "LOCAL_STORAGE_BROWSER_RUNNING":
+      return t("backendErrors.localStorageBrowserRunning");
+    case "LOCAL_STORAGE_REMOTE_SESSION":
+      return t("backendErrors.localStorageRemoteSession");
     case "MCP_TOOLSET_UNKNOWN":
       return t("backendErrors.mcpToolsetUnknown");
     case "MCP_AGENT_UNKNOWN":

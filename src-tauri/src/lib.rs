@@ -148,6 +148,7 @@ mod cookie_bot;
 mod cookie_manager;
 mod cookie_paste;
 pub mod events;
+mod local_storage;
 mod mcp_integrations;
 mod mcp_remote;
 mod mcp_server;
@@ -3539,6 +3540,9 @@ pub fn run_with_builder(
       add_mcp_to_agent,
       remove_mcp_from_agent,
       set_mcp_toolsets,
+      local_storage::get_profile_local_storage_stats,
+      local_storage::export_profile_storage_state,
+      local_storage::import_profile_storage_state,
       start_mcp_remote_bridge,
       stop_mcp_remote_bridge,
       get_mcp_remote_status,

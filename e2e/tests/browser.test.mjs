@@ -705,7 +705,10 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     const inPlace = await agentClick({ role: "button", name: "Clicked" });
     assert.equal(inPlace.navigated, false);
     assert.ok(inPlace.ms < 5000, `an in-place click took ${inPlace.ms} ms`);
-    const link = await agentClick({ role: "link", name: "Open the linked page" });
+    const link = await agentClick({
+      role: "link",
+      name: "Open the linked page",
+    });
     assert.equal(link.navigated, true);
     assert.equal(
       await cdp.evaluate("document.querySelector('#path').textContent"),
@@ -1939,6 +1942,115 @@ test("a batch from a template makes numbered profiles, each with its own device"
     await app.capture("failure");
     throw error;
   } finally {
+    await app.close();
+  }
+});
+
+test("Local Storage that Donut writes, Wayfern reads, and what Wayfern writes exports", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const app = appFromEnvironment("browser-local-storage", {
+    seedVersionCache:
+      cachedFixtureVersion(process.env.DONUT_E2E_PROJECT_ROOT) ?? false,
+    wayfernTermsAccepted: false,
+  });
+  let browserPid;
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    await app.invoke("accept_wayfern_terms");
+    const profile = await createRealProfile(
+      app,
+      prepared.version,
+      "Local Storage",
+    );
+    const origin = new URL(fixtureUrl).origin;
+    const imported = await app.invoke("import_profile_storage_state", {
+      profileId: profile.id,
+      content: JSON.stringify({
+        origins: [
+          {
+            origin,
+            localStorage: [
+              { name: "imported", value: "from Donut" },
+              { name: "unicode", value: "日本語 🍩" },
+            ],
+          },
+        ],
+      }),
+    });
+    assert.equal(imported.items, 2);
+
+    const launched = await app.invoke("launch_browser_profile", {
+      profile: (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      ),
+      url: `${fixtureUrl}/local-storage`,
+    });
+    browserPid = launched.process_id;
+    const port = processCommandLine(browserPid).match(
+      /--remote-debugging-port=(\d+)/,
+    )?.[1];
+    assert.ok(port, "the launch exposes a debugging port");
+    const cdp = await CdpClient.connect(Number(port));
+    await cdp.waitFor(`location.pathname === "/local-storage"`, {
+      description: "the fixture page",
+    });
+    assert.equal(
+      await cdp.evaluate("localStorage.getItem('imported')"),
+      "from Donut",
+    );
+    assert.equal(
+      await cdp.evaluate("localStorage.getItem('unicode')"),
+      "日本語 🍩",
+    );
+    await cdp.evaluate("localStorage.setItem('written', 'by Wayfern'); true");
+    // Chromium commits Local Storage to disk a few seconds after a change.
+    await new Promise((resolve) => setTimeout(resolve, 8_000));
+    cdp.close?.();
+
+    const running = (await app.invoke("list_browser_profiles")).find(
+      (p) => p.id === profile.id,
+    );
+    await app.invoke("kill_browser_profile", { profile: running });
+    await waitForProcessExit(app, browserPid);
+    browserPid = undefined;
+
+    const exported = JSON.parse(
+      await app.invoke("export_profile_storage_state", {
+        profileId: profile.id,
+        includeCookies: false,
+      }),
+    );
+    const site = exported.origins.find((o) => o.origin === origin);
+    assert.ok(
+      site,
+      `the fixture origin is exported: ${JSON.stringify(exported.origins)}`,
+    );
+    const items = Object.fromEntries(
+      site.localStorage.map((i) => [i.name, i.value]),
+    );
+    assert.equal(items.imported, "from Donut");
+    assert.equal(items.written, "by Wayfern");
+    await app.invoke("delete_profile", {
+      profileId: profile.id,
+      permanent: true,
+    });
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    if (app.session && browserPid && processExists(browserPid)) {
+      const running = (
+        await app.invoke("list_browser_profiles").catch(() => [])
+      ).find((item) => item.process_id === browserPid);
+      if (running)
+        await app
+          .invoke("kill_browser_profile", { profile: running })
+          .catch(() => {});
+    }
     await app.close();
   }
 });

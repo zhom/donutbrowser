@@ -1610,6 +1610,13 @@
       "extensionsUnavailable": "临时配置在浏览器关闭时会被丢弃，因此无法为其分配扩展分组。",
       "syncUnavailable": "临时配置在浏览器关闭时会被丢弃，因此没有可同步到云端的内容。",
       "hint": "如果需要保留这些数据，请创建普通配置。"
+    },
+    "localStorage": {
+      "title": "本地存储",
+      "stats": "网站：{{origins}} · 条目：{{items}}",
+      "hint": "一个包含 Cookie 和本地存储的 Playwright storageState 文件。导入时浏览器必须关闭。",
+      "exported": "已导出存储状态",
+      "imported": "已导入。本地存储条目：{{items}} · 网站：{{origins}} · Cookie：{{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2620,7 +2627,18 @@
     "templateLimitReached": "最多可保留 100 个模板。请先删除一个。",
     "bulkCreateCountInvalid": "每次可以创建 1 到 {{max}} 个配置文件。",
     "bulkCreateBusy": "已在创建配置文件。请等待完成。",
-    "mcpToolsetUnknown": "该工具分组不存在。"
+    "mcpToolsetUnknown": "该工具分组不存在。",
+    "localStorageEphemeral": "临时配置文件不会在磁盘上保存本地存储。",
+    "localStorageProfileProtected": "此配置文件受密码保护，其本地存储保持封存。",
+    "localStorageUnreadable": "无法读取配置文件的本地存储。",
+    "localStorageUnwritable": "无法写入配置文件的本地存储。",
+    "localStorageOriginInvalid": "“{{origin}}”不是 https://example.com 这样的网页来源。",
+    "localStorageOriginTooLarge": "{{origin}} 的本地存储超过了网站可保留的 10 MiB。",
+    "localStorageTooManyOrigins": "文件中的网站超过 10,000 个。",
+    "localStorageImportTooLarge": "文件大于 32 MiB。",
+    "storageStateInvalid": "这不是 storageState 文件。",
+    "localStorageBrowserRunning": "导入存储状态前请关闭浏览器。",
+    "localStorageRemoteSession": "远程会话正在使用此配置文件。请等待其工作回到这里。"
   },
   "rail": {
     "profiles": "配置文件",

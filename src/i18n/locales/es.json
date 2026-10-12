@@ -1621,6 +1621,13 @@
       "extensionsUnavailable": "Los perfiles efímeros se descartan al cerrar el navegador, así que no se les pueden asignar grupos de extensiones.",
       "syncUnavailable": "Los perfiles efímeros se descartan al cerrar el navegador, así que no hay nada que sincronizar con la nube.",
       "hint": "Crea un perfil normal si necesitas que esto se conserve."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Sitios: {{origins}} · Elementos: {{items}}",
+      "hint": "Un archivo storageState de Playwright con las cookies y el Local Storage. Para importar, el navegador debe estar cerrado.",
+      "exported": "Estado de almacenamiento exportado",
+      "imported": "Importado. Elementos de Local Storage: {{items}} · Sitios: {{origins}} · Cookies: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2640,7 +2647,18 @@
     "templateLimitReached": "Puedes guardar como máximo 100 plantillas. Elimina una primero.",
     "bulkCreateCountInvalid": "Puedes crear de 1 a {{max}} perfiles a la vez.",
     "bulkCreateBusy": "Ya se están creando perfiles. Espera a que termine.",
-    "mcpToolsetUnknown": "Este grupo de herramientas no existe."
+    "mcpToolsetUnknown": "Este grupo de herramientas no existe.",
+    "localStorageEphemeral": "Un perfil efímero no guarda Local Storage en el disco.",
+    "localStorageProfileProtected": "Este perfil está protegido con contraseña. Su Local Storage sigue sellado.",
+    "localStorageUnreadable": "No se pudo leer el Local Storage del perfil.",
+    "localStorageUnwritable": "No se pudo escribir el Local Storage del perfil.",
+    "localStorageOriginInvalid": "\"{{origin}}\" no es un origen web como https://example.com.",
+    "localStorageOriginTooLarge": "El Local Storage de {{origin}} supera los 10 MiB que puede guardar un sitio.",
+    "localStorageTooManyOrigins": "El archivo tiene más de 10.000 sitios.",
+    "localStorageImportTooLarge": "El archivo supera los 32 MiB.",
+    "storageStateInvalid": "Este no es un archivo storageState.",
+    "localStorageBrowserRunning": "Cierra el navegador antes de importar un estado de almacenamiento.",
+    "localStorageRemoteSession": "Una sesión remota usa este perfil. Espera a que su trabajo vuelva aquí."
   },
   "rail": {
     "profiles": "Perfiles",

@@ -1610,6 +1610,13 @@
       "extensionsUnavailable": "Ephemeral profiles are discarded when the browser closes, so extension groups cannot be assigned to them.",
       "syncUnavailable": "Ephemeral profiles are discarded when the browser closes, so there is nothing to sync to the cloud.",
       "hint": "Create a regular profile if you need this to persist."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Sites: {{origins}} · Items: {{items}}",
+      "hint": "One Playwright storageState file with the cookies and the Local Storage. Import needs the browser closed.",
+      "exported": "Storage state exported",
+      "imported": "Imported. Local Storage items: {{items}} · Sites: {{origins}} · Cookies: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2620,7 +2627,18 @@
     "templateLimitReached": "You can keep at most 100 templates. Delete one first.",
     "bulkCreateCountInvalid": "You can create from 1 to {{max}} profiles at a time.",
     "bulkCreateBusy": "Profiles are already being created. Wait until that is done.",
-    "mcpToolsetUnknown": "This tool group does not exist."
+    "mcpToolsetUnknown": "This tool group does not exist.",
+    "localStorageEphemeral": "An ephemeral profile keeps no Local Storage on disk.",
+    "localStorageProfileProtected": "This profile is password-protected. Its Local Storage stays sealed.",
+    "localStorageUnreadable": "The profile's Local Storage could not be read.",
+    "localStorageUnwritable": "The profile's Local Storage could not be written.",
+    "localStorageOriginInvalid": "\"{{origin}}\" is not a web origin like https://example.com.",
+    "localStorageOriginTooLarge": "Local Storage for {{origin}} is larger than the 10 MiB a site may keep.",
+    "localStorageTooManyOrigins": "The file has more than 10,000 sites.",
+    "localStorageImportTooLarge": "The file is larger than 32 MiB.",
+    "storageStateInvalid": "This is not a storageState file.",
+    "localStorageBrowserRunning": "Close the browser before you import a storage state.",
+    "localStorageRemoteSession": "A remote session owns this profile. Wait until its work is back here."
   },
   "rail": {
     "profiles": "Profiles",

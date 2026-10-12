@@ -1610,6 +1610,13 @@
       "extensionsUnavailable": "Flüchtige Profile werden beim Schließen des Browsers verworfen, daher können ihnen keine Erweiterungsgruppen zugewiesen werden.",
       "syncUnavailable": "Flüchtige Profile werden beim Schließen des Browsers verworfen, daher gibt es nichts, was in die Cloud synchronisiert werden könnte.",
       "hint": "Erstellen Sie ein normales Profil, wenn die Daten erhalten bleiben sollen."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Websites: {{origins}} · Einträge: {{items}}",
+      "hint": "Eine Playwright-storageState-Datei mit den Cookies und dem Local Storage. Zum Importieren muss der Browser geschlossen sein.",
+      "exported": "Speicherzustand exportiert",
+      "imported": "Importiert. Local-Storage-Einträge: {{items}} · Websites: {{origins}} · Cookies: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2620,7 +2627,18 @@
     "templateLimitReached": "Sie können höchstens 100 Vorlagen behalten. Löschen Sie zuerst eine.",
     "bulkCreateCountInvalid": "Sie können 1 bis {{max}} Profile auf einmal erstellen.",
     "bulkCreateBusy": "Es werden bereits Profile erstellt. Warten Sie, bis das abgeschlossen ist.",
-    "mcpToolsetUnknown": "Diese Werkzeuggruppe existiert nicht."
+    "mcpToolsetUnknown": "Diese Werkzeuggruppe existiert nicht.",
+    "localStorageEphemeral": "Ein flüchtiges Profil speichert keinen Local Storage auf der Festplatte.",
+    "localStorageProfileProtected": "Dieses Profil ist passwortgeschützt. Sein Local Storage bleibt versiegelt.",
+    "localStorageUnreadable": "Der Local Storage des Profils konnte nicht gelesen werden.",
+    "localStorageUnwritable": "Der Local Storage des Profils konnte nicht geschrieben werden.",
+    "localStorageOriginInvalid": "„{{origin}}“ ist kein Web-Ursprung wie https://example.com.",
+    "localStorageOriginTooLarge": "Der Local Storage für {{origin}} ist größer als die 10 MiB, die eine Website behalten darf.",
+    "localStorageTooManyOrigins": "Die Datei enthält mehr als 10.000 Websites.",
+    "localStorageImportTooLarge": "Die Datei ist größer als 32 MiB.",
+    "storageStateInvalid": "Dies ist keine storageState-Datei.",
+    "localStorageBrowserRunning": "Schließen Sie den Browser, bevor Sie einen Speicherzustand importieren.",
+    "localStorageRemoteSession": "Eine Remote-Sitzung verwendet dieses Profil. Warten Sie, bis ihre Arbeit wieder hier ist."
   },
   "rail": {
     "profiles": "Profile",

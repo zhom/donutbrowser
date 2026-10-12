@@ -2,8 +2,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { open as openDialog, save } from "@tauri-apps/plugin-dialog";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { hideOthers } from "aria-hidden";
 import Color from "color";
 import { motion, useReducedMotion } from "motion/react";
@@ -2403,6 +2403,13 @@ function CookiesSectionInline({
                   : "—"}
             </p>
           </div>
+          {profile.ephemeral !== true && !profile.password_protected && (
+            <StorageStateBlock
+              profile={profile}
+              isDisabled={isDisabled}
+              t={t}
+            />
+          )}
           {domains.length > 0 && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-muted/40">
               <p className="shrink-0 border-b border-border px-3 py-2 text-[10px] tracking-wide text-muted-foreground uppercase">
@@ -2428,6 +2435,141 @@ function CookiesSectionInline({
           {error && <p className="text-xs text-destructive-text">{error}</p>}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The profile's Local Storage with its cookies, as one Playwright
+ * `storageState` file: export it to an automation tool, or import one.
+ */
+function StorageStateBlock({
+  profile,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const [stats, setStats] = React.useState<{
+    origins: number;
+    items: number;
+  } | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const loadStats = React.useCallback(async () => {
+    try {
+      setStats(
+        await invoke<{ origins: number; items: number }>(
+          "get_profile_local_storage_stats",
+          { profileId: profile.id },
+        ),
+      );
+    } catch {
+      setStats(null);
+    }
+  }, [profile.id]);
+
+  React.useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
+
+  const handleExport = async () => {
+    setBusy(true);
+    try {
+      const content = await invoke<string>("export_profile_storage_state", {
+        profileId: profile.id,
+        includeCookies: true,
+      });
+      const filePath = await save({
+        defaultPath: `${profile.name}_storage_state.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!filePath) return;
+      await writeTextFile(filePath, content);
+      showSuccessToast(t("profileInfo.localStorage.exported"));
+    } catch (e) {
+      showErrorToast(translateBackendError(t as never, e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    setBusy(true);
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!selected || typeof selected !== "string") return;
+      const content = await readTextFile(selected);
+      const result = await invoke<{
+        origins: number;
+        items: number;
+        cookies_imported: number;
+      }>("import_profile_storage_state", { profileId: profile.id, content });
+      showSuccessToast(
+        t("profileInfo.localStorage.imported", {
+          items: result.items,
+          origins: result.origins,
+          cookies: result.cookies_imported,
+        }),
+      );
+      void loadStats();
+    } catch (e) {
+      showErrorToast(translateBackendError(t as never, e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      data-slot="profile-storage-state"
+      className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/40 px-3 py-2"
+    >
+      <div className="min-w-0">
+        <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+          {t("profileInfo.localStorage.title")}
+        </p>
+        <p className="mt-0.5 text-sm" data-slot="profile-local-storage-stats">
+          {stats
+            ? t("profileInfo.localStorage.stats", {
+                origins: stats.origins,
+                items: stats.items,
+              })
+            : "—"}
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {t("profileInfo.localStorage.hint")}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5"
+          data-slot="storage-state-export"
+          disabled={isDisabled || busy}
+          onClick={() => void handleExport()}
+        >
+          <LuDownload className="size-3.5" />
+          {t("common.buttons.export")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5"
+          data-slot="storage-state-import"
+          disabled={isDisabled || busy}
+          onClick={() => void handleImport()}
+        >
+          <LuUpload className="size-3.5" />
+          {t("common.buttons.import")}
+        </Button>
+      </div>
     </div>
   );
 }

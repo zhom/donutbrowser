@@ -836,6 +836,10 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
+    "name": "crc32c",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "crc32fast",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1248,6 +1252,10 @@
     "license": "MIT"
   },
   {
+    "name": "fs2",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "futures",
     "license": "Apache-2.0 OR MIT"
   },
@@ -1562,6 +1570,10 @@
   {
     "name": "inout",
     "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "name": "integer-encoding",
+    "license": "MIT"
   },
   {
     "name": "internmap",
@@ -2392,6 +2404,10 @@
     "license": "ISC"
   },
   {
+    "name": "rusty-leveldb",
+    "license": "MIT"
+  },
+  {
     "name": "ryu",
     "license": "Apache-2.0 OR BSL-1.0"
   },
@@ -2590,6 +2606,10 @@
   {
     "name": "smoltcp",
     "license": "0BSD"
+  },
+  {
+    "name": "snap",
+    "license": "BSD-3-Clause"
   },
   {
     "name": "socket2",

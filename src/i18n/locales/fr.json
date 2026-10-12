@@ -1621,6 +1621,13 @@
       "extensionsUnavailable": "Les profils éphémères sont supprimés à la fermeture du navigateur : aucun groupe d'extensions ne peut leur être attribué.",
       "syncUnavailable": "Les profils éphémères sont supprimés à la fermeture du navigateur : il n'y a rien à synchroniser vers le cloud.",
       "hint": "Créez un profil normal si vous avez besoin de conserver ces données."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Sites : {{origins}} · Éléments : {{items}}",
+      "hint": "Un fichier storageState de Playwright avec les cookies et le Local Storage. L'import nécessite que le navigateur soit fermé.",
+      "exported": "État de stockage exporté",
+      "imported": "Importé. Éléments Local Storage : {{items}} · Sites : {{origins}} · Cookies : {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2640,7 +2647,18 @@
     "templateLimitReached": "Vous pouvez garder au plus 100 modèles. Supprimez-en un d'abord.",
     "bulkCreateCountInvalid": "Vous pouvez créer de 1 à {{max}} profils à la fois.",
     "bulkCreateBusy": "Des profils sont déjà en cours de création. Attendez la fin.",
-    "mcpToolsetUnknown": "Ce groupe d'outils n'existe pas."
+    "mcpToolsetUnknown": "Ce groupe d'outils n'existe pas.",
+    "localStorageEphemeral": "Un profil éphémère ne garde pas de Local Storage sur le disque.",
+    "localStorageProfileProtected": "Ce profil est protégé par un mot de passe. Son Local Storage reste scellé.",
+    "localStorageUnreadable": "Impossible de lire le Local Storage du profil.",
+    "localStorageUnwritable": "Impossible d'écrire le Local Storage du profil.",
+    "localStorageOriginInvalid": "« {{origin}} » n'est pas une origine web comme https://example.com.",
+    "localStorageOriginTooLarge": "Le Local Storage de {{origin}} dépasse les 10 Mio qu'un site peut garder.",
+    "localStorageTooManyOrigins": "Le fichier contient plus de 10 000 sites.",
+    "localStorageImportTooLarge": "Le fichier dépasse 32 Mio.",
+    "storageStateInvalid": "Ce n'est pas un fichier storageState.",
+    "localStorageBrowserRunning": "Fermez le navigateur avant d'importer un état de stockage.",
+    "localStorageRemoteSession": "Une session distante utilise ce profil. Attendez que son travail soit revenu ici."
   },
   "rail": {
     "profiles": "Profils",

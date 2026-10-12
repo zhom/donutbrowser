@@ -1610,6 +1610,13 @@
       "extensionsUnavailable": "一時プロファイルはブラウザーを閉じると破棄されるため、拡張機能グループを割り当てられません。",
       "syncUnavailable": "一時プロファイルはブラウザーを閉じると破棄されるため、クラウドに同期するものはありません。",
       "hint": "データを保持したい場合は通常のプロファイルを作成してください。"
+    },
+    "localStorage": {
+      "title": "ローカルストレージ",
+      "stats": "サイト: {{origins}} · 項目: {{items}}",
+      "hint": "Cookie とローカルストレージを 1 つの Playwright storageState ファイルにまとめます。インポートするにはブラウザーを閉じてください。",
+      "exported": "ストレージ状態をエクスポートしました",
+      "imported": "インポートしました。ローカルストレージの項目: {{items}} · サイト: {{origins}} · Cookie: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2620,7 +2627,18 @@
     "templateLimitReached": "保存できるテンプレートは最大100件です。先に1件削除してください。",
     "bulkCreateCountInvalid": "一度に作成できるプロファイルは1〜{{max}}件です。",
     "bulkCreateBusy": "既にプロファイルを作成中です。完了するまでお待ちください。",
-    "mcpToolsetUnknown": "このツールグループは存在しません。"
+    "mcpToolsetUnknown": "このツールグループは存在しません。",
+    "localStorageEphemeral": "エフェメラルプロファイルはローカルストレージをディスクに保存しません。",
+    "localStorageProfileProtected": "このプロファイルはパスワードで保護されています。ローカルストレージは封印されたままです。",
+    "localStorageUnreadable": "プロファイルのローカルストレージを読み取れませんでした。",
+    "localStorageUnwritable": "プロファイルのローカルストレージに書き込めませんでした。",
+    "localStorageOriginInvalid": "「{{origin}}」は https://example.com のような Web オリジンではありません。",
+    "localStorageOriginTooLarge": "{{origin}} のローカルストレージが、サイトが保存できる 10 MiB を超えています。",
+    "localStorageTooManyOrigins": "ファイルに 10,000 を超えるサイトが含まれています。",
+    "localStorageImportTooLarge": "ファイルが 32 MiB を超えています。",
+    "storageStateInvalid": "これは storageState ファイルではありません。",
+    "localStorageBrowserRunning": "ストレージ状態をインポートする前にブラウザーを閉じてください。",
+    "localStorageRemoteSession": "リモートセッションがこのプロファイルを使用しています。作業がここに戻るまでお待ちください。"
   },
   "rail": {
     "profiles": "プロファイル",

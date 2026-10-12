@@ -3209,6 +3209,7 @@ mod tests {
     proxy_path: &std::path::Path,
   ) -> Result<(std::process::ExitStatus, String, Duration), Box<dyn std::error::Error>> {
     let stdout = tempfile::NamedTempFile::new()?;
+    let stderr = tempfile::NamedTempFile::new()?;
     let mut cmd = Command::new(proxy_path);
     cmd
       .args([
@@ -3221,13 +3222,29 @@ mod tests {
         "--type",
         "http",
       ])
+      .env("RUST_LOG", "debug")
       .stdin(Stdio::null())
       .stdout(Stdio::from(stdout.reopen()?))
-      .stderr(Stdio::null());
+      .stderr(Stdio::from(stderr.reopen()?))
+      .kill_on_drop(true);
     let started = std::time::Instant::now();
-    let status = tokio::time::timeout(CLI_EXIT_LIMIT, cmd.status())
-      .await
-      .map_err(|_| "CLI command timed out - this indicates improper detachment")??;
+    let mut child = cmd.spawn()?;
+    let status = match tokio::time::timeout(CLI_EXIT_LIMIT, child.wait()).await {
+      Ok(status) => status?,
+      Err(_) => {
+        let _ = child.kill().await;
+        let log = std::fs::read_to_string(stderr.path()).unwrap_or_default();
+        let tail: Vec<&str> = log.lines().rev().take(25).collect();
+        let tail: Vec<&str> = tail.into_iter().rev().collect();
+        return Err(
+          format!(
+            "CLI command timed out - this indicates improper detachment. Its log:\n{}",
+            tail.join("\n")
+          )
+          .into(),
+        );
+      }
+    };
     Ok((
       status,
       std::fs::read_to_string(stdout.path())?,

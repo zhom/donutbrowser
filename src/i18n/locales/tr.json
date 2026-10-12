@@ -1610,6 +1610,13 @@
       "extensionsUnavailable": "Geçici profiller tarayıcı kapandığında silinir, bu yüzden onlara uzantı grubu atanamaz.",
       "syncUnavailable": "Geçici profiller tarayıcı kapandığında silinir, bu yüzden buluta eşitlenecek bir şey yoktur.",
       "hint": "Bunun kalıcı olmasını istiyorsanız normal bir profil oluşturun."
+    },
+    "localStorage": {
+      "title": "Local Storage",
+      "stats": "Siteler: {{origins}} · Öğeler: {{items}}",
+      "hint": "Çerezleri ve Local Storage'ı tek bir Playwright storageState dosyasında toplar. İçe aktarmak için tarayıcı kapalı olmalıdır.",
+      "exported": "Depolama durumu dışa aktarıldı",
+      "imported": "İçe aktarıldı. Local Storage öğeleri: {{items}} · Siteler: {{origins}} · Çerezler: {{cookies}}"
     }
   },
   "profileTransfer": {
@@ -2620,7 +2627,18 @@
     "templateLimitReached": "En fazla 100 şablon tutabilirsiniz. Önce birini silin.",
     "bulkCreateCountInvalid": "Bir seferde 1 ile {{max}} arasında profil oluşturabilirsiniz.",
     "bulkCreateBusy": "Profiller zaten oluşturuluyor. Bitmesini bekleyin.",
-    "mcpToolsetUnknown": "Bu araç grubu yok."
+    "mcpToolsetUnknown": "Bu araç grubu yok.",
+    "localStorageEphemeral": "Geçici bir profil Local Storage'ı diskte tutmaz.",
+    "localStorageProfileProtected": "Bu profil parolayla korunuyor. Local Storage'ı mühürlü kalır.",
+    "localStorageUnreadable": "Profilin Local Storage'ı okunamadı.",
+    "localStorageUnwritable": "Profilin Local Storage'ına yazılamadı.",
+    "localStorageOriginInvalid": "\"{{origin}}\", https://example.com gibi bir web kaynağı değil.",
+    "localStorageOriginTooLarge": "{{origin}} için Local Storage, bir sitenin tutabileceği 10 MiB'tan büyük.",
+    "localStorageTooManyOrigins": "Dosyada 10.000'den fazla site var.",
+    "localStorageImportTooLarge": "Dosya 32 MiB'tan büyük.",
+    "storageStateInvalid": "Bu bir storageState dosyası değil.",
+    "localStorageBrowserRunning": "Bir depolama durumunu içe aktarmadan önce tarayıcıyı kapatın.",
+    "localStorageRemoteSession": "Bu profili uzak bir oturum kullanıyor. İşi buraya dönene kadar bekleyin."
   },
   "rail": {
     "profiles": "Profiller",
