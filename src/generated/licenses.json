@@ -1324,6 +1324,10 @@
     "license": "MIT"
   },
   {
+    "name": "geist",
+    "license": "OFL-1.1"
+  },
+  {
     "name": "generic-array",
     "license": "MIT"
   },

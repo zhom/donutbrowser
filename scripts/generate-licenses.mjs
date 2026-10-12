@@ -40,6 +40,8 @@ const LEGACY_LICENSE_EXPRESSIONS = new Map([
   ["MIT/Apache-2.0", "Apache-2.0 OR MIT"],
   ["MIT OR Apache-2.0", "Apache-2.0 OR MIT"],
   ["Unlicense/MIT", "MIT OR Unlicense"],
+  // The bundled Geist fonts name their license in words.
+  ["SIL OPEN FONT LICENSE", "OFL-1.1"],
 ]);
 
 const HOST_ONLY_PNPM_NATIVE_PREFIXES = [
