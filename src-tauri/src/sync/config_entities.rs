@@ -282,7 +282,7 @@ impl SyncEngine {
     match (local, stat.exists) {
       (Some(item), true) => {
         let remote_updated_at = self.remote_updated_at(&stat, &remote_key).await;
-        if remote_updated_at > local_updated_at {
+        if self.remote_wins(local_updated_at, remote_updated_at) {
           self.download_config::<T>(id).await?;
         } else if local_updated_at > remote_updated_at {
           self.upload_config(&item).await?;
@@ -329,6 +329,9 @@ impl SyncEngine {
 
   pub async fn delete_config(&self, kind: ConfigKind, id: &str) -> SyncResult<()> {
     let folder = kind.folder();
+    if self.skips_remote_write(&format!("key={folder}/{id}.json")) {
+      return Ok(());
+    }
     self
       .client
       .delete(

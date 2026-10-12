@@ -838,7 +838,8 @@
       "profileLocked": "In use by {{email}}",
       "profileLockedShort": "In use",
       "cannotLaunchLocked": "Cannot launch — profile is in use by {{email}}",
-      "createdBy": "Created by {{email}}"
+      "createdBy": "Created by {{email}}",
+      "roleLauncher": "Launcher"
     },
     "disabled": "Disabled",
     "toast": {
@@ -2641,7 +2642,11 @@
     "localStorageRemoteSession": "A remote session owns this profile. Wait until its work is back here.",
     "scheduledAutomationNotEntitled": "Scheduled recipes are part of Solo, Pro, Team and Enterprise.",
     "agentScheduleInvalid": "Donut cloud did not accept this schedule. Check the days, the time and the profiles.",
-    "agentScheduleNotFound": "This schedule no longer exists."
+    "agentScheduleNotFound": "This schedule no longer exists.",
+    "teamRoleReadOnly": "Your team role can open profiles but not change them. Ask a team owner or admin.",
+    "teamActivityForbidden": "Only team owners and admins can see the team's activity.",
+    "teamActivityNotEntitled": "The activity log needs an active Team or Enterprise plan.",
+    "teamActivityInvalid": "The activity request was not valid."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2730,7 +2735,8 @@
     "tabs": {
       "account": "Account",
       "selfHosted": "Self-hosted",
-      "teamUsage": "Team usage"
+      "teamUsage": "Team usage",
+      "teamActivity": "Team activity"
     },
     "selfHosted": {
       "title": "Self-hosted sync server",
@@ -3940,6 +3946,85 @@
       "bodyWithLogs": "Your feedback and logs are with the Donut team.",
       "reply": "If we need more details, we will write to {{email}}.",
       "done": "Done"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "Your team role is Launcher: you can open the team's profiles, and what a session changes is kept. Settings, proxies and groups stay as the team set them."
+  },
+  "teamActivity": {
+    "title": "Team activity",
+    "description": "What members did with the team's profiles and shared items, newest first. Kept for 90 days, or 365 days on Enterprise.",
+    "empty": "No activity yet.",
+    "loadMore": "Load more",
+    "system": "Donut",
+    "formerMember": "A former member",
+    "noTarget": "an item",
+    "changedFields": "Changed: {{fields}}",
+    "actions": {
+      "memberInvite": "invited {{target}}",
+      "memberJoin": "joined the team",
+      "memberRemove": "removed {{target}} from the team",
+      "memberRoleChange": "changed the role of {{target}}",
+      "invitationCancel": "cancelled the invitation for {{target}}",
+      "profileLaunch": "opened {{target}}",
+      "profileStop": "closed {{target}}",
+      "profileCreate": "created {{target}}",
+      "profileRename": "renamed {{target}}",
+      "profileUpdate": "changed {{target}}",
+      "profileBulkUpdate": "changed {{target}} in a bulk edit",
+      "profileDelete": "deleted {{target}}",
+      "profileRestore": "restored {{target}} from the trash",
+      "profileSyncOn": "turned on sync for {{target}}",
+      "profileSyncOff": "turned off sync for {{target}}",
+      "proxyCreate": "added the proxy {{target}}",
+      "proxyUpdate": "changed the proxy {{target}}",
+      "proxyDelete": "deleted the proxy {{target}}",
+      "groupCreate": "created the group {{target}}",
+      "groupUpdate": "changed the group {{target}}",
+      "groupDelete": "deleted the group {{target}}",
+      "vpnCreate": "added the VPN {{target}}",
+      "vpnUpdate": "changed the VPN {{target}}",
+      "vpnDelete": "deleted the VPN {{target}}",
+      "extensionAdd": "added the extension {{target}}",
+      "extensionUpdate": "updated the extension {{target}}",
+      "extensionDelete": "deleted the extension {{target}}",
+      "extensionGroupCreate": "created the extension group {{target}}",
+      "extensionGroupUpdate": "changed the extension group {{target}}",
+      "extensionGroupDelete": "deleted the extension group {{target}}",
+      "templateCreate": "created the template {{target}}",
+      "templateUpdate": "changed the template {{target}}",
+      "templateDelete": "deleted the template {{target}}",
+      "statusCreate": "created the status {{target}}",
+      "statusUpdate": "changed the status {{target}}",
+      "statusDelete": "deleted the status {{target}}",
+      "other": "did {{action}} on {{target}}"
+    },
+    "fields": {
+      "name": "Name",
+      "group": "Group",
+      "tags": "Tags",
+      "note": "Note",
+      "clearOnClose": "Clear on close",
+      "windowColor": "Window color",
+      "launchHook": "Launch hook",
+      "proxyBypassRules": "Proxy bypass rules",
+      "dnsBlocklist": "DNS blocklist",
+      "dnsServer": "DNS server",
+      "startUrls": "Start pages",
+      "status": "Status",
+      "fingerprint": "Fingerprint",
+      "proxy": "Proxy",
+      "vpn": "VPN",
+      "extensionGroup": "Extension group",
+      "bookmarks": "Bookmarks",
+      "extensions": "Extensions"
+    },
+    "via": {
+      "desktop": "from the desktop app",
+      "web": "from the web",
+      "mcp": "by an MCP agent",
+      "service": "with an API key",
+      "remote_vm": "from a cloud browser"
     }
   }
 }

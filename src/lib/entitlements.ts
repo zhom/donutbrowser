@@ -205,3 +205,22 @@ export function isTeamOwner(user: CloudUser | null | undefined): boolean {
     Boolean(user.teamId)
   );
 }
+
+/**
+ * A team seat that may open the team's profiles and keep what a session
+ * changes, but not change the team's profiles, proxies or groups.
+ */
+export function isTeamLauncher(user: CloudUser | null | undefined): boolean {
+  return Boolean(user?.teamId) && user?.teamRole === "launcher";
+}
+
+/** Owners and admins read the team's activity log. The cloud checks again. */
+export function canViewTeamActivity(
+  user: CloudUser | null | undefined,
+): boolean {
+  return (
+    getEntitlements(user).teamCollaboration &&
+    Boolean(user?.teamId) &&
+    (user?.teamRole === "owner" || user?.teamRole === "admin")
+  );
+}

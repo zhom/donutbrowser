@@ -88,6 +88,7 @@ import {
   canUseCookieBot,
   canUseRemoteControl,
   getEntitlements,
+  isTeamLauncher,
 } from "@/lib/entitlements";
 import {
   ONBOARDING_TOUR_CLOSED_EVENT,
@@ -457,6 +458,18 @@ export default function Home() {
   const [agentInitialTab, setAgentInitialTab] =
     useState<AgentTab>("conversation");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
+  const teamReadOnly = isTeamLauncher(cloudUser);
+  const teamReadOnlyRef = useRef(teamReadOnly);
+  teamReadOnlyRef.current = teamReadOnly;
+  // A launcher's new profile would be refused; say so before the form is
+  // filled in, not after.
+  const openCreateProfile = useCallback(() => {
+    if (teamReadOnlyRef.current) {
+      showErrorToast(t("backendErrors.teamRoleReadOnly"));
+      return;
+    }
+    setCreateProfileDialogOpen(true);
+  }, [t]);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   // A settings section to land on, set by a tip's action for one opening.
   const [settingsInitialSection, setSettingsInitialSection] = useState<
@@ -1102,7 +1115,7 @@ export default function Home() {
             event.payload,
           );
           showErrorToast(t("errors.noProfilesForUrl"));
-          setCreateProfileDialogOpen(true);
+          if (!teamReadOnlyRef.current) setCreateProfileDialogOpen(true);
         }),
       );
 
@@ -2329,7 +2342,10 @@ export default function Home() {
       <div className="flex h-dvh flex-col bg-background font-(family-name:--font-geist-sans)">
         <CloseConfirmDialog />
         <HomeHeader
-          onCreateProfileDialogOpen={setCreateProfileDialogOpen}
+          onCreateProfileDialogOpen={(open) =>
+            open ? openCreateProfile() : setCreateProfileDialogOpen(false)
+          }
+          canCreateProfiles={!teamReadOnly}
           searchQuery={searchQuery}
           onSearchQueryChange={changeProfileSearch}
           groups={groupsData}
@@ -2362,6 +2378,14 @@ export default function Home() {
                   sessions={syncSessions}
                   onSessionChanged={applySession}
                 />
+                {teamReadOnly && (
+                  <p
+                    className="mb-2 rounded-md bg-foreground/5 px-3 py-2 text-xs text-muted-foreground"
+                    data-testid="team-read-only-notice"
+                  >
+                    {t("teamRoles.readOnlyNotice")}
+                  </p>
+                )}
                 <ProfilesDataTable
                   profileStatuses={profileStatuses}
                   isLoading={isLoading && profiles.length === 0}
@@ -2424,9 +2448,7 @@ export default function Home() {
                   onLaunchWithSync={(profile) => {
                     setSyncLeaderProfile(profile);
                   }}
-                  onCreateProfile={() => {
-                    setCreateProfileDialogOpen(true);
-                  }}
+                  onCreateProfile={openCreateProfile}
                   onImportProfiles={() => {
                     handleRailNavigate("import");
                   }}
@@ -2623,9 +2645,7 @@ export default function Home() {
             setProfileInfoOpenMethod("keyboard");
             setProfileInfoDialog(profile);
           }}
-          onCreateProfile={() => {
-            setCreateProfileDialogOpen(true);
-          }}
+          onCreateProfile={openCreateProfile}
           onOpenAbout={() => {
             setAboutDialogOpen(true);
           }}

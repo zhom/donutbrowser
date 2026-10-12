@@ -18,7 +18,20 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-type TeamScope = { ownerId: string; teamId: string; teamProfileLimit: number };
+type TeamScope = {
+  ownerId: string;
+  teamId: string;
+  teamProfileLimit: number;
+  role?: string;
+};
+
+const TEAM_ROLES = ["owner", "admin", "member", "launcher"] as const;
+type TeamRole = (typeof TEAM_ROLES)[number];
+
+/** A role the backend names, or `member` for one this build does not know. */
+function teamRoleOf(role: unknown): TeamRole {
+  return TEAM_ROLES.includes(role as TeamRole) ? (role as TeamRole) : "member";
+}
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -139,12 +152,14 @@ export class AuthGuard implements CanActivate {
         // backend is the sole authority. On any resolver error we fail CLOSED:
         // fall back to the user's own namespace, never widening to a team one.
         let effectivePrefix = ownPrefix;
+        let teamRole: TeamRole | undefined;
         let effectiveProfileLimit =
           typeof decoded.profileLimit === "number" ? decoded.profileLimit : 0;
         try {
           const scope = sub ? await this.resolveTeamScope(sub) : null;
           if (scope && /^[^/]+$/.test(scope.ownerId)) {
             effectivePrefix = `users/${scope.ownerId}/`;
+            teamRole = teamRoleOf(scope.role);
             if (scope.teamProfileLimit > 0) {
               effectiveProfileLimit = scope.teamProfileLimit;
             }
@@ -162,6 +177,7 @@ export class AuthGuard implements CanActivate {
           prefix: effectivePrefix,
           profileLimit: effectiveProfileLimit,
           sub,
+          ...(teamRole ? { teamRole } : {}),
         } satisfies UserContext;
         return true;
       } catch (err) {

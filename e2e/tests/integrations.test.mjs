@@ -1607,6 +1607,16 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       // the app can check itself is checked before anything is sent.
       const scheduleId = "00000000-0000-0000-0000-000000000000";
       assert.match(await app.invokeError("list_agent_schedules"), notSignedIn);
+
+      // The team's log is read in the cloud, by owners and admins only.
+      // Without a team seat there is no log to ask for.
+      assert.match(
+        await app.invokeError("list_team_activity", {
+          cursor: null,
+          limit: 50,
+        }),
+        /"code":"TEAM_ACTIVITY_FORBIDDEN"/,
+      );
       assert.match(
         await app.invokeError("create_agent_schedule", {
           schedule: {

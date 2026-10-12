@@ -760,6 +760,7 @@ impl ExtensionManager {
     }
 
     if ext.sync_enabled {
+      crate::team_activity::record("extension.add", &ext.id, Some(&ext.name), None);
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = ext.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1045,6 +1046,7 @@ impl ExtensionManager {
     }
 
     if ext.sync_enabled {
+      crate::team_activity::record("extension.update", &ext.id, Some(&ext.name), None);
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let eid = ext.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1080,6 +1082,7 @@ impl ExtensionManager {
     }
 
     if ext.sync_enabled {
+      crate::team_activity::record("extension.delete", &ext.id, Some(&ext.name), None);
       let ext_id = id.to_string();
       let app_handle_clone = app_handle.clone();
       tauri::async_runtime::spawn(async move {
@@ -1157,6 +1160,7 @@ impl ExtensionManager {
     }
 
     if group.sync_enabled {
+      crate::team_activity::record("extension.group_create", &group.id, Some(&group.name), None);
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = group.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1230,6 +1234,12 @@ impl ExtensionManager {
     }
 
     if updated.sync_enabled {
+      crate::team_activity::record(
+        "extension.group_update",
+        &updated.id,
+        Some(&updated.name),
+        None,
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let gid = updated.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1274,6 +1284,7 @@ impl ExtensionManager {
     }
 
     if was_sync_enabled {
+      crate::team_activity::record("extension.group_delete", id, None, None);
       let group_id_owned = id.to_string();
       let app_handle_clone = app_handle.clone();
       tauri::async_runtime::spawn(async move {
@@ -1329,6 +1340,12 @@ impl ExtensionManager {
     }
 
     if updated.sync_enabled {
+      crate::team_activity::record(
+        "extension.group_update",
+        &updated.id,
+        Some(&updated.name),
+        crate::team_activity::fields(&["extensions"]),
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let gid = updated.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1363,6 +1380,12 @@ impl ExtensionManager {
     }
 
     if updated.sync_enabled {
+      crate::team_activity::record(
+        "extension.group_update",
+        &updated.id,
+        Some(&updated.name),
+        crate::team_activity::fields(&["extensions"]),
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let gid = updated.id.clone();
         tauri::async_runtime::spawn(async move {

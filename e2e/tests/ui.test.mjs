@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import test from "node:test";
@@ -3110,6 +3110,183 @@ test("scheduled recipes stay behind the plan, and a schedule is built from the f
         undefined,
         "only the weekly fields",
       );
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
+test("a launcher seat opens the team's profiles but cannot change them, and an owner reads the team's log", async () => {
+  await withApp(
+    "ui-team-roles",
+    async (app) => {
+      const profile = await createUiProfile(app, "Team Profile");
+      const user = (teamRole) => ({
+        logged_in_at: new Date().toISOString(),
+        user: {
+          id: "ui-team-seat",
+          email: "seat@example.test",
+          plan: "team",
+          planPeriod: "monthly",
+          subscriptionStatus: "active",
+          profileLimit: 50,
+          cloudProfilesUsed: 0,
+          proxyBandwidthLimitMb: 0,
+          proxyBandwidthUsedMb: 0,
+          proxyBandwidthExtraMb: 0,
+          isPrimaryDevice: true,
+          teamId: "team-1",
+          teamName: "Shop team",
+          teamRole,
+        },
+      });
+      const signIn = async (teamRole) => {
+        await stubCommand(app, "cloud_get_user", user(teamRole));
+        await app.invoke("plugin:event|emit", {
+          event: "cloud-auth-changed",
+          payload: null,
+        });
+      };
+      // A paid seat opens the one-time welcome; close it when it comes.
+      const closeWelcome = async () => {
+        const opened = await app
+          .waitFor(
+            () =>
+              app.execute(
+                `return Boolean(document.querySelector('[role="dialog"]'));`,
+              ),
+            { timeoutMs: 4000, description: "the paid welcome" },
+          )
+          .catch(() => false);
+        if (!opened) return;
+        await dismissSurface(app);
+        await app.waitFor(
+          () =>
+            app.execute(`return !document.querySelector('[role="dialog"]');`),
+          { description: "the welcome closed" },
+        );
+      };
+
+      const launcherSeat = path.join(app.root, "donut", "e2e-team-read-only");
+      await writeFile(launcherSeat, "");
+      await signIn("launcher");
+      await closeWelcome();
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('[data-testid="team-read-only-notice"]')?.innerText ?? null;`,
+          ),
+        { description: "the launcher notice" },
+      );
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('[data-onborda="create-profile"]'));`,
+        ),
+        false,
+        "a launcher is not offered a new profile",
+      );
+      await app.capture("team-launcher-profiles");
+
+      // The app refuses the edit itself; the profile stays as the team set it.
+      assert.match(
+        await app.invokeError("rename_profile", {
+          profileId: profile.id,
+          newName: "Renamed by a launcher",
+        }),
+        /"code":"TEAM_ROLE_READ_ONLY"/,
+      );
+      assert.match(
+        await app.invokeError("create_profile_group", { name: "Blocked" }),
+        /"code":"TEAM_ROLE_READ_ONLY"/,
+      );
+      const profiles = await app.invoke("list_browser_profiles");
+      assert.equal(
+        profiles.find((p) => p.id === profile.id)?.name,
+        "Team Profile",
+      );
+
+      await stubCommand(app, "list_team_activity", {
+        items: [
+          {
+            id: 3,
+            at: new Date().toISOString(),
+            actor: {
+              userId: "u-admin",
+              email: "admin@example.test",
+              kind: "desktop",
+            },
+            action: "profile.update",
+            target: { type: "profile", id: profile.id, name: null },
+            detail: { fields: ["tags", "dns_server"] },
+            source: "client",
+          },
+          {
+            id: 2,
+            at: new Date(Date.now() - 60_000).toISOString(),
+            actor: {
+              userId: "u-launcher",
+              email: "launcher@example.test",
+              kind: "desktop",
+            },
+            action: "profile.launch",
+            target: { type: "profile", id: profile.id, name: null },
+            detail: null,
+            source: "server",
+          },
+          {
+            id: 1,
+            at: new Date(Date.now() - 120_000).toISOString(),
+            actor: {
+              userId: "u-launcher",
+              email: "launcher@example.test",
+              kind: "web",
+            },
+            action: "member.join",
+            target: { type: "member", id: "u-launcher", name: null },
+            detail: null,
+            source: "server",
+          },
+        ],
+        nextCursor: null,
+      });
+      await rm(launcherSeat);
+      await signIn("owner");
+      await closeWelcome();
+      await app.clickSelector(`[aria-label="${en.rail.account}"]`);
+      await app.clickText(en.account.tabs.teamActivity, { roles: ["tab"] });
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelectorAll('[data-testid="team-activity"] li').length === 3;`,
+          ),
+        { description: "the team's log" },
+      );
+      const rows = await app.execute(
+        `return [...document.querySelectorAll('[data-testid="team-activity"] li')].map((row) => row.innerText);`,
+      );
+      // An id in the log reads as the name this computer has for it.
+      assert.match(
+        rows[0],
+        new RegExp(
+          en.teamActivity.actions.profileUpdate.replace(
+            "{{target}}",
+            "Team Profile",
+          ),
+        ),
+      );
+      assert.match(rows[0], new RegExp(en.teamActivity.fields.dnsServer));
+      assert.match(rows[0], new RegExp(en.teamActivity.via.desktop));
+      assert.match(
+        rows[1],
+        new RegExp(
+          en.teamActivity.actions.profileLaunch.replace(
+            "{{target}}",
+            "Team Profile",
+          ),
+        ),
+      );
+      assert.match(rows[2], new RegExp(en.teamActivity.actions.memberJoin));
+      await app.capture("team-activity-log");
+      await dismissSurface(app);
     },
     { seedDownloadedBrowser: true },
   );

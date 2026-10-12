@@ -92,6 +92,43 @@ describe("AuthGuard", () => {
     });
   });
 
+  it("keeps the team role the backend names for a team member", async () => {
+    const OWNER_ID = "99999999-8888-7777-6666-555555555555";
+    const answers = ["launcher", "superuser"];
+    jest.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const role = answers.shift();
+      return new Response(
+        JSON.stringify({
+          ownerId: OWNER_ID,
+          teamId: "team-1",
+          teamProfileLimit: 50,
+          role,
+        }),
+      );
+    });
+    const guard = () =>
+      guardWith({
+        SYNC_JWT_PUBLIC_KEY: signingKeys.publicKey,
+        BACKEND_INTERNAL_URL: "http://backend.internal",
+        BACKEND_INTERNAL_KEY: "internal-key",
+      });
+
+    const launcher = contextFor(syncToken());
+    await expect(guard().canActivate(launcher.context)).resolves.toBe(true);
+    expect(launcher.request.user).toEqual({
+      mode: "cloud",
+      prefix: `users/${OWNER_ID}/`,
+      profileLimit: 50,
+      sub: USER_ID,
+      teamRole: "launcher",
+    });
+
+    // A role this build does not know never widens what the member may do.
+    const unknown = contextFor(syncToken());
+    await expect(guard().canActivate(unknown.context)).resolves.toBe(true);
+    expect(unknown.request.user?.teamRole).toBe("member");
+  });
+
   it("refuses an account access token signed with the same key", async () => {
     const accessToken = sign({
       sub: USER_ID,

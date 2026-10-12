@@ -661,6 +661,12 @@ impl ProxyManager {
     }
 
     if stored_proxy.sync_enabled {
+      crate::team_activity::record(
+        "proxy.create",
+        &stored_proxy.id,
+        Some(&stored_proxy.name),
+        None,
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = stored_proxy.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1093,6 +1099,12 @@ impl ProxyManager {
     }
 
     if updated_proxy.sync_enabled {
+      crate::team_activity::record(
+        "proxy.update",
+        &updated_proxy.id,
+        Some(&updated_proxy.name),
+        None,
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = updated_proxy.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -1216,6 +1228,7 @@ impl ProxyManager {
 
     // If sync was enabled, also delete from S3
     if was_sync_enabled {
+      crate::team_activity::record("proxy.delete", proxy_id, None, None);
       let proxy_id_owned = proxy_id.to_string();
       let app_handle_clone = app_handle.clone();
       tauri::async_runtime::spawn(async move {

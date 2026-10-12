@@ -125,9 +125,10 @@ export type BackendErrorCode =
   | "SCHEDULED_AUTOMATION_NOT_ENTITLED"
   | "AGENT_SCHEDULE_INVALID"
   | "AGENT_SCHEDULE_NOT_FOUND"
-  | "SCHEDULED_AUTOMATION_NOT_ENTITLED"
-  | "AGENT_SCHEDULE_INVALID"
-  | "AGENT_SCHEDULE_NOT_FOUND"
+  | "TEAM_ROLE_READ_ONLY"
+  | "TEAM_ACTIVITY_FORBIDDEN"
+  | "TEAM_ACTIVITY_NOT_ENTITLED"
+  | "TEAM_ACTIVITY_INVALID"
   | "LOCAL_STORAGE_EPHEMERAL"
   | "LOCAL_STORAGE_PROFILE_PROTECTED"
   | "LOCAL_STORAGE_UNREADABLE"
@@ -685,12 +686,14 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.agentScheduleInvalid");
     case "AGENT_SCHEDULE_NOT_FOUND":
       return t("backendErrors.agentScheduleNotFound");
-    case "SCHEDULED_AUTOMATION_NOT_ENTITLED":
-      return t("backendErrors.scheduledAutomationNotEntitled");
-    case "AGENT_SCHEDULE_INVALID":
-      return t("backendErrors.agentScheduleInvalid");
-    case "AGENT_SCHEDULE_NOT_FOUND":
-      return t("backendErrors.agentScheduleNotFound");
+    case "TEAM_ROLE_READ_ONLY":
+      return t("backendErrors.teamRoleReadOnly");
+    case "TEAM_ACTIVITY_FORBIDDEN":
+      return t("backendErrors.teamActivityForbidden");
+    case "TEAM_ACTIVITY_NOT_ENTITLED":
+      return t("backendErrors.teamActivityNotEntitled");
+    case "TEAM_ACTIVITY_INVALID":
+      return t("backendErrors.teamActivityInvalid");
     case "MCP_TOOLSET_UNKNOWN":
       return t("backendErrors.mcpToolsetUnknown");
     case "MCP_AGENT_UNKNOWN":

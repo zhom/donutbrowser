@@ -265,6 +265,7 @@ pub async fn create(name: &str, settings: TemplateSettings) -> Result<ProfileTem
     Ok(template)
   })?;
   config_entities::changed_locally::<ProfileTemplate>(&template.id);
+  crate::team_activity::record("template.create", &template.id, Some(&template.name), None);
   log::info!("Template created template={}", template.id);
   Ok(template)
 }
@@ -293,6 +294,7 @@ pub async fn update(
     Ok(template.clone())
   })?;
   config_entities::changed_locally::<ProfileTemplate>(&template.id);
+  crate::team_activity::record("template.update", &template.id, Some(&template.name), None);
   Ok(template)
 }
 
@@ -306,6 +308,7 @@ pub fn delete(template_id: &str) -> Result<(), String> {
     return Err(code("TEMPLATE_NOT_FOUND"));
   }
   config_entities::deleted_locally::<ProfileTemplate>(template_id);
+  crate::team_activity::record("template.delete", template_id, None, None);
   log::info!("Template deleted template={template_id}");
   Ok(())
 }

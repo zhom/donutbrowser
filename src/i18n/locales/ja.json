@@ -838,7 +838,8 @@
       "profileLocked": "{{email}} が使用中",
       "profileLockedShort": "使用中",
       "cannotLaunchLocked": "起動できません — {{email}} がプロファイルを使用中です",
-      "createdBy": "{{email}} が作成"
+      "createdBy": "{{email}} が作成",
+      "roleLauncher": "ランチャー"
     },
     "disabled": "無効",
     "toast": {
@@ -2641,7 +2642,11 @@
     "localStorageRemoteSession": "リモートセッションがこのプロファイルを使用しています。作業がここに戻るまでお待ちください。",
     "scheduledAutomationNotEntitled": "スケジュールされたレシピは Solo、Pro、Team、Enterprise に含まれます。",
     "agentScheduleInvalid": "Donut クラウドがこのスケジュールを受け付けませんでした。曜日、時刻、プロファイルを確認してください。",
-    "agentScheduleNotFound": "このスケジュールはもう存在しません。"
+    "agentScheduleNotFound": "このスケジュールはもう存在しません。",
+    "teamRoleReadOnly": "あなたのチームロールはプロファイルを開けますが、変更はできません。チームのオーナーか管理者に依頼してください。",
+    "teamActivityForbidden": "チームのアクティビティを見られるのは、オーナーと管理者だけです。",
+    "teamActivityNotEntitled": "アクティビティログには、有効な Team または Enterprise プランが必要です。",
+    "teamActivityInvalid": "アクティビティログのリクエストが無効でした。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2730,7 +2735,8 @@
     "tabs": {
       "account": "アカウント",
       "selfHosted": "セルフホスト",
-      "teamUsage": "チームの使用状況"
+      "teamUsage": "チームの使用状況",
+      "teamActivity": "チームのアクティビティ"
     },
     "selfHosted": {
       "title": "セルフホスト同期サーバー",
@@ -3940,6 +3946,85 @@
       "bodyWithLogs": "フィードバックとログは Donut チームに届きました。",
       "reply": "詳細が必要な場合は {{email}} にご連絡します。",
       "done": "完了"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "あなたのチームロールはランチャーです。チームのプロファイルを開くことができ、セッションでの変更は保存されます。設定、プロキシ、グループはチームが決めたままです。"
+  },
+  "teamActivity": {
+    "title": "チームのアクティビティ",
+    "description": "メンバーがチームのプロファイルと共有項目に対して行った操作です（新しい順）。90 日間、Enterprise では 365 日間保存されます。",
+    "empty": "まだアクティビティはありません。",
+    "loadMore": "さらに読み込む",
+    "system": "Donut",
+    "formerMember": "以前のメンバー",
+    "noTarget": "項目",
+    "changedFields": "変更: {{fields}}",
+    "actions": {
+      "memberInvite": "が {{target}} を招待しました",
+      "memberJoin": "がチームに参加しました",
+      "memberRemove": "が {{target}} をチームから外しました",
+      "memberRoleChange": "が {{target}} のロールを変更しました",
+      "invitationCancel": "が {{target}} への招待を取り消しました",
+      "profileLaunch": "が {{target}} を開きました",
+      "profileStop": "が {{target}} を閉じました",
+      "profileCreate": "が {{target}} を作成しました",
+      "profileRename": "が {{target}} の名前を変更しました",
+      "profileUpdate": "が {{target}} を変更しました",
+      "profileBulkUpdate": "が一括編集で {{target}} を変更しました",
+      "profileDelete": "が {{target}} を削除しました",
+      "profileRestore": "が {{target}} をゴミ箱から復元しました",
+      "profileSyncOn": "が {{target}} の同期をオンにしました",
+      "profileSyncOff": "が {{target}} の同期をオフにしました",
+      "proxyCreate": "がプロキシ {{target}} を追加しました",
+      "proxyUpdate": "がプロキシ {{target}} を変更しました",
+      "proxyDelete": "がプロキシ {{target}} を削除しました",
+      "groupCreate": "がグループ {{target}} を作成しました",
+      "groupUpdate": "がグループ {{target}} を変更しました",
+      "groupDelete": "がグループ {{target}} を削除しました",
+      "vpnCreate": "が VPN {{target}} を追加しました",
+      "vpnUpdate": "が VPN {{target}} を変更しました",
+      "vpnDelete": "が VPN {{target}} を削除しました",
+      "extensionAdd": "が拡張機能 {{target}} を追加しました",
+      "extensionUpdate": "が拡張機能 {{target}} を更新しました",
+      "extensionDelete": "が拡張機能 {{target}} を削除しました",
+      "extensionGroupCreate": "が拡張機能グループ {{target}} を作成しました",
+      "extensionGroupUpdate": "が拡張機能グループ {{target}} を変更しました",
+      "extensionGroupDelete": "が拡張機能グループ {{target}} を削除しました",
+      "templateCreate": "がテンプレート {{target}} を作成しました",
+      "templateUpdate": "がテンプレート {{target}} を変更しました",
+      "templateDelete": "がテンプレート {{target}} を削除しました",
+      "statusCreate": "がステータス {{target}} を作成しました",
+      "statusUpdate": "がステータス {{target}} を変更しました",
+      "statusDelete": "がステータス {{target}} を削除しました",
+      "other": "が {{target}} に {{action}} を実行しました"
+    },
+    "fields": {
+      "name": "名前",
+      "group": "グループ",
+      "tags": "タグ",
+      "note": "メモ",
+      "clearOnClose": "終了時に消去",
+      "windowColor": "ウィンドウの色",
+      "launchHook": "起動フック",
+      "proxyBypassRules": "プロキシの除外ルール",
+      "dnsBlocklist": "DNS ブロックリスト",
+      "dnsServer": "DNS サーバー",
+      "startUrls": "スタートページ",
+      "status": "ステータス",
+      "fingerprint": "フィンガープリント",
+      "proxy": "プロキシ",
+      "vpn": "VPN",
+      "extensionGroup": "拡張機能グループ",
+      "bookmarks": "ブックマーク",
+      "extensions": "拡張機能"
+    },
+    "via": {
+      "desktop": "デスクトップアプリから",
+      "web": "Web から",
+      "mcp": "MCP エージェントによって",
+      "service": "API キーで",
+      "remote_vm": "クラウドブラウザから"
     }
   }
 }

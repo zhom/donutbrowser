@@ -2053,7 +2053,7 @@ fn typing_report(prefix: &str, inscription: &vellum::Inscription) -> String {
 }
 
 impl McpServer {
-  fn new() -> Self {
+  pub(crate) fn new() -> Self {
     Self {
       inner: Arc::new(AsyncMutex::new(McpServerInner {
         app_handle: None,
@@ -4538,6 +4538,14 @@ impl McpServer {
       return Err(McpError {
         code: -32000,
         message: crate::backend_error("TOOL_IS_LOCAL_ONLY"),
+        data: None,
+      });
+    }
+
+    if let Some(refused) = crate::team_roles::tool_refusal(tool_name) {
+      return Err(McpError {
+        code: -32000,
+        message: refused,
         data: None,
       });
     }

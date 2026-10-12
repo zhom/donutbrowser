@@ -843,7 +843,8 @@
       "profileLocked": "Utilisé par {{email}}",
       "profileLockedShort": "En cours d'utilisation",
       "cannotLaunchLocked": "Impossible de lancer — le profil est utilisé par {{email}}",
-      "createdBy": "Créé par {{email}}"
+      "createdBy": "Créé par {{email}}",
+      "roleLauncher": "Lanceur"
     },
     "disabled": "Désactivée",
     "toast": {
@@ -2661,7 +2662,11 @@
     "localStorageRemoteSession": "Une session distante utilise ce profil. Attendez que son travail soit revenu ici.",
     "scheduledAutomationNotEntitled": "Les recettes planifiées font partie de Solo, Pro, Team et Enterprise.",
     "agentScheduleInvalid": "Donut cloud n'a pas accepté cette planification. Vérifiez les jours, l'heure et les profils.",
-    "agentScheduleNotFound": "Cette planification n'existe plus."
+    "agentScheduleNotFound": "Cette planification n'existe plus.",
+    "teamRoleReadOnly": "Votre rôle dans l’équipe peut ouvrir des profils, mais pas les modifier. Demandez à un propriétaire ou un administrateur de l’équipe.",
+    "teamActivityForbidden": "Seuls les propriétaires et administrateurs de l’équipe voient son activité.",
+    "teamActivityNotEntitled": "Le journal d’activité nécessite un forfait Team ou Enterprise actif.",
+    "teamActivityInvalid": "La demande du journal d’activité n’était pas valide."
   },
   "rail": {
     "profiles": "Profils",
@@ -2750,7 +2755,8 @@
     "tabs": {
       "account": "Compte",
       "selfHosted": "Auto-hébergé",
-      "teamUsage": "Utilisation de l'équipe"
+      "teamUsage": "Utilisation de l'équipe",
+      "teamActivity": "Activité de l’équipe"
     },
     "selfHosted": {
       "title": "Serveur de synchronisation auto-hébergé",
@@ -3983,6 +3989,85 @@
       "bodyWithLogs": "Votre avis et vos journaux sont bien arrivés chez l'équipe Donut.",
       "reply": "Si nous avons besoin de détails, nous vous écrirons à {{email}}.",
       "done": "Terminé"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "Votre rôle dans l’équipe est Lanceur : vous pouvez ouvrir les profils de l’équipe, et ce qu’une session modifie est conservé. Les réglages, proxys et groupes restent tels que l’équipe les a définis."
+  },
+  "teamActivity": {
+    "title": "Activité de l’équipe",
+    "description": "Ce que les membres ont fait avec les profils et éléments partagés de l’équipe, du plus récent au plus ancien. Conservé 90 jours, ou 365 jours avec Enterprise.",
+    "empty": "Aucune activité pour l’instant.",
+    "loadMore": "Charger plus",
+    "system": "Donut",
+    "formerMember": "Un ancien membre",
+    "noTarget": "un élément",
+    "changedFields": "Modifié : {{fields}}",
+    "actions": {
+      "memberInvite": "a invité {{target}}",
+      "memberJoin": "a rejoint l’équipe",
+      "memberRemove": "a retiré {{target}} de l’équipe",
+      "memberRoleChange": "a changé le rôle de {{target}}",
+      "invitationCancel": "a annulé l’invitation de {{target}}",
+      "profileLaunch": "a ouvert {{target}}",
+      "profileStop": "a fermé {{target}}",
+      "profileCreate": "a créé {{target}}",
+      "profileRename": "a renommé {{target}}",
+      "profileUpdate": "a modifié {{target}}",
+      "profileBulkUpdate": "a modifié {{target}} lors d’une modification groupée",
+      "profileDelete": "a supprimé {{target}}",
+      "profileRestore": "a restauré {{target}} depuis la corbeille",
+      "profileSyncOn": "a activé la synchronisation de {{target}}",
+      "profileSyncOff": "a désactivé la synchronisation de {{target}}",
+      "proxyCreate": "a ajouté le proxy {{target}}",
+      "proxyUpdate": "a modifié le proxy {{target}}",
+      "proxyDelete": "a supprimé le proxy {{target}}",
+      "groupCreate": "a créé le groupe {{target}}",
+      "groupUpdate": "a modifié le groupe {{target}}",
+      "groupDelete": "a supprimé le groupe {{target}}",
+      "vpnCreate": "a ajouté le VPN {{target}}",
+      "vpnUpdate": "a modifié le VPN {{target}}",
+      "vpnDelete": "a supprimé le VPN {{target}}",
+      "extensionAdd": "a ajouté l’extension {{target}}",
+      "extensionUpdate": "a mis à jour l’extension {{target}}",
+      "extensionDelete": "a supprimé l’extension {{target}}",
+      "extensionGroupCreate": "a créé le groupe d’extensions {{target}}",
+      "extensionGroupUpdate": "a modifié le groupe d’extensions {{target}}",
+      "extensionGroupDelete": "a supprimé le groupe d’extensions {{target}}",
+      "templateCreate": "a créé le modèle {{target}}",
+      "templateUpdate": "a modifié le modèle {{target}}",
+      "templateDelete": "a supprimé le modèle {{target}}",
+      "statusCreate": "a créé le statut {{target}}",
+      "statusUpdate": "a modifié le statut {{target}}",
+      "statusDelete": "a supprimé le statut {{target}}",
+      "other": "a effectué {{action}} sur {{target}}"
+    },
+    "fields": {
+      "name": "Nom",
+      "group": "Groupe",
+      "tags": "Étiquettes",
+      "note": "Note",
+      "clearOnClose": "Effacer à la fermeture",
+      "windowColor": "Couleur de la fenêtre",
+      "launchHook": "Hook de lancement",
+      "proxyBypassRules": "Exceptions du proxy",
+      "dnsBlocklist": "Liste de blocage DNS",
+      "dnsServer": "Serveur DNS",
+      "startUrls": "Pages de démarrage",
+      "status": "Statut",
+      "fingerprint": "Empreinte",
+      "proxy": "Proxy",
+      "vpn": "VPN",
+      "extensionGroup": "Groupe d’extensions",
+      "bookmarks": "Favoris",
+      "extensions": "Extensions"
+    },
+    "via": {
+      "desktop": "depuis l’app de bureau",
+      "web": "depuis le web",
+      "mcp": "par un agent MCP",
+      "service": "avec une clé d’API",
+      "remote_vm": "depuis un navigateur cloud"
     }
   }
 }

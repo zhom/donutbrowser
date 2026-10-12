@@ -838,7 +838,8 @@
       "profileLocked": "{{email}}이(가) 사용 중",
       "profileLockedShort": "사용 중",
       "cannotLaunchLocked": "실행할 수 없습니다 — 프로필을 {{email}}이(가) 사용 중",
-      "createdBy": "{{email}}이(가) 생성"
+      "createdBy": "{{email}}이(가) 생성",
+      "roleLauncher": "런처"
     },
     "disabled": "사용 안 함",
     "toast": {
@@ -2641,7 +2642,11 @@
     "localStorageRemoteSession": "원격 세션이 이 프로필을 사용 중입니다. 작업이 이곳으로 돌아올 때까지 기다리세요.",
     "scheduledAutomationNotEntitled": "예약된 레시피는 Solo, Pro, Team, Enterprise에 포함됩니다.",
     "agentScheduleInvalid": "Donut 클라우드가 이 일정을 받아들이지 않았습니다. 요일, 시간, 프로필을 확인하세요.",
-    "agentScheduleNotFound": "이 일정은 더 이상 없습니다."
+    "agentScheduleNotFound": "이 일정은 더 이상 없습니다.",
+    "teamRoleReadOnly": "내 팀 역할은 프로필을 열 수 있지만 변경할 수는 없습니다. 팀 소유자나 관리자에게 요청하세요.",
+    "teamActivityForbidden": "팀 활동은 팀 소유자와 관리자만 볼 수 있습니다.",
+    "teamActivityNotEntitled": "활동 기록에는 활성 Team 또는 Enterprise 요금제가 필요합니다.",
+    "teamActivityInvalid": "활동 기록 요청이 올바르지 않습니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -2730,7 +2735,8 @@
     "tabs": {
       "account": "계정",
       "selfHosted": "자체 호스팅",
-      "teamUsage": "팀 사용량"
+      "teamUsage": "팀 사용량",
+      "teamActivity": "팀 활동"
     },
     "selfHosted": {
       "title": "자체 호스팅 동기화 서버",
@@ -3940,6 +3946,85 @@
       "bodyWithLogs": "피드백과 로그가 Donut 팀에 전달되었습니다.",
       "reply": "더 자세한 내용이 필요하면 {{email}}(으)로 연락드리겠습니다.",
       "done": "완료"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "내 팀 역할은 런처입니다. 팀의 프로필을 열 수 있고, 세션에서 바뀐 내용은 유지됩니다. 설정, 프록시, 그룹은 팀이 정한 그대로 유지됩니다."
+  },
+  "teamActivity": {
+    "title": "팀 활동",
+    "description": "멤버가 팀의 프로필과 공유 항목에 한 작업입니다(최신순). 90일 동안 보관되며, Enterprise에서는 365일 동안 보관됩니다.",
+    "empty": "아직 활동이 없습니다.",
+    "loadMore": "더 불러오기",
+    "system": "Donut",
+    "formerMember": "이전 멤버",
+    "noTarget": "항목",
+    "changedFields": "변경됨: {{fields}}",
+    "actions": {
+      "memberInvite": "님이 {{target}} 님을 초대했습니다",
+      "memberJoin": "님이 팀에 참여했습니다",
+      "memberRemove": "님이 {{target}} 님을 팀에서 제거했습니다",
+      "memberRoleChange": "님이 {{target}} 님의 역할을 변경했습니다",
+      "invitationCancel": "님이 {{target}} 님에 대한 초대를 취소했습니다",
+      "profileLaunch": "님이 {{target}}을(를) 열었습니다",
+      "profileStop": "님이 {{target}}을(를) 닫았습니다",
+      "profileCreate": "님이 {{target}}을(를) 만들었습니다",
+      "profileRename": "님이 {{target}}의 이름을 바꿨습니다",
+      "profileUpdate": "님이 {{target}}을(를) 변경했습니다",
+      "profileBulkUpdate": "님이 일괄 편집으로 {{target}}을(를) 변경했습니다",
+      "profileDelete": "님이 {{target}}을(를) 삭제했습니다",
+      "profileRestore": "님이 {{target}}을(를) 휴지통에서 복원했습니다",
+      "profileSyncOn": "님이 {{target}}의 동기화를 켰습니다",
+      "profileSyncOff": "님이 {{target}}의 동기화를 껐습니다",
+      "proxyCreate": "님이 프록시 {{target}}을(를) 추가했습니다",
+      "proxyUpdate": "님이 프록시 {{target}}을(를) 변경했습니다",
+      "proxyDelete": "님이 프록시 {{target}}을(를) 삭제했습니다",
+      "groupCreate": "님이 그룹 {{target}}을(를) 만들었습니다",
+      "groupUpdate": "님이 그룹 {{target}}을(를) 변경했습니다",
+      "groupDelete": "님이 그룹 {{target}}을(를) 삭제했습니다",
+      "vpnCreate": "님이 VPN {{target}}을(를) 추가했습니다",
+      "vpnUpdate": "님이 VPN {{target}}을(를) 변경했습니다",
+      "vpnDelete": "님이 VPN {{target}}을(를) 삭제했습니다",
+      "extensionAdd": "님이 확장 프로그램 {{target}}을(를) 추가했습니다",
+      "extensionUpdate": "님이 확장 프로그램 {{target}}을(를) 업데이트했습니다",
+      "extensionDelete": "님이 확장 프로그램 {{target}}을(를) 삭제했습니다",
+      "extensionGroupCreate": "님이 확장 프로그램 그룹 {{target}}을(를) 만들었습니다",
+      "extensionGroupUpdate": "님이 확장 프로그램 그룹 {{target}}을(를) 변경했습니다",
+      "extensionGroupDelete": "님이 확장 프로그램 그룹 {{target}}을(를) 삭제했습니다",
+      "templateCreate": "님이 템플릿 {{target}}을(를) 만들었습니다",
+      "templateUpdate": "님이 템플릿 {{target}}을(를) 변경했습니다",
+      "templateDelete": "님이 템플릿 {{target}}을(를) 삭제했습니다",
+      "statusCreate": "님이 상태 {{target}}을(를) 만들었습니다",
+      "statusUpdate": "님이 상태 {{target}}을(를) 변경했습니다",
+      "statusDelete": "님이 상태 {{target}}을(를) 삭제했습니다",
+      "other": "님이 {{target}}에 {{action}}을(를) 실행했습니다"
+    },
+    "fields": {
+      "name": "이름",
+      "group": "그룹",
+      "tags": "태그",
+      "note": "메모",
+      "clearOnClose": "닫을 때 지우기",
+      "windowColor": "창 색상",
+      "launchHook": "실행 훅",
+      "proxyBypassRules": "프록시 예외 규칙",
+      "dnsBlocklist": "DNS 차단 목록",
+      "dnsServer": "DNS 서버",
+      "startUrls": "시작 페이지",
+      "status": "상태",
+      "fingerprint": "핑거프린트",
+      "proxy": "프록시",
+      "vpn": "VPN",
+      "extensionGroup": "확장 프로그램 그룹",
+      "bookmarks": "북마크",
+      "extensions": "확장 프로그램"
+    },
+    "via": {
+      "desktop": "데스크톱 앱에서",
+      "web": "웹에서",
+      "mcp": "MCP 에이전트가",
+      "service": "API 키로",
+      "remote_vm": "클라우드 브라우저에서"
     }
   }
 }

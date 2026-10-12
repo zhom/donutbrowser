@@ -525,13 +525,32 @@ pub fn is_sync_configured() -> bool {
 
 pub struct SyncEngine {
   pub(super) client: SyncClient,
+  /// A team launcher's engine: the team's copy of every setting wins, and
+  /// only what a session changed goes up (`team_roles.rs`).
+  pub(super) read_only: bool,
 }
 
 impl SyncEngine {
   pub fn new(server_url: String, token: String) -> Self {
     Self {
       client: SyncClient::new(server_url, token),
+      read_only: false,
     }
+  }
+
+  /// Whether the remote copy replaces the local one when both exist. On a
+  /// read-only engine any difference does, so a local change never sticks.
+  pub(super) fn remote_wins(&self, local_updated_at: u64, remote_updated_at: u64) -> bool {
+    remote_updated_at > local_updated_at
+      || (self.read_only && local_updated_at != remote_updated_at)
+  }
+
+  /// Whether this engine must leave the remote copy of `what` alone.
+  pub(super) fn skips_remote_write(&self, what: &str) -> bool {
+    if self.read_only {
+      log::debug!("Sync write skipped, team role is read-only {what}");
+    }
+    self.read_only
   }
 
   pub async fn create_from_settings(app_handle: &tauri::AppHandle) -> Result<Self, String> {
@@ -543,7 +562,9 @@ impl SyncEngine {
         .await
         .map_err(|e| format!("Failed to get cloud sync token: {e}"))?
         .ok_or_else(|| "Cloud sync token not available".to_string())?;
-      return Ok(Self::new(url, token));
+      let mut engine = Self::new(url, token);
+      engine.read_only = crate::team_roles::is_read_only();
+      return Ok(engine);
     }
 
     // Fall back to self-hosted settings
@@ -623,6 +644,9 @@ impl SyncEngine {
     json: &str,
     updated_at: u64,
   ) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("key={remote_key}")) {
+      return Ok(());
+    }
     let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
       .map_err(|e| SyncError::InvalidData(format!("Failed to seal config: {e}")))?;
     let mut meta = HashMap::new();
@@ -897,6 +921,11 @@ impl SyncEngine {
     if pending_session.is_some() && remote_manifest.is_none() {
       return Ok(ProfileSyncOutcome::Skipped(
         "remote manifest is not available yet",
+      ));
+    }
+    if self.read_only && remote_manifest.is_none() {
+      return Ok(ProfileSyncOutcome::Skipped(
+        "the team role cannot add profiles",
       ));
     }
 
@@ -1225,13 +1254,12 @@ impl SyncEngine {
 
     let local_updated = profile.updated_at.unwrap_or(0);
     let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
-    if local_updated > remote_updated {
-      self
-        .upload_profile_metadata(&profile_id, profile, &key_prefix)
-        .await?;
-      return Ok(profile.clone());
-    }
-    if remote_updated <= local_updated {
+    if !self.remote_wins(local_updated, remote_updated) {
+      if local_updated > remote_updated {
+        self
+          .upload_profile_metadata(&profile_id, profile, &key_prefix)
+          .await?;
+      }
       return Ok(profile.clone());
     }
 
@@ -1864,7 +1892,7 @@ impl SyncEngine {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated_at {
+        if self.remote_wins(local_updated_at, remote_updated) {
           self.download_proxy(proxy_id, app_handle).await?;
         } else if local_updated_at > remote_updated {
           self.upload_proxy(&proxy).await?;
@@ -2018,7 +2046,7 @@ impl SyncEngine {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated_at {
+        if self.remote_wins(local_updated_at, remote_updated) {
           self.download_group(group_id, app_handle).await?;
         } else if local_updated_at > remote_updated {
           self.upload_group(&group).await?;
@@ -2141,6 +2169,9 @@ impl SyncEngine {
   }
 
   pub async fn delete_profile(&self, profile_id: &str) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("profile={profile_id}")) {
+      return Ok(());
+    }
     let prefix = format!("profiles/{}/", profile_id);
     let tombstone_key = format!("tombstones/profiles/{}.json", profile_id);
 
@@ -2196,6 +2227,9 @@ impl SyncEngine {
   }
 
   async fn delete_profile_tombstones(&self, profile: &BrowserProfile) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("tombstone profile={}", profile.id)) {
+      return Ok(());
+    }
     for key in Self::profile_tombstone_keys(profile).await {
       self.client.delete(&key, None).await?;
     }
@@ -2213,6 +2247,9 @@ impl SyncEngine {
   }
 
   pub async fn delete_proxy(&self, proxy_id: &str) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("proxy={proxy_id}")) {
+      return Ok(());
+    }
     let remote_key = format!("proxies/{}.json", proxy_id);
     let tombstone_key = format!("tombstones/proxies/{}.json", proxy_id);
 
@@ -2226,6 +2263,9 @@ impl SyncEngine {
   }
 
   pub async fn delete_group(&self, group_id: &str) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("group={group_id}")) {
+      return Ok(());
+    }
     let remote_key = format!("groups/{}.json", group_id);
     let tombstone_key = format!("tombstones/groups/{}.json", group_id);
 
@@ -2260,7 +2300,7 @@ impl SyncEngine {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated_at {
+        if self.remote_wins(local_updated_at, remote_updated) {
           self.download_vpn(vpn_id, app_handle).await?;
         } else if local_updated_at > remote_updated {
           self.upload_vpn(&vpn).await?;
@@ -2372,6 +2412,9 @@ impl SyncEngine {
   }
 
   pub async fn delete_vpn(&self, vpn_id: &str) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("vpn={vpn_id}")) {
+      return Ok(());
+    }
     let remote_key = format!("vpns/{}.json", vpn_id);
     let tombstone_key = format!("tombstones/vpns/{}.json", vpn_id);
 
@@ -2419,7 +2462,7 @@ impl SyncEngine {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated_at {
+        if self.remote_wins(local_updated_at, remote_updated) {
           self.download_extension(ext_id, app_handle).await?;
         } else if local_updated_at > remote_updated {
           self.upload_extension(&ext).await?;
@@ -2585,6 +2628,9 @@ impl SyncEngine {
   }
 
   pub async fn delete_extension(&self, ext_id: &str) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("extension={ext_id}")) {
+      return Ok(());
+    }
     let remote_key = format!("extensions/{}.json", ext_id);
     let file_prefix = format!("extensions/{}/file/", ext_id);
     let tombstone_key = format!("tombstones/extensions/{}.json", ext_id);
@@ -2630,7 +2676,7 @@ impl SyncEngine {
         // Both exist - resolve by user-edit timestamp (last-write-wins).
         let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_updated > local_updated_at {
+        if self.remote_wins(local_updated_at, remote_updated) {
           self.download_extension_group(group_id, app_handle).await?;
         } else if local_updated_at > remote_updated {
           self.upload_extension_group(&group).await?;
@@ -2736,6 +2782,9 @@ impl SyncEngine {
   }
 
   pub async fn delete_extension_group(&self, group_id: &str) -> SyncResult<()> {
+    if self.skips_remote_write(&format!("extension_group={group_id}")) {
+      return Ok(());
+    }
     let remote_key = format!("extension_groups/{}.json", group_id);
     let tombstone_key = format!("tombstones/extension_groups/{}.json", group_id);
 
@@ -3060,6 +3109,9 @@ impl SyncEngine {
         false
       };
       if has_personal_tombstone || has_team_tombstone {
+        if self.skips_remote_write(&format!("leftovers profile={profile_id}")) {
+          continue;
+        }
         let prefix = format!("{}profiles/{}/", key_prefix, profile_id);
         match self.client.delete_prefix(&prefix, None).await {
           Ok(_) => {
@@ -3707,6 +3759,20 @@ async fn apply_profile_sync_mode(
   // copy this machine declared; without this, an enrolment keeps claiming a
   // syncable profile every night after the user turned sync off.
   crate::cookie_bot::report_profile_state(&profile);
+  if (old_mode == SyncMode::Disabled) == enabling {
+    // Turning sync on puts a profile in the team's hands; turning it off takes
+    // it out. Either is worth a line in the team's log.
+    crate::team_activity::record(
+      if enabling {
+        "profile.sync_on"
+      } else {
+        "profile.sync_off"
+      },
+      &profile_id,
+      Some(&profile.name),
+      None,
+    );
+  }
 
   let _ = events::emit("profiles-changed", ());
 
@@ -4592,6 +4658,26 @@ pub async fn rollover_encryption_for_all_entities(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[tokio::test]
+  async fn a_read_only_engine_takes_the_team_copy_of_any_change() {
+    let mut engine = SyncEngine::new("http://127.0.0.1:9".into(), "token".into());
+    assert!(engine.remote_wins(1, 2));
+    assert!(!engine.remote_wins(2, 1));
+    assert!(!engine.remote_wins(2, 2));
+
+    engine.read_only = true;
+    assert!(engine.remote_wins(2, 1));
+    assert!(!engine.remote_wins(2, 2));
+    // Nothing reaches the server: these would fail against the closed port.
+    let json = r#"{"id":"p1"}"#;
+    assert!(engine
+      .upload_config_json("proxies/p1.json", json, 2)
+      .await
+      .is_ok());
+    assert!(engine.delete_proxy("p1").await.is_ok());
+    assert!(engine.delete_profile("p1").await.is_ok());
+  }
 
   #[test]
   fn sync_calls_share_a_lock_only_for_the_same_profile() {

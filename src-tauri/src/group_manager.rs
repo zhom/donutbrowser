@@ -126,6 +126,7 @@ impl GroupManager {
     }
 
     if group.sync_enabled {
+      crate::team_activity::record("group.create", &group.id, Some(&group.name), None);
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = group.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -184,6 +185,12 @@ impl GroupManager {
     }
 
     if updated_group.sync_enabled {
+      crate::team_activity::record(
+        "group.update",
+        &updated_group.id,
+        Some(&updated_group.name),
+        None,
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = updated_group.id.clone();
         tauri::async_runtime::spawn(async move {
@@ -278,6 +285,7 @@ impl GroupManager {
 
     // If sync was enabled, also delete from S3
     if was_sync_enabled {
+      crate::team_activity::record("group.delete", &id, None, None);
       let group_id_owned = id.clone();
       let app_handle_clone = app_handle.clone();
       tauri::async_runtime::spawn(async move {
@@ -336,6 +344,12 @@ impl GroupManager {
     }
 
     if updated_group.sync_enabled {
+      crate::team_activity::record(
+        "group.update",
+        &updated_group.id,
+        Some(&updated_group.name),
+        crate::team_activity::fields(&["bookmarks"]),
+      );
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
         let id = updated_group.id.clone();
         tauri::async_runtime::spawn(async move {

@@ -144,6 +144,19 @@ fn merge_submitted_wayfern_config(
   config
 }
 
+/// Note a person's change to a team profile in the team activity log.
+/// Profiles that do not sync stay out of it: they are not the team's.
+fn report_team_edit(profile: &BrowserProfile, action: &str, fields: &[&str]) {
+  if profile.is_sync_enabled() {
+    crate::team_activity::record(
+      action,
+      &profile.id.to_string(),
+      Some(&profile.name),
+      crate::team_activity::fields(fields),
+    );
+  }
+}
+
 impl ProfileManager {
   fn new() -> Self {
     Self {
@@ -690,6 +703,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.rename", &["name"]);
 
     // Keep tag suggestions up to date after name change (rebuild from all profiles)
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -805,7 +819,11 @@ impl ProfileManager {
     emit_events: bool,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let started = std::time::Instant::now();
+    let removed = self.find_profile(profile_id).ok();
     let outcome = self.remove_profile_unlogged(app_handle, profile_id, permanent, emit_events)?;
+    if let Some(profile) = &removed {
+      report_team_edit(profile, "profile.delete", &[]);
+    }
     log::info!(
       "Profile deleted profile={profile_id} {outcome} elapsed_ms={}",
       started.elapsed().as_millis()
@@ -985,6 +1003,9 @@ impl ProfileManager {
     )?;
     // The normal save path, so tag suggestions pick the profile up again.
     self.save_profile(&profile)?;
+    if sync_mode != SyncMode::Disabled {
+      crate::team_activity::record("profile.restore", profile_id, Some(&profile.name), None);
+    }
 
     log::info!("Profile restored from trash profile={profile_id}");
     if let Err(e) = events::emit_empty("profiles-changed") {
@@ -1178,6 +1199,7 @@ impl ProfileManager {
       self.save_profile(&profile)?;
 
       crate::sync::queue_profile_sync_if_eligible(&profile);
+      report_team_edit(&profile, "profile.update", &["group"]);
 
       // Auto-enable sync for new group if profile has sync enabled
       if profile.is_sync_enabled() {
@@ -1235,6 +1257,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["tags"]);
 
     // Update global tag suggestions from all profiles
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -1272,6 +1295,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["note"]);
 
     // Emit profile note update event
     if let Err(e) = events::emit_empty("profiles-changed") {
@@ -1311,6 +1335,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["clear_on_close"]);
 
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
@@ -1344,6 +1369,7 @@ impl ProfileManager {
 
     self.save_profile(&profile)?;
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["window_color"]);
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
     }
@@ -1371,6 +1397,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["launch_hook"]);
 
     if let Err(e) = events::emit("profile-updated", &profile) {
       log::warn!("Event emit failed event=profile-updated err=\"{e}\"");
@@ -1403,6 +1430,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["proxy_bypass_rules"]);
 
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
@@ -1430,6 +1458,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["dns_blocklist"]);
 
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
@@ -1457,6 +1486,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["dns_server"]);
 
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
@@ -1480,6 +1510,7 @@ impl ProfileManager {
     profile.updated_at = Some(crate::proxy_manager::now_secs());
     self.save_profile(&profile)?;
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["start_urls"]);
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
     }
@@ -1514,6 +1545,7 @@ impl ProfileManager {
       profile.updated_at = Some(crate::proxy_manager::now_secs());
       self.save_profile(&profile)?;
       crate::sync::queue_profile_sync_if_eligible(&profile);
+      report_team_edit(&profile, "profile.bulk_update", &[]);
       any_synced |= profile.is_sync_enabled();
       changed += 1;
     }
@@ -1565,6 +1597,7 @@ impl ProfileManager {
     profile.updated_at = Some(crate::proxy_manager::now_secs());
     self.save_profile(&profile)?;
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.create", &[]);
     if profile.is_sync_enabled() {
       Self::sync_patched_groups(patch);
     }
@@ -1593,6 +1626,7 @@ impl ProfileManager {
       profile.updated_at = Some(crate::proxy_manager::now_secs());
       self.save_profile(&profile)?;
       crate::sync::queue_profile_sync_if_eligible(&profile);
+      report_team_edit(&profile, "profile.update", &["status"]);
     }
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Event emit failed event=profiles-changed err=\"{e}\"");
@@ -1848,6 +1882,7 @@ impl ProfileManager {
       })?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["fingerprint"]);
 
     log::info!("Wayfern config updated profile={profile_id}");
 
@@ -1902,6 +1937,7 @@ impl ProfileManager {
       })?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["proxy"]);
 
     // The cookie bot refuses a run on a profile with no exit node, using the
     // copy of that fact the desktop last declared. Detaching a proxy has to
@@ -1970,6 +2006,7 @@ impl ProfileManager {
       })?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["vpn"]);
 
     // Same reason as the proxy path: a VPN is the profile's exit node too, and
     // the server only knows what this machine last told it.
@@ -2014,6 +2051,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
+    report_team_edit(&profile, "profile.update", &["extension_group"]);
 
     // Auto-enable sync for the new extension group if profile has sync
     // enabled. The helper is sync internally; we fire-and-forget through

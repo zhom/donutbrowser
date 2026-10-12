@@ -10,7 +10,7 @@ import { WebDriverClient } from "../lib/webdriver.mjs";
 
 function registeredCommands(source) {
   const match = source.match(
-    /invoke_handler\(tauri::generate_handler!\[(.*?)\]\)/s,
+    /invoke_handler\(team_roles::guarded\(tauri::generate_handler!\[(.*?)\]\)\)/s,
   );
   assert.ok(match, "Could not locate Tauri generate_handler! command registry");
   const withoutComments = match[1].replace(/\/\/[^\n]*/g, "");

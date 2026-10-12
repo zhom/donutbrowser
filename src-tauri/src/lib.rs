@@ -158,7 +158,9 @@ mod mcp_toolsets;
 mod mcp_views;
 mod navigation_watch;
 mod tag_manager;
+pub mod team_activity;
 mod team_lock;
+pub mod team_roles;
 mod totp;
 mod vault;
 mod version_updater;
@@ -1492,6 +1494,7 @@ async fn import_vpn_config(
   match storage.import_config(&content, &filename, name.clone()) {
     Ok(config) => {
       if config.sync_enabled {
+        crate::team_activity::record("vpn.create", &config.id, Some(&config.name), None);
         if let Some(scheduler) = sync::get_global_scheduler() {
           let id = config.id.clone();
           tauri::async_runtime::spawn(async move {
@@ -1568,6 +1571,7 @@ async fn delete_vpn_config(app_handle: tauri::AppHandle, vpn_id: String) -> Resu
 
   // If sync was enabled, also delete from remote
   if was_sync_enabled {
+    crate::team_activity::record("vpn.delete", &vpn_id, None, None);
     let vpn_id_clone = vpn_id.clone();
     let app_handle_clone = app_handle.clone();
     tauri::async_runtime::spawn(async move {
@@ -1608,6 +1612,7 @@ async fn create_vpn_config_manual(
   };
 
   if config.sync_enabled {
+    crate::team_activity::record("vpn.create", &config.id, Some(&config.name), None);
     if let Some(scheduler) = sync::get_global_scheduler() {
       let id = config.id.clone();
       tauri::async_runtime::spawn(async move {
@@ -1632,6 +1637,7 @@ async fn update_vpn_config(vpn_id: String, name: String) -> Result<vpn::VpnConfi
   };
 
   if config.sync_enabled {
+    crate::team_activity::record("vpn.update", &config.id, Some(&config.name), None);
     if let Some(scheduler) = sync::get_global_scheduler() {
       let id = config.id.clone();
       tauri::async_runtime::spawn(async move {
@@ -3341,7 +3347,7 @@ pub fn run_with_builder(
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![
+    .invoke_handler(team_roles::guarded(tauri::generate_handler![
       confirm_quit,
       hide_to_tray,
       update_tray_menu,
@@ -3651,7 +3657,8 @@ pub fn run_with_builder(
       unlock_profile,
       lock_profile,
       is_profile_locked,
-    ])
+      team_activity::list_team_activity,
+    ]))
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|_app_handle, _event| {

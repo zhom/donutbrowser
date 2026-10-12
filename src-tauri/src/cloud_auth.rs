@@ -423,12 +423,19 @@ pub struct CloudAuthManager {
   wayfern_device_refusal: std::sync::Mutex<Option<String>>,
 }
 
+/// Tell what depends on the team seat that the signed-in account changed.
+fn observe_account(user: Option<&CloudUser>) {
+  crate::team_roles::observe(user);
+  crate::team_activity::observe(user);
+}
+
 pub static CLOUD_AUTH: std::sync::LazyLock<CloudAuthManager> =
   std::sync::LazyLock::new(CloudAuthManager::new);
 
 impl CloudAuthManager {
   fn new() -> Self {
     let state = Self::load_auth_state_from_disk();
+    observe_account(state.as_ref().map(|auth| &auth.user));
     // Bound every cloud API call so no single slow / hung request can stall
     // the startup chain (sync-token → proxy-config → wayfern-token), which
     // otherwise gates Wayfern launch behind whichever endpoint is slowest.
@@ -511,6 +518,7 @@ impl CloudAuthManager {
   }
 
   fn store_auth_state(state: &CloudAuthState) -> Result<(), String> {
+    observe_account(Some(&state.user));
     let path = Self::get_settings_dir().join("cloud_auth_state.json");
     if let Some(parent) = path.parent() {
       fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
@@ -1352,6 +1360,7 @@ impl CloudAuthManager {
   async fn clear_auth(&self) {
     let mut state = self.state.lock().await;
     *state = None;
+    observe_account(None);
     Self::delete_all_cloud_files();
     crate::cookie_bot::forget_enrolments();
   }

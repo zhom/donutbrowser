@@ -838,7 +838,8 @@
       "profileLocked": "{{email}} 正在使用中",
       "profileLockedShort": "使用中",
       "cannotLaunchLocked": "无法启动 — 配置文件正被 {{email}} 使用",
-      "createdBy": "由 {{email}} 创建"
+      "createdBy": "由 {{email}} 创建",
+      "roleLauncher": "启动者"
     },
     "disabled": "已禁用",
     "toast": {
@@ -2641,7 +2642,11 @@
     "localStorageRemoteSession": "远程会话正在使用此配置文件。请等待其工作回到这里。",
     "scheduledAutomationNotEntitled": "计划配方包含在 Solo、Pro、Team 和 Enterprise 中。",
     "agentScheduleInvalid": "Donut 云未接受此计划。请检查日期、时间和配置文件。",
-    "agentScheduleNotFound": "该计划已不存在。"
+    "agentScheduleNotFound": "该计划已不存在。",
+    "teamRoleReadOnly": "你的团队角色可以打开配置文件，但不能更改它们。请联系团队所有者或管理员。",
+    "teamActivityForbidden": "只有团队所有者和管理员可以查看团队活动。",
+    "teamActivityNotEntitled": "活动日志需要有效的 Team 或 Enterprise 套餐。",
+    "teamActivityInvalid": "活动日志请求无效。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2730,7 +2735,8 @@
     "tabs": {
       "account": "账户",
       "selfHosted": "自托管",
-      "teamUsage": "团队用量"
+      "teamUsage": "团队用量",
+      "teamActivity": "团队活动"
     },
     "selfHosted": {
       "title": "自托管同步服务器",
@@ -3940,6 +3946,85 @@
       "bodyWithLogs": "你的反馈和日志已送达 Donut 团队。",
       "reply": "如需更多细节，我们会写信到 {{email}}。",
       "done": "完成"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "你的团队角色是启动者：你可以打开团队的配置文件，会话中的更改会保留。设置、代理和分组保持团队设定的样子。"
+  },
+  "teamActivity": {
+    "title": "团队活动",
+    "description": "成员对团队配置文件和共享项目所做的操作，最新的在前。保留 90 天，Enterprise 保留 365 天。",
+    "empty": "暂无活动。",
+    "loadMore": "加载更多",
+    "system": "Donut",
+    "formerMember": "前成员",
+    "noTarget": "某个项目",
+    "changedFields": "已更改：{{fields}}",
+    "actions": {
+      "memberInvite": "邀请了 {{target}}",
+      "memberJoin": "加入了团队",
+      "memberRemove": "将 {{target}} 移出了团队",
+      "memberRoleChange": "更改了 {{target}} 的角色",
+      "invitationCancel": "取消了对 {{target}} 的邀请",
+      "profileLaunch": "打开了 {{target}}",
+      "profileStop": "关闭了 {{target}}",
+      "profileCreate": "创建了 {{target}}",
+      "profileRename": "重命名了 {{target}}",
+      "profileUpdate": "更改了 {{target}}",
+      "profileBulkUpdate": "在批量编辑中更改了 {{target}}",
+      "profileDelete": "删除了 {{target}}",
+      "profileRestore": "从回收站恢复了 {{target}}",
+      "profileSyncOn": "为 {{target}} 开启了同步",
+      "profileSyncOff": "为 {{target}} 关闭了同步",
+      "proxyCreate": "添加了代理 {{target}}",
+      "proxyUpdate": "更改了代理 {{target}}",
+      "proxyDelete": "删除了代理 {{target}}",
+      "groupCreate": "创建了分组 {{target}}",
+      "groupUpdate": "更改了分组 {{target}}",
+      "groupDelete": "删除了分组 {{target}}",
+      "vpnCreate": "添加了 VPN {{target}}",
+      "vpnUpdate": "更改了 VPN {{target}}",
+      "vpnDelete": "删除了 VPN {{target}}",
+      "extensionAdd": "添加了扩展 {{target}}",
+      "extensionUpdate": "更新了扩展 {{target}}",
+      "extensionDelete": "删除了扩展 {{target}}",
+      "extensionGroupCreate": "创建了扩展分组 {{target}}",
+      "extensionGroupUpdate": "更改了扩展分组 {{target}}",
+      "extensionGroupDelete": "删除了扩展分组 {{target}}",
+      "templateCreate": "创建了模板 {{target}}",
+      "templateUpdate": "更改了模板 {{target}}",
+      "templateDelete": "删除了模板 {{target}}",
+      "statusCreate": "创建了状态 {{target}}",
+      "statusUpdate": "更改了状态 {{target}}",
+      "statusDelete": "删除了状态 {{target}}",
+      "other": "对 {{target}} 执行了 {{action}}"
+    },
+    "fields": {
+      "name": "名称",
+      "group": "分组",
+      "tags": "标签",
+      "note": "备注",
+      "clearOnClose": "关闭时清除",
+      "windowColor": "窗口颜色",
+      "launchHook": "启动钩子",
+      "proxyBypassRules": "代理例外规则",
+      "dnsBlocklist": "DNS 拦截列表",
+      "dnsServer": "DNS 服务器",
+      "startUrls": "起始页",
+      "status": "状态",
+      "fingerprint": "指纹",
+      "proxy": "代理",
+      "vpn": "VPN",
+      "extensionGroup": "扩展分组",
+      "bookmarks": "书签",
+      "extensions": "扩展"
+    },
+    "via": {
+      "desktop": "来自桌面应用",
+      "web": "来自网页",
+      "mcp": "由 MCP 代理",
+      "service": "使用 API 密钥",
+      "remote_vm": "来自云端浏览器"
     }
   }
 }

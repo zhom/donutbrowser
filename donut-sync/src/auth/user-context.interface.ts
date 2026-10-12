@@ -7,4 +7,8 @@ export interface UserContext {
   prefix: string;
   profileLimit: number; // 0 for unlimited (self-hosted); effective (team) limit for team members
   sub?: string; // the authenticated user id (cloud only)
+  // The caller's role on the team whose namespace `prefix` is, from the
+  // backend. A `launcher` may run profiles and sync what a session changed,
+  // never change a profile's settings, proxies or groups.
+  teamRole?: "owner" | "admin" | "member" | "launcher";
 }

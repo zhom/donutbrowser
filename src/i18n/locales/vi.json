@@ -838,7 +838,8 @@
       "profileLocked": "Đang được sử dụng bởi {{email}}",
       "profileLockedShort": "Đang sử dụng",
       "cannotLaunchLocked": "Không thể khởi chạy — profile đang được sử dụng bởi {{email}}",
-      "createdBy": "Được tạo bởi {{email}}"
+      "createdBy": "Được tạo bởi {{email}}",
+      "roleLauncher": "Người khởi chạy"
     },
     "disabled": "Tắt",
     "toast": {
@@ -2641,7 +2642,11 @@
     "localStorageRemoteSession": "Một phiên từ xa đang dùng profile này. Hãy đợi đến khi công việc của nó trở lại đây.",
     "scheduledAutomationNotEntitled": "Công thức theo lịch có trong Solo, Pro, Team và Enterprise.",
     "agentScheduleInvalid": "Đám mây Donut không chấp nhận lịch chạy này. Hãy kiểm tra ngày, giờ và profile.",
-    "agentScheduleNotFound": "Lịch chạy này không còn tồn tại."
+    "agentScheduleNotFound": "Lịch chạy này không còn tồn tại.",
+    "teamRoleReadOnly": "Vai trò nhóm của bạn có thể mở hồ sơ nhưng không thể thay đổi chúng. Hãy nhờ chủ sở hữu hoặc quản trị viên của nhóm.",
+    "teamActivityForbidden": "Chỉ chủ sở hữu và quản trị viên của nhóm mới xem được hoạt động của nhóm.",
+    "teamActivityNotEntitled": "Nhật ký hoạt động cần gói Team hoặc Enterprise đang hoạt động.",
+    "teamActivityInvalid": "Yêu cầu nhật ký hoạt động không hợp lệ."
   },
   "rail": {
     "profiles": "Profile",
@@ -2730,7 +2735,8 @@
     "tabs": {
       "account": "Tài khoản",
       "selfHosted": "Tự lưu trữ",
-      "teamUsage": "Mức dùng của nhóm"
+      "teamUsage": "Mức dùng của nhóm",
+      "teamActivity": "Hoạt động của nhóm"
     },
     "selfHosted": {
       "title": "Máy chủ đồng bộ tự lưu trữ",
@@ -3940,6 +3946,85 @@
       "bodyWithLogs": "Phản hồi và nhật ký của bạn đã đến đội ngũ Donut.",
       "reply": "Nếu cần thêm chi tiết, chúng tôi sẽ viết thư tới {{email}}.",
       "done": "Xong"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "Vai trò nhóm của bạn là Người khởi chạy: bạn có thể mở các hồ sơ của nhóm, và những gì một phiên thay đổi sẽ được giữ lại. Cài đặt, proxy và nhóm vẫn giữ như nhóm đã đặt."
+  },
+  "teamActivity": {
+    "title": "Hoạt động của nhóm",
+    "description": "Những gì thành viên đã làm với hồ sơ và mục dùng chung của nhóm, mới nhất trước. Lưu 90 ngày, hoặc 365 ngày với Enterprise.",
+    "empty": "Chưa có hoạt động nào.",
+    "loadMore": "Tải thêm",
+    "system": "Donut",
+    "formerMember": "Một cựu thành viên",
+    "noTarget": "một mục",
+    "changedFields": "Đã thay đổi: {{fields}}",
+    "actions": {
+      "memberInvite": "đã mời {{target}}",
+      "memberJoin": "đã tham gia nhóm",
+      "memberRemove": "đã xóa {{target}} khỏi nhóm",
+      "memberRoleChange": "đã đổi vai trò của {{target}}",
+      "invitationCancel": "đã hủy lời mời cho {{target}}",
+      "profileLaunch": "đã mở {{target}}",
+      "profileStop": "đã đóng {{target}}",
+      "profileCreate": "đã tạo {{target}}",
+      "profileRename": "đã đổi tên {{target}}",
+      "profileUpdate": "đã thay đổi {{target}}",
+      "profileBulkUpdate": "đã thay đổi {{target}} trong một lần sửa hàng loạt",
+      "profileDelete": "đã xóa {{target}}",
+      "profileRestore": "đã khôi phục {{target}} từ thùng rác",
+      "profileSyncOn": "đã bật đồng bộ cho {{target}}",
+      "profileSyncOff": "đã tắt đồng bộ cho {{target}}",
+      "proxyCreate": "đã thêm proxy {{target}}",
+      "proxyUpdate": "đã thay đổi proxy {{target}}",
+      "proxyDelete": "đã xóa proxy {{target}}",
+      "groupCreate": "đã tạo nhóm {{target}}",
+      "groupUpdate": "đã thay đổi nhóm {{target}}",
+      "groupDelete": "đã xóa nhóm {{target}}",
+      "vpnCreate": "đã thêm VPN {{target}}",
+      "vpnUpdate": "đã thay đổi VPN {{target}}",
+      "vpnDelete": "đã xóa VPN {{target}}",
+      "extensionAdd": "đã thêm tiện ích {{target}}",
+      "extensionUpdate": "đã cập nhật tiện ích {{target}}",
+      "extensionDelete": "đã xóa tiện ích {{target}}",
+      "extensionGroupCreate": "đã tạo nhóm tiện ích {{target}}",
+      "extensionGroupUpdate": "đã thay đổi nhóm tiện ích {{target}}",
+      "extensionGroupDelete": "đã xóa nhóm tiện ích {{target}}",
+      "templateCreate": "đã tạo mẫu {{target}}",
+      "templateUpdate": "đã thay đổi mẫu {{target}}",
+      "templateDelete": "đã xóa mẫu {{target}}",
+      "statusCreate": "đã tạo trạng thái {{target}}",
+      "statusUpdate": "đã thay đổi trạng thái {{target}}",
+      "statusDelete": "đã xóa trạng thái {{target}}",
+      "other": "đã thực hiện {{action}} với {{target}}"
+    },
+    "fields": {
+      "name": "Tên",
+      "group": "Nhóm",
+      "tags": "Thẻ",
+      "note": "Ghi chú",
+      "clearOnClose": "Xóa khi đóng",
+      "windowColor": "Màu cửa sổ",
+      "launchHook": "Hook khởi chạy",
+      "proxyBypassRules": "Quy tắc bỏ qua proxy",
+      "dnsBlocklist": "Danh sách chặn DNS",
+      "dnsServer": "Máy chủ DNS",
+      "startUrls": "Trang bắt đầu",
+      "status": "Trạng thái",
+      "fingerprint": "Dấu vân tay",
+      "proxy": "Proxy",
+      "vpn": "VPN",
+      "extensionGroup": "Nhóm tiện ích",
+      "bookmarks": "Dấu trang",
+      "extensions": "Tiện ích"
+    },
+    "via": {
+      "desktop": "từ ứng dụng máy tính",
+      "web": "từ web",
+      "mcp": "bởi một tác tử MCP",
+      "service": "bằng khóa API",
+      "remote_vm": "từ trình duyệt đám mây"
     }
   }
 }

@@ -21,6 +21,7 @@ import {
   RemoteHoursMeter,
 } from "@/components/cookie-bot-shared";
 import { LoadingButton } from "@/components/loading-button";
+import { TeamActivityLog } from "@/components/team-activity-log";
 import { TeamUsagePanel } from "@/components/team-usage-panel";
 import {
   AnimatedTabs,
@@ -45,6 +46,7 @@ import { cookieBotScopeFor, useCookieBot } from "@/hooks/use-cookie-bot";
 import { translateBackendError } from "@/lib/backend-errors";
 import {
   canUseCookieBot,
+  canViewTeamActivity,
   effectivePlanOf,
   getEntitlements,
   isTeamOwner,
@@ -85,6 +87,7 @@ export function AccountPage({
   // a refused launch.
   const remoteHoursVisible = isLoggedIn && canUseCookieBot(user);
   const showTeamUsage = remoteHoursVisible && isTeamOwner(user);
+  const showTeamActivity = isLoggedIn && canViewTeamActivity(user);
   // A member's own row says "free" because the owner pays. The plan the seat
   // is served under is the one the customer expects to read here, and the
   // billing period slot names the seat instead, since a seat has no period.
@@ -95,7 +98,9 @@ export function AccountPage({
       ? t("sync.team.roleOwner")
       : user?.teamRole === "admin"
         ? t("sync.team.roleAdmin")
-        : t("sync.team.roleMember");
+        : user?.teamRole === "launcher"
+          ? t("sync.team.roleLauncher")
+          : t("sync.team.roleMember");
   const seatLabel = user?.teamName
     ? t("account.teamSeat", { role: seatRole, team: user.teamName })
     : t("account.teamSeatUnnamed", { role: seatRole });
@@ -110,7 +115,10 @@ export function AccountPage({
   // click back to.
   useEffect(() => {
     if (!showTeamUsage && activeTab === "team-usage") setActiveTab("account");
-  }, [showTeamUsage, activeTab]);
+    if (!showTeamActivity && activeTab === "team-activity") {
+      setActiveTab("account");
+    }
+  }, [showTeamUsage, showTeamActivity, activeTab]);
 
   // Self-hosted server state. Loaded once when the dialog opens and persisted
   // via `save_sync_settings` so the rest of the app picks up the new URL/token
@@ -283,7 +291,7 @@ export function AccountPage({
       details.push({
         id: "teamRole",
         label: t("account.fields.teamRole"),
-        value: user.teamRole,
+        value: seatRole,
       });
     }
     if (user.planPeriod) {
@@ -331,6 +339,11 @@ export function AccountPage({
                 {showTeamUsage && (
                   <AnimatedTabsTrigger value="team-usage">
                     {t("account.tabs.teamUsage")}
+                  </AnimatedTabsTrigger>
+                )}
+                {showTeamActivity && (
+                  <AnimatedTabsTrigger value="team-activity">
+                    {t("account.tabs.teamActivity")}
                   </AnimatedTabsTrigger>
                 )}
                 <AnimatedTabsTrigger
@@ -541,6 +554,12 @@ export function AccountPage({
               {showTeamUsage && (
                 <AnimatedTabsContent value="team-usage" className="mt-4">
                   <TeamUsagePanel quota={quota} />
+                </AnimatedTabsContent>
+              )}
+
+              {showTeamActivity && (
+                <AnimatedTabsContent value="team-activity" className="mt-4">
+                  <TeamActivityLog />
                 </AnimatedTabsContent>
               )}
 

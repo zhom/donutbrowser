@@ -41,6 +41,8 @@ const ALL_FILTER_ID = "__all__";
 
 interface Props {
   onCreateProfileDialogOpen: (open: boolean) => void;
+  /** False for a team seat that may not add profiles. */
+  canCreateProfiles?: boolean;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   groups: GroupWithCount[];
@@ -149,6 +151,7 @@ const SearchSyntaxHelp = () => {
 
 const HomeHeader = ({
   onCreateProfileDialogOpen,
+  canCreateProfiles = true,
   searchQuery,
   onSearchQueryChange,
   groups,
@@ -438,7 +441,7 @@ const HomeHeader = ({
 
       {showProfileToolbar && <SearchSyntaxHelp />}
 
-      {showProfileToolbar && (
+      {showProfileToolbar && canCreateProfiles && (
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="shrink-0">

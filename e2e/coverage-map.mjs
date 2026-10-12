@@ -377,6 +377,11 @@ export const commandCoverage = {
       "agent_schedules::list_agent_schedule_runs",
     ],
   },
+  teamActivity: {
+    suite: "integrations",
+    level: "contract",
+    commands: ["team_activity::list_team_activity"],
+  },
   feedback: {
     suite: "ui",
     level: "integration",

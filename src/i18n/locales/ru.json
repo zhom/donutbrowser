@@ -848,7 +848,8 @@
       "profileLocked": "Используется {{email}}",
       "profileLockedShort": "Используется",
       "cannotLaunchLocked": "Невозможно запустить — профиль используется {{email}}",
-      "createdBy": "Создано {{email}}"
+      "createdBy": "Создано {{email}}",
+      "roleLauncher": "Запуск"
     },
     "disabled": "Отключена",
     "toast": {
@@ -2681,7 +2682,11 @@
     "localStorageRemoteSession": "Этот профиль использует удалённая сессия. Дождитесь, пока её работа вернётся сюда.",
     "scheduledAutomationNotEntitled": "Рецепты по расписанию входят в Solo, Pro, Team и Enterprise.",
     "agentScheduleInvalid": "Облако Donut не приняло это расписание. Проверьте дни, время и профили.",
-    "agentScheduleNotFound": "Этого расписания больше нет."
+    "agentScheduleNotFound": "Этого расписания больше нет.",
+    "teamRoleReadOnly": "Ваша роль в команде позволяет открывать профили, но не изменять их. Обратитесь к владельцу или администратору команды.",
+    "teamActivityForbidden": "Активность команды видят только её владельцы и администраторы.",
+    "teamActivityNotEntitled": "Для журнала активности нужен активный план Team или Enterprise.",
+    "teamActivityInvalid": "Запрос журнала активности недействителен."
   },
   "rail": {
     "profiles": "Профили",
@@ -2770,7 +2775,8 @@
     "tabs": {
       "account": "Аккаунт",
       "selfHosted": "Свой сервер",
-      "teamUsage": "Использование командой"
+      "teamUsage": "Использование командой",
+      "teamActivity": "Активность команды"
     },
     "selfHosted": {
       "title": "Свой сервер синхронизации",
@@ -4026,6 +4032,85 @@
       "bodyWithLogs": "Ваш отзыв и логи получены командой Donut.",
       "reply": "Если понадобятся подробности, мы напишем на {{email}}.",
       "done": "Готово"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "Ваша роль в команде — «Запуск»: вы можете открывать профили команды, и то, что меняет сеанс, сохраняется. Настройки, прокси и группы остаются такими, как их задала команда."
+  },
+  "teamActivity": {
+    "title": "Активность команды",
+    "description": "Что участники делали с профилями и общими элементами команды, сначала новые. Хранится 90 дней, на Enterprise — 365 дней.",
+    "empty": "Активности пока нет.",
+    "loadMore": "Загрузить ещё",
+    "system": "Donut",
+    "formerMember": "Бывший участник",
+    "noTarget": "элемент",
+    "changedFields": "Изменено: {{fields}}",
+    "actions": {
+      "memberInvite": "пригласил(а) {{target}}",
+      "memberJoin": "присоединился(-ась) к команде",
+      "memberRemove": "удалил(а) {{target}} из команды",
+      "memberRoleChange": "изменил(а) роль {{target}}",
+      "invitationCancel": "отменил(а) приглашение для {{target}}",
+      "profileLaunch": "открыл(а) {{target}}",
+      "profileStop": "закрыл(а) {{target}}",
+      "profileCreate": "создал(а) {{target}}",
+      "profileRename": "переименовал(а) {{target}}",
+      "profileUpdate": "изменил(а) {{target}}",
+      "profileBulkUpdate": "изменил(а) {{target}} при массовом редактировании",
+      "profileDelete": "удалил(а) {{target}}",
+      "profileRestore": "восстановил(а) {{target}} из корзины",
+      "profileSyncOn": "включил(а) синхронизацию для {{target}}",
+      "profileSyncOff": "выключил(а) синхронизацию для {{target}}",
+      "proxyCreate": "добавил(а) прокси {{target}}",
+      "proxyUpdate": "изменил(а) прокси {{target}}",
+      "proxyDelete": "удалил(а) прокси {{target}}",
+      "groupCreate": "создал(а) группу {{target}}",
+      "groupUpdate": "изменил(а) группу {{target}}",
+      "groupDelete": "удалил(а) группу {{target}}",
+      "vpnCreate": "добавил(а) VPN {{target}}",
+      "vpnUpdate": "изменил(а) VPN {{target}}",
+      "vpnDelete": "удалил(а) VPN {{target}}",
+      "extensionAdd": "добавил(а) расширение {{target}}",
+      "extensionUpdate": "обновил(а) расширение {{target}}",
+      "extensionDelete": "удалил(а) расширение {{target}}",
+      "extensionGroupCreate": "создал(а) группу расширений {{target}}",
+      "extensionGroupUpdate": "изменил(а) группу расширений {{target}}",
+      "extensionGroupDelete": "удалил(а) группу расширений {{target}}",
+      "templateCreate": "создал(а) шаблон {{target}}",
+      "templateUpdate": "изменил(а) шаблон {{target}}",
+      "templateDelete": "удалил(а) шаблон {{target}}",
+      "statusCreate": "создал(а) статус {{target}}",
+      "statusUpdate": "изменил(а) статус {{target}}",
+      "statusDelete": "удалил(а) статус {{target}}",
+      "other": "выполнил(а) {{action}} для {{target}}"
+    },
+    "fields": {
+      "name": "Название",
+      "group": "Группа",
+      "tags": "Теги",
+      "note": "Заметка",
+      "clearOnClose": "Очищать при закрытии",
+      "windowColor": "Цвет окна",
+      "launchHook": "Хук запуска",
+      "proxyBypassRules": "Исключения прокси",
+      "dnsBlocklist": "Блок-лист DNS",
+      "dnsServer": "DNS-сервер",
+      "startUrls": "Стартовые страницы",
+      "status": "Статус",
+      "fingerprint": "Отпечаток",
+      "proxy": "Прокси",
+      "vpn": "VPN",
+      "extensionGroup": "Группа расширений",
+      "bookmarks": "Закладки",
+      "extensions": "Расширения"
+    },
+    "via": {
+      "desktop": "из приложения для компьютера",
+      "web": "из веба",
+      "mcp": "через MCP-агента",
+      "service": "с ключом API",
+      "remote_vm": "из облачного браузера"
     }
   }
 }

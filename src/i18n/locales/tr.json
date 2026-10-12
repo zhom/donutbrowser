@@ -838,7 +838,8 @@
       "profileLocked": "{{email}} tarafından kullanılıyor",
       "profileLockedShort": "Kullanımda",
       "cannotLaunchLocked": "Başlatılamıyor — profil {{email}} tarafından kullanılıyor",
-      "createdBy": "{{email}} tarafından oluşturuldu"
+      "createdBy": "{{email}} tarafından oluşturuldu",
+      "roleLauncher": "Başlatıcı"
     },
     "disabled": "Devre Dışı",
     "toast": {
@@ -2641,7 +2642,11 @@
     "localStorageRemoteSession": "Bu profili uzak bir oturum kullanıyor. İşi buraya dönene kadar bekleyin.",
     "scheduledAutomationNotEntitled": "Zamanlanmış tarifler Solo, Pro, Team ve Enterprise'a dahildir.",
     "agentScheduleInvalid": "Donut bulutu bu zamanlamayı kabul etmedi. Günleri, saati ve profilleri kontrol edin.",
-    "agentScheduleNotFound": "Bu zamanlama artık yok."
+    "agentScheduleNotFound": "Bu zamanlama artık yok.",
+    "teamRoleReadOnly": "Ekip rolün profilleri açabilir ama değiştiremez. Bir ekip sahibine veya yöneticisine sor.",
+    "teamActivityForbidden": "Ekibin etkinliğini yalnızca ekip sahipleri ve yöneticileri görebilir.",
+    "teamActivityNotEntitled": "Etkinlik günlüğü için etkin bir Team veya Enterprise planı gerekir.",
+    "teamActivityInvalid": "Etkinlik günlüğü isteği geçerli değildi."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2730,7 +2735,8 @@
     "tabs": {
       "account": "Hesap",
       "selfHosted": "Kendi sunucunuz",
-      "teamUsage": "Ekip kullanımı"
+      "teamUsage": "Ekip kullanımı",
+      "teamActivity": "Ekip etkinliği"
     },
     "selfHosted": {
       "title": "Kendi eşitleme sunucunuz",
@@ -3940,6 +3946,85 @@
       "bodyWithLogs": "Geri bildiriminiz ve günlükleriniz Donut ekibine ulaştı.",
       "reply": "Daha fazla ayrıntıya ihtiyacımız olursa {{email}} adresine yazarız.",
       "done": "Tamam"
+    }
+  },
+  "teamRoles": {
+    "readOnlyNotice": "Ekip rolün Başlatıcı: Ekibin profillerini açabilirsin ve bir oturumun değiştirdikleri korunur. Ayarlar, proxy'ler ve gruplar ekibin belirlediği gibi kalır."
+  },
+  "teamActivity": {
+    "title": "Ekip etkinliği",
+    "description": "Üyelerin ekibin profilleri ve paylaşılan öğeleriyle yaptıkları, en yenisi önce. 90 gün, Enterprise'da 365 gün saklanır.",
+    "empty": "Henüz etkinlik yok.",
+    "loadMore": "Daha fazla yükle",
+    "system": "Donut",
+    "formerMember": "Eski bir üye",
+    "noTarget": "bir öğe",
+    "changedFields": "Değişen: {{fields}}",
+    "actions": {
+      "memberInvite": "{{target}} kişisini davet etti",
+      "memberJoin": "ekibe katıldı",
+      "memberRemove": "{{target}} kişisini ekipten çıkardı",
+      "memberRoleChange": "{{target}} kişisinin rolünü değiştirdi",
+      "invitationCancel": "{{target}} için daveti iptal etti",
+      "profileLaunch": "{{target}} profilini açtı",
+      "profileStop": "{{target}} profilini kapattı",
+      "profileCreate": "{{target}} profilini oluşturdu",
+      "profileRename": "{{target}} profilinin adını değiştirdi",
+      "profileUpdate": "{{target}} profilini değiştirdi",
+      "profileBulkUpdate": "{{target}} profilini toplu düzenlemede değiştirdi",
+      "profileDelete": "{{target}} profilini sildi",
+      "profileRestore": "{{target}} profilini çöp kutusundan geri yükledi",
+      "profileSyncOn": "{{target}} için eşitlemeyi açtı",
+      "profileSyncOff": "{{target}} için eşitlemeyi kapattı",
+      "proxyCreate": "{{target}} proxy'sini ekledi",
+      "proxyUpdate": "{{target}} proxy'sini değiştirdi",
+      "proxyDelete": "{{target}} proxy'sini sildi",
+      "groupCreate": "{{target}} grubunu oluşturdu",
+      "groupUpdate": "{{target}} grubunu değiştirdi",
+      "groupDelete": "{{target}} grubunu sildi",
+      "vpnCreate": "{{target}} VPN'ini ekledi",
+      "vpnUpdate": "{{target}} VPN'ini değiştirdi",
+      "vpnDelete": "{{target}} VPN'ini sildi",
+      "extensionAdd": "{{target}} eklentisini ekledi",
+      "extensionUpdate": "{{target}} eklentisini güncelledi",
+      "extensionDelete": "{{target}} eklentisini sildi",
+      "extensionGroupCreate": "{{target}} eklenti grubunu oluşturdu",
+      "extensionGroupUpdate": "{{target}} eklenti grubunu değiştirdi",
+      "extensionGroupDelete": "{{target}} eklenti grubunu sildi",
+      "templateCreate": "{{target}} şablonunu oluşturdu",
+      "templateUpdate": "{{target}} şablonunu değiştirdi",
+      "templateDelete": "{{target}} şablonunu sildi",
+      "statusCreate": "{{target}} durumunu oluşturdu",
+      "statusUpdate": "{{target}} durumunu değiştirdi",
+      "statusDelete": "{{target}} durumunu sildi",
+      "other": "{{target}} üzerinde {{action}} yaptı"
+    },
+    "fields": {
+      "name": "Ad",
+      "group": "Grup",
+      "tags": "Etiketler",
+      "note": "Not",
+      "clearOnClose": "Kapanınca temizle",
+      "windowColor": "Pencere rengi",
+      "launchHook": "Başlatma kancası",
+      "proxyBypassRules": "Proxy istisna kuralları",
+      "dnsBlocklist": "DNS engel listesi",
+      "dnsServer": "DNS sunucusu",
+      "startUrls": "Başlangıç sayfaları",
+      "status": "Durum",
+      "fingerprint": "Parmak izi",
+      "proxy": "Proxy",
+      "vpn": "VPN",
+      "extensionGroup": "Eklenti grubu",
+      "bookmarks": "Yer imleri",
+      "extensions": "Eklentiler"
+    },
+    "via": {
+      "desktop": "masaüstü uygulamasından",
+      "web": "web'den",
+      "mcp": "bir MCP ajanıyla",
+      "service": "bir API anahtarıyla",
+      "remote_vm": "bir bulut tarayıcısından"
     }
   }
 }

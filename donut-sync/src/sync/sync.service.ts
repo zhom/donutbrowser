@@ -78,6 +78,13 @@ function sanitizeMetadata(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * What a launcher's session may write, relative to the team namespace. Team
+ * profiles live under `teams/<team id>/`, personal ones at the root.
+ */
+const LAUNCHER_WRITABLE =
+  /^(teams\/[^/]+\/)?profiles\/[^/]+\/(files\/.+|manifest\.json)$/;
+
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
@@ -361,6 +368,22 @@ export class SyncService implements OnModuleInit {
     throw new ForbiddenException("Access denied to this key");
   }
 
+  /**
+   * A launcher may write only what a session changes: a profile's files and
+   * its manifest. Never its settings (`metadata.json`), the team's proxies,
+   * groups or other shared config, and never a whole profile or a tombstone.
+   */
+  private validateWriteAccess(ctx: UserContext, key: string): void {
+    this.validateKeyAccess(ctx, key);
+    if (ctx.teamRole !== "launcher") return;
+    const relative = key.slice(ctx.prefix.length);
+    if (LAUNCHER_WRITABLE.test(relative)) return;
+    throw new ForbiddenException({
+      code: "TEAM_ROLE_READ_ONLY",
+      message: "This team role can run profiles but not change them",
+    });
+  }
+
   async stat(dto: StatRequestDto, ctx: UserContext): Promise<StatResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
     this.validateKeyAccess(ctx, key);
@@ -400,7 +423,7 @@ export class SyncService implements OnModuleInit {
     ctx: UserContext,
   ): Promise<PresignUploadResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
-    this.validateKeyAccess(ctx, key);
+    this.validateWriteAccess(ctx, key);
 
     // Check profile limit for cloud users
     if (ctx.mode === "cloud" && ctx.profileLimit > 0) {
@@ -480,7 +503,11 @@ export class SyncService implements OnModuleInit {
     ctx: UserContext,
   ): Promise<DeleteResponseDto> {
     const key = this.scopeKey(ctx, dto.key);
-    this.validateKeyAccess(ctx, key);
+    this.validateWriteAccess(ctx, key);
+    const scopedTombstoneKey = dto.tombstoneKey
+      ? this.scopeKey(ctx, dto.tombstoneKey)
+      : undefined;
+    if (scopedTombstoneKey) this.validateWriteAccess(ctx, scopedTombstoneKey);
 
     let deleted = false;
     let tombstoneCreated = false;
@@ -497,8 +524,7 @@ export class SyncService implements OnModuleInit {
       deleted = false;
     }
 
-    if (dto.tombstoneKey) {
-      const scopedTombstoneKey = this.scopeKey(ctx, dto.tombstoneKey);
+    if (scopedTombstoneKey) {
       const tombstoneData = JSON.stringify({
         id: key,
         deleted_at: dto.deletedAt || new Date().toISOString(),
@@ -590,7 +616,7 @@ export class SyncService implements OnModuleInit {
     const items = await Promise.all(
       dto.items.map(async (item) => {
         const key = this.scopeKey(ctx, item.key);
-        this.validateKeyAccess(ctx, key);
+        this.validateWriteAccess(ctx, key);
 
         const command = new PutCmd({
           Bucket: this.bucket,
@@ -685,10 +711,14 @@ export class SyncService implements OnModuleInit {
     // (one already starting with its own/team scope, which scopeKey returns
     // verbatim) could wipe an entire shared namespace. Enforce scope, and
     // refuse an empty scoped prefix (which would match the whole scope).
-    this.validateKeyAccess(ctx, prefix);
+    this.validateWriteAccess(ctx, prefix);
     if (ctx.mode === "cloud" && prefix.length === 0) {
       throw new ForbiddenException("Refusing to delete an empty prefix");
     }
+    const scopedTombstoneKey = dto.tombstoneKey
+      ? this.scopeKey(ctx, dto.tombstoneKey)
+      : undefined;
+    if (scopedTombstoneKey) this.validateWriteAccess(ctx, scopedTombstoneKey);
     let deletedCount = 0;
     let tombstoneCreated = false;
     let continuationToken: string | undefined;
@@ -729,9 +759,7 @@ export class SyncService implements OnModuleInit {
     } while (continuationToken);
 
     // Create tombstone if requested
-    if (dto.tombstoneKey && deletedCount > 0) {
-      const scopedTombstoneKey = this.scopeKey(ctx, dto.tombstoneKey);
-      this.validateKeyAccess(ctx, scopedTombstoneKey);
+    if (scopedTombstoneKey && deletedCount > 0) {
       const tombstoneData = JSON.stringify({
         prefix: dto.prefix,
         deleted_at: dto.deletedAt || new Date().toISOString(),

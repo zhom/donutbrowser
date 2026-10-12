@@ -97,6 +97,7 @@ pub fn create(name: &str, color: &str) -> Result<ProfileStatus, String> {
     Ok(status)
   })?;
   config_entities::changed_locally::<ProfileStatus>(&status.id);
+  crate::team_activity::record("status.create", &status.id, Some(&status.name), None);
   Ok(status)
 }
 
@@ -122,6 +123,7 @@ pub fn update(status_id: &str, name: &str, color: &str) -> Result<ProfileStatus,
     Ok(status.clone())
   })?;
   config_entities::changed_locally::<ProfileStatus>(&status.id);
+  crate::team_activity::record("status.update", &status.id, Some(&status.name), None);
   Ok(status)
 }
 
@@ -139,6 +141,7 @@ pub fn delete(status_id: &str) -> Result<(), String> {
     .clear_status_references(status_id)
     .map_err(|e| crate::wrap_backend_error(e, "Failed to clear the status from profiles"))?;
   config_entities::deleted_locally::<ProfileStatus>(status_id);
+  crate::team_activity::record("status.delete", status_id, None, None);
   Ok(())
 }
 

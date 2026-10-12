@@ -40,14 +40,14 @@ donutbrowser/
 │   ├── hooks/                        # Event-driven React hooks, table preferences, filtering, and keyboard controls
 │   ├── i18n/locales/                 # Translations (de, en, es, fr, ja, ko, pt, ru, tr, vi, zh)
 │   ├── generated/                    # Build-generated third-party license inventory
-│   ├── lib/                          # Utilities (themes, toast, browser-utils)
+│   ├── lib/                          # Utilities (themes, toast, browser-utils, ui-sounds, schedules, team-activity)
 │   └── types.ts                      # Shared TypeScript interfaces
 ├── src-tauri/                        # Rust backend (Tauri)
 │   ├── src/
 │   │   ├── lib.rs                    # Tauri command registration (100+ commands)
 │   │   ├── browser_runner.rs         # Profile launch/kill orchestration
 │   │   ├── browser.rs               # Browser trait & launch logic
-│   │   ├── profile/                  # Profile CRUD (manager.rs, types.rs)
+│   │   ├── profile/                  # Profile CRUD (manager.rs, types.rs), bulk-edit patch (patch.rs), trash
 │   │   ├── proxy_manager.rs         # Proxy lifecycle, connection testing, per-proxy check history
 │   │   ├── proxy_udp.rs             # SOCKS5 UDP ASSOCIATE probe (yes/no/unknown UDP verdict)
 │   │   ├── proxy_server.rs          # Local proxy binary (donut-proxy)
@@ -55,11 +55,16 @@ donutbrowser/
 │   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
 │   │   ├── mcp_server.rs            # MCP tool engine, served over the remote bridge
+│   │   ├── mcp_toolsets.rs          # Optional MCP toolsets: which tools a client lists (core + opt-in sets)
+│   │   ├── mcp_views.rs             # Compact MCP views: profile summaries, filters, paging, size caps
+│   │   ├── navigation_watch.rs      # Whether a CDP action navigated, so a click waits only for a load that comes
 │   │   ├── mcp_remote.rs            # Remote MCP bridge: outbound websocket to Donut cloud (Enterprise remote control)
 │   │   ├── mcp_integrations.rs      # 20-client MCP installer: remote endpoint with bearer, format-preserving JSONC/TOML edits
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── agent_console.rs         # The person's side of connected MCP agents: activity, questions, notes, take-over, pause
 │   │   ├── recipes.rs               # Thin client for cloud recipes; storage and replay stay in the cloud
+│   │   ├── agent_schedules.rs       # Thin client for scheduled recipes (paid plans; the cloud checks the plan)
+│   │   ├── cloud_api.rs             # Signed-in JSON calls to Donut cloud, with token refresh and error codes
 │   │   ├── feedback.rs              # Feedback to the Donut team from the dialog and the send_feedback MCP tool, optional redacted logs
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
@@ -73,7 +78,11 @@ donutbrowser/
 │   │   ├── system_proxy.rs         # The OS proxy Donut's own requests use; named in the error when it is unreachable
 │   │   ├── vault.rs                # Per-install key that seals local secrets; opens legacy build-password seals once
 │   │   ├── cookie_manager.rs       # Cookie import/export
+│   │   ├── local_storage.rs        # Local Storage LevelDB read/write, Playwright storageState import/export
 │   │   ├── profile_importer.rs     # Bulk profile import (Chromium-family detection, ZIP, batch)
+│   │   ├── profile_templates.rs    # Synced profile templates and bulk create from a template
+│   │   ├── profile_statuses.rs     # Synced profile statuses (name + color) set on profiles
+│   │   ├── totp.rs                 # RFC 6238 codes; profile_totp.rs keeps sealed per-profile keys (device only)
 │   │   ├── fingerprint_consistency.rs # Launch-time proxy exit vs fingerprint timezone/language check
 │   │   ├── dns_blocklist.rs         # Hagezi DNS blocklists + user custom lists/allowlist
 │   │   ├── traffic_stats.rs         # Per-profile traffic stats + secure history erase
@@ -82,6 +91,8 @@ donutbrowser/
 │   │   ├── group_manager.rs        # Profile group management
 │   │   ├── synchronizer.rs         # Real-time profile synchronizer (pause/resume, hold a follower out, window layouts)
 │   │   ├── legacy_autostart.rs     # Removes the autostart entry the removed tray daemon (0.14-0.17) left behind
+│   │   ├── team_roles.rs           # Launcher seat: refuses team-data commands and MCP tools, read-only sync
+│   │   ├── team_activity.rs        # Team activity log: batched reports of member edits, owner/admin viewer
 │   │   └── cloud_auth.rs           # Cloud authentication
 │   ├── tests/                      # Integration tests
 │   └── Cargo.toml                  # Rust dependencies
@@ -470,6 +481,19 @@ echoes back what it signed (the Rust client must send exactly those headers on
 the PUT or S3 rejects it, hence the echo). `stat` returns `response.Metadata`.
 Older servers omit `metadata` → client falls back to the body-GET path. DTOs:
 `donut-sync/src/sync/dto/sync.dto.ts`; logic: `sync.service.ts`.
+
+## Team roles and the activity log
+
+- A `launcher` seat opens the team's profiles and keeps what a session changes, never the team's
+  settings. The sync server enforces it (`donut-sync` `LAUNCHER_WRITABLE`: only a profile's
+  `files/` and `manifest.json`); the app mirrors it so an edit never appears and then reverts.
+- `team_roles.rs` lists every Tauri command and MCP tool that changes team data (profiles,
+  proxies, groups, VPNs, extensions, templates, statuses). A new command or tool of that kind goes
+  in the list; the tests check every name is registered. On a launcher seat the sync engine takes
+  the team's copy of every setting and skips its own uploads and deletes of them.
+- `team_activity::record` notes a person's edit of a synced entity, next to the `updated_at` bump.
+  Only a team seat with team collaboration reports; names leave the app only when E2E encryption
+  is off. Launches, stops and membership are written by the cloud itself, not reported.
 
 ## Proprietary Changes
 
