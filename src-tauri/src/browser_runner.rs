@@ -1653,7 +1653,38 @@ pub async fn launch_browser_profile_impl(
   let _profile_launch_guard = lock_profile_launch(&profile.id.to_string()).await;
   let started = std::time::Instant::now();
   emit_launch_stage(&profile, "queued", None);
-  let result = launch_browser_profile_tracked(app_handle, profile.clone(), url, options).await;
+  let mut profile = profile;
+  let mut result = launch_browser_profile_tracked(
+    app_handle.clone(),
+    profile.clone(),
+    url.clone(),
+    options.clone(),
+  )
+  .await;
+  // Wayfern refuses some overrides a whole supplied device carries (which ones
+  // depends on the values). Each refusal names one property, so the property
+  // is dropped and the launch tried again, a bounded number of times.
+  for _ in 0..MAX_OVERRIDE_RETRIES {
+    let Err(error) = &result else { break };
+    let Some(dropped) = drop_refused_override(&profile, error) else {
+      break;
+    };
+    log::warn!(
+      "Override refused by the browser, dropped and launching again profile={} property={}",
+      profile.id,
+      dropped.1
+    );
+    profile = dropped.0;
+    // The refused browser was killed; a new one may only start once it is gone.
+    wait_until_stopped(&app_handle, &profile).await;
+    result = launch_browser_profile_tracked(
+      app_handle.clone(),
+      profile.clone(),
+      url.clone(),
+      options.clone(),
+    )
+    .await;
+  }
   match &result {
     Ok(_) => emit_launch_stage(&profile, "running", None),
     Err(error) => {
@@ -1666,6 +1697,70 @@ pub async fn launch_browser_profile_impl(
     }
   }
   result
+}
+
+/// Wait, briefly, until no browser runs for `profile`.
+async fn wait_until_stopped(app_handle: &tauri::AppHandle, profile: &BrowserProfile) {
+  for _ in 0..50 {
+    match BrowserRunner::instance()
+      .check_browser_status(app_handle.clone(), profile)
+      .await
+    {
+      Ok(false) => return,
+      _ => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+    }
+  }
+  log::warn!(
+    "Refused browser still running after 5 s profile={}",
+    profile.id
+  );
+}
+
+/// How many refused overrides one launch may drop before it gives up.
+const MAX_OVERRIDE_RETRIES: usize = 6;
+
+/// The property a `WAYFERN_IDENTITY_REFUSED` error names, when it is one the
+/// profile overrides.
+fn refused_override(error: &str) -> Option<String> {
+  if !error.contains("WAYFERN_IDENTITY_REFUSED") {
+    return None;
+  }
+  let marker = "Fingerprint property was not applied: ";
+  let rest = &error[error.find(marker)? + marker.len()..];
+  let name: String = rest
+    .chars()
+    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+    .collect();
+  (!name.is_empty()).then_some(name)
+}
+
+/// `profile` without the override the browser refused, saved so the next
+/// launch does not trip on it again. `None` when the error names no override
+/// this profile carries.
+fn drop_refused_override(
+  profile: &BrowserProfile,
+  error: &str,
+) -> Option<(BrowserProfile, String)> {
+  let property = refused_override(error)?;
+  let mut updated = profile.clone();
+  let config = updated.wayfern_config.as_mut()?;
+  let mut overrides: serde_json::Map<String, serde_json::Value> =
+    serde_json::from_str(config.identity_overrides.as_deref()?).ok()?;
+  overrides.remove(&property)?;
+  config.identity_overrides = if overrides.is_empty() {
+    None
+  } else {
+    serde_json::to_string(&overrides).ok()
+  };
+  // Not an edit of the person's: the stored copy only stops asking for what the
+  // browser cannot give, so `updated_at` stays and sync is not woken.
+  if let Err(e) = ProfileManager::instance().save_profile(&updated) {
+    log::warn!(
+      "Refused override not saved profile={} err=\"{e}\"",
+      profile.id
+    );
+  }
+  Some((updated, property))
 }
 
 async fn launch_browser_profile_tracked(
@@ -1940,6 +2035,24 @@ static BROWSER_RUNNER: std::sync::LazyLock<BrowserRunner> =
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_refusal_names_the_override_to_drop() {
+    let refused = crate::backend_error_with_detail(
+      "WAYFERN_IDENTITY_REFUSED",
+      "the identity file overrides were rejected: Fingerprint property was not applied: batteryLevel. Check the property name and the value type.",
+    );
+    assert_eq!(refused_override(&refused).as_deref(), Some("batteryLevel"));
+    assert_eq!(
+      refused_override(&crate::backend_error("WAYFERN_IDENTITY_REFUSED")),
+      None
+    );
+    assert_eq!(
+      refused_override("Fingerprint property was not applied: x"),
+      None,
+      "only an identity refusal drops an override"
+    );
+  }
 
   #[tokio::test]
   async fn profile_launch_lock_serializes_only_the_same_profile() {
