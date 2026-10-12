@@ -2838,6 +2838,7 @@ mod tests {
   use super::*;
   use std::env;
   use std::path::PathBuf;
+  use std::process::Stdio;
   use std::time::Duration;
   use tokio::process::Command;
   use tokio::time::sleep;
@@ -3194,90 +3195,83 @@ mod tests {
     );
   }
 
-  // Test the CLI detachment specifically - ensure the CLI exits properly
+  /// A CLI that does not detach from its worker never exits at all, so the
+  /// limit only has to be far past a slow start: the CLI itself waits up to
+  /// about four seconds for the worker, and a loaded machine adds to that.
+  const CLI_EXIT_LIMIT: Duration = Duration::from_secs(30);
+
+  /// Run `donut-proxy proxy start` against a real upstream and wait for the
+  /// CLI to exit. Its output goes to a file, not a pipe: on macOS a pipe is
+  /// made close-on-exec in a second step, so a child that another test in
+  /// this process starts in between inherits it and keeps it open, and a
+  /// reader waiting for the pipe to close waits for that child instead.
+  async fn run_cli_start(
+    proxy_path: &std::path::Path,
+  ) -> Result<(std::process::ExitStatus, String, Duration), Box<dyn std::error::Error>> {
+    let stdout = tempfile::NamedTempFile::new()?;
+    let mut cmd = Command::new(proxy_path);
+    cmd
+      .args([
+        "proxy",
+        "start",
+        "--host",
+        "httpbin.org",
+        "--proxy-port",
+        "80",
+        "--type",
+        "http",
+      ])
+      .stdin(Stdio::null())
+      .stdout(Stdio::from(stdout.reopen()?))
+      .stderr(Stdio::null());
+    let started = std::time::Instant::now();
+    let status = tokio::time::timeout(CLI_EXIT_LIMIT, cmd.status())
+      .await
+      .map_err(|_| "CLI command timed out - this indicates improper detachment")??;
+    Ok((
+      status,
+      std::fs::read_to_string(stdout.path())?,
+      started.elapsed(),
+    ))
+  }
+
+  async fn stop_cli_proxy(proxy_path: &std::path::Path, stdout: &str) {
+    let Ok(config) = serde_json::from_str::<serde_json::Value>(stdout) else {
+      return;
+    };
+    if let Some(proxy_id) = config["id"].as_str() {
+      let _ = Command::new(proxy_path)
+        .args(["proxy", "stop", "--id", proxy_id])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await;
+    }
+  }
+
   #[tokio::test]
   async fn test_cli_exits_after_proxy_start() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_path = ensure_donut_proxy_binary().await?;
-
-    // Test that the CLI exits quickly with a mock upstream
-    let mut cmd = Command::new(&proxy_path);
-    cmd
-      .arg("proxy")
-      .arg("start")
-      .arg("--host")
-      .arg("httpbin.org")
-      .arg("--proxy-port")
-      .arg("80")
-      .arg("--type")
-      .arg("http");
-
-    let start_time = std::time::Instant::now();
-    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
-
-    match output {
-      Ok(Ok(cmd_output)) => {
-        let execution_time = start_time.elapsed();
-
-        if cmd_output.status.success() {
-          let stdout = String::from_utf8(cmd_output.stdout)?;
-          let config: serde_json::Value = serde_json::from_str(&stdout)?;
-
-          // Clean up - try to stop the proxy
-          if let Some(proxy_id) = config["id"].as_str() {
-            let mut stop_cmd = Command::new(&proxy_path);
-            stop_cmd.arg("proxy").arg("stop").arg("--id").arg(proxy_id);
-            let _ = stop_cmd.output().await;
-          }
-        }
-
-        println!("CLI detachment test passed - CLI exited in {execution_time:?}");
-      }
-      Ok(Err(e)) => {
-        return Err(format!("Command execution failed: {e}").into());
-      }
-      Err(_) => {
-        return Err("CLI command timed out - this indicates improper detachment".into());
-      }
+    let (status, stdout, elapsed) = run_cli_start(&proxy_path).await?;
+    if status.success() {
+      let config: serde_json::Value = serde_json::from_str(&stdout)?;
+      assert!(config["id"].is_string(), "the CLI prints the started proxy");
+      stop_cli_proxy(&proxy_path, &stdout).await;
     }
-
+    println!("CLI detachment test passed - CLI exited in {elapsed:?}");
     Ok(())
   }
 
-  // Test that validates proper CLI detachment behavior
   #[tokio::test]
   async fn test_cli_detachment_behavior() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_path = ensure_donut_proxy_binary().await?;
-
-    // Test that the CLI command exits quickly even with a real upstream
-    let mut cmd = Command::new(&proxy_path);
-    cmd
-      .arg("proxy")
-      .arg("start")
-      .arg("--host")
-      .arg("httpbin.org")
-      .arg("--proxy-port")
-      .arg("80")
-      .arg("--type")
-      .arg("http");
-
-    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await??;
-
-    if output.status.success() {
-      let stdout = String::from_utf8(output.stdout)?;
-      let config: serde_json::Value = serde_json::from_str(&stdout)?;
-      let proxy_id = config["id"].as_str().unwrap();
-
-      // Clean up
-      let mut stop_cmd = Command::new(&proxy_path);
-      stop_cmd.arg("proxy").arg("stop").arg("--id").arg(proxy_id);
-      let _ = stop_cmd.output().await;
-
-      println!("CLI detachment test passed");
-    } else {
-      // Even if the upstream fails, the CLI should still exit quickly
-      println!("CLI command failed but exited quickly as expected");
+    // Even when the upstream fails, the CLI must exit instead of waiting on
+    // its worker.
+    let (status, stdout, _) = run_cli_start(&proxy_path).await?;
+    if status.success() {
+      stop_cli_proxy(&proxy_path, &stdout).await;
     }
-
     Ok(())
   }
 

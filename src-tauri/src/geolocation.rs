@@ -410,7 +410,10 @@ pub fn get_geolocation(ip: &str) -> Result<Geolocation, GeolocationError> {
     .ok_or_else(|| GeolocationError::LocationNotFound("No country code".to_string()))?
     .to_uppercase();
 
-  let selector = LocaleSelector::new()?;
+  // The CLDR data is parsed once for the process, not on every lookup.
+  let selector = locale_selector().ok_or_else(|| {
+    GeolocationError::LocationNotFound("CLDR locale data is unavailable".to_string())
+  })?;
   let locale = selector.from_region(&iso_code)?;
 
   Ok(Geolocation {
