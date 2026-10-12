@@ -80,6 +80,7 @@ mod auto_updater;
 mod automation_rate_limiter;
 mod browser;
 mod browser_runner;
+mod browser_tabs;
 mod browser_version_manager;
 mod cdp_target;
 mod checksum;
@@ -99,6 +100,7 @@ mod geolocation;
 mod group_bookmarks;
 mod group_manager;
 mod human_typing;
+mod indexed_db;
 mod ip_utils;
 mod launch_gate;
 mod launch_gate_prefs;
@@ -2383,10 +2385,34 @@ pub fn run() {
   run_with_builder(|builder| builder);
 }
 
+/// The async runtime, set before anything spawns on it.
+///
+/// A debug build keeps every local of a large `async fn` in one poll frame,
+/// and the MCP tool dispatcher's frame, nested under the HTTP and bridge
+/// layers, passes the 2 MiB that tokio gives a worker by default: the app
+/// aborted with a stack overflow on a tool call. 8 MiB is address space a
+/// thread reserves, not memory it uses.
+fn install_runtime() {
+  const WORKER_STACK_BYTES: usize = 8 * 1024 * 1024;
+  match tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .thread_stack_size(WORKER_STACK_BYTES)
+    .build()
+  {
+    Ok(runtime) => {
+      tauri::async_runtime::set(runtime.handle().clone());
+      // Lives as long as the app; Tauri holds only a handle.
+      std::mem::forget(runtime);
+    }
+    Err(e) => eprintln!("Async runtime with larger stacks unavailable, using the default: {e}"),
+  }
+}
+
 #[doc(hidden)]
 pub fn run_with_builder(
   configure_builder: impl FnOnce(tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry>,
 ) {
+  install_runtime();
   let args: Vec<String> = env::args().collect();
   let startup_url = urls_from_args(args.iter()).into_iter().next();
 
@@ -3659,6 +3685,10 @@ pub fn run_with_builder(
       unlock_profile,
       lock_profile,
       is_profile_locked,
+      sync::restore_points::list_restore_points,
+      sync::restore_points::create_restore_point,
+      sync::restore_points::delete_restore_point,
+      sync::restore_points::restore_restore_point,
       team_activity::list_team_activity,
       team_activity::export_team_activity_csv,
       team_members::list_team_members,

@@ -1617,7 +1617,10 @@
       "stats": "Siteler: {{origins}} · Öğeler: {{items}}",
       "hint": "Çerezleri ve Local Storage'ı tek bir Playwright storageState dosyasında toplar. İçe aktarmak için tarayıcı kapalı olmalıdır.",
       "exported": "Depolama durumu dışa aktarıldı",
-      "imported": "İçe aktarıldı. Local Storage öğeleri: {{items}} · Siteler: {{origins}} · Çerezler: {{cookies}}"
+      "imported": "İçe aktarıldı. Local Storage öğeleri: {{items}} · Siteler: {{origins}} · Çerezler: {{cookies}}",
+      "includeIndexedDb": "IndexedDB'yi dahil et",
+      "indexedDbHint": "Dışa aktarma profili bir anlığına arka planda açar; hiçbir sayfa yüklenmez.",
+      "importedWithIndexedDb": "İçe aktarıldı. Local Storage öğeleri: {{items}} · Siteler: {{origins}} · Çerezler: {{cookies}} · IndexedDB kayıtları: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "Bu üye artık ekipte değil.",
     "teamGroupAccessDenied": "Bu profilin grubuna erişimin yok.",
     "teamAccessNotEntitled": "Gruba göre erişim için etkin bir Team veya Enterprise planı gerekir.",
-    "replayRecipeNotFound": "Bu tarif artık yok."
+    "replayRecipeNotFound": "Bu tarif artık yok.",
+    "indexedDbUnavailable": "Tarayıcı IndexedDB'yi okuyamadı veya yazamadı. Profili kapatıp yeniden dene.",
+    "indexedDbTooLarge": "IndexedDB 24 MiB'den büyük, tek bir storage state dosyası için fazla.",
+    "snapshotInvalid": "Geri yükleme noktası isteği geçerli değildi.",
+    "snapshotNothingToKeep": "Bu profilin henüz saklanacak eşitlenmiş verisi yok. Önce eşitle.",
+    "snapshotNotFound": "Bu geri yükleme noktası artık yok.",
+    "restorePointsUnsupported": "Eşitleme sunucusu geri yükleme noktaları için çok eski. Güncelle.",
+    "restorePointFailed": "Geri yükleme noktası başarısız oldu: {{detail}}",
+    "restorePointsNeedSync": "Geri yükleme noktaları için bu profilde eşitleme açık olmalı."
   },
   "rail": {
     "profiles": "Profiller",
@@ -4084,5 +4095,21 @@
     "saved": "Erişim kaydedildi.",
     "someGroups_one": "{{count}} grup",
     "someGroups_other": "{{count}} grup"
+  },
+  "restorePoints": {
+    "title": "Geri yükleme noktaları",
+    "hint": "Bu profilin verilerinin eşitleme sunucusundaki kopyaları: bir değişiklikten sonra günde bir tane ve senin oluşturdukların. Her türün en yeni 3 tanesi tutulur.",
+    "create": "Oluştur",
+    "created": "Geri yükleme noktası oluşturuldu.",
+    "empty": "Henüz geri yükleme noktası yok.",
+    "restore": "Geri yükle",
+    "restored": "Geri yükleme noktası geri yüklendi.",
+    "deleted": "Geri yükleme noktası silindi.",
+    "restoreTitle": "Bu profil geri yüklensin mi?",
+    "restoreDescription": "Profilin verileri {{when}} tarihli kopyaya döner. Önce mevcut veriler yeni bir geri yükleme noktası olarak saklanır.",
+    "kind": {
+      "auto": "Günlük",
+      "manual": "Elle"
+    }
   }
 }

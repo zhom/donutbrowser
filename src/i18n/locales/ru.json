@@ -1639,7 +1639,10 @@
       "stats": "Сайты: {{origins}} · Записи: {{items}}",
       "hint": "Один файл storageState для Playwright с cookie и Local Storage. Для импорта браузер должен быть закрыт.",
       "exported": "Состояние хранилища экспортировано",
-      "imported": "Импортировано. Записи Local Storage: {{items}} · Сайты: {{origins}} · Cookie: {{cookies}}"
+      "imported": "Импортировано. Записи Local Storage: {{items}} · Сайты: {{origins}} · Cookie: {{cookies}}",
+      "includeIndexedDb": "Включить IndexedDB",
+      "indexedDbHint": "Экспорт на миг открывает профиль в фоне; страницы не загружаются.",
+      "importedWithIndexedDb": "Импортировано. Записей Local Storage: {{items}} · Сайтов: {{origins}} · Cookie: {{cookies}} · Записей IndexedDB: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2693,7 +2696,15 @@
     "teamMemberNotFound": "Этого участника больше нет в команде.",
     "teamGroupAccessDenied": "У вас нет доступа к группе этого профиля.",
     "teamAccessNotEntitled": "Для доступа по группам нужен активный план Team или Enterprise.",
-    "replayRecipeNotFound": "Этого рецепта больше нет."
+    "replayRecipeNotFound": "Этого рецепта больше нет.",
+    "indexedDbUnavailable": "Браузер не смог прочитать или записать IndexedDB. Закройте профиль и попробуйте снова.",
+    "indexedDbTooLarge": "IndexedDB больше 24 МиБ — слишком много для одного файла storage state.",
+    "snapshotInvalid": "Запрос точки восстановления недействителен.",
+    "snapshotNothingToKeep": "У этого профиля пока нет синхронизированных данных. Сначала синхронизируйте его.",
+    "snapshotNotFound": "Этой точки восстановления больше нет.",
+    "restorePointsUnsupported": "Сервер синхронизации слишком старый для точек восстановления. Обновите его.",
+    "restorePointFailed": "Ошибка точки восстановления: {{detail}}",
+    "restorePointsNeedSync": "Для точек восстановления нужна включённая синхронизация этого профиля."
   },
   "rail": {
     "profiles": "Профили",
@@ -4174,5 +4185,21 @@
     "someGroups_few": "{{count}} группы",
     "someGroups_many": "{{count}} групп",
     "someGroups_other": "{{count}} группы"
+  },
+  "restorePoints": {
+    "title": "Точки восстановления",
+    "hint": "Копии данных этого профиля на сервере синхронизации: одна в день после изменений и те, что вы создаёте. Хранятся 3 последние каждого вида.",
+    "create": "Создать",
+    "created": "Точка восстановления создана.",
+    "empty": "Точек восстановления пока нет.",
+    "restore": "Восстановить",
+    "restored": "Профиль восстановлен из точки.",
+    "deleted": "Точка восстановления удалена.",
+    "restoreTitle": "Восстановить этот профиль?",
+    "restoreDescription": "Данные профиля вернутся к копии от {{when}}. Текущие данные сначала сохранятся как новая точка восстановления.",
+    "kind": {
+      "auto": "Ежедневная",
+      "manual": "Ручная"
+    }
   }
 }

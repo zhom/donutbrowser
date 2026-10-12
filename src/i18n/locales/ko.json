@@ -1617,7 +1617,10 @@
       "stats": "사이트: {{origins}} · 항목: {{items}}",
       "hint": "쿠키와 로컬 스토리지를 하나의 Playwright storageState 파일로 담습니다. 가져오려면 브라우저를 닫아야 합니다.",
       "exported": "스토리지 상태를 내보냈습니다",
-      "imported": "가져왔습니다. 로컬 스토리지 항목: {{items}} · 사이트: {{origins}} · 쿠키: {{cookies}}"
+      "imported": "가져왔습니다. 로컬 스토리지 항목: {{items}} · 사이트: {{origins}} · 쿠키: {{cookies}}",
+      "includeIndexedDb": "IndexedDB 포함",
+      "indexedDbHint": "내보내기는 프로필을 잠시 백그라운드에서 엽니다. 페이지는 불러오지 않습니다.",
+      "importedWithIndexedDb": "가져왔습니다. Local Storage 항목: {{items}} · 사이트: {{origins}} · 쿠키: {{cookies}} · IndexedDB 레코드: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "이 멤버는 더 이상 팀에 없습니다.",
     "teamGroupAccessDenied": "이 프로필의 그룹에 접근할 수 없습니다.",
     "teamAccessNotEntitled": "그룹별 접근 권한에는 활성 Team 또는 Enterprise 요금제가 필요합니다.",
-    "replayRecipeNotFound": "이 레시피는 더 이상 없습니다."
+    "replayRecipeNotFound": "이 레시피는 더 이상 없습니다.",
+    "indexedDbUnavailable": "브라우저가 IndexedDB를 읽거나 쓰지 못했습니다. 프로필을 닫고 다시 시도하세요.",
+    "indexedDbTooLarge": "IndexedDB가 24MiB를 넘어 하나의 storage state 파일에 담을 수 없습니다.",
+    "snapshotInvalid": "복원 지점 요청이 올바르지 않습니다.",
+    "snapshotNothingToKeep": "이 프로필에는 아직 보관할 동기화 데이터가 없습니다. 먼저 동기화하세요.",
+    "snapshotNotFound": "이 복원 지점은 더 이상 없습니다.",
+    "restorePointsUnsupported": "동기화 서버가 너무 오래되어 복원 지점을 쓸 수 없습니다. 업데이트하세요.",
+    "restorePointFailed": "복원 지점 작업이 실패했습니다: {{detail}}",
+    "restorePointsNeedSync": "복원 지점을 쓰려면 이 프로필의 동기화를 켜야 합니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -4084,5 +4095,21 @@
     "saved": "접근 권한을 저장했습니다.",
     "someGroups_one": "{{count}}개 그룹",
     "someGroups_other": "{{count}}개 그룹"
+  },
+  "restorePoints": {
+    "title": "복원 지점",
+    "hint": "동기화 서버에 있는 이 프로필 데이터의 사본입니다. 변경이 있으면 하루에 하나 자동으로 만들고, 직접 만들 수도 있습니다. 종류마다 최신 3개를 보관합니다.",
+    "create": "만들기",
+    "created": "복원 지점을 만들었습니다.",
+    "empty": "아직 복원 지점이 없습니다.",
+    "restore": "복원",
+    "restored": "복원 지점에서 복원했습니다.",
+    "deleted": "복원 지점을 삭제했습니다.",
+    "restoreTitle": "이 프로필을 복원할까요?",
+    "restoreDescription": "프로필 데이터가 {{when}}의 사본으로 돌아갑니다. 현재 데이터는 먼저 새 복원 지점으로 보관됩니다.",
+    "kind": {
+      "auto": "매일",
+      "manual": "수동"
+    }
   }
 }

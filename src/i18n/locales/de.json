@@ -1617,7 +1617,10 @@
       "stats": "Websites: {{origins}} · Einträge: {{items}}",
       "hint": "Eine Playwright-storageState-Datei mit den Cookies und dem Local Storage. Zum Importieren muss der Browser geschlossen sein.",
       "exported": "Speicherzustand exportiert",
-      "imported": "Importiert. Local-Storage-Einträge: {{items}} · Websites: {{origins}} · Cookies: {{cookies}}"
+      "imported": "Importiert. Local-Storage-Einträge: {{items}} · Websites: {{origins}} · Cookies: {{cookies}}",
+      "includeIndexedDb": "IndexedDB einschließen",
+      "indexedDbHint": "Der Export öffnet das Profil kurz im Hintergrund; es wird keine Seite geladen.",
+      "importedWithIndexedDb": "Importiert. Local-Storage-Einträge: {{items}} · Websites: {{origins}} · Cookies: {{cookies}} · IndexedDB-Datensätze: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "Dieses Mitglied ist nicht mehr im Team.",
     "teamGroupAccessDenied": "Du hast keinen Zugriff auf die Gruppe dieses Profils.",
     "teamAccessNotEntitled": "Zugriff nach Gruppe braucht einen aktiven Team- oder Enterprise-Plan.",
-    "replayRecipeNotFound": "Dieses Rezept gibt es nicht mehr."
+    "replayRecipeNotFound": "Dieses Rezept gibt es nicht mehr.",
+    "indexedDbUnavailable": "Der Browser konnte IndexedDB nicht lesen oder schreiben. Schließe das Profil und versuche es erneut.",
+    "indexedDbTooLarge": "Die IndexedDB ist größer als 24 MiB und passt nicht in eine Storage-State-Datei.",
+    "snapshotInvalid": "Die Anfrage für den Wiederherstellungspunkt war ungültig.",
+    "snapshotNothingToKeep": "Dieses Profil hat noch keine synchronisierten Daten. Synchronisiere es zuerst.",
+    "snapshotNotFound": "Diesen Wiederherstellungspunkt gibt es nicht mehr.",
+    "restorePointsUnsupported": "Der Sync-Server ist zu alt für Wiederherstellungspunkte. Aktualisiere ihn.",
+    "restorePointFailed": "Der Wiederherstellungspunkt ist fehlgeschlagen: {{detail}}",
+    "restorePointsNeedSync": "Wiederherstellungspunkte brauchen eingeschaltete Synchronisierung für dieses Profil."
   },
   "rail": {
     "profiles": "Profile",
@@ -4084,5 +4095,21 @@
     "saved": "Zugriff gespeichert.",
     "someGroups_one": "{{count}} Gruppe",
     "someGroups_other": "{{count}} Gruppen"
+  },
+  "restorePoints": {
+    "title": "Wiederherstellungspunkte",
+    "hint": "Kopien der Profildaten auf dem Sync-Server: einer pro Tag nach einer Änderung und die, die du erstellst. Von jeder Art bleiben die neuesten 3.",
+    "create": "Erstellen",
+    "created": "Wiederherstellungspunkt erstellt.",
+    "empty": "Noch keine Wiederherstellungspunkte.",
+    "restore": "Wiederherstellen",
+    "restored": "Wiederherstellungspunkt wiederhergestellt.",
+    "deleted": "Wiederherstellungspunkt gelöscht.",
+    "restoreTitle": "Dieses Profil wiederherstellen?",
+    "restoreDescription": "Die Profildaten werden auf die Kopie vom {{when}} zurückgesetzt. Die aktuellen Daten werden vorher als neuer Wiederherstellungspunkt gesichert.",
+    "kind": {
+      "auto": "Täglich",
+      "manual": "Manuell"
+    }
   }
 }

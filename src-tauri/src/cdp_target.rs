@@ -283,7 +283,11 @@ async fn local_page_ws_url(profile: &BrowserProfile, patience: Patience) -> Opti
     {
       Ok(response) => match response.json::<Vec<Value>>().await {
         Ok(targets) => {
-          if let Some(ws_url) = pick_local_page_socket(&targets) {
+          // The tab an agent picked comes first; then any drivable page.
+          if let Some(ws_url) =
+            crate::browser_tabs::selected_socket(&profile.id.to_string(), &targets)
+              .or_else(|| pick_local_page_socket(&targets))
+          {
             return Some(ws_url);
           }
           last_err = "no page target found in browser".to_string();
@@ -560,14 +564,119 @@ const _: () = {
 };
 
 /// Run one command on a fresh connection and hand back its result.
+/// A socket kept open after a one-shot command, for the next one to the same
+/// page. Dialing costs little on this computer, but a remote session pays a
+/// relay dial and a page attach each time.
+struct PooledConnection {
+  connection: CdpConnection,
+  next_id: u64,
+  last_used: tokio::time::Instant,
+}
+
+/// How long an unused socket is kept.
+const POOL_IDLE: Duration = Duration::from_secs(30);
+/// The first command id on a pooled socket, apart from the fixed ids the
+/// one-shot helpers use, so a late reply never matches a new command.
+const POOL_FIRST_ID: u64 = 1_000;
+
+static POOL: std::sync::LazyLock<
+  tokio::sync::Mutex<std::collections::HashMap<String, PooledConnection>>,
+> = std::sync::LazyLock::new(Default::default);
+
+impl CdpTarget {
+  /// The socket a pooled connection to this target serves.
+  fn pool_key(&self) -> String {
+    match self {
+      Self::Local { ws_url } => ws_url.clone(),
+      Self::Remote {
+        ws_url, session_id, ..
+      } => format!("{ws_url}#{session_id}"),
+    }
+  }
+}
+
+/// Whether a failure on a pooled socket means the command never reached the
+/// browser, so a fresh socket may send it again.
+fn not_delivered(error: &CdpError) -> bool {
+  matches!(error, CdpError::Transport(message)
+    if message.starts_with("failed to send CDP command")
+      || message.contains("connection closed"))
+}
+
+/// Whether the socket is still fit for the next command after `result`.
+fn reusable(result: &Result<Value, CdpError>) -> bool {
+  matches!(result, Ok(_) | Err(CdpError::Protocol(_)))
+}
+
+async fn give_back(key: String, pooled: PooledConnection) {
+  let mut pool = POOL.lock().await;
+  pool.retain(|_, kept| kept.last_used.elapsed() < POOL_IDLE);
+  if let Some(extra) = pool.insert(key, pooled) {
+    drop(pool);
+    extra.connection.close().await;
+  }
+}
+
 pub async fn run_command(
   target: &CdpTarget,
   method: &str,
   params: Value,
 ) -> Result<Value, CdpError> {
-  let mut connection = target.connect().await?;
-  let result = connection.call(RUN_COMMAND_ID, method, params).await;
-  connection.close().await;
+  let key = target.pool_key();
+  // Tests run each case on a runtime of its own, and a socket kept from one
+  // is dead in the next, so the pool only serves the app's one runtime.
+  let kept = if cfg!(test) {
+    None
+  } else {
+    POOL
+      .lock()
+      .await
+      .remove(&key)
+      .filter(|kept| kept.last_used.elapsed() < POOL_IDLE)
+  };
+  if let Some(mut pooled) = kept {
+    pooled.next_id += 1;
+    // A bound on the whole call, the send included: a socket that stopped
+    // being driven must fail the command, never hang it.
+    let result = tokio::time::timeout(
+      COMMAND_TIMEOUT + Duration::from_secs(5),
+      pooled
+        .connection
+        .call(pooled.next_id, method, params.clone()),
+    )
+    .await
+    .unwrap_or_else(|_| {
+      Err(CdpError::Transport(
+        "timed out waiting for a CDP response".to_string(),
+      ))
+    });
+    match &result {
+      Err(error) if not_delivered(error) => {
+        log::debug!("Pooled CDP socket was closed, dialing again method={method}");
+      }
+      _ => {
+        if reusable(&result) {
+          pooled.last_used = tokio::time::Instant::now();
+          give_back(key, pooled).await;
+        } else {
+          pooled.connection.close().await;
+        }
+        return result;
+      }
+    }
+  }
+  let mut pooled = PooledConnection {
+    connection: target.connect().await?,
+    next_id: POOL_FIRST_ID,
+    last_used: tokio::time::Instant::now(),
+  };
+  let result = pooled.connection.call(pooled.next_id, method, params).await;
+  if reusable(&result) && !cfg!(test) {
+    pooled.last_used = tokio::time::Instant::now();
+    give_back(key, pooled).await;
+  } else {
+    pooled.connection.close().await;
+  }
   result
 }
 

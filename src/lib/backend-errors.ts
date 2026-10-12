@@ -136,6 +136,14 @@ export type BackendErrorCode =
   | "TEAM_GROUP_ACCESS_DENIED"
   | "TEAM_ACCESS_NOT_ENTITLED"
   | "REPLAY_RECIPE_NOT_FOUND"
+  | "INDEXED_DB_UNAVAILABLE"
+  | "INDEXED_DB_TOO_LARGE"
+  | "SNAPSHOT_INVALID"
+  | "SNAPSHOT_NOTHING_TO_KEEP"
+  | "SNAPSHOT_NOT_FOUND"
+  | "RESTORE_POINTS_UNSUPPORTED"
+  | "RESTORE_POINT_FAILED"
+  | "RESTORE_POINTS_NEED_SYNC"
   | "LOCAL_STORAGE_EPHEMERAL"
   | "LOCAL_STORAGE_PROFILE_PROTECTED"
   | "LOCAL_STORAGE_UNREADABLE"
@@ -715,6 +723,24 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.teamAccessNotEntitled");
     case "REPLAY_RECIPE_NOT_FOUND":
       return t("backendErrors.replayRecipeNotFound");
+    case "INDEXED_DB_UNAVAILABLE":
+      return t("backendErrors.indexedDbUnavailable");
+    case "INDEXED_DB_TOO_LARGE":
+      return t("backendErrors.indexedDbTooLarge");
+    case "SNAPSHOT_INVALID":
+      return t("backendErrors.snapshotInvalid");
+    case "SNAPSHOT_NOTHING_TO_KEEP":
+      return t("backendErrors.snapshotNothingToKeep");
+    case "SNAPSHOT_NOT_FOUND":
+      return t("backendErrors.snapshotNotFound");
+    case "RESTORE_POINTS_UNSUPPORTED":
+      return t("backendErrors.restorePointsUnsupported");
+    case "RESTORE_POINT_FAILED":
+      return t("backendErrors.restorePointFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "RESTORE_POINTS_NEED_SYNC":
+      return t("backendErrors.restorePointsNeedSync");
     case "MCP_TOOLSET_UNKNOWN":
       return t("backendErrors.mcpToolsetUnknown");
     case "MCP_AGENT_UNKNOWN":

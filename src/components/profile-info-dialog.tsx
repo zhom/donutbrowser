@@ -48,10 +48,12 @@ import { ProfileHandoffStatus } from "@/components/profile-handoff-status";
 import { ProfileLaunchActivity } from "@/components/profile-launch-activity";
 import { ProfileMetadataCard } from "@/components/profile-metadata-card";
 import { ExportProfileSection } from "@/components/profile-transfer";
+import { RestorePoints } from "@/components/restore-points";
 import { SharedFingerprintConfigForm } from "@/components/shared-fingerprint-config-form";
 import { ProfileTotpSection } from "@/components/totp-code";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ColorPicker,
   ColorPickerEyeDropper,
@@ -1867,6 +1869,9 @@ function SyncSectionInline({
           )}
         </div>
       )}
+      {syncMode !== "Disabled" && (
+        <RestorePoints profileId={profile.id} isDisabled={isDisabled} />
+      )}
       {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>
   );
@@ -2457,6 +2462,7 @@ function StorageStateBlock({
     items: number;
   } | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [withIndexedDb, setWithIndexedDb] = React.useState(false);
 
   const loadStats = React.useCallback(async () => {
     try {
@@ -2481,6 +2487,7 @@ function StorageStateBlock({
       const content = await invoke<string>("export_profile_storage_state", {
         profileId: profile.id,
         includeCookies: true,
+        includeIndexedDb: withIndexedDb,
       });
       const filePath = await save({
         defaultPath: `${profile.name}_storage_state.json`,
@@ -2509,13 +2516,20 @@ function StorageStateBlock({
         origins: number;
         items: number;
         cookies_imported: number;
+        indexed_db_records: number;
       }>("import_profile_storage_state", { profileId: profile.id, content });
       showSuccessToast(
-        t("profileInfo.localStorage.imported", {
-          items: result.items,
-          origins: result.origins,
-          cookies: result.cookies_imported,
-        }),
+        t(
+          result.indexed_db_records > 0
+            ? "profileInfo.localStorage.importedWithIndexedDb"
+            : "profileInfo.localStorage.imported",
+          {
+            items: result.items,
+            origins: result.origins,
+            cookies: result.cookies_imported,
+            records: result.indexed_db_records,
+          },
+        ),
       );
       void loadStats();
     } catch (e) {
@@ -2545,6 +2559,26 @@ function StorageStateBlock({
         <p className="mt-0.5 text-xs text-muted-foreground">
           {t("profileInfo.localStorage.hint")}
         </p>
+        <label
+          htmlFor={`storage-indexed-db-${profile.id}`}
+          className="mt-1.5 flex cursor-pointer items-start gap-2 text-xs"
+        >
+          <Checkbox
+            id={`storage-indexed-db-${profile.id}`}
+            checked={withIndexedDb}
+            disabled={isDisabled || busy}
+            onCheckedChange={(checked) => setWithIndexedDb(checked === true)}
+            data-slot="storage-state-indexed-db"
+          />
+          <span>
+            <span className="block">
+              {t("profileInfo.localStorage.includeIndexedDb")}
+            </span>
+            <span className="block text-muted-foreground">
+              {t("profileInfo.localStorage.indexedDbHint")}
+            </span>
+          </span>
+        </label>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <Button

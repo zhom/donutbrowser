@@ -1617,7 +1617,10 @@
       "stats": "Trang web: {{origins}} · Mục: {{items}}",
       "hint": "Một tệp storageState của Playwright gồm cookie và Local Storage. Để nhập, trình duyệt phải đóng.",
       "exported": "Đã xuất trạng thái lưu trữ",
-      "imported": "Đã nhập. Mục Local Storage: {{items}} · Trang web: {{origins}} · Cookie: {{cookies}}"
+      "imported": "Đã nhập. Mục Local Storage: {{items}} · Trang web: {{origins}} · Cookie: {{cookies}}",
+      "includeIndexedDb": "Bao gồm IndexedDB",
+      "indexedDbHint": "Khi xuất, hồ sơ được mở ngầm trong giây lát; không trang nào được tải.",
+      "importedWithIndexedDb": "Đã nhập. Mục Local Storage: {{items}} · Trang: {{origins}} · Cookie: {{cookies}} · Bản ghi IndexedDB: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "Thành viên này không còn trong nhóm.",
     "teamGroupAccessDenied": "Bạn không có quyền truy cập nhóm của hồ sơ này.",
     "teamAccessNotEntitled": "Quyền truy cập theo nhóm cần gói Team hoặc Enterprise đang hoạt động.",
-    "replayRecipeNotFound": "Công thức này không còn nữa."
+    "replayRecipeNotFound": "Công thức này không còn nữa.",
+    "indexedDbUnavailable": "Trình duyệt không thể đọc hoặc ghi IndexedDB. Hãy đóng hồ sơ rồi thử lại.",
+    "indexedDbTooLarge": "IndexedDB lớn hơn 24 MiB, quá lớn cho một tệp storage state.",
+    "snapshotInvalid": "Yêu cầu điểm khôi phục không hợp lệ.",
+    "snapshotNothingToKeep": "Hồ sơ này chưa có dữ liệu đồng bộ để giữ. Hãy đồng bộ trước.",
+    "snapshotNotFound": "Điểm khôi phục này không còn nữa.",
+    "restorePointsUnsupported": "Máy chủ đồng bộ quá cũ để dùng điểm khôi phục. Hãy cập nhật.",
+    "restorePointFailed": "Điểm khôi phục thất bại: {{detail}}",
+    "restorePointsNeedSync": "Điểm khôi phục cần bật đồng bộ cho hồ sơ này."
   },
   "rail": {
     "profiles": "Profile",
@@ -4084,5 +4095,21 @@
     "saved": "Đã lưu quyền truy cập.",
     "someGroups_one": "{{count}} nhóm",
     "someGroups_other": "{{count}} nhóm"
+  },
+  "restorePoints": {
+    "title": "Điểm khôi phục",
+    "hint": "Các bản sao dữ liệu của hồ sơ này trên máy chủ đồng bộ: mỗi ngày một bản sau khi có thay đổi, và những bản bạn tạo. Giữ 3 bản mới nhất của mỗi loại.",
+    "create": "Tạo",
+    "created": "Đã tạo điểm khôi phục.",
+    "empty": "Chưa có điểm khôi phục nào.",
+    "restore": "Khôi phục",
+    "restored": "Đã khôi phục từ điểm khôi phục.",
+    "deleted": "Đã xóa điểm khôi phục.",
+    "restoreTitle": "Khôi phục hồ sơ này?",
+    "restoreDescription": "Dữ liệu hồ sơ sẽ trở về bản sao lúc {{when}}. Dữ liệu hiện tại được giữ trước thành một điểm khôi phục mới.",
+    "kind": {
+      "auto": "Hằng ngày",
+      "manual": "Thủ công"
+    }
   }
 }

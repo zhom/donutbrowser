@@ -52,6 +52,9 @@ const TEAM_DATA_COMMANDS: &[&str] = &[
   "set_profile_password",
   "change_profile_password",
   "remove_profile_password",
+  "create_restore_point",
+  "delete_restore_point",
+  "restore_restore_point",
   // Proxies
   "create_stored_proxy",
   "update_stored_proxy",

@@ -1617,7 +1617,10 @@
       "stats": "サイト: {{origins}} · 項目: {{items}}",
       "hint": "Cookie とローカルストレージを 1 つの Playwright storageState ファイルにまとめます。インポートするにはブラウザーを閉じてください。",
       "exported": "ストレージ状態をエクスポートしました",
-      "imported": "インポートしました。ローカルストレージの項目: {{items}} · サイト: {{origins}} · Cookie: {{cookies}}"
+      "imported": "インポートしました。ローカルストレージの項目: {{items}} · サイト: {{origins}} · Cookie: {{cookies}}",
+      "includeIndexedDb": "IndexedDB を含める",
+      "indexedDbHint": "エクスポートでは、プロファイルを一瞬バックグラウンドで開きます。ページは読み込みません。",
+      "importedWithIndexedDb": "インポートしました。Local Storage の項目: {{items}} · サイト: {{origins}} · Cookie: {{cookies}} · IndexedDB のレコード: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "このメンバーはもうチームにいません。",
     "teamGroupAccessDenied": "このプロファイルのグループにアクセスできません。",
     "teamAccessNotEntitled": "グループ別のアクセスには、有効な Team または Enterprise プランが必要です。",
-    "replayRecipeNotFound": "このレシピはもう存在しません。"
+    "replayRecipeNotFound": "このレシピはもう存在しません。",
+    "indexedDbUnavailable": "ブラウザーが IndexedDB を読み書きできませんでした。プロファイルを閉じてもう一度お試しください。",
+    "indexedDbTooLarge": "IndexedDB が 24 MiB を超えていて、1 つの storage state ファイルに収まりません。",
+    "snapshotInvalid": "復元ポイントのリクエストが無効でした。",
+    "snapshotNothingToKeep": "このプロファイルにはまだ同期されたデータがありません。先に同期してください。",
+    "snapshotNotFound": "この復元ポイントはもう存在しません。",
+    "restorePointsUnsupported": "同期サーバーが古いため、復元ポイントを使えません。更新してください。",
+    "restorePointFailed": "復元ポイントの処理に失敗しました: {{detail}}",
+    "restorePointsNeedSync": "復元ポイントには、このプロファイルの同期をオンにする必要があります。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -4084,5 +4095,21 @@
     "saved": "アクセスを保存しました。",
     "someGroups_one": "{{count}} グループ",
     "someGroups_other": "{{count}} グループ"
+  },
+  "restorePoints": {
+    "title": "復元ポイント",
+    "hint": "同期サーバー上にあるこのプロファイルのデータのコピーです。変更があった日に 1 つ自動で作られ、手動でも作れます。種類ごとに最新の 3 つが残ります。",
+    "create": "作成",
+    "created": "復元ポイントを作成しました。",
+    "empty": "まだ復元ポイントはありません。",
+    "restore": "復元",
+    "restored": "復元ポイントから復元しました。",
+    "deleted": "復元ポイントを削除しました。",
+    "restoreTitle": "このプロファイルを復元しますか？",
+    "restoreDescription": "プロファイルのデータを {{when}} のコピーに戻します。現在のデータは先に新しい復元ポイントとして保存されます。",
+    "kind": {
+      "auto": "毎日",
+      "manual": "手動"
+    }
   }
 }

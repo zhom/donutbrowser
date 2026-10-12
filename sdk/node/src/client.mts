@@ -1214,7 +1214,11 @@ export class DonutClient {
       throw error;
     } finally {
       try {
-        await this.killProfile(profileId);
+        // A browser the person had open stays open: it was taken over, not
+        // started here.
+        if (!session.attached) {
+          await this.killProfile(profileId);
+        }
       } catch (cleanupError) {
         session.cleanupError = cleanupError;
         if (!failed) {
@@ -1240,6 +1244,8 @@ export class RunSession {
   readonly remoteDebuggingPort: number;
   /** Whether the browser actually started headless. */
   readonly headless: boolean;
+  /** Whether a running browser was taken over; the session then leaves it open. */
+  readonly attached: boolean;
   /** A failure while stopping the browser, kept rather than thrown. */
   cleanupError: unknown = undefined;
 
@@ -1249,6 +1255,7 @@ export class RunSession {
     this.response = response;
     this.remoteDebuggingPort = response.remote_debugging_port;
     this.headless = response.headless;
+    this.attached = response.attached === true;
   }
 
   /**
@@ -1262,6 +1269,8 @@ export class RunSession {
   }
 
   async [Symbol.asyncDispose](): Promise<void> {
-    await this.client.killProfile(this.profileId);
+    if (!this.attached) {
+      await this.client.killProfile(this.profileId);
+    }
   }
 }

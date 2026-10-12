@@ -315,10 +315,16 @@ class DownloadBrowserResponse(TypedDict):
     status: str
 
 
-class RunProfileResponse(TypedDict):
+class _RunProfileResponseRequired(TypedDict):
     profile_id: str
     remote_debugging_port: int
     headless: bool
+
+
+class RunProfileResponse(_RunProfileResponseRequired, total=False):
+    #: True when the profile was already running and was taken over as it is,
+    #: with no restart. Older apps omit it.
+    attached: bool
 
 
 class RunRemoteResponse(TypedDict):

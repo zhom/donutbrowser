@@ -290,6 +290,8 @@ struct ApiStorageState {
 struct StorageStateQuery {
   #[serde(default)]
   include_cookies: bool,
+  #[serde(default)]
+  indexed_db: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -438,7 +440,11 @@ pub struct ToastPayload {
 struct RunProfileResponse {
   profile_id: String,
   remote_debugging_port: u16,
+  /// The mode asked for. A browser that was already running keeps its own.
   headless: bool,
+  /// True when the profile was already running and was taken over as it is,
+  /// with no restart.
+  attached: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -3513,6 +3519,26 @@ async fn run_profile(
     ));
   }
 
+  // A browser the person already opened is handed over as it is, never
+  // restarted: its DevTools port is the answer, with the URL in a new tab.
+  if let Some(port) = crate::browser_tabs::local_port(profile).await {
+    if let Some(url) = url.as_deref() {
+      crate::browser_tabs::open(profile, url)
+        .await
+        .map_err(manager_error_response)?;
+    }
+    log::info!(
+      "Running browser taken over profile={} cdp_port={port}",
+      profile.id
+    );
+    return Ok(Json(RunProfileResponse {
+      profile_id: profile.id.to_string(),
+      remote_debugging_port: port,
+      headless,
+      attached: true,
+    }));
+  }
+
   // Team lock check. Routed through the shared mapper so a profile held by the
   // user's OWN remote session is a 409 that says so, rather than a bare status
   // with no body, which is what an automation client had to guess from.
@@ -3547,6 +3573,7 @@ async fn run_profile(
     profile_id: updated_profile.id.to_string(),
     remote_debugging_port,
     headless,
+    attached: false,
   }))
 }
 
@@ -5013,14 +5040,15 @@ async fn import_profiles_api(
   path = "/v1/profiles/{id}/storage-state",
   params(
     ("id" = String, Path, description = "Profile ID"),
-    ("include_cookies" = Option<bool>, Query, description = "Also export the profile's cookies; false when left out")
+    ("include_cookies" = Option<bool>, Query, description = "Also export the profile's cookies; false when left out"),
+    ("indexed_db" = Option<bool>, Query, description = "Also export each origin's IndexedDB (`origins[].indexedDB`). The profile must be closed; it opens headless for a moment and no request leaves the computer. False when left out")
   ),
   responses(
-    (status = 200, description = "Playwright storageState: each origin's Local Storage, and the cookies when asked for. Readable while the browser runs; writes from the last seconds may not be on disk yet", body = ApiStorageState),
-    (status = 400, description = "The profile is ephemeral and keeps no Local Storage on disk"),
+    (status = 200, description = "Playwright storageState: each origin's Local Storage, and the cookies and IndexedDB when asked for. Readable while the browser runs unless IndexedDB is asked for; writes from the last seconds may not be on disk yet", body = ApiStorageState),
+    (status = 400, description = "The profile is ephemeral and keeps no Local Storage on disk, the IndexedDB is over 24 MiB, or the browser could not read it"),
     (status = 401, description = "Unauthorized"),
     (status = 404, description = "Profile not found"),
-    (status = 409, description = "The profile is password-protected"),
+    (status = 409, description = "The profile is password-protected, IndexedDB was asked for while the browser runs, or a remote session owns it"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -5029,14 +5057,17 @@ async fn import_profiles_api(
   tag = "cookies"
 )]
 async fn export_storage_state(
+  State(state): State<ApiServerState>,
   Path(id): Path<String>,
   Query(query): Query<StorageStateQuery>,
 ) -> Result<Json<ApiStorageState>, (StatusCode, String)> {
-  let text = tokio::task::spawn_blocking(move || {
-    crate::local_storage::export_storage_state(&id, query.include_cookies)
-  })
+  let text = crate::local_storage::export_storage_state_with(
+    &state.app_handle,
+    &id,
+    query.include_cookies,
+    query.indexed_db,
+  )
   .await
-  .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
   .map_err(manager_error_response)?;
   serde_json::from_str(&text)
     .map(Json)

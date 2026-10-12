@@ -90,3 +90,14 @@ def test_the_cdp_url_is_refused_before_the_block(client: DonutClient) -> None:
     session = client.run("p1")
     with pytest.raises(DonutError):
         _ = session.cdp_url
+
+
+def test_a_browser_taken_over_is_left_running(client: DonutClient, fake: FakeDonut) -> None:
+    fake.enqueue_json({**RUN_BODY, "attached": True})
+
+    with client.run("p1") as session:
+        assert session.attached is True
+
+    assert [(sent.method, sent.path) for sent in fake.requests] == [
+        ("POST", "/v1/profiles/p1/run"),
+    ]

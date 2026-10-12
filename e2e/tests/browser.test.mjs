@@ -782,6 +782,37 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     });
     assert.equal(missing.met, false);
 
+    // Each listed element carries an id that stays the same while it lives;
+    // a batch acts on one by id and reports each step.
+    const listing = (await tool("get_interactive_elements")).text;
+    const buttonLine = listing
+      .split("\n")
+      .find((line) => line.includes('id="fixture-button"'));
+    const elementId = /^\[\d+ (e\d+)/.exec(buttonLine ?? "")?.[1];
+    assert.ok(elementId, listing);
+    assert.doesNotMatch(
+      (await tool("get_interactive_elements")).text,
+      / new[\] ]/,
+      "nothing is new on a second listing of the same page",
+    );
+    await cdp.evaluate(
+      "delete document.querySelector('#fixture-button').dataset.clicked; true",
+    );
+    const batch = await toolJson("run_actions", {
+      actions: [
+        { tool: "click_by_index", arguments: { element_id: elementId } },
+        { tool: "get_page_info" },
+      ],
+    });
+    assert.equal(batch.completed, 2, JSON.stringify(batch));
+    assert.equal(batch.stopped, null);
+    assert.equal(
+      await cdp.evaluate(
+        "document.querySelector('#fixture-button').dataset.clicked",
+      ),
+      "yes",
+    );
+
     const shot = await tool("screenshot");
     assert.equal(shot.mimeType, "image/jpeg");
     const jpeg = Buffer.from(shot.data, "base64");
@@ -789,6 +820,37 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
 
     const visited = await tool("navigate", { url: `${fixtureUrl}/again` });
     assert.match(visited.text, /Page: Donut E2E Browser Fixture <.*\/again>/);
+
+    // A running browser is taken over as it is: a second run hands back the
+    // same DevTools port with the URL in a new tab, and never restarts it.
+    const takeover = await request(`${base}/v1/profiles/${profile.id}/run`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { url: `${fixtureUrl}/taken-over` },
+    });
+    assert.equal(takeover.response.status, 200, JSON.stringify(takeover.value));
+    assert.equal(takeover.value.attached, true);
+    assert.equal(
+      takeover.value.remote_debugging_port,
+      launched.value.remote_debugging_port,
+    );
+    const listed = await toolJson("list_tabs");
+    const takenTab = listed.tabs.find((tab) => tab.url.endsWith("/taken-over"));
+    assert.ok(takenTab, JSON.stringify(listed));
+    assert.equal(
+      takenTab.selected,
+      true,
+      "the new tab is the one the tools drive",
+    );
+    const otherTab = listed.tabs.find((tab) => tab.id !== takenTab.id);
+    const switched = await toolJson("switch_tab", { tab_id: otherTab.id });
+    assert.equal(switched.selected, true);
+    assert.match((await tool("get_page_info")).text, /again/);
+    await tool("close_tab", { tab_id: takenTab.id });
+    assert.equal(
+      (await toolJson("list_tabs")).tabs.some((tab) => tab.id === takenTab.id),
+      false,
+    );
 
     const runningProfile = (await app.invoke("list_browser_profiles")).find(
       (item) => item.id === profile.id,
@@ -877,39 +939,22 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       },
     });
     assert.equal(batchRun.response.status, 200);
-    // A profile carrying a whole stored device is migrated into an identity
-    // plus overrides. Some override values are currently rejected by the
-    // browser at launch, and the launcher reports that with the property
-    // named, so this asserts the reported failure rather than pretending the
-    // launch worked. If the launch succeeds instead, the else branch takes
-    // over and the batch is asserted in full.
-    const batchBlockedByBrowser =
-      !batchRun.value.results[0].ok &&
-      /was not applied: \w+/.test(batchRun.value.results[0].error ?? "");
-    if (batchBlockedByBrowser) {
-      console.log(
-        `[donut-e2e] Batch profile could not launch: ${batchRun.value.results[0].error}`,
-      );
-      assert.match(
-        batchRun.value.results[0].error,
-        /WAYFERN_IDENTITY_REFUSED|WAYFERN_FINGERPRINT_APPLY_FAILED/,
-        "a refused device must reach the caller as a coded error, never as a silent success",
-      );
-    } else {
-      assert.equal(
-        batchRun.value.results[0].ok,
-        true,
-        batchRun.value.results[0].error,
-      );
-      const batchCdp = await CdpClient.connect(
-        batchRun.value.results[0].remote_debugging_port,
-      );
-      assert.equal(
-        await batchCdp.waitFor("window.__fixtureReady === true"),
-        true,
-      );
-      batchCdp.close();
-    }
+    // A whole supplied device becomes an identity plus overrides. The browser
+    // refuses some override values and names each one; the launcher drops it
+    // and launches again, so the batch launches.
+    assert.equal(
+      batchRun.value.results[0].ok,
+      true,
+      batchRun.value.results[0].error,
+    );
+    const batchCdp = await CdpClient.connect(
+      batchRun.value.results[0].remote_debugging_port,
+    );
+    assert.equal(
+      await batchCdp.waitFor("window.__fixtureReady === true"),
+      true,
+    );
+    batchCdp.close();
     const batchStop = await request(`${base}/v1/profiles/batch/stop`, {
       method: "POST",
       token: saved.api_token,
@@ -2052,11 +2097,47 @@ test("Local Storage that Donut writes, Wayfern reads, and what Wayfern writes ex
               { name: "imported", value: "from Donut" },
               { name: "unicode", value: "日本語 🍩" },
             ],
+            // Playwright's shape: a store with an in-line key and an index,
+            // and one with out-of-line keys and an encoded (Date) value.
+            indexedDB: [
+              {
+                name: "shop",
+                version: 2,
+                stores: [
+                  {
+                    name: "cart",
+                    autoIncrement: false,
+                    keyPath: "id",
+                    records: [{ value: { id: 1, item: "donut" } }],
+                    indexes: [
+                      {
+                        name: "by_item",
+                        keyPath: "item",
+                        multiEntry: false,
+                        unique: false,
+                      },
+                    ],
+                  },
+                  {
+                    name: "kv",
+                    autoIncrement: false,
+                    records: [
+                      {
+                        key: "when",
+                        valueEncoded: { d: "2026-10-12T00:00:00.000Z" },
+                      },
+                    ],
+                    indexes: [],
+                  },
+                ],
+              },
+            ],
           },
         ],
       }),
     });
     assert.equal(imported.items, 2);
+    assert.equal(imported.indexed_db_records, 2);
 
     const launched = await app.invoke("launch_browser_profile", {
       profile: (await app.invoke("list_browser_profiles")).find(
@@ -2082,6 +2163,38 @@ test("Local Storage that Donut writes, Wayfern reads, and what Wayfern writes ex
       "日本語 🍩",
     );
     await cdp.evaluate("localStorage.setItem('written', 'by Wayfern'); true");
+    const inShop = (body) =>
+      cdp.evaluate(`(async () => {
+        const db = await new Promise((resolve, reject) => {
+          const open = indexedDB.open("shop");
+          open.onsuccess = () => resolve(open.result);
+          open.onerror = () => reject(open.error);
+        });
+        const read = (store, key) => new Promise((resolve, reject) => {
+          const get = db.transaction(store).objectStore(store).get(key);
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        });
+        const result = await (${body})(db, read);
+        db.close();
+        return result;
+      })()`);
+    assert.equal(
+      await inShop("async (db, read) => (await read('cart', 1)).item"),
+      "donut",
+    );
+    assert.equal(
+      await inShop(
+        "async (db, read) => (await read('kv', 'when')) instanceof Date",
+      ),
+      true,
+    );
+    await inShop(`(db) => new Promise((resolve, reject) => {
+      const tx = db.transaction("cart", "readwrite");
+      tx.objectStore("cart").put({ id: 2, item: "cruller" });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    })`);
     // Chromium commits Local Storage to disk a few seconds after a change.
     await new Promise((resolve) => setTimeout(resolve, 8_000));
     cdp.close?.();
@@ -2109,6 +2222,39 @@ test("Local Storage that Donut writes, Wayfern reads, and what Wayfern writes ex
     );
     assert.equal(items.imported, "from Donut");
     assert.equal(items.written, "by Wayfern");
+    assert.equal(site.indexedDB, undefined, "IndexedDB only when asked for");
+
+    // With IndexedDB the closed profile opens headless for a moment.
+    const withDatabases = JSON.parse(
+      await app.invoke("export_profile_storage_state", {
+        profileId: profile.id,
+        includeCookies: false,
+        includeIndexedDb: true,
+      }),
+    );
+    const shop = withDatabases.origins
+      .find((o) => o.origin === origin)
+      ?.indexedDB?.find((db) => db.name === "shop");
+    assert.ok(shop, JSON.stringify(withDatabases.origins));
+    assert.equal(shop.version, 2);
+    const cart = shop.stores.find((store) => store.name === "cart");
+    assert.equal(cart.keyPath, "id");
+    assert.deepEqual(cart.records.map((record) => record.value.item).sort(), [
+      "cruller",
+      "donut",
+    ]);
+    assert.equal(cart.indexes[0].name, "by_item");
+    const kv = shop.stores.find((store) => store.name === "kv");
+    assert.deepEqual(kv.records, [
+      { key: "when", valueEncoded: { d: "2026-10-12T00:00:00.000Z" } },
+    ]);
+    assert.equal(
+      (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      ).process_id,
+      null,
+      "the headless browser is closed again",
+    );
     await app.invoke("delete_profile", {
       profileId: profile.id,
       permanent: true,

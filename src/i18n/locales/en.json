@@ -1617,7 +1617,10 @@
       "stats": "Sites: {{origins}} · Items: {{items}}",
       "hint": "One Playwright storageState file with the cookies and the Local Storage. Import needs the browser closed.",
       "exported": "Storage state exported",
-      "imported": "Imported. Local Storage items: {{items}} · Sites: {{origins}} · Cookies: {{cookies}}"
+      "imported": "Imported. Local Storage items: {{items}} · Sites: {{origins}} · Cookies: {{cookies}}",
+      "includeIndexedDb": "Include IndexedDB",
+      "indexedDbHint": "Export opens the profile in the background for a moment; no page loads.",
+      "importedWithIndexedDb": "Imported. Local Storage items: {{items}} · Sites: {{origins}} · Cookies: {{cookies}} · IndexedDB records: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "This member is no longer on the team.",
     "teamGroupAccessDenied": "You have no access to the group of this profile.",
     "teamAccessNotEntitled": "Access by group needs an active Team or Enterprise plan.",
-    "replayRecipeNotFound": "This recipe no longer exists."
+    "replayRecipeNotFound": "This recipe no longer exists.",
+    "indexedDbUnavailable": "The browser could not read or write IndexedDB. Close the profile and try again.",
+    "indexedDbTooLarge": "The IndexedDB is over 24 MiB, too large for one storage state file.",
+    "snapshotInvalid": "The restore point request was not valid.",
+    "snapshotNothingToKeep": "This profile has no synced data to keep yet. Sync it first.",
+    "snapshotNotFound": "This restore point no longer exists.",
+    "restorePointsUnsupported": "The sync server is too old for restore points. Update it.",
+    "restorePointFailed": "The restore point failed: {{detail}}",
+    "restorePointsNeedSync": "Restore points need sync on for this profile."
   },
   "rail": {
     "profiles": "Profiles",
@@ -4084,5 +4095,21 @@
     "saved": "Access saved.",
     "someGroups_one": "{{count}} group",
     "someGroups_other": "{{count}} groups"
+  },
+  "restorePoints": {
+    "title": "Restore points",
+    "hint": "Copies of this profile's data on the sync server: one a day after a change, and the ones you make. The newest 3 of each are kept.",
+    "create": "Create",
+    "created": "Restore point created.",
+    "empty": "No restore points yet.",
+    "restore": "Restore",
+    "restored": "Restore point restored.",
+    "deleted": "Restore point deleted.",
+    "restoreTitle": "Restore this profile?",
+    "restoreDescription": "The profile's data goes back to the copy from {{when}}. The current data is kept as a new restore point first.",
+    "kind": {
+      "auto": "Daily",
+      "manual": "Manual"
+    }
   }
 }

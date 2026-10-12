@@ -1617,7 +1617,10 @@
       "stats": "网站：{{origins}} · 条目：{{items}}",
       "hint": "一个包含 Cookie 和本地存储的 Playwright storageState 文件。导入时浏览器必须关闭。",
       "exported": "已导出存储状态",
-      "imported": "已导入。本地存储条目：{{items}} · 网站：{{origins}} · Cookie：{{cookies}}"
+      "imported": "已导入。本地存储条目：{{items}} · 网站：{{origins}} · Cookie：{{cookies}}",
+      "includeIndexedDb": "包含 IndexedDB",
+      "indexedDbHint": "导出时会在后台短暂打开该配置文件，不会加载任何页面。",
+      "importedWithIndexedDb": "已导入。Local Storage 项：{{items}} · 网站：{{origins}} · Cookie：{{cookies}} · IndexedDB 记录：{{records}}"
     }
   },
   "profileTransfer": {
@@ -2653,7 +2656,15 @@
     "teamMemberNotFound": "此成员已不在团队中。",
     "teamGroupAccessDenied": "你无权访问此配置文件所在的分组。",
     "teamAccessNotEntitled": "按分组的权限需要有效的 Team 或 Enterprise 套餐。",
-    "replayRecipeNotFound": "此配方已不存在。"
+    "replayRecipeNotFound": "此配方已不存在。",
+    "indexedDbUnavailable": "浏览器无法读取或写入 IndexedDB。请关闭配置文件后重试。",
+    "indexedDbTooLarge": "IndexedDB 超过 24 MiB，无法放入一个 storage state 文件。",
+    "snapshotInvalid": "还原点请求无效。",
+    "snapshotNothingToKeep": "此配置文件还没有可保留的同步数据。请先同步。",
+    "snapshotNotFound": "此还原点已不存在。",
+    "restorePointsUnsupported": "同步服务器版本太旧，无法使用还原点。请更新它。",
+    "restorePointFailed": "还原点操作失败：{{detail}}",
+    "restorePointsNeedSync": "使用还原点需要为此配置文件开启同步。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -4084,5 +4095,21 @@
     "saved": "权限已保存。",
     "someGroups_one": "{{count}} 个分组",
     "someGroups_other": "{{count}} 个分组"
+  },
+  "restorePoints": {
+    "title": "还原点",
+    "hint": "同步服务器上此配置文件数据的副本：有变化的日子自动保留一份，也可以手动创建。每种保留最新的 3 份。",
+    "create": "创建",
+    "created": "已创建还原点。",
+    "empty": "还没有还原点。",
+    "restore": "还原",
+    "restored": "已从还原点还原。",
+    "deleted": "已删除还原点。",
+    "restoreTitle": "要还原此配置文件吗？",
+    "restoreDescription": "配置文件的数据将回到 {{when}} 的副本。当前数据会先保存为新的还原点。",
+    "kind": {
+      "auto": "每日",
+      "manual": "手动"
+    }
   }
 }

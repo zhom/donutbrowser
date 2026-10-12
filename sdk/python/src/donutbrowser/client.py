@@ -1336,6 +1336,9 @@ class RunSession:
         self.remote_debugging_port: Optional[int] = None
         #: Whether the browser actually started headless.
         self.headless: Optional[bool] = None
+        #: Whether a running browser was taken over; the block then leaves it
+        #: open.
+        self.attached: bool = False
         #: A failure while stopping the browser, kept rather than raised when
         #: the block itself was already failing.
         self.cleanup_error: Optional[DonutError] = None
@@ -1358,6 +1361,7 @@ class RunSession:
         self.response = response
         self.remote_debugging_port = response["remote_debugging_port"]
         self.headless = response["headless"]
+        self.attached = bool(response.get("attached", False))
         return self
 
     def __exit__(
@@ -1366,6 +1370,9 @@ class RunSession:
         exc: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> bool:
+        if self.attached:
+            # The person had this browser open; it was taken over, not started.
+            return False
         try:
             self.client.kill_profile(self.profile_id)
         except DonutError as failure:

@@ -378,6 +378,16 @@ export const commandCoverage = {
       "agent_schedules::test_agent_schedule_notice",
     ],
   },
+  restorePoints: {
+    suite: "sync",
+    level: "integration",
+    commands: [
+      "sync::restore_points::list_restore_points",
+      "sync::restore_points::create_restore_point",
+      "sync::restore_points::delete_restore_point",
+      "sync::restore_points::restore_restore_point",
+    ],
+  },
   teamActivity: {
     suite: "integrations",
     level: "contract",

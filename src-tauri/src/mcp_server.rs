@@ -47,6 +47,20 @@ const INTERACTIVE_ELEMENTS_JS: &str = r#"(() => {
   const lines = [];
   let truncated = false;
   let total = 0;
+  // An id per element that stays the same across listings while the element
+  // lives, so a caller can act on `e12` after the page moved things around,
+  // and can tell which elements are new since its last listing.
+  let ids = window.__donut_element_ids;
+  if (!ids) {
+    ids = { map: new WeakMap(), next: 1, seen: {} };
+    try {
+      Object.defineProperty(window, '__donut_element_ids', { value: ids, enumerable: false, configurable: true });
+    } catch (e) {
+      window.__donut_element_ids = ids;
+    }
+  }
+  const seenBefore = ids.seen[__CACHE__];
+  const seenNow = new Set();
   const nodes = document.querySelectorAll(SELECTORS);
   for (const el of nodes) {
     if (el.disabled) continue;
@@ -65,13 +79,28 @@ const INTERACTIVE_ELEMENTS_JS: &str = r#"(() => {
       text = (el.innerText || el.textContent || '').trim().replace(/\s+/g,' ').slice(0,100);
     }
     const idx = interactive.length;
-    const line = '[' + idx + ']<' + tag + (parts.length ? ' ' + parts.join(' ') : '') + '>' + text + '</' + tag + '>';
+    let eid = ids.map.get(el);
+    if (!eid) { eid = ids.next++; ids.map.set(el, eid); }
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const inView = cx >= 0 && cy >= 0 && cx < window.innerWidth && cy < window.innerHeight;
+    let covered = false;
+    if (inView) {
+      const hit = document.elementFromPoint(cx, cy);
+      covered = !!hit && hit !== el && !el.contains(hit) && !(hit.tagName === 'LABEL' && hit.control === el);
+    }
+    const marks = ' e' + eid
+      + (seenBefore && !seenBefore.has(eid) ? ' new' : '')
+      + (!inView ? ' offscreen' : covered ? ' covered' : '');
+    const line = '[' + idx + marks + ']<' + tag + (parts.length ? ' ' + parts.join(' ') : '') + '>' + text + '</' + tag + '>';
     if (total + line.length + 1 > MAX_CHARS) { truncated = true; break; }
     total += line.length + 1;
     interactive.push(el);
     lines.push(line);
+    seenNow.add(eid);
   }
   window[__CACHE__] = interactive;
+  ids.seen[__CACHE__] = seenNow;
   // Bound how many snapshots one page carries. Each slot holds live element
   // references, so it pins every node in it, including nodes the page has
   // since detached, for as long as the tab lives, and NOTHING on the page
@@ -2084,6 +2113,34 @@ fn click_report(prefix: &str, navigated: bool) -> String {
   }
 }
 
+/// The tools `run_actions` may run, and how many steps one call may hold.
+const BATCH_TOOLS: &[&str] = &[
+  "navigate",
+  "go_back",
+  "scroll",
+  "press_key",
+  "wait_for",
+  "click_element",
+  "click_by_index",
+  "click_locator",
+  "type_text",
+  "type_by_index",
+  "type_locator",
+  "get_page_info",
+];
+const MAX_BATCH_ACTIONS: usize = 20;
+/// How much of each step's answer a batch reports.
+const BATCH_RESULT_CHARS: usize = 2_000;
+
+/// A tab helper's coded refusal as a tool error.
+fn tab_error(message: String) -> McpError {
+  McpError {
+    code: -32000,
+    message,
+    data: None,
+  }
+}
+
 /// Where an action left the page, read in one round trip after it.
 const PAGE_STATE_SCRIPT: &str = "(() => ({ url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 1500) }))()";
 
@@ -2757,7 +2814,7 @@ impl McpServer {
       },
       McpTool {
         name: "run_profile".to_string(),
-        description: "Launch a browser profile with an optional URL. Requires an active Pro subscription.".to_string(),
+        description: "Launch a browser profile with an optional URL. A profile that is already running is taken over as it is, with no restart. Requires an active Pro subscription.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -3883,6 +3940,80 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "run_actions".to_string(),
+        description: "Run several browser actions in one call, in order, on one profile: navigate, go_back, scroll, press_key, wait_for, the click and type tools, get_page_info. Stops at the first failure and, unless stop_on_change is false, as soon as the page address changes, since later steps were planned for the old page. Returns each step's result.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The UUID of the running profile" },
+            "actions": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tool": { "type": "string", "description": "The tool to run, e.g. click_by_index" },
+                  "arguments": { "type": "object", "description": "That tool's arguments, without profile_id" }
+                },
+                "required": ["tool"]
+              }
+            },
+            "stop_on_change": {
+              "type": "boolean",
+              "description": "Stop when the page address changes (default: true)"
+            }
+          },
+          "required": ["profile_id", "actions"]
+        }),
+      },
+      McpTool {
+        name: "list_tabs".to_string(),
+        description: "List the open tabs of a running profile: id, title, URL, and which one the browser tools act on (selected).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The UUID of the running profile" }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "open_tab".to_string(),
+        description: "Open a URL in a new tab of a running profile and make it the tab the browser tools act on.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The UUID of the running profile" },
+            "url": { "type": "string", "description": "The URL to open" }
+          },
+          "required": ["profile_id", "url"]
+        }),
+      },
+      McpTool {
+        name: "switch_tab".to_string(),
+        description: "Bring a tab to the front and make it the tab the browser tools act on. Take the id from list_tabs.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The UUID of the running profile" },
+            "tab_id": { "type": "string", "description": "The tab id from list_tabs" }
+          },
+          "required": ["profile_id", "tab_id"]
+        }),
+      },
+      McpTool {
+        name: "close_tab".to_string(),
+        description: "Close a tab of a running profile. Take the id from list_tabs.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The UUID of the running profile" },
+            "tab_id": { "type": "string", "description": "The tab id from list_tabs" }
+          },
+          "required": ["profile_id", "tab_id"]
+        }),
+      },
+      McpTool {
         name: "scroll".to_string(),
         description: "Scroll the page with the mouse wheel at the middle of the viewport, so an inner scroll area under it scrolls too. Returns the window's new position and whether it reached the top or bottom; call get_interactive_elements again for what came into view.".to_string(),
         input_schema: serde_json::json!({
@@ -4098,7 +4229,7 @@ impl McpServer {
       },
       McpTool {
         name: "get_interactive_elements".to_string(),
-        description: "Enumerate visible interactive elements on the page (buttons, links, inputs, etc.) as a compact indexed list. The returned indices are stable for the current page and can be used with click_by_index and type_by_index instead of guessing CSS selectors. Call this before click_by_index / type_by_index, and re-call after any navigation or major DOM change. Far cheaper in tokens than get_page_content for agentic browsing.".to_string(),
+        description: "Enumerate visible interactive elements on the page (buttons, links, inputs, etc.) as a compact indexed list. The returned indices are stable for the current page and can be used with click_by_index and type_by_index instead of guessing CSS selectors. Call this before click_by_index / type_by_index, and re-call after any navigation or major DOM change. Far cheaper in tokens than get_page_content for agentic browsing. Each line starts with [index eN marks]: eN stays the same while the element lives (pass it as element_id), `new` marks an element that appeared since your last listing, `covered` one that something else sits on, `offscreen` one outside the viewport.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -4124,12 +4255,16 @@ impl McpServer {
               "type": "string",
               "description": "The UUID of the running profile"
             },
+            "element_id": {
+              "type": "string",
+              "description": "Instead of index: the stable id (e12) from the last get_interactive_elements response"
+            },
             "index": {
               "type": "integer",
               "description": "Zero-based index from the last get_interactive_elements response"
             }
           },
-          "required": ["profile_id", "index"]
+          "required": ["profile_id"]
         }),
       },
       McpTool {
@@ -4141,6 +4276,10 @@ impl McpServer {
             "profile_id": {
               "type": "string",
               "description": "The UUID of the running profile"
+            },
+            "element_id": {
+              "type": "string",
+              "description": "Instead of index: the stable id (e12) from the last get_interactive_elements response"
             },
             "index": {
               "type": "integer",
@@ -4163,7 +4302,7 @@ impl McpServer {
               "description": "Target words per minute for human typing (default: 80)"
             }
           },
-          "required": ["profile_id", "index", "text"]
+          "required": ["profile_id", "text"]
         }),
       },
       // Remote fleet. An agent that could drive a remote profile but not start
@@ -5195,6 +5334,46 @@ impl McpServer {
         .await?;
         self.handle_screenshot(arguments).await
       }
+      "run_actions" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_run_actions(caller, arguments).await
+      }
+      "list_tabs" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_list_tabs(arguments).await
+      }
+      "open_tab" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_open_tab(arguments).await
+      }
+      "switch_tab" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_switch_tab(arguments).await
+      }
+      "close_tab" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_close_tab(arguments).await
+      }
       "scroll" => {
         Self::require_capability(
           "Browser automation",
@@ -5514,6 +5693,29 @@ impl McpServer {
         message: "MCP only supports Wayfern profiles".to_string(),
         data: None,
       });
+    }
+
+    // A browser the person already opened is taken over as it is, never
+    // restarted: the tools reach it on its DevTools port.
+    if let Some(port) = crate::browser_tabs::local_port(profile).await {
+      if let Some(url) = url {
+        crate::browser_tabs::open(profile, url)
+          .await
+          .map_err(tab_error)?;
+      }
+      log::info!(
+        "Running browser taken over profile={} cdp_port={port}",
+        profile.id
+      );
+      return Ok(serde_json::json!({
+        "content": [{
+          "type": "text",
+          "text": format!(
+            "Browser profile '{}' was already running; the tools now drive it. Use list_tabs to see its tabs.",
+            profile.name
+          )
+        }]
+      }));
     }
 
     // Team lock check
@@ -8554,6 +8756,221 @@ impl McpServer {
     Ok(LayoutMetrics::from_reply(&reply))
   }
 
+  /// The running profile a tab tool names.
+  fn tab_profile(arguments: &serde_json::Value) -> Result<BrowserProfile, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+        data: None,
+      })?
+      .into_iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: format!("Profile not found: {profile_id}"),
+        data: None,
+      })
+  }
+
+  async fn handle_list_tabs(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile = Self::tab_profile(arguments)?;
+    let tabs = crate::browser_tabs::list(&profile)
+      .await
+      .map_err(tab_error)?;
+    Self::json_content(&serde_json::json!({ "tabs": tabs }))
+  }
+
+  async fn handle_open_tab(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile = Self::tab_profile(arguments)?;
+    let url = Self::require_navigable_url(arguments, "url")?;
+    let tab = crate::browser_tabs::open(&profile, url)
+      .await
+      .map_err(tab_error)?;
+    Self::json_content(&tab)
+  }
+
+  async fn handle_switch_tab(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile = Self::tab_profile(arguments)?;
+    let tab_id = Self::require_str(arguments, "tab_id")?;
+    let tab = crate::browser_tabs::switch(&profile, tab_id)
+      .await
+      .map_err(tab_error)?;
+    Self::json_content(&tab)
+  }
+
+  async fn handle_close_tab(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile = Self::tab_profile(arguments)?;
+    let tab_id = Self::require_str(arguments, "tab_id")?;
+    crate::browser_tabs::close(&profile, tab_id)
+      .await
+      .map_err(tab_error)?;
+    Ok(serde_json::json!({ "content": [{ "type": "text", "text": "Tab closed" }] }))
+  }
+
+  /// The index the caller named, directly or as a stable element id (`e12`)
+  /// from the last listing.
+  async fn element_index(
+    &self,
+    profile_id: &str,
+    cache: &str,
+    arguments: &serde_json::Value,
+  ) -> Result<u64, McpError> {
+    if let Some(index) = arguments.get("index").and_then(|v| v.as_u64()) {
+      return Ok(index);
+    }
+    let raw = arguments.get("element_id").ok_or_else(|| McpError {
+      code: -32602,
+      message: "Missing index or element_id".to_string(),
+      data: None,
+    })?;
+    let id = raw
+      .as_u64()
+      .or_else(|| {
+        raw
+          .as_str()
+          .and_then(|s| s.trim_start_matches('e').parse().ok())
+      })
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "element_id is an id like e12 from get_interactive_elements".to_string(),
+        data: None,
+      })?;
+    let target = self.resolve_cdp_target(profile_id).await?;
+    let reply = self
+      .send_cdp(
+        &target,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": format!(
+            "(() => {{ const arr = window[{cache}]; const ids = window.__donut_element_ids; if (!arr || !ids) return -1; return arr.findIndex((el) => ids.map.get(el) === {id}); }})()"
+          ),
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+    match reply.pointer("/result/value").and_then(|v| v.as_i64()) {
+      Some(index) if index >= 0 => Ok(index as u64),
+      _ => Err(McpError {
+        code: -32000,
+        message: format!(
+          "No element e{id} in the last listing. Call get_interactive_elements again."
+        ),
+        data: None,
+      }),
+    }
+  }
+
+  /// Several browser actions in one call, in order, on one profile. Stops at
+  /// the first failure, and by default once the page's address changes, since
+  /// what follows was planned against the page before it.
+  async fn handle_run_actions(
+    &self,
+    caller: McpCaller<'_>,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    let actions = arguments
+      .get("actions")
+      .and_then(|v| v.as_array())
+      .filter(|list| !list.is_empty() && list.len() <= MAX_BATCH_ACTIONS)
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: format!("actions is a list of 1 to {MAX_BATCH_ACTIONS} steps"),
+        data: None,
+      })?;
+    let mut steps = Vec::with_capacity(actions.len());
+    for action in actions {
+      let tool = action
+        .get("tool")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+      if !BATCH_TOOLS.contains(&tool) {
+        return Err(McpError {
+          code: -32602,
+          message: format!(
+            "{tool:?} cannot run in a batch. Batchable tools: {}",
+            BATCH_TOOLS.join(", ")
+          ),
+          data: None,
+        });
+      }
+      let mut step_arguments = action
+        .get("arguments")
+        .cloned()
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+      step_arguments["profile_id"] = serde_json::json!(profile_id);
+      steps.push((tool, step_arguments));
+    }
+    let stop_on_change = arguments
+      .get("stop_on_change")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true);
+
+    let target = self.resolve_cdp_target(profile_id).await?;
+    let mut url = self.page_state(&target).await.map(|state| state.url);
+    let mut results = Vec::new();
+    let mut stopped: Option<String> = None;
+    for (position, (tool, step_arguments)) in steps.iter().enumerate() {
+      if let Err(refusal) = crate::agent_console::check_call(false, step_arguments) {
+        let error = Self::console_refusal(refusal);
+        results.push(serde_json::json!({ "tool": tool, "ok": false, "error": error.message }));
+        stopped = Some("the person paused or took over".to_string());
+        break;
+      }
+      match Box::pin(self.dispatch_tool_call(caller, tool, step_arguments)).await {
+        Ok(value) => {
+          let text: String = value
+            .pointer("/content/0/text")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .chars()
+            .take(BATCH_RESULT_CHARS)
+            .collect();
+          results.push(serde_json::json!({ "tool": tool, "ok": true, "result": text }));
+        }
+        Err(error) => {
+          results.push(serde_json::json!({ "tool": tool, "ok": false, "error": error.message }));
+          stopped = Some("a step failed".to_string());
+          break;
+        }
+      }
+      if stop_on_change && position + 1 < steps.len() {
+        let now = self.page_state(&target).await.map(|state| state.url);
+        if now.is_some() && url.is_some() && now != url {
+          stopped = Some(format!(
+            "the page changed to {}",
+            now.clone().unwrap_or_default()
+          ));
+          break;
+        }
+        url = now;
+      }
+    }
+    let done = results.len();
+    Self::json_content(&serde_json::json!({
+      "results": results,
+      "completed": done,
+      "remaining": steps.len() - done,
+      "stopped": stopped,
+    }))
+  }
+
   async fn handle_scroll(
     &self,
     arguments: &serde_json::Value,
@@ -9464,14 +9881,7 @@ impl McpServer {
         message: "Missing profile_id".to_string(),
         data: None,
       })?;
-    let index = arguments
-      .get("index")
-      .and_then(|v| v.as_u64())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing index".to_string(),
-        data: None,
-      })?;
+    let index = self.element_index(profile_id, &cache, arguments).await?;
 
     let ctx = self.agent_context(profile_id).await?;
 
@@ -9554,14 +9964,7 @@ impl McpServer {
         message: "Missing profile_id".to_string(),
         data: None,
       })?;
-    let index = arguments
-      .get("index")
-      .and_then(|v| v.as_u64())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing index".to_string(),
-        data: None,
-      })?;
+    let index = self.element_index(profile_id, &cache, arguments).await?;
     let text = arguments
       .get("text")
       .and_then(|v| v.as_str())
@@ -10899,6 +11302,25 @@ mod tests {
     assert!(wait_for_script(Some("x"), Some("#y")).is_none());
   }
 
+  /// Whether a scanned method body is the tool listing rather than a handler.
+  fn is_tool_listing(body: &str) -> bool {
+    body.trim_start().starts_with("pub fn get_tools")
+  }
+
+  #[test]
+  fn every_batchable_tool_exists_and_none_reads_files() {
+    let names: Vec<String> = McpServer::new()
+      .get_tools()
+      .into_iter()
+      .map(|t| t.name)
+      .collect();
+    for tool in BATCH_TOOLS {
+      assert!(names.iter().any(|name| name == tool), "{tool}");
+      assert!(!LOCAL_PATH_TOOLS.contains(tool), "{tool}");
+    }
+    assert!(!BATCH_TOOLS.contains(&"run_actions"), "a batch never nests");
+  }
+
   #[test]
   fn test_mcp_tools_count() {
     let server = McpServer::new();
@@ -10912,7 +11334,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      102,
+      107,
       "the tool list is a published contract; update this number deliberately"
     );
 
@@ -11609,7 +12031,7 @@ mod tests {
       let body = &source[begin..stop];
       // ANY method that reads a "url" argument from the caller, however it
       // spells the read.
-      if !(body.contains("arguments") && body.contains(r#""url""#)) {
+      if !(body.contains("arguments") && body.contains(r#""url""#)) || is_tool_listing(body) {
         continue;
       }
       let name = body
@@ -11644,6 +12066,7 @@ mod tests {
       vec![
         "handle_batch_run_profiles",
         "handle_navigate",
+        "handle_open_tab",
         "handle_run_profile",
         "handle_run_profile_remote",
       ],
@@ -11737,8 +12160,8 @@ mod tests {
       production.matches("window[__CACHE__]").count()
         + production.matches("window[{cache}]").count()
         + production.matches("window[{slot}]").count(),
-      7,
-      "the seven cache sites (one write, four reads, two in the teardown) must \
+      8,
+      "the eight cache sites (one write, five reads, two in the teardown) must \
        all be parameterised"
     );
   }
@@ -12314,7 +12737,8 @@ mod tests {
     for (n, &begin) in starts.iter().enumerate() {
       let stop = starts.get(n + 1).copied().unwrap_or(source.len());
       let body = &source[begin..stop];
-      if !body.contains("arguments") {
+      // `get_tools` only lists schemas; a batch tool's schema names `arguments`.
+      if !body.contains("arguments") || is_tool_listing(body) {
         continue;
       }
       if body.contains(r#""path""#) || body.contains(r#""folder""#) {

@@ -1628,7 +1628,10 @@
       "stats": "Sitios: {{origins}} · Elementos: {{items}}",
       "hint": "Un archivo storageState de Playwright con las cookies y el Local Storage. Para importar, el navegador debe estar cerrado.",
       "exported": "Estado de almacenamiento exportado",
-      "imported": "Importado. Elementos de Local Storage: {{items}} · Sitios: {{origins}} · Cookies: {{cookies}}"
+      "imported": "Importado. Elementos de Local Storage: {{items}} · Sitios: {{origins}} · Cookies: {{cookies}}",
+      "includeIndexedDb": "Incluir IndexedDB",
+      "indexedDbHint": "La exportación abre el perfil en segundo plano un momento; no se carga ninguna página.",
+      "importedWithIndexedDb": "Importado. Elementos de Local Storage: {{items}} · Sitios: {{origins}} · Cookies: {{cookies}} · Registros de IndexedDB: {{records}}"
     }
   },
   "profileTransfer": {
@@ -2673,7 +2676,15 @@
     "teamMemberNotFound": "Este miembro ya no está en el equipo.",
     "teamGroupAccessDenied": "No tienes acceso al grupo de este perfil.",
     "teamAccessNotEntitled": "El acceso por grupo necesita un plan Team o Enterprise activo.",
-    "replayRecipeNotFound": "Esta receta ya no existe."
+    "replayRecipeNotFound": "Esta receta ya no existe.",
+    "indexedDbUnavailable": "El navegador no pudo leer ni escribir IndexedDB. Cierra el perfil e inténtalo de nuevo.",
+    "indexedDbTooLarge": "La IndexedDB supera los 24 MiB, demasiado para un archivo de storage state.",
+    "snapshotInvalid": "La solicitud del punto de restauración no era válida.",
+    "snapshotNothingToKeep": "Este perfil aún no tiene datos sincronizados que guardar. Sincronízalo primero.",
+    "snapshotNotFound": "Este punto de restauración ya no existe.",
+    "restorePointsUnsupported": "El servidor de sincronización es demasiado antiguo para los puntos de restauración. Actualízalo.",
+    "restorePointFailed": "El punto de restauración falló: {{detail}}",
+    "restorePointsNeedSync": "Los puntos de restauración necesitan la sincronización activada en este perfil."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -4129,5 +4140,21 @@
     "someGroups_one": "{{count}} grupo",
     "someGroups_many": "{{count}} grupos",
     "someGroups_other": "{{count}} grupos"
+  },
+  "restorePoints": {
+    "title": "Puntos de restauración",
+    "hint": "Copias de los datos de este perfil en el servidor de sincronización: una al día tras un cambio, y las que crees. Se guardan las 3 más recientes de cada tipo.",
+    "create": "Crear",
+    "created": "Punto de restauración creado.",
+    "empty": "Aún no hay puntos de restauración.",
+    "restore": "Restaurar",
+    "restored": "Punto de restauración restaurado.",
+    "deleted": "Punto de restauración eliminado.",
+    "restoreTitle": "¿Restaurar este perfil?",
+    "restoreDescription": "Los datos del perfil vuelven a la copia del {{when}}. Antes, los datos actuales se guardan como un nuevo punto de restauración.",
+    "kind": {
+      "auto": "Diario",
+      "manual": "Manual"
+    }
   }
 }

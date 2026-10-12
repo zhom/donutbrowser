@@ -132,3 +132,18 @@ test("a session also disposes itself", async () => {
     );
   });
 });
+
+test("a browser taken over is left running", async () => {
+  await withClient(async (client, fake) => {
+    fake.enqueueJson({ ...RUN_BODY, attached: true });
+
+    await client.withProfile("p1", {}, async (session) => {
+      assert.equal(session.attached, true);
+    });
+
+    assert.deepEqual(
+      fake.requests.map((sent) => `${sent.method} ${sent.path}`),
+      ["POST /v1/profiles/p1/run"],
+    );
+  });
+});

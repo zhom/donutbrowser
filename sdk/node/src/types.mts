@@ -240,6 +240,11 @@ export interface RunProfileResponse {
   profile_id: string;
   remote_debugging_port: number;
   headless: boolean;
+  /**
+   * True when the profile was already running and was taken over as it is,
+   * with no restart. Older apps omit it.
+   */
+  attached?: boolean;
 }
 
 export interface RunRemoteResponse {
