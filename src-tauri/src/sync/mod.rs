@@ -5,6 +5,7 @@ mod engine;
 pub mod manifest;
 pub mod pending_deletes;
 pub mod preflight;
+pub mod restore_points;
 pub mod scheduler;
 pub mod subscription;
 pub mod types;

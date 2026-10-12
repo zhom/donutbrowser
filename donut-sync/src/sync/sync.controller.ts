@@ -28,6 +28,12 @@ import type {
   PresignUploadBatchResponseDto,
   PresignUploadRequestDto,
   PresignUploadResponseDto,
+  SnapshotCreateRequestDto,
+  SnapshotDto,
+  SnapshotListRequestDto,
+  SnapshotListResponseDto,
+  SnapshotRequestDto,
+  SnapshotRestoreResponseDto,
   StatRequestDto,
   StatResponseDto,
 } from "./dto/sync.dto.js";
@@ -112,6 +118,42 @@ export class SyncController {
     @Req() req: Request,
   ): Promise<DeletePrefixResponseDto> {
     return this.syncService.deletePrefix(dto, this.getUserContext(req));
+  }
+
+  @Post("snapshots/list")
+  @HttpCode(200)
+  async listSnapshots(
+    @Body() dto: SnapshotListRequestDto,
+    @Req() req: Request,
+  ): Promise<SnapshotListResponseDto> {
+    return this.syncService.listSnapshots(dto, this.getUserContext(req));
+  }
+
+  @Post("snapshots/create")
+  @HttpCode(200)
+  async createSnapshot(
+    @Body() dto: SnapshotCreateRequestDto,
+    @Req() req: Request,
+  ): Promise<SnapshotDto> {
+    return this.syncService.createSnapshot(dto, this.getUserContext(req));
+  }
+
+  @Post("snapshots/delete")
+  @HttpCode(200)
+  async deleteSnapshot(
+    @Body() dto: SnapshotRequestDto,
+    @Req() req: Request,
+  ): Promise<{ deleted: boolean }> {
+    return this.syncService.deleteSnapshot(dto, this.getUserContext(req));
+  }
+
+  @Post("snapshots/restore-files")
+  @HttpCode(200)
+  async restoreSnapshotFiles(
+    @Body() dto: SnapshotRequestDto,
+    @Req() req: Request,
+  ): Promise<SnapshotRestoreResponseDto> {
+    return this.syncService.restoreSnapshotFiles(dto, this.getUserContext(req));
   }
 
   @Get("subscribe")

@@ -434,6 +434,9 @@ pub enum DiffBias {
   /// the local clock genuinely is later; only the caller knows that the remote
   /// copy is the one that matters.
   PreferRemote,
+  /// Remote wins, for the pull that follows a restore point: the server now
+  /// holds the restored files, and the local copy is the one being replaced.
+  Restore,
 }
 
 pub fn compute_diff(local: &SyncManifest, remote: Option<&SyncManifest>) -> ManifestDiff {
@@ -479,7 +482,7 @@ pub fn compute_diff_with_bias(
   let remote_updated = remote.updated_at_datetime();
 
   let local_is_newer = match bias {
-    DiffBias::PreferRemote => false,
+    DiffBias::PreferRemote | DiffBias::Restore => false,
     DiffBias::Auto => match (local_updated, remote_updated) {
       (Some(l), Some(r)) => l > r,
       (Some(_), None) => true,

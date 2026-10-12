@@ -563,6 +563,99 @@ test("the first sync of an empty profile publishes a manifest and records comple
   }
 });
 
+test("a restore point keeps a profile's files and puts them back on every device", async () => {
+  const app = appFromEnvironment("sync-restore-points");
+  try {
+    await app.start();
+    await configureSync(app);
+    const profile = await createProfile(app, "Restore Point Profile");
+    const data = path.join(
+      app.dataRoot,
+      "data",
+      "profiles",
+      profile.id,
+      "profile",
+      "Default",
+    );
+    await mkdir(data, { recursive: true });
+    const preferences = path.join(data, "Preferences");
+    await writeFile(preferences, "kept preferences");
+    await app.invoke("set_profile_sync_mode", {
+      profileId: profile.id,
+      syncMode: "Regular",
+    });
+    const synced = async () =>
+      (await app.invoke("list_browser_profiles")).find(
+        (item) => item.id === profile.id,
+      )?.last_sync;
+    await app.invoke("request_profile_sync", { profileId: profile.id });
+    await waitFor(
+      app,
+      async () => (await synced()) > 0,
+      "the first sync of the profile",
+    );
+
+    const point = await app.invoke("create_restore_point", {
+      profileId: profile.id,
+    });
+    assert.equal(point.kind, "manual");
+    assert.ok(point.files >= 1, JSON.stringify(point));
+    const listed = await app.invoke("list_restore_points", {
+      profileId: profile.id,
+    });
+    assert.ok(
+      listed.some((item) => item.id === point.id),
+      JSON.stringify(listed),
+    );
+
+    // A change after the point, synced up.
+    const before = await synced();
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await writeFile(preferences, "changed preferences");
+    await app.invoke("request_profile_sync", { profileId: profile.id });
+    await waitFor(
+      app,
+      async () => (await synced()) > before,
+      "the changed profile synced",
+    );
+
+    await app.invoke("restore_restore_point", {
+      profileId: profile.id,
+      id: point.id,
+    });
+    assert.equal(await readFile(preferences, "utf8"), "kept preferences");
+    const remoteManifest = JSON.parse(
+      (await downloadRemote(`profiles/${profile.id}/manifest.json`)).toString(
+        "utf8",
+      ),
+    );
+    assert.ok(
+      remoteManifest.files.some((file) => file.path.endsWith("Preferences")),
+    );
+    // The data the restore replaced is a restore point of its own.
+    const after = await app.invoke("list_restore_points", {
+      profileId: profile.id,
+    });
+    assert.equal(after.length, listed.length + 1);
+
+    await app.invoke("delete_restore_point", {
+      profileId: profile.id,
+      id: point.id,
+    });
+    assert.equal(
+      (await app.invoke("list_restore_points", { profileId: profile.id })).some(
+        (item) => item.id === point.id,
+      ),
+      false,
+    );
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    await app.close();
+  }
+});
+
 test("global config sealing and encrypted profile sync reject a wrong password, round-trip with the right one, and roll over", async () => {
   const source = appFromEnvironment("sync-encrypted-source");
   const receiver = appFromEnvironment("sync-encrypted-receiver");

@@ -120,3 +120,38 @@ export class DeletePrefixResponseDto {
   deletedCount: number;
   tombstoneCreated: boolean;
 }
+
+// Restore points: copies of a profile's files and manifest
+export type SnapshotKind = "auto" | "manual";
+
+export class SnapshotCreateRequestDto {
+  /** `profiles/<id>/` or `teams/<team>/profiles/<id>/`. */
+  profileRoot: string;
+  kind?: SnapshotKind;
+}
+
+export class SnapshotDto {
+  id: string;
+  createdAt: string;
+  kind: SnapshotKind;
+  files: number;
+  bytes: number;
+}
+
+export class SnapshotListRequestDto {
+  profileRoot: string;
+}
+
+export class SnapshotListResponseDto {
+  snapshots: SnapshotDto[];
+}
+
+export class SnapshotRequestDto {
+  profileRoot: string;
+  id: string;
+}
+
+export class SnapshotRestoreResponseDto {
+  restored: number;
+  removed: number;
+}

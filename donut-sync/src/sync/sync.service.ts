@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  CopyObjectCommand,
   CreateBucketCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -17,6 +18,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
   type OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -38,6 +40,13 @@ import type {
   PresignUploadBatchResponseDto,
   PresignUploadRequestDto,
   PresignUploadResponseDto,
+  SnapshotCreateRequestDto,
+  SnapshotDto,
+  SnapshotKind,
+  SnapshotListRequestDto,
+  SnapshotListResponseDto,
+  SnapshotRequestDto,
+  SnapshotRestoreResponseDto,
   StatRequestDto,
   StatResponseDto,
   SubscribeEventDto,
@@ -88,8 +97,13 @@ function sanitizeMetadata(
 /** The `group-id` a profile without a group carries. */
 export const UNGROUPED = "__ungrouped__";
 const GROUP_ID = /^[A-Za-z0-9_-]{1,128}$/;
-/** A profile's objects, relative to the namespace: its root and its id. */
-const PROFILE_KEY = /^((?:teams\/[^/]+\/)?profiles\/([^/]+)\/)/;
+/** A profile's objects, relative to the namespace: its root and its id. A
+ * restore point (`snapshots/<root>`) belongs to the profile it copies. */
+const PROFILE_KEY = /^(?:snapshots\/)?((?:teams\/[^/]+\/)?profiles\/([^/]+)\/)/;
+/** A profile root as the restore-point routes take it. */
+const PROFILE_ROOT = /^(?:teams\/[^/]+\/)?profiles\/[^/]+\/$/;
+/** A restore point's id: its UTC time, then a short random part. */
+const SNAPSHOT_ID = /^\d{8}T\d{6}Z-[0-9a-f]{4}$/;
 /** A group's config object, relative to the namespace. */
 const GROUP_KEY = /^(?:teams\/[^/]+\/)?groups\/([^/]+)\.json$/;
 /** How long a profile's group is trusted before it is read again. */
@@ -846,6 +860,251 @@ export class SyncService implements OnModuleInit {
     );
 
     return { items };
+  }
+
+  // --- Restore points --------------------------------------------------------
+
+  /** How many restore points of each kind a profile keeps. */
+  static readonly SNAPSHOTS_PER_KIND = 3;
+  /** Objects copied at a time. */
+  private static readonly COPY_CONCURRENCY = 8;
+
+  /** The checked profile root, relative to the namespace. */
+  private snapshotRoot(raw: string): string {
+    if (typeof raw !== "string" || !PROFILE_ROOT.test(raw)) {
+      throw new BadRequestException({ code: "SNAPSHOT_INVALID" });
+    }
+    return raw;
+  }
+
+  private snapshotId(raw: string): string {
+    if (typeof raw !== "string" || !SNAPSHOT_ID.test(raw)) {
+      throw new BadRequestException({ code: "SNAPSHOT_INVALID" });
+    }
+    return raw;
+  }
+
+  /** Every object under the scoped `prefix`. */
+  private async listAll(
+    prefix: string,
+  ): Promise<{ key: string; size: number }[]> {
+    const out: { key: string; size: number }[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const page = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      for (const object of page.Contents ?? []) {
+        if (object.Key) out.push({ key: object.Key, size: object.Size ?? 0 });
+      }
+      continuationToken = page.NextContinuationToken;
+    } while (continuationToken);
+    return out;
+  }
+
+  /** Run `work` over `items`, a few at a time. */
+  private async inBatches<T>(
+    items: T[],
+    work: (item: T) => Promise<void>,
+  ): Promise<void> {
+    for (let i = 0; i < items.length; i += SyncService.COPY_CONCURRENCY) {
+      await Promise.all(
+        items.slice(i, i + SyncService.COPY_CONCURRENCY).map(work),
+      );
+    }
+  }
+
+  private async copy(from: string, to: string): Promise<void> {
+    await this.s3Client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        Key: to,
+        CopySource: `${this.bucket}/${from.split("/").map(encodeURIComponent).join("/")}`,
+      }),
+    );
+  }
+
+  private async readSnapshot(key: string): Promise<SnapshotDto | null> {
+    try {
+      const object = await this.s3Client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const text = await object.Body?.transformToString();
+      return text ? (JSON.parse(text) as SnapshotDto) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async listSnapshots(
+    dto: SnapshotListRequestDto,
+    ctx: UserContext,
+  ): Promise<SnapshotListResponseDto> {
+    const root = this.snapshotRoot(dto.profileRoot);
+    const base = this.scopeKey(ctx, `snapshots/${root}`);
+    this.validateKeyAccess(ctx, base);
+    await this.assertReachable(ctx, this.scopeKey(ctx, `${root}manifest.json`));
+    const objects = await this.listAll(base);
+    const records = objects.filter((object) =>
+      object.key.endsWith("/snapshot.json"),
+    );
+    const snapshots = (
+      await Promise.all(records.map((record) => this.readSnapshot(record.key)))
+    ).filter((snapshot): snapshot is SnapshotDto => snapshot !== null);
+    snapshots.sort((a, b) => b.id.localeCompare(a.id));
+    return { snapshots };
+  }
+
+  /**
+   * Copy a profile's files and manifest into a new restore point, inside the
+   * store (no byte leaves it), and keep the newest few of each kind.
+   */
+  async createSnapshot(
+    dto: SnapshotCreateRequestDto,
+    ctx: UserContext,
+  ): Promise<SnapshotDto> {
+    const root = this.snapshotRoot(dto.profileRoot);
+    const kind = dto.kind === "auto" ? "auto" : "manual";
+    const live = this.scopeKey(ctx, root);
+    const base = this.scopeKey(ctx, `snapshots/${root}`);
+    this.validateWriteAccess(ctx, base);
+    await this.assertGroupWrite(ctx, live);
+    const objects = (await this.listAll(live)).filter((object) => {
+      const relative = object.key.slice(live.length);
+      return relative === "manifest.json" || relative.startsWith("files/");
+    });
+    if (!objects.some((object) => object.key === `${live}manifest.json`)) {
+      throw new BadRequestException({ code: "SNAPSHOT_NOTHING_TO_KEEP" });
+    }
+    const now = new Date();
+    const id = `${now
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d+Z$/, "Z")}-${randomUUID().slice(0, 4)}`;
+    const target = `${base}${id}/`;
+    await this.inBatches(objects, (object) =>
+      this.copy(object.key, `${target}${object.key.slice(live.length)}`),
+    );
+    const snapshot: SnapshotDto = {
+      id,
+      createdAt: now.toISOString(),
+      kind,
+      files: objects.length - 1,
+      bytes: objects.reduce((sum, object) => sum + object.size, 0),
+    };
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: `${target}snapshot.json`,
+        Body: JSON.stringify(snapshot),
+        ContentType: "application/json",
+      }),
+    );
+    await this.pruneSnapshots(ctx, root, kind);
+    this.logger.log(
+      `Snapshot created kind=${kind} files=${snapshot.files} bytes=${snapshot.bytes}`,
+    );
+    return snapshot;
+  }
+
+  private async pruneSnapshots(
+    ctx: UserContext,
+    root: string,
+    kind: SnapshotKind,
+  ): Promise<void> {
+    const { snapshots } = await this.listSnapshots({ profileRoot: root }, ctx);
+    const old = snapshots
+      .filter((snapshot) => snapshot.kind === kind)
+      .slice(SyncService.SNAPSHOTS_PER_KIND);
+    for (const snapshot of old) {
+      await this.removeSnapshot(ctx, root, snapshot.id);
+    }
+  }
+
+  private async removeSnapshot(
+    ctx: UserContext,
+    root: string,
+    id: string,
+  ): Promise<void> {
+    const prefix = this.scopeKey(ctx, `snapshots/${root}${id}/`);
+    const objects = await this.listAll(prefix);
+    for (let i = 0; i < objects.length; i += 1000) {
+      await this.s3Client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: {
+            Objects: objects.slice(i, i + 1000).map((o) => ({ Key: o.key })),
+            Quiet: true,
+          },
+        }),
+      );
+    }
+  }
+
+  async deleteSnapshot(
+    dto: SnapshotRequestDto,
+    ctx: UserContext,
+  ): Promise<{ deleted: boolean }> {
+    const root = this.snapshotRoot(dto.profileRoot);
+    const id = this.snapshotId(dto.id);
+    const base = this.scopeKey(ctx, `snapshots/${root}`);
+    this.validateWriteAccess(ctx, base);
+    await this.assertGroupWrite(ctx, this.scopeKey(ctx, root));
+    await this.removeSnapshot(ctx, root, id);
+    return { deleted: true };
+  }
+
+  /**
+   * Put a restore point's files back in place of the live ones. The manifest
+   * is left to the app: it may be sealed, and the app must stamp it as the
+   * newest so every device takes the restored files.
+   */
+  async restoreSnapshotFiles(
+    dto: SnapshotRequestDto,
+    ctx: UserContext,
+  ): Promise<SnapshotRestoreResponseDto> {
+    const root = this.snapshotRoot(dto.profileRoot);
+    const id = this.snapshotId(dto.id);
+    const live = this.scopeKey(ctx, root);
+    const source = this.scopeKey(ctx, `snapshots/${root}${id}/`);
+    this.validateWriteAccess(ctx, source);
+    await this.assertGroupWrite(ctx, live);
+    const kept = (await this.listAll(`${source}files/`)).map((object) =>
+      object.key.slice(source.length),
+    );
+    if (
+      kept.length === 0 &&
+      !(await this.readSnapshot(`${source}snapshot.json`))
+    ) {
+      throw new NotFoundException({ code: "SNAPSHOT_NOT_FOUND" });
+    }
+    const keptSet = new Set(kept);
+    const stale = (await this.listAll(`${live}files/`)).filter(
+      (object) => !keptSet.has(object.key.slice(live.length)),
+    );
+    await this.inBatches(kept, (relative) =>
+      this.copy(`${source}${relative}`, `${live}${relative}`),
+    );
+    for (let i = 0; i < stale.length; i += 1000) {
+      await this.s3Client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: {
+            Objects: stale.slice(i, i + 1000).map((o) => ({ Key: o.key })),
+            Quiet: true,
+          },
+        }),
+      );
+    }
+    void this.bumpManifest(ctx, `${live}manifest.json`);
+    this.logger.log(
+      `Snapshot restored restored=${kept.length} removed=${stale.length}`,
+    );
+    return { restored: kept.length, removed: stale.length };
   }
 
   async deletePrefix(

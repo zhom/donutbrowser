@@ -416,4 +416,78 @@ impl SyncClient {
       .await
       .map_err(|e| SyncError::SerializationError(e.to_string()))
   }
+
+  async fn post_json<B: serde::Serialize, T: serde::de::DeserializeOwned>(
+    &self,
+    path: &str,
+    body: &B,
+  ) -> SyncResult<T> {
+    let response = self
+      .client
+      .post(self.url(path))
+      .header("Authorization", format!("Bearer {}", self.token))
+      .json(body)
+      .send()
+      .await
+      .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+    let status = response.status();
+    if status.is_client_error() || status.is_server_error() {
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
+    }
+    response
+      .json()
+      .await
+      .map_err(|e| SyncError::SerializationError(e.to_string()))
+  }
+
+  pub async fn snapshots_list(
+    &self,
+    profile_root: &str,
+  ) -> SyncResult<Vec<super::restore_points::RestorePoint>> {
+    #[derive(serde::Deserialize)]
+    struct Listed {
+      snapshots: Vec<super::restore_points::RestorePoint>,
+    }
+    let listed: Listed = self
+      .post_json(
+        "snapshots/list",
+        &serde_json::json!({ "profileRoot": profile_root }),
+      )
+      .await?;
+    Ok(listed.snapshots)
+  }
+
+  pub async fn snapshots_create(
+    &self,
+    profile_root: &str,
+    kind: &str,
+  ) -> SyncResult<super::restore_points::RestorePoint> {
+    self
+      .post_json(
+        "snapshots/create",
+        &serde_json::json!({ "profileRoot": profile_root, "kind": kind }),
+      )
+      .await
+  }
+
+  pub async fn snapshots_delete(&self, profile_root: &str, id: &str) -> SyncResult<()> {
+    let _: serde_json::Value = self
+      .post_json(
+        "snapshots/delete",
+        &serde_json::json!({ "profileRoot": profile_root, "id": id }),
+      )
+      .await?;
+    Ok(())
+  }
+
+  pub async fn snapshots_restore_files(&self, profile_root: &str, id: &str) -> SyncResult<()> {
+    let _: serde_json::Value = self
+      .post_json(
+        "snapshots/restore-files",
+        &serde_json::json!({ "profileRoot": profile_root, "id": id }),
+      )
+      .await?;
+    Ok(())
+  }
 }

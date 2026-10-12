@@ -267,3 +267,151 @@ describe("SyncService access by group", () => {
     expect(listed.objects).toHaveLength(6);
   });
 });
+
+describe("SyncService restore points", () => {
+  /** A bucket in memory, enough for the restore-point paths. */
+  function memoryService(): {
+    service: SyncService;
+    objects: Map<string, string>;
+  } {
+    const { service, send } = serviceWithStubbedS3();
+    const objects = new Map<string, string>();
+    send.mockImplementation(
+      async (command: { input: Record<string, unknown> }) => {
+        const name = command.constructor.name;
+        const input = command.input;
+        if (name === "ListObjectsV2Command") {
+          const prefix = String(input.Prefix ?? "");
+          return {
+            Contents: [...objects.keys()]
+              .filter((key) => key.startsWith(prefix))
+              .sort()
+              .map((key) => ({ Key: key, Size: objects.get(key)?.length })),
+          };
+        }
+        if (name === "CopyObjectCommand") {
+          const source = decodeURIComponent(
+            String(input.CopySource).split("/").slice(1).join("/"),
+          );
+          objects.set(String(input.Key), objects.get(source) ?? "");
+          return {};
+        }
+        if (name === "PutObjectCommand") {
+          objects.set(String(input.Key), String(input.Body ?? ""));
+          return {};
+        }
+        if (name === "GetObjectCommand") {
+          const body = objects.get(String(input.Key));
+          if (body === undefined) {
+            throw Object.assign(new Error("missing"), { name: "NoSuchKey" });
+          }
+          return { Body: { transformToString: async () => body } };
+        }
+        if (name === "DeleteObjectsCommand") {
+          const doomed = (input.Delete as { Objects: { Key: string }[] })
+            .Objects;
+          for (const { Key } of doomed) objects.delete(Key);
+          return {};
+        }
+        return {};
+      },
+    );
+    return { service, objects };
+  }
+
+  const owner: UserContext = {
+    mode: "cloud",
+    prefix: OWNER_PREFIX,
+    profileLimit: 0,
+    teamRole: "owner",
+  };
+  const live = (relative: string) => `${OWNER_PREFIX}profiles/p1/${relative}`;
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("keeps a copy of the files and manifest, and puts it back", async () => {
+    const { service, objects } = memoryService();
+    objects.set(live("manifest.json"), "manifest-1");
+    objects.set(live("files/Default/Cookies"), "cookies-1");
+    objects.set(live("metadata.json"), "settings");
+
+    const point = await service.createSnapshot(
+      { profileRoot: "profiles/p1/", kind: "manual" },
+      owner,
+    );
+    expect(point).toMatchObject({ kind: "manual", files: 1 });
+    expect(
+      [...objects.keys()].filter((key) => key.includes("/snapshots/")),
+    ).toHaveLength(3);
+
+    objects.set(live("files/Default/Cookies"), "cookies-2");
+    objects.set(live("files/Default/New"), "new");
+    const restored = await service.restoreSnapshotFiles(
+      { profileRoot: "profiles/p1/", id: point.id },
+      owner,
+    );
+    expect(restored).toEqual({ restored: 1, removed: 1 });
+    expect(objects.get(live("files/Default/Cookies"))).toBe("cookies-1");
+    expect(objects.has(live("files/Default/New"))).toBe(false);
+    expect(objects.get(live("metadata.json"))).toBe("settings");
+
+    const { snapshots } = await service.listSnapshots(
+      { profileRoot: "profiles/p1/" },
+      owner,
+    );
+    expect(snapshots.map((s) => s.id)).toEqual([point.id]);
+  });
+
+  it("keeps the newest few of each kind", async () => {
+    const { service, objects } = memoryService();
+    objects.set(live("manifest.json"), "m");
+    const ids: string[] = [];
+    for (let i = 0; i < SyncService.SNAPSHOTS_PER_KIND + 2; i++) {
+      ids.push(
+        (
+          await service.createSnapshot(
+            { profileRoot: "profiles/p1/", kind: "auto" },
+            owner,
+          )
+        ).id,
+      );
+    }
+    await service.createSnapshot(
+      { profileRoot: "profiles/p1/", kind: "manual" },
+      owner,
+    );
+    const { snapshots } = await service.listSnapshots(
+      { profileRoot: "profiles/p1/" },
+      owner,
+    );
+    expect(snapshots.filter((s) => s.kind === "auto")).toHaveLength(
+      SyncService.SNAPSHOTS_PER_KIND,
+    );
+    expect(snapshots.filter((s) => s.kind === "manual")).toHaveLength(1);
+  });
+
+  it("refuses a launcher and a root that is not one profile", async () => {
+    const { service, objects } = memoryService();
+    objects.set(live("manifest.json"), "m");
+    await expect(
+      refusalCode(
+        service.createSnapshot(
+          { profileRoot: "profiles/p1/" },
+          { ...owner, teamRole: "launcher" },
+        ),
+      ),
+    ).resolves.toBe("TEAM_ROLE_READ_ONLY");
+    for (const profileRoot of ["profiles/", "proxies/x/", "profiles/p1"]) {
+      await expect(
+        service.createSnapshot({ profileRoot }, owner),
+      ).rejects.toThrow();
+    }
+  });
+});

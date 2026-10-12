@@ -540,6 +540,7 @@ pub fn is_sync_configured() -> bool {
   false
 }
 
+#[derive(Clone)]
 pub struct SyncEngine {
   pub(super) client: SyncClient,
   /// A team launcher's engine: the team's copy of every setting wins, and
@@ -604,7 +605,7 @@ impl SyncEngine {
   }
 
   /// Get the key prefix for team profiles. Returns empty string for personal profiles.
-  async fn get_team_key_prefix(profile: &BrowserProfile) -> String {
+  pub(super) async fn get_team_key_prefix(profile: &BrowserProfile) -> String {
     if profile.created_by_id.is_some() {
       if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
         if let Some(team_id) = &auth.user.team_id {
@@ -622,6 +623,25 @@ impl SyncEngine {
       .get_user()
       .await
       .is_some_and(|auth| auth.user.team_id.is_some())
+  }
+
+  /// The key that seals an end-to-end encrypted profile's files, or `None`.
+  pub(super) fn profile_encryption_key(profile: &BrowserProfile) -> SyncResult<Option<[u8; 32]>> {
+    if !profile.is_encrypted_sync() {
+      return Ok(None);
+    }
+    let password = encryption::load_e2e_password()
+      .map_err(|e| SyncError::InvalidData(format!("Failed to load E2E password: {e}")))?
+      .ok_or_else(|| {
+        let _ = events::emit("profile-sync-e2e-password-required", ());
+        SyncError::InvalidData("E2E password not set".to_string())
+      })?;
+    let salt = profile.encryption_salt.as_deref().ok_or_else(|| {
+      SyncError::InvalidData("Encryption salt missing on encrypted profile".to_string())
+    })?;
+    let key = encryption::derive_profile_key(&password, salt)
+      .map_err(|e| SyncError::InvalidData(format!("Key derivation failed: {e}")))?;
+    Ok(Some(key))
   }
 
   /// Check if this is a self-hosted sync (no cloud login).
@@ -873,22 +893,7 @@ impl SyncEngine {
     let profile = &reconciled_profile;
 
     // Derive encryption key if encrypted sync
-    let encryption_key = if profile.is_encrypted_sync() {
-      let password = encryption::load_e2e_password()
-        .map_err(|e| SyncError::InvalidData(format!("Failed to load E2E password: {e}")))?
-        .ok_or_else(|| {
-          let _ = events::emit("profile-sync-e2e-password-required", ());
-          SyncError::InvalidData("E2E password not set".to_string())
-        })?;
-      let salt = profile.encryption_salt.as_deref().ok_or_else(|| {
-        SyncError::InvalidData("Encryption salt missing on encrypted profile".to_string())
-      })?;
-      let key = encryption::derive_profile_key(&password, salt)
-        .map_err(|e| SyncError::InvalidData(format!("Key derivation failed: {e}")))?;
-      Some(key)
-    } else {
-      None
-    };
+    let encryption_key = Self::profile_encryption_key(profile)?;
 
     let profile_manager = ProfileManager::instance();
     let profiles_dir = profile_manager.get_profiles_dir();
@@ -1191,10 +1196,13 @@ impl SyncEngine {
       diff.files_to_delete_remote.len(),
       started.elapsed().as_millis()
     );
+    if !diff.files_to_upload.is_empty() {
+      self.maybe_auto_restore_point(&updated_profile);
+    }
     Ok(ProfileSyncOutcome::Completed)
   }
 
-  async fn download_manifest(
+  pub(super) async fn download_manifest(
     &self,
     key: &str,
     encryption_key: Option<&[u8; 32]>,
@@ -1227,7 +1235,7 @@ impl SyncEngine {
     ))
   }
 
-  async fn upload_manifest(
+  pub(super) async fn upload_manifest(
     &self,
     profile_id: &str,
     manifest: &SyncManifest,
