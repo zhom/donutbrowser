@@ -220,6 +220,7 @@ pub(crate) async fn ensure_sidecar_version() -> Result<(), Box<dyn std::error::E
       return Err(sidecar_version_mismatch_error());
     }
   };
+  let checked = std::time::Instant::now();
   let mut command = std::process::Command::new(&executable);
   command.arg("--version");
 
@@ -242,6 +243,11 @@ pub(crate) async fn ensure_sidecar_version() -> Result<(), Box<dyn std::error::E
   };
   let actual_version = parse_sidecar_version(&output.stdout);
   let expected_version = env!("BUILD_VERSION");
+  log::debug!(
+    "Sidecar version checked path={} elapsed_ms={}",
+    executable.display(),
+    checked.elapsed().as_millis()
+  );
 
   if output.status.success() && actual_version.as_deref() == Some(expected_version) {
     SIDECAR_VERSION_VERIFIED.store(true, Ordering::Release);
@@ -403,6 +409,7 @@ async fn spawn_proxy_worker(
     let child = cmd.spawn()?;
     let pid = child.id();
     spawned_pid = pid;
+    log::debug!("Proxy worker spawned id={id} pid={pid}");
 
     // Store PID
     {
