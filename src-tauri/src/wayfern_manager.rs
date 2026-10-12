@@ -50,8 +50,8 @@ pub struct WayfernConfig {
   #[serde(default)]
   pub persona: Option<String>,
   /// A still (.png) or clip (.y4m/.mjpeg) the claimed camera serves, as an
-  /// absolute path. `None` means the camera serves dark frames; the browser
-  /// never falls back to the host device.
+  /// absolute path. `None` means the camera shows the computer's own camera
+  /// picture. A file that is set is always used, never the computer's camera.
   #[serde(default)]
   pub camera_file: Option<String>,
   /// `x,y,width,height` in SOURCE pixels, cropped before the frame is scaled.
@@ -797,9 +797,9 @@ pub fn persona_switch(
   Some(format!("--wayfern-profile-persona={}", path.display()))
 }
 
-/// The camera switches for a launch. A file that is not there is not passed:
-/// the browser would report it and serve dark frames anyway, and the log line
-/// here names the profile, which its own does not.
+/// The camera switches for a launch. A file that is not there is still passed,
+/// so the camera serves dark frames rather than the computer's own camera; the
+/// log line here names the file.
 pub fn camera_switches(version: &str, config: &WayfernConfig) -> Vec<String> {
   if !supports_wayfern_152(version) {
     return Vec::new();
@@ -814,7 +814,6 @@ pub fn camera_switches(version: &str, config: &WayfernConfig) -> Vec<String> {
   };
   if !Path::new(file).is_file() {
     log::warn!("Camera source missing, camera serves dark frames file={file}");
-    return Vec::new();
   }
   let mut switches = vec![format!("--wayfern-camera-file={file}")];
   if let Some(crop) = config
@@ -4722,7 +4721,7 @@ mod tests {
   }
 
   #[test]
-  fn the_camera_switches_need_a_file_that_exists_and_a_sane_crop() {
+  fn the_camera_switches_pass_the_file_and_a_sane_crop() {
     let root = tempfile::tempdir().unwrap();
     let file = root.path().join("frame.png");
     std::fs::write(&file, b"not really a png").unwrap();
@@ -4734,7 +4733,11 @@ mod tests {
     };
     assert!(camera_switches("151.0.7922.76", &config(Some(&path), None)).is_empty());
     assert!(camera_switches("152.0.7977.64", &config(None, Some("0,0,10,10"))).is_empty());
-    assert!(camera_switches("152.0.7977.64", &config(Some("/nope/frame.png"), None)).is_empty());
+    assert_eq!(
+      camera_switches("152.0.7977.64", &config(Some("/nope/frame.png"), None)),
+      vec!["--wayfern-camera-file=/nope/frame.png".to_string()],
+      "a missing file still keeps the computer's camera off"
+    );
     assert_eq!(
       camera_switches("152.0.7977.64", &config(Some(&path), Some("0,0,640,480"))),
       vec![
