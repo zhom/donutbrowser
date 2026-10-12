@@ -691,6 +691,27 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     assert.ok(echo.userAgent.length > 20);
     assert.match(await cdp.evaluate("document.cookie"), /donut_e2e=browser-ok/);
 
+    // A click that only changes the page ends a moment after the click, not
+    // at the load timeout; a link click still waits for its load and says so.
+    const agentClick = async (locator) => {
+      const started = Date.now();
+      const answer = await request(
+        `${base}/v1/profiles/${profile.id}/agent/click`,
+        { method: "POST", token: saved.api_token, body: { locator } },
+      );
+      assert.equal(answer.response.status, 200, JSON.stringify(answer.value));
+      return { ...answer.value, ms: Date.now() - started };
+    };
+    const inPlace = await agentClick({ role: "button", name: "Clicked" });
+    assert.equal(inPlace.navigated, false);
+    assert.ok(inPlace.ms < 5000, `an in-place click took ${inPlace.ms} ms`);
+    const link = await agentClick({ role: "link", name: "Open the linked page" });
+    assert.equal(link.navigated, true);
+    assert.equal(
+      await cdp.evaluate("document.querySelector('#path').textContent"),
+      "/linked",
+    );
+
     const runningProfile = (await app.invoke("list_browser_profiles")).find(
       (item) => item.id === profile.id,
     );

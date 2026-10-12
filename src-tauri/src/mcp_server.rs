@@ -1801,12 +1801,7 @@ pub(crate) async fn agent_click_locator(
       "clickCount": request.click_count.unwrap_or(1),
     });
     let (_, navigated) = session
-      .call_then_await_event(
-        "Input.dispatchMouseEvent",
-        release,
-        "Page.loadEventFired",
-        CLICK_LOAD_TIMEOUT,
-      )
+      .call_then_await_navigation("Input.dispatchMouseEvent", release, CLICK_LOAD_TIMEOUT)
       .await?;
     Ok::<_, AgentError>(navigated)
   }
@@ -8047,16 +8042,25 @@ impl McpServer {
     dispatch_keystrokes(target, events).await.map_err(cdp_error)
   }
 
+  /// `expect_navigation`: the command is a navigation, so the page's load is
+  /// always awaited; otherwise only a navigation that starts is.
   async fn send_cdp_and_wait_for_load(
     &self,
     target: &CdpTarget,
     method: &str,
     params: serde_json::Value,
     timeout_secs: u64,
+    expect_navigation: bool,
   ) -> Result<serde_json::Value, McpError> {
-    crate::cdp_target::run_command_awaiting_load(target, method, params, timeout_secs)
-      .await
-      .map_err(cdp_error)
+    crate::cdp_target::run_command_awaiting_load(
+      target,
+      method,
+      params,
+      timeout_secs,
+      expect_navigation,
+    )
+    .await
+    .map_err(cdp_error)
   }
 
   /// The profile a browser-interaction tool refers to.
@@ -8120,6 +8124,7 @@ impl McpServer {
         "Page.navigate",
         serde_json::json!({ "url": url }),
         30,
+        true,
       )
       .await?;
 
@@ -8235,7 +8240,7 @@ impl McpServer {
 
     let result = if wait_for_load {
       self
-        .send_cdp_and_wait_for_load(&target, "Runtime.evaluate", cdp_params, 30)
+        .send_cdp_and_wait_for_load(&target, "Runtime.evaluate", cdp_params, 30, false)
         .await?
     } else {
       self
@@ -8317,8 +8322,8 @@ impl McpServer {
     );
 
     // Use send_cdp_and_wait_for_load: if the click triggers navigation,
-    // we wait for the new page to load. If not, the 10s timeout expires
-    // and we return immediately.
+    // we wait for the new page to load; if no navigation starts, the wait
+    // ends a moment after the click.
     let result = self
       .send_cdp_and_wait_for_load(
         &ctx.target,
@@ -8328,6 +8333,7 @@ impl McpServer {
           "returnByValue": true,
         }),
         10,
+        false,
       )
       .await?;
 
@@ -8812,6 +8818,7 @@ impl McpServer {
           "returnByValue": true,
         }),
         10,
+        false,
       )
       .await?;
 

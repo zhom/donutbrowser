@@ -541,6 +541,7 @@ impl CdpConnection {
 const RUN_PAGE_ENABLE_ID: u64 = 1;
 const RUN_COMMAND_ID: u64 = 2;
 const RUN_PAGE_DISABLE_ID: u64 = 3;
+const RUN_FRAME_TREE_ID: u64 = 4;
 
 /// The attach handshake and the commands after it share one socket, so a
 /// handshake reply carrying a command's id would be handed back as that
@@ -554,6 +555,8 @@ const _: () = {
   assert!(HANDSHAKE_ATTACH_ID != RUN_PAGE_ENABLE_ID);
   assert!(HANDSHAKE_ATTACH_ID != RUN_COMMAND_ID);
   assert!(HANDSHAKE_ATTACH_ID != RUN_PAGE_DISABLE_ID);
+  assert!(HANDSHAKE_GET_TARGETS_ID != RUN_FRAME_TREE_ID);
+  assert!(HANDSHAKE_ATTACH_ID != RUN_FRAME_TREE_ID);
 };
 
 /// Run one command on a fresh connection and hand back its result.
@@ -570,16 +573,19 @@ pub async fn run_command(
 
 /// Run one command, then wait for the page to finish loading.
 ///
-/// Used for anything that might navigate: `Page.navigate` obviously, but also a
-/// click or a script that turns out to follow a link. When nothing navigates,
-/// the wait simply expires and the command's own result is returned — that is
-/// the intended path, not a failure.
+/// Used for anything that might navigate: `Page.navigate` obviously
+/// (`expect_navigation`), but also a click or a script that turns out to
+/// follow a link. When nothing starts to navigate, the wait ends a moment after
+/// the reply (`navigation_watch`) and the command's own result is returned:
+/// that is the intended path, not a failure.
 pub async fn run_command_awaiting_load(
   target: &CdpTarget,
   method: &str,
   params: Value,
   timeout_secs: u64,
+  expect_navigation: bool,
 ) -> Result<Value, CdpError> {
+  use crate::navigation_watch::{main_frame_of, NavigationWatch};
   let mut connection = target.connect().await?;
 
   // Page events have to be on before the command runs, or `loadEventFired`
@@ -587,20 +593,31 @@ pub async fn run_command_awaiting_load(
   connection
     .call(RUN_PAGE_ENABLE_ID, "Page.enable", serde_json::json!({}))
     .await?;
+  let main_frame = connection
+    .call(
+      RUN_FRAME_TREE_ID,
+      "Page.getFrameTree",
+      serde_json::json!({}),
+    )
+    .await
+    .ok()
+    .and_then(|tree| main_frame_of(&tree));
   connection
     .send_command(RUN_COMMAND_ID, method, params)
     .await?;
 
   let mut command_result = None;
   let mut failure = None;
+  let mut watch = NavigationWatch::new(main_frame, expect_navigation);
   let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
 
   loop {
-    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-    if remaining.is_zero() {
+    let now = tokio::time::Instant::now();
+    if watch.done(now) || now >= deadline {
       break;
     }
-    let text = match tokio::time::timeout(remaining, connection.next_text()).await {
+    let text = match tokio::time::timeout_at(watch.wake_at(deadline), connection.next_text()).await
+    {
       Ok(Some(Ok(text))) => text,
       Ok(Some(Err(e))) => {
         // A dropped connection cannot unsay a command the browser already
@@ -612,9 +629,11 @@ pub async fn run_command_awaiting_load(
         }
         break;
       }
-      // The peer hung up, or the wait expired. Either way whatever the command
-      // already answered is the best result available.
-      Ok(None) | Err(_) => break,
+      // The peer hung up. Whatever the command already answered is the best
+      // result available.
+      Ok(None) => break,
+      // Woken for the end of the grace or the deadline; the loop decides.
+      Err(_) => continue,
     };
 
     let response: Value = serde_json::from_str(&text).unwrap_or_default();
@@ -630,12 +649,13 @@ pub async fn run_command_awaiting_load(
           .cloned()
           .unwrap_or_else(|| serde_json::json!({})),
       );
+      watch.on_reply(tokio::time::Instant::now());
     }
 
     // Flattened remote sessions keep `method` at the top level, so this match
     // is identical on both arms.
-    if response.get("method") == Some(&Value::from("Page.loadEventFired")) {
-      break;
+    if let Some(event) = response.get("method").and_then(Value::as_str) {
+      watch.on_event(event, response.get("params"));
     }
   }
 
@@ -663,6 +683,7 @@ pub async fn navigate(target: &CdpTarget, url: &str, timeout_secs: u64) -> Resul
     "Page.navigate",
     serde_json::json!({ "url": url }),
     timeout_secs,
+    true,
   )
   .await
   .map(|_| ())

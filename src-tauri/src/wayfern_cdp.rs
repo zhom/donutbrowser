@@ -628,60 +628,59 @@ impl WayfernSession {
     Ok(self.connection.await_reply(id, timeout).await?)
   }
 
-  /// Send `method`, then keep reading until BOTH its reply and `event` have
-  /// arrived, or `timeout` passes.
+  /// Send an action that may navigate (a click), then wait as long as the
+  /// page needs and no longer: for its load when it navigates, a short grace
+  /// when it does not (`navigation_watch`). `Page` must be enabled.
   ///
-  /// The reply alone is never enough for an action that may navigate: the
-  /// browser answers `Vellum.strike` as soon as the release is dispatched, and
-  /// the load that follows is what the caller is waiting for. The reply alone
-  /// is, however, still the answer when no load ever comes; that is the normal
-  /// case for a click that only changed state on the page.
-  ///
-  /// Returns the reply and whether `event` was seen. An error reply is an
+  /// Returns the reply and whether the page navigated. An error reply is an
   /// error; a socket that dies before the reply is one too.
-  pub async fn call_then_await_event(
+  pub async fn call_then_await_navigation(
     &mut self,
     method: &str,
     params: Value,
-    event: &str,
     timeout: Duration,
   ) -> Result<(Value, bool), WayfernError> {
+    use crate::navigation_watch::{main_frame_of, NavigationWatch};
+    let main_frame = self
+      .call("Page.getFrameTree", serde_json::json!({}))
+      .await
+      .ok()
+      .and_then(|tree| main_frame_of(&tree));
     let id = self.allocate_id();
     self.connection.send_command(id, method, params).await?;
 
     let deadline = tokio::time::Instant::now() + timeout;
+    let mut watch = NavigationWatch::new(main_frame, false);
     let mut reply: Option<Value> = None;
-    let mut event_seen = false;
 
     loop {
-      if reply.is_some() && event_seen {
+      let now = tokio::time::Instant::now();
+      if watch.done(now) || now >= deadline {
         break;
       }
-      let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-      if remaining.is_zero() {
-        break;
-      }
-      let text = match tokio::time::timeout(remaining, self.connection.next_text()).await {
-        Ok(Some(Ok(text))) => text,
-        Ok(Some(Err(e))) => {
-          if reply.is_none() {
-            return Err(e.into());
+      let text =
+        match tokio::time::timeout_at(watch.wake_at(deadline), self.connection.next_text()).await {
+          Ok(Some(Ok(text))) => text,
+          Ok(Some(Err(e))) => {
+            if reply.is_none() {
+              return Err(e.into());
+            }
+            break;
           }
-          break;
-        }
-        Ok(None) => {
-          if reply.is_none() {
-            return Err(
-              self
-                .connection
-                .closed_error("no response received from CDP")
-                .into(),
-            );
+          Ok(None) => {
+            if reply.is_none() {
+              return Err(
+                self
+                  .connection
+                  .closed_error("no response received from CDP")
+                  .into(),
+              );
+            }
+            break;
           }
-          break;
-        }
-        Err(_) => break,
-      };
+          // Woken for the end of the grace; the loop decides.
+          Err(_) => continue,
+        };
 
       let message: Value = serde_json::from_str(&text).unwrap_or_default();
       if message.get("id") == Some(&Value::from(id)) {
@@ -694,15 +693,16 @@ impl WayfernSession {
             .cloned()
             .unwrap_or_else(|| serde_json::json!({})),
         );
+        watch.on_reply(tokio::time::Instant::now());
         continue;
       }
-      if message.get("method").and_then(Value::as_str) == Some(event) {
-        event_seen = true;
+      if let Some(event) = message.get("method").and_then(Value::as_str) {
+        watch.on_event(event, message.get("params"));
       }
     }
 
     match reply {
-      Some(reply) => Ok((reply, event_seen)),
+      Some(reply) => Ok((reply, watch.navigated())),
       None => {
         Err(CdpError::Transport(format!("timed out waiting for the reply to {method}")).into())
       }
@@ -1232,10 +1232,9 @@ pub mod vellum {
     load_timeout: Duration,
   ) -> Result<(Strike, bool), WayfernError> {
     let (reply, navigated) = session
-      .call_then_await_event(
+      .call_then_await_navigation(
         "Vellum.strike",
         strike_params(pointer, button, click_count),
-        "Page.loadEventFired",
         load_timeout,
       )
       .await?;

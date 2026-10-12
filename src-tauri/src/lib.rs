@@ -153,6 +153,7 @@ mod mcp_remote;
 mod mcp_server;
 mod mcp_toolsets;
 mod mcp_views;
+mod navigation_watch;
 mod tag_manager;
 mod team_lock;
 mod totp;

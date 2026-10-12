@@ -410,6 +410,7 @@ function startFixtureServer(geoIpFixture, geoIpAsnFixture) {
           <h1 id="fixture-title">Donut E2E Browser Fixture</h1>
           <p id="path">${url.pathname}</p>
           <button id="fixture-button" onclick="this.dataset.clicked='yes'; this.textContent='Clicked'">Click fixture</button>
+          <a id="fixture-link" href="/linked">Open the linked page</a>
           <script>window.__fixtureReady = true;</script>
         </body>
       </html>`);
