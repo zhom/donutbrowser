@@ -2,7 +2,7 @@
   "source": "src-tauri/src/api_server.rs",
   "regenerate_with": "python3 sdk/tools/extract-api-paths.py",
   "description": "Every operation the desktop app publishes in its /openapi.json. The SDK test suites assert this list and their own coverage tables match exactly, so an endpoint added to the app fails the SDK tests until it is either wrapped or deliberately listed as omitted.",
-  "operation_count": 71,
+  "operation_count": 84,
   "operations": [
     {
       "operation_id": "download_browser_api",
@@ -175,6 +175,11 @@
       "path": "/v1/profiles/batch/stop"
     },
     {
+      "operation_id": "bulk_edit_profiles",
+      "method": "POST",
+      "path": "/v1/profiles/bulk-edit"
+    },
+    {
       "operation_id": "distribute_proxies",
       "method": "POST",
       "path": "/v1/profiles/distribute-proxies"
@@ -265,6 +270,16 @@
       "path": "/v1/profiles/{id}/run-remote"
     },
     {
+      "operation_id": "export_storage_state",
+      "method": "GET",
+      "path": "/v1/profiles/{id}/storage-state"
+    },
+    {
+      "operation_id": "import_storage_state",
+      "method": "POST",
+      "path": "/v1/profiles/{id}/storage-state"
+    },
+    {
       "operation_id": "get_proxies",
       "method": "GET",
       "path": "/v1/proxies"
@@ -295,6 +310,11 @@
       "path": "/v1/proxies/{id}"
     },
     {
+      "operation_id": "rotate_proxy",
+      "method": "POST",
+      "path": "/v1/proxies/{id}/rotate"
+    },
+    {
       "operation_id": "get_remote_hours",
       "method": "GET",
       "path": "/v1/remote-hours"
@@ -320,9 +340,54 @@
       "path": "/v1/remote-sessions/{id}/cdp"
     },
     {
+      "operation_id": "get_statuses",
+      "method": "GET",
+      "path": "/v1/statuses"
+    },
+    {
+      "operation_id": "create_status",
+      "method": "POST",
+      "path": "/v1/statuses"
+    },
+    {
+      "operation_id": "delete_status",
+      "method": "DELETE",
+      "path": "/v1/statuses/{id}"
+    },
+    {
+      "operation_id": "update_status",
+      "method": "PUT",
+      "path": "/v1/statuses/{id}"
+    },
+    {
       "operation_id": "get_tags",
       "method": "GET",
       "path": "/v1/tags"
+    },
+    {
+      "operation_id": "get_templates",
+      "method": "GET",
+      "path": "/v1/templates"
+    },
+    {
+      "operation_id": "create_template",
+      "method": "POST",
+      "path": "/v1/templates"
+    },
+    {
+      "operation_id": "delete_template",
+      "method": "DELETE",
+      "path": "/v1/templates/{id}"
+    },
+    {
+      "operation_id": "update_template",
+      "method": "PUT",
+      "path": "/v1/templates/{id}"
+    },
+    {
+      "operation_id": "create_profiles_from_template",
+      "method": "POST",
+      "path": "/v1/templates/{id}/profiles"
     },
     {
       "operation_id": "get_vpns",

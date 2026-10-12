@@ -31,6 +31,15 @@ Case = Tuple[
 
 LOCATOR = {"role": "button", "name": "Sign in"}
 
+STORAGE_STATE = {
+    "cookies": [{"name": "sid", "value": "1", "domain": ".example.com", "path": "/"}],
+    "origins": [
+        {"origin": "https://example.com", "localStorage": [{"name": "k", "value": "v"}]}
+    ],
+}
+
+TEMPLATE_SETTINGS = {"name_prefix": "Shop", "tags": ["eu"], "proxy_ids": ["x1", "x2"]}
+
 CASES: List[Case] = [
     # -- profiles ----------------------------------------------------------
     ("list_profiles", (), {}, "GET", "/v1/profiles", None, {}, "/v1/profiles"),
@@ -56,12 +65,42 @@ CASES: List[Case] = [
         "/v1/profiles",
     ),
     (
+        "create_profile",
+        (),
+        {
+            "name": "Started",
+            "browser": "wayfern",
+            "status_id": "st1",
+            "start_urls": ["https://example.com"],
+        },
+        "POST",
+        "/v1/profiles",
+        {
+            "name": "Started",
+            "browser": "wayfern",
+            "status_id": "st1",
+            "start_urls": ["https://example.com"],
+        },
+        {},
+        "/v1/profiles",
+    ),
+    (
         "update_profile",
         ("p1",),
         {"name": "Renamed", "proxy_id": "", "clear_on_close": False, "dns_server": "9.9.9.9"},
         "PUT",
         "/v1/profiles/p1",
         {"name": "Renamed", "proxy_id": "", "clear_on_close": False, "dns_server": "9.9.9.9"},
+        {},
+        "/v1/profiles/{id}",
+    ),
+    (
+        "update_profile",
+        ("p1",),
+        {"status_id": "", "start_urls": []},
+        "PUT",
+        "/v1/profiles/p1",
+        {"status_id": "", "start_urls": []},
         {},
         "/v1/profiles/{id}",
     ),
@@ -193,6 +232,49 @@ CASES: List[Case] = [
         {"content": "[]"},
         {},
         "/v1/profiles/{id}/cookies/import",
+    ),
+    (
+        "export_storage_state",
+        ("p1",),
+        {"include_cookies": True},
+        "GET",
+        "/v1/profiles/p1/storage-state",
+        None,
+        {"include_cookies": "true"},
+        "/v1/profiles/{id}/storage-state",
+    ),
+    (
+        "export_storage_state",
+        ("p1",),
+        {},
+        "GET",
+        "/v1/profiles/p1/storage-state",
+        None,
+        {},
+        "/v1/profiles/{id}/storage-state",
+    ),
+    (
+        "import_storage_state",
+        ("p1", STORAGE_STATE),
+        {},
+        "POST",
+        "/v1/profiles/p1/storage-state",
+        STORAGE_STATE,
+        {},
+        "/v1/profiles/{id}/storage-state",
+    ),
+    (
+        "bulk_edit_profiles",
+        (["p1", "p2"], {"status_id": None, "tags_add": ["eu"], "new_device": True}),
+        {},
+        "POST",
+        "/v1/profiles/bulk-edit",
+        {
+            "profile_ids": ["p1", "p2"],
+            "patch": {"status_id": None, "tags_add": ["eu"], "new_device": True},
+        },
+        {},
+        "/v1/profiles/bulk-edit",
     ),
     # -- agent -------------------------------------------------------------
     (
@@ -440,6 +522,72 @@ CASES: List[Case] = [
     ),
     ("delete_group", ("g1",), {}, "DELETE", "/v1/groups/g1", None, {}, "/v1/groups/{id}"),
     ("list_tags", (), {}, "GET", "/v1/tags", None, {}, "/v1/tags"),
+    # -- statuses ----------------------------------------------------------
+    ("list_statuses", (), {}, "GET", "/v1/statuses", None, {}, "/v1/statuses"),
+    (
+        "create_status",
+        (),
+        {"name": "Warming", "color": "#ffaa00"},
+        "POST",
+        "/v1/statuses",
+        {"name": "Warming", "color": "#ffaa00"},
+        {},
+        "/v1/statuses",
+    ),
+    (
+        "update_status",
+        ("st1",),
+        {"name": "Ready", "color": "#00aa55"},
+        "PUT",
+        "/v1/statuses/st1",
+        {"name": "Ready", "color": "#00aa55"},
+        {},
+        "/v1/statuses/{id}",
+    ),
+    ("delete_status", ("st1",), {}, "DELETE", "/v1/statuses/st1", None, {}, "/v1/statuses/{id}"),
+    # -- templates ---------------------------------------------------------
+    ("list_templates", (), {}, "GET", "/v1/templates", None, {}, "/v1/templates"),
+    (
+        "create_template",
+        (),
+        {"name": "Shop EU", "settings": TEMPLATE_SETTINGS},
+        "POST",
+        "/v1/templates",
+        {"name": "Shop EU", "settings": TEMPLATE_SETTINGS},
+        {},
+        "/v1/templates",
+    ),
+    (
+        "create_template",
+        (),
+        {"name": "Empty"},
+        "POST",
+        "/v1/templates",
+        {"name": "Empty"},
+        {},
+        "/v1/templates",
+    ),
+    (
+        "update_template",
+        ("t1",),
+        {"name": "Shop EU 2", "settings": TEMPLATE_SETTINGS},
+        "PUT",
+        "/v1/templates/t1",
+        {"name": "Shop EU 2", "settings": TEMPLATE_SETTINGS},
+        {},
+        "/v1/templates/{id}",
+    ),
+    ("delete_template", ("t1",), {}, "DELETE", "/v1/templates/t1", None, {}, "/v1/templates/{id}"),
+    (
+        "create_profiles_from_template",
+        ("t1",),
+        {"count": 3, "name": "Shop"},
+        "POST",
+        "/v1/templates/t1/profiles",
+        {"count": 3, "name": "Shop"},
+        {},
+        "/v1/templates/{id}/profiles",
+    ),
     # -- proxies -----------------------------------------------------------
     ("list_proxies", (), {}, "GET", "/v1/proxies", None, {}, "/v1/proxies"),
     ("get_proxy", ("x1",), {}, "GET", "/v1/proxies/x1", None, {}, "/v1/proxies/{id}"),
@@ -454,6 +602,24 @@ CASES: List[Case] = [
         "/v1/proxies",
     ),
     (
+        "create_proxy",
+        (),
+        {
+            "name": "Rotating",
+            "proxy_settings": {"proxy_type": "http", "host": "h", "port": 8080},
+            "rotation_url": "https://provider.example/rotate?key=1",
+        },
+        "POST",
+        "/v1/proxies",
+        {
+            "name": "Rotating",
+            "proxy_settings": {"proxy_type": "http", "host": "h", "port": 8080},
+            "rotation_url": "https://provider.example/rotate?key=1",
+        },
+        {},
+        "/v1/proxies",
+    ),
+    (
         "update_proxy",
         ("x1",),
         {"name": "EU 2"},
@@ -464,6 +630,26 @@ CASES: List[Case] = [
         "/v1/proxies/{id}",
     ),
     ("delete_proxy", ("x1",), {}, "DELETE", "/v1/proxies/x1", None, {}, "/v1/proxies/{id}"),
+    (
+        "update_proxy",
+        ("x1",),
+        {"rotation_url": ""},
+        "PUT",
+        "/v1/proxies/x1",
+        {"rotation_url": ""},
+        {},
+        "/v1/proxies/{id}",
+    ),
+    (
+        "rotate_proxy",
+        ("x1",),
+        {},
+        "POST",
+        "/v1/proxies/x1/rotate",
+        None,
+        {},
+        "/v1/proxies/{id}/rotate",
+    ),
     (
         "import_proxies",
         (),

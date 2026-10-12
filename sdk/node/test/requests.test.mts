@@ -26,6 +26,13 @@ interface Case {
 
 const LOCATOR = { role: "button", name: "Sign in" };
 
+const STORAGE_STATE = {
+  cookies: [{ name: "sid", value: "1", domain: ".example.com", path: "/" }],
+  origins: [{ origin: "https://example.com", localStorage: [{ name: "k", value: "v" }] }],
+};
+
+const TEMPLATE_SETTINGS = { name_prefix: "Shop", tags: ["eu"], proxy_ids: ["x1", "x2"] };
+
 const CASES: Case[] = [
   // -- profiles ------------------------------------------------------------
   {
@@ -61,6 +68,26 @@ const CASES: Case[] = [
     operation: "POST /v1/profiles",
   },
   {
+    method: "createProfile",
+    args: [
+      {
+        name: "Started",
+        browser: "wayfern",
+        status_id: "st1",
+        start_urls: ["https://example.com"],
+      },
+    ],
+    verb: "POST",
+    path: "/v1/profiles",
+    body: {
+      name: "Started",
+      browser: "wayfern",
+      status_id: "st1",
+      start_urls: ["https://example.com"],
+    },
+    operation: "POST /v1/profiles",
+  },
+  {
     method: "updateProfile",
     args: [
       "p1",
@@ -79,6 +106,14 @@ const CASES: Case[] = [
       clear_on_close: false,
       dns_server: "9.9.9.9",
     },
+    operation: "PUT /v1/profiles/{id}",
+  },
+  {
+    method: "updateProfile",
+    args: ["p1", { status_id: "", start_urls: [] }],
+    verb: "PUT",
+    path: "/v1/profiles/p1",
+    body: { status_id: "", start_urls: [] },
     operation: "PUT /v1/profiles/{id}",
   },
   {
@@ -201,6 +236,42 @@ const CASES: Case[] = [
     path: "/v1/profiles/p1/cookies/import",
     body: { content: "[]" },
     operation: "POST /v1/profiles/{id}/cookies/import",
+  },
+  {
+    method: "exportStorageState",
+    args: ["p1", { include_cookies: true }],
+    verb: "GET",
+    path: "/v1/profiles/p1/storage-state",
+    body: null,
+    query: { include_cookies: "true" },
+    operation: "GET /v1/profiles/{id}/storage-state",
+  },
+  {
+    method: "exportStorageState",
+    args: ["p1"],
+    verb: "GET",
+    path: "/v1/profiles/p1/storage-state",
+    body: null,
+    operation: "GET /v1/profiles/{id}/storage-state",
+  },
+  {
+    method: "importStorageState",
+    args: ["p1", STORAGE_STATE],
+    verb: "POST",
+    path: "/v1/profiles/p1/storage-state",
+    body: STORAGE_STATE,
+    operation: "POST /v1/profiles/{id}/storage-state",
+  },
+  {
+    method: "bulkEditProfiles",
+    args: [["p1", "p2"], { status_id: null, tags_add: ["eu"], new_device: true }],
+    verb: "POST",
+    path: "/v1/profiles/bulk-edit",
+    body: {
+      profile_ids: ["p1", "p2"],
+      patch: { status_id: null, tags_add: ["eu"], new_device: true },
+    },
+    operation: "POST /v1/profiles/bulk-edit",
   },
   // -- agent ---------------------------------------------------------------
   {
@@ -458,6 +529,88 @@ const CASES: Case[] = [
     body: null,
     operation: "GET /v1/tags",
   },
+  // -- statuses ------------------------------------------------------------
+  {
+    method: "listStatuses",
+    args: [],
+    verb: "GET",
+    path: "/v1/statuses",
+    body: null,
+    operation: "GET /v1/statuses",
+  },
+  {
+    method: "createStatus",
+    args: [{ name: "Warming", color: "#ffaa00" }],
+    verb: "POST",
+    path: "/v1/statuses",
+    body: { name: "Warming", color: "#ffaa00" },
+    operation: "POST /v1/statuses",
+  },
+  {
+    method: "updateStatus",
+    args: ["st1", { name: "Ready", color: "#00aa55" }],
+    verb: "PUT",
+    path: "/v1/statuses/st1",
+    body: { name: "Ready", color: "#00aa55" },
+    operation: "PUT /v1/statuses/{id}",
+  },
+  {
+    method: "deleteStatus",
+    args: ["st1"],
+    verb: "DELETE",
+    path: "/v1/statuses/st1",
+    body: null,
+    operation: "DELETE /v1/statuses/{id}",
+  },
+  // -- templates -----------------------------------------------------------
+  {
+    method: "listTemplates",
+    args: [],
+    verb: "GET",
+    path: "/v1/templates",
+    body: null,
+    operation: "GET /v1/templates",
+  },
+  {
+    method: "createTemplate",
+    args: [{ name: "Shop EU", settings: TEMPLATE_SETTINGS }],
+    verb: "POST",
+    path: "/v1/templates",
+    body: { name: "Shop EU", settings: TEMPLATE_SETTINGS },
+    operation: "POST /v1/templates",
+  },
+  {
+    method: "createTemplate",
+    args: [{ name: "Empty", settings: undefined }],
+    verb: "POST",
+    path: "/v1/templates",
+    body: { name: "Empty" },
+    operation: "POST /v1/templates",
+  },
+  {
+    method: "updateTemplate",
+    args: ["t1", { name: "Shop EU 2", settings: TEMPLATE_SETTINGS }],
+    verb: "PUT",
+    path: "/v1/templates/t1",
+    body: { name: "Shop EU 2", settings: TEMPLATE_SETTINGS },
+    operation: "PUT /v1/templates/{id}",
+  },
+  {
+    method: "deleteTemplate",
+    args: ["t1"],
+    verb: "DELETE",
+    path: "/v1/templates/t1",
+    body: null,
+    operation: "DELETE /v1/templates/{id}",
+  },
+  {
+    method: "createProfilesFromTemplate",
+    args: ["t1", { count: 3, name: "Shop" }],
+    verb: "POST",
+    path: "/v1/templates/t1/profiles",
+    body: { count: 3, name: "Shop" },
+    operation: "POST /v1/templates/{id}/profiles",
+  },
   // -- proxies -------------------------------------------------------------
   {
     method: "listProxies",
@@ -484,6 +637,24 @@ const CASES: Case[] = [
     operation: "POST /v1/proxies",
   },
   {
+    method: "createProxy",
+    args: [
+      {
+        name: "Rotating",
+        proxy_settings: { proxy_type: "http", host: "h", port: 8080 },
+        rotation_url: "https://provider.example/rotate?key=1",
+      },
+    ],
+    verb: "POST",
+    path: "/v1/proxies",
+    body: {
+      name: "Rotating",
+      proxy_settings: { proxy_type: "http", host: "h", port: 8080 },
+      rotation_url: "https://provider.example/rotate?key=1",
+    },
+    operation: "POST /v1/proxies",
+  },
+  {
     method: "updateProxy",
     args: ["x1", { name: "EU 2" }],
     verb: "PUT",
@@ -498,6 +669,22 @@ const CASES: Case[] = [
     path: "/v1/proxies/x1",
     body: null,
     operation: "DELETE /v1/proxies/{id}",
+  },
+  {
+    method: "updateProxy",
+    args: ["x1", { rotation_url: "" }],
+    verb: "PUT",
+    path: "/v1/proxies/x1",
+    body: { rotation_url: "" },
+    operation: "PUT /v1/proxies/{id}",
+  },
+  {
+    method: "rotateProxy",
+    args: ["x1"],
+    verb: "POST",
+    path: "/v1/proxies/x1/rotate",
+    body: null,
+    operation: "POST /v1/proxies/{id}/rotate",
   },
   {
     method: "importProxies",

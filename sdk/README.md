@@ -270,7 +270,7 @@ On top of that, one parameterised test per method drives it against a fake
 server and asserts the exact verb, path, query string and JSON body it sends.
 That is what ties the table to reality rather than to a comment.
 
-Of the 71 published operations, 70 are wrapped. The one omission:
+Of the 84 published operations, 83 are wrapped. The one omission:
 
 - `GET /v1/remote-sessions/{id}/cdp` is a WebSocket upgrade, not a request an
   HTTP client can make, and bundling a websocket implementation would end the

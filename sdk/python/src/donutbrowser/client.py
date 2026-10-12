@@ -22,15 +22,18 @@ from .errors import DonutConnectionError, DonutError, error_for_status
 from .models import (
     AgentClick,
     AgentTyping,
+    ApiBulkCreateResponse,
     ApiGroupResponse,
     ApiProfileResponse,
     ApiProfilesResponse,
     ApiProxyResponse,
     ApiRemoteSessionsResponse,
+    ApiStatusResponse,
     ApiVpnExportResponse,
     ApiVpnResponse,
     BatchRunResponse,
     BatchStopResponse,
+    BulkEditResponse,
     CookieBotConflictCheck,
     CookieBotPresetList,
     CookieBotRun,
@@ -56,14 +59,20 @@ from .models import (
     PerceptionPage,
     PickedElement,
     ProfileImportBatchResult,
+    ProfilePatch,
+    ProfileTemplate,
     ProxyPair,
     ProxySettings,
     RemoteHoursQuota,
     RemoteSessionState,
+    RotationResult,
     RunProfileResponse,
     RunRemoteResponse,
     SetCloudSyncResponse,
     StopRemoteResponse,
+    StorageState,
+    StorageStateImport,
+    TemplateSettings,
     WayfernConfig,
 )
 
@@ -289,6 +298,8 @@ class DonutClient:
         ephemeral: Optional[bool] = None,
         temporary: Optional[bool] = None,
         dns_server: Optional[str] = None,
+        status_id: Optional[str] = None,
+        start_urls: Optional[Sequence[str]] = None,
     ) -> ApiProfileResponse:
         """POST /v1/profiles
 
@@ -298,7 +309,8 @@ class DonutClient:
         names through the profile's proxy or VPN: ``https://host/path``,
         ``tls://host[:port]``, ``tcp://host[:port]`` or a bare ``host[:port]``;
         a bare address of a well-known resolver such as ``"1.1.1.1"`` uses its
-        DNS over HTTPS endpoint.
+        DNS over HTTPS endpoint. ``status_id`` comes from :meth:`list_statuses`;
+        ``start_urls`` is at most 20 http(s) URLs.
         """
         return self._request(
             "POST",
@@ -317,6 +329,8 @@ class DonutClient:
                 ephemeral=ephemeral,
                 temporary=temporary,
                 dns_server=dns_server,
+                status_id=status_id,
+                start_urls=list(start_urls) if start_urls is not None else None,
             ),
         )
 
@@ -337,13 +351,16 @@ class DonutClient:
         sync_mode: Optional[str] = None,
         clear_on_close: Optional[bool] = None,
         dns_server: Optional[str] = None,
+        status_id: Optional[str] = None,
+        start_urls: Optional[Sequence[str]] = None,
     ) -> ApiProfileResponse:
         """PUT /v1/profiles/{id}
 
         A profile's browser engine is fixed at creation, so there is no
         ``browser`` argument. Pass ``proxy_id=""`` or ``vpn_id=""`` to detach
         one; leaving either unset changes nothing. ``dns_server=""`` lets the
-        proxy resolve names again.
+        proxy resolve names again, ``status_id=""`` clears the status, and
+        ``start_urls=[]`` removes the start pages.
         """
         return self._request(
             "PUT",
@@ -364,6 +381,8 @@ class DonutClient:
                 sync_mode=sync_mode,
                 clear_on_close=clear_on_close,
                 dns_server=dns_server,
+                status_id=status_id,
+                start_urls=list(start_urls) if start_urls is not None else None,
             ),
         )
 
@@ -495,6 +514,51 @@ class DonutClient:
             "POST",
             f"/v1/profiles/{_segment(profile_id)}/cookies/import",
             body={"content": content},
+        )
+
+    def export_storage_state(
+        self, profile_id: str, *, include_cookies: Optional[bool] = None
+    ) -> StorageState:
+        """GET /v1/profiles/{id}/storage-state
+
+        Playwright's ``storageState``: each origin's Local Storage, plus the
+        cookies when ``include_cookies=True``. Readable while the browser runs,
+        but writes from the last few seconds may not be on disk yet.
+        """
+        return self._request(
+            "GET",
+            f"/v1/profiles/{_segment(profile_id)}/storage-state",
+            query=_query(include_cookies=include_cookies),
+        )
+
+    def import_storage_state(self, profile_id: str, state: StorageState) -> StorageStateImport:
+        """POST /v1/profiles/{id}/storage-state
+
+        ``state`` is a Playwright ``storageState``; what
+        ``context.storage_state()`` returns can be passed as is. An item
+        replaces the one of the same name, and the origin's other items stay.
+        The browser must be stopped.
+        """
+        return self._request(
+            "POST",
+            f"/v1/profiles/{_segment(profile_id)}/storage-state",
+            body=dict(state),
+        )
+
+    def bulk_edit_profiles(
+        self, profile_ids: Sequence[str], patch: ProfilePatch
+    ) -> BulkEditResponse:
+        """POST /v1/profiles/bulk-edit
+
+        Every profile is checked before any is saved, so a bad value, an
+        unknown profile or a running browser changes nothing. ``patch`` is sent
+        as given: a ``None`` in it clears that field rather than being dropped.
+        ``changed`` counts only the profiles that really changed.
+        """
+        return self._request(
+            "POST",
+            "/v1/profiles/bulk-edit",
+            body={"profile_ids": list(profile_ids), "patch": dict(patch)},
         )
 
     def distribute_proxies(self, pairs: Sequence[ProxyPair]) -> DistributeProxiesResponse:
@@ -850,6 +914,101 @@ class DonutClient:
         return self._request("GET", "/v1/tags")
 
     # ------------------------------------------------------------------
+    # Statuses
+    # ------------------------------------------------------------------
+
+    def list_statuses(self) -> List[ApiStatusResponse]:
+        """GET /v1/statuses"""
+        return self._request("GET", "/v1/statuses")
+
+    def create_status(self, *, name: str, color: str) -> ApiStatusResponse:
+        """POST /v1/statuses
+
+        ``name`` is 1 to 40 characters, unique regardless of case, and
+        ``color`` is ``#rrggbb``.
+        """
+        return self._request("POST", "/v1/statuses", body={"name": name, "color": color})
+
+    def update_status(self, status_id: str, *, name: str, color: str) -> ApiStatusResponse:
+        """PUT /v1/statuses/{id}"""
+        return self._request(
+            "PUT",
+            f"/v1/statuses/{_segment(status_id)}",
+            body={"name": name, "color": color},
+        )
+
+    def delete_status(self, status_id: str) -> None:
+        """DELETE /v1/statuses/{id}
+
+        The status is also taken off every profile that had it.
+        """
+        self._request("DELETE", f"/v1/statuses/{_segment(status_id)}")
+
+    # ------------------------------------------------------------------
+    # Templates
+    # ------------------------------------------------------------------
+
+    def list_templates(self) -> List[ProfileTemplate]:
+        """GET /v1/templates"""
+        return self._request("GET", "/v1/templates")
+
+    def create_template(
+        self, *, name: str, settings: Optional[TemplateSettings] = None
+    ) -> ProfileTemplate:
+        """POST /v1/templates
+
+        ``name`` is 1 to 60 characters, unique regardless of case. Device
+        fields in ``settings["wayfern_config"]`` are dropped: every profile
+        made from the template gets its own device.
+        """
+        return self._request(
+            "POST",
+            "/v1/templates",
+            body=_body(
+                name=name, settings=dict(settings) if settings is not None else None
+            ),
+        )
+
+    def update_template(
+        self, template_id: str, *, name: str, settings: Optional[TemplateSettings] = None
+    ) -> ProfileTemplate:
+        """PUT /v1/templates/{id}
+
+        Replaces the whole template. Settings left out are reset to empty, so
+        to rename one, send its current ``settings`` back with the new name.
+        """
+        return self._request(
+            "PUT",
+            f"/v1/templates/{_segment(template_id)}",
+            body=_body(
+                name=name, settings=dict(settings) if settings is not None else None
+            ),
+        )
+
+    def delete_template(self, template_id: str) -> None:
+        """DELETE /v1/templates/{id}
+
+        Profiles made from the template keep their settings.
+        """
+        self._request("DELETE", f"/v1/templates/{_segment(template_id)}")
+
+    def create_profiles_from_template(
+        self, template_id: str, *, count: int, name: Optional[str] = None
+    ) -> ApiBulkCreateResponse:
+        """POST /v1/templates/{id}/profiles
+
+        Makes ``count`` (1 to 100) profiles with the newest downloaded Wayfern,
+        each with its own device. One profile takes ``name``; several take it
+        followed by numbers. When ``error`` is set, creation stopped early and
+        ``profiles`` lists what was made.
+        """
+        return self._request(
+            "POST",
+            f"/v1/templates/{_segment(template_id)}/profiles",
+            body=_body(count=count, name=name),
+        )
+
+    # ------------------------------------------------------------------
     # Proxies
     # ------------------------------------------------------------------
 
@@ -861,12 +1020,24 @@ class DonutClient:
         """GET /v1/proxies/{id}"""
         return self._request("GET", f"/v1/proxies/{_segment(proxy_id)}")
 
-    def create_proxy(self, *, name: str, proxy_settings: ProxySettings) -> ApiProxyResponse:
-        """POST /v1/proxies"""
+    def create_proxy(
+        self,
+        *,
+        name: str,
+        proxy_settings: ProxySettings,
+        rotation_url: Optional[str] = None,
+    ) -> ApiProxyResponse:
+        """POST /v1/proxies
+
+        ``rotation_url`` is the provider's http(s) "change IP" link, used by
+        :meth:`rotate_proxy`.
+        """
         return self._request(
             "POST",
             "/v1/proxies",
-            body={"name": name, "proxy_settings": dict(proxy_settings)},
+            body=_body(
+                name=name, proxy_settings=dict(proxy_settings), rotation_url=rotation_url
+            ),
         )
 
     def update_proxy(
@@ -875,20 +1046,35 @@ class DonutClient:
         *,
         name: Optional[str] = None,
         proxy_settings: Optional[ProxySettings] = None,
+        rotation_url: Optional[str] = None,
     ) -> ApiProxyResponse:
-        """PUT /v1/proxies/{id}"""
+        """PUT /v1/proxies/{id}
+
+        ``rotation_url=""`` clears the "change IP" link.
+        """
         return self._request(
             "PUT",
             f"/v1/proxies/{_segment(proxy_id)}",
             body=_body(
                 name=name,
                 proxy_settings=dict(proxy_settings) if proxy_settings is not None else None,
+                rotation_url=rotation_url,
             ),
         )
 
     def delete_proxy(self, proxy_id: str) -> None:
         """DELETE /v1/proxies/{id}"""
         self._request("DELETE", f"/v1/proxies/{_segment(proxy_id)}")
+
+    def rotate_proxy(self, proxy_id: str) -> RotationResult:
+        """POST /v1/proxies/{id}/rotate
+
+        Calls the proxy's "change IP" link; every profile behind the proxy
+        moves to the new IP. A proxy without a link raises
+        :class:`~donutbrowser.errors.ValidationError`, and a provider that
+        refuses or does not answer raises :class:`~donutbrowser.errors.BadGateway`.
+        """
+        return self._request("POST", f"/v1/proxies/{_segment(proxy_id)}/rotate")
 
     def import_proxies(
         self,
