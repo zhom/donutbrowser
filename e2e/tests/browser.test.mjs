@@ -715,6 +715,81 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       "/linked",
     );
 
+    // The MCP browser tools, through the engine an agent reaches over the
+    // remote bridge. Each action says where the page is afterwards.
+    let rpcId = 0;
+    let mcpSession = null;
+    const mcp = async (method, params) => {
+      const response = await fetch(`${base}/v1/e2e/mcp`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${saved.api_token}`,
+          "content-type": "application/json",
+          ...(mcpSession ? { "mcp-session-id": mcpSession } : {}),
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
+      });
+      assert.equal(response.status, 200, await response.clone().text());
+      const answer = await response.json();
+      mcpSession = answer.session_id ?? mcpSession;
+      assert.equal(answer.body.error, undefined, JSON.stringify(answer.body));
+      return answer.body.result;
+    };
+    const tool = async (name, args = {}) => {
+      const result = await mcp("tools/call", {
+        name,
+        arguments: { profile_id: profile.id, ...args },
+      });
+      assert.notEqual(result.isError, true, JSON.stringify(result));
+      return result.content[0];
+    };
+    const toolJson = async (name, args) =>
+      JSON.parse((await tool(name, args)).text);
+    await mcp("initialize", {
+      protocolVersion: "2025-06-18",
+      clientInfo: { name: "Donut E2E", version: "1" },
+    });
+
+    const back = await tool("go_back");
+    assert.match(back.text, /^Went back/);
+    assert.match(back.text, /Page: Donut E2E Browser Fixture <.*\/wayfern>/);
+    assert.equal(
+      await cdp.evaluate("document.querySelector('#path').textContent"),
+      "/wayfern",
+    );
+
+    const scrolled = await toolJson("scroll", { direction: "down" });
+    assert.equal(scrolled.moved, true, JSON.stringify(scrolled));
+    assert.ok(scrolled.scroll_y > 0);
+    assert.equal(scrolled.at_top, false);
+
+    await cdp.evaluate("document.querySelector('#fixture-input').focus()");
+    const pressed = await tool("press_key", { key: "Enter" });
+    assert.match(pressed.text, /^Pressed Enter/);
+    assert.equal(
+      await cdp.evaluate(
+        "document.querySelector('#fixture-input').dataset.entered",
+      ),
+      "yes",
+    );
+
+    const found = await toolJson("wait_for", { selector: "#fixture-end" });
+    assert.equal(found.met, true);
+    assert.equal(found.title, "Donut E2E Browser Fixture");
+    const missing = await toolJson("wait_for", {
+      text: "Text that is never on the fixture",
+      timeout_ms: 300,
+    });
+    assert.equal(missing.met, false);
+
+    const shot = await tool("screenshot");
+    assert.equal(shot.mimeType, "image/jpeg");
+    const jpeg = Buffer.from(shot.data, "base64");
+    assert.equal(jpeg.readUInt16BE(0), 0xffd8, "a JPEG by default");
+
+    const visited = await tool("navigate", { url: `${fixtureUrl}/again` });
+    assert.match(visited.text, /Page: Donut E2E Browser Fixture <.*\/again>/);
+
     const runningProfile = (await app.invoke("list_browser_profiles")).find(
       (item) => item.id === profile.id,
     );

@@ -1424,6 +1424,45 @@ async fn vellum_click_in(
   Ok(outcome)
 }
 
+/// Turn the wheel at the viewport's centre, with the pointer gliding there
+/// first, as a hand on a mouse would.
+async fn vellum_wheel(target: &CdpTarget, delta_x: f64, delta_y: f64) -> Result<(), AgentError> {
+  let mut session = WayfernSession::open(target).await?;
+  let outcome = async {
+    let viewport = wayfern_cdp::layout_viewport(&mut session).await?;
+    let (x, y) = (viewport.0 / 2.0, viewport.1 / 2.0);
+    let centre = ViewportTarget {
+      x,
+      y,
+      width: viewport.0,
+      height: viewport.1,
+    };
+    let origin = wayfern_cdp::glide_origin(&centre, viewport);
+    vellum::with_pointer(&mut session, origin.0, origin.1, |s, p| {
+      Box::pin(async move {
+        vellum::glide(s, p, x, y, None).await?;
+        s.call(
+          "Input.dispatchMouseEvent",
+          serde_json::json!({
+            "type": "mouseWheel",
+            "x": x,
+            "y": y,
+            "deltaX": delta_x,
+            "deltaY": delta_y,
+          }),
+        )
+        .await?;
+        Ok::<(), WayfernError>(())
+      })
+    })
+    .await?;
+    Ok::<(), AgentError>(())
+  }
+  .await;
+  session.close().await;
+  outcome
+}
+
 /// Strike `point` with a humanized pointer on a fresh session.
 async fn vellum_click(
   target: &CdpTarget,
@@ -2042,6 +2081,253 @@ fn click_report(prefix: &str, navigated: bool) -> String {
     format!("{prefix} (a page load followed)")
   } else {
     prefix.to_string()
+  }
+}
+
+/// Where an action left the page, read in one round trip after it.
+const PAGE_STATE_SCRIPT: &str = "(() => ({ url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 1500) }))()";
+
+#[derive(Debug, Default, Deserialize)]
+struct PageState {
+  #[serde(default)]
+  url: String,
+  #[serde(default)]
+  title: String,
+  /// The start of the visible text, only to recognise a bot check.
+  #[serde(default)]
+  text: String,
+}
+
+/// Titles that a bot check or block page shows instead of the site.
+const WALL_TITLES: &[(&str, &str)] = &[
+  ("just a moment", "a Cloudflare check"),
+  ("attention required", "a Cloudflare block"),
+  ("ddos-guard", "a DDoS-Guard check"),
+  ("pardon our interruption", "a bot check"),
+  ("are you a robot", "a CAPTCHA"),
+  ("captcha", "a CAPTCHA"),
+  ("security check", "a security check"),
+  ("access denied", "an access block"),
+  ("403 forbidden", "an access block"),
+];
+
+/// Phrases specific enough that page text alone says it is a bot check.
+/// A plain mention of a CAPTCHA is not one: many login forms carry it.
+const WALL_PHRASES: &[(&str, &str)] = &[
+  ("verify you are human", "a human check"),
+  ("checking your browser before accessing", "a browser check"),
+  (
+    "checking if the site connection is secure",
+    "a Cloudflare check",
+  ),
+  ("press & hold", "a press-and-hold check"),
+  ("please complete the security check", "a security check"),
+  (
+    "enable javascript and cookies to continue",
+    "a browser check",
+  ),
+];
+
+/// The bot check standing in front of the page, if it looks like one.
+fn bot_wall(title: &str, text: &str) -> Option<&'static str> {
+  let title = title.to_lowercase();
+  let text = text.to_lowercase();
+  WALL_TITLES
+    .iter()
+    .find(|(needle, _)| title.contains(needle))
+    .or_else(|| {
+      WALL_PHRASES
+        .iter()
+        .find(|(needle, _)| text.contains(needle))
+    })
+    .map(|(_, wall)| *wall)
+}
+
+/// The line an action ends with: the page's title and address, and a hint
+/// when a bot check stands in front of the site.
+fn page_report(state: &PageState) -> String {
+  let title = if state.title.trim().is_empty() {
+    "(no title)"
+  } else {
+    state.title.trim()
+  };
+  let mut line = format!("Page: {title} <{}>", state.url);
+  if let Some(wall) = bot_wall(&state.title, &state.text) {
+    line.push_str(&format!(
+      "\nThis looks like {wall}, not the site itself. wait_for the site's content, or ask_human to get past it."
+    ));
+  }
+  line
+}
+
+/// The viewport and page sizes `Page.getLayoutMetrics` reports, in CSS pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct LayoutMetrics {
+  x: f64,
+  y: f64,
+  width: f64,
+  height: f64,
+  page_width: f64,
+  page_height: f64,
+  /// Device pixels per CSS pixel.
+  dpr: f64,
+}
+
+impl LayoutMetrics {
+  fn from_reply(reply: &serde_json::Value) -> Self {
+    let number = |path: &str| reply.pointer(path).and_then(|v| v.as_f64());
+    let width = number("/cssVisualViewport/clientWidth")
+      .or_else(|| number("/cssLayoutViewport/clientWidth"))
+      .unwrap_or(1280.0);
+    let height = number("/cssVisualViewport/clientHeight")
+      .or_else(|| number("/cssLayoutViewport/clientHeight"))
+      .unwrap_or(800.0);
+    // The deprecated viewport is in device pixels, so the two give the ratio.
+    let dpr = number("/visualViewport/clientWidth")
+      .map(|device| device / width)
+      .filter(|dpr| dpr.is_finite() && *dpr >= 0.5 && *dpr <= 8.0)
+      .unwrap_or(1.0);
+    Self {
+      x: number("/cssVisualViewport/pageX").unwrap_or(0.0),
+      y: number("/cssVisualViewport/pageY").unwrap_or(0.0),
+      width,
+      height,
+      page_width: number("/cssContentSize/width")
+        .or_else(|| number("/contentSize/width"))
+        .unwrap_or(width),
+      page_height: number("/cssContentSize/height")
+        .or_else(|| number("/contentSize/height"))
+        .unwrap_or(height),
+      dpr,
+    }
+  }
+}
+
+/// The capture scale that keeps an image `css_width` wide at most `max_width`
+/// device pixels across. Never above 1: a capture is never upscaled.
+fn screenshot_scale(css_width: f64, dpr: f64, max_width: f64) -> f64 {
+  let output = css_width * dpr;
+  if !(output.is_finite() && output > 0.0) {
+    return 1.0;
+  }
+  (max_width / output).clamp(0.05, 1.0)
+}
+
+/// The wheel distance for `pages` viewports in `direction`. A page is 85% of
+/// the viewport, so a line of context stays in view.
+fn scroll_delta(direction: &str, pages: f64, width: f64, height: f64) -> Option<(f64, f64)> {
+  let (x, y) = (width * 0.85 * pages, height * 0.85 * pages);
+  match direction {
+    "down" => Some((0.0, y)),
+    "up" => Some((0.0, -y)),
+    "right" => Some((x, 0.0)),
+    "left" => Some((-x, 0.0)),
+    _ => None,
+  }
+}
+
+/// A key as `Input.dispatchKeyEvent` takes it.
+#[derive(Debug, PartialEq)]
+struct KeyStroke {
+  key: String,
+  code: String,
+  key_code: u32,
+  /// What the key types, when it types something.
+  text: Option<String>,
+}
+
+/// The named keys an agent needs most, and any single character.
+fn key_stroke(name: &str) -> Option<KeyStroke> {
+  let named = |key: &str, code: &str, key_code: u32, text: Option<&str>| KeyStroke {
+    key: key.to_string(),
+    code: code.to_string(),
+    key_code,
+    text: text.map(str::to_string),
+  };
+  Some(match name {
+    "Enter" => named("Enter", "Enter", 13, Some("\r")),
+    "Tab" => named("Tab", "Tab", 9, None),
+    "Escape" => named("Escape", "Escape", 27, None),
+    "Backspace" => named("Backspace", "Backspace", 8, None),
+    "Delete" => named("Delete", "Delete", 46, None),
+    "Space" | " " => named(" ", "Space", 32, Some(" ")),
+    "ArrowUp" => named("ArrowUp", "ArrowUp", 38, None),
+    "ArrowDown" => named("ArrowDown", "ArrowDown", 40, None),
+    "ArrowLeft" => named("ArrowLeft", "ArrowLeft", 37, None),
+    "ArrowRight" => named("ArrowRight", "ArrowRight", 39, None),
+    "PageUp" => named("PageUp", "PageUp", 33, None),
+    "PageDown" => named("PageDown", "PageDown", 34, None),
+    "Home" => named("Home", "Home", 36, None),
+    "End" => named("End", "End", 35, None),
+    _ => {
+      let mut chars = name.chars();
+      let c = chars.next()?;
+      if chars.next().is_some() || c.is_control() {
+        return None;
+      }
+      let upper = c.to_ascii_uppercase();
+      let (code, key_code) = if c.is_ascii_alphabetic() {
+        (format!("Key{upper}"), upper as u32)
+      } else if c.is_ascii_digit() {
+        (format!("Digit{c}"), c as u32)
+      } else {
+        (String::new(), 0)
+      };
+      KeyStroke {
+        key: c.to_string(),
+        code,
+        key_code,
+        text: Some(c.to_string()),
+      }
+    }
+  })
+}
+
+/// The `modifiers` bit field `Input.dispatchKeyEvent` takes.
+fn modifier_bits(modifiers: &[&str]) -> Result<u32, String> {
+  modifiers.iter().try_fold(0, |bits, modifier| {
+    Ok(
+      bits
+        | match *modifier {
+          "alt" => 1,
+          "ctrl" => 2,
+          "meta" => 4,
+          "shift" => 8,
+          other => return Err(format!("Unknown modifier: {other}")),
+        },
+    )
+  })
+}
+
+/// What `wait_for` answers: whether the wait was met, and where the page is.
+fn wait_report(met: bool, elapsed: Duration, state: &PageState) -> serde_json::Value {
+  serde_json::json!({
+    "met": met,
+    "elapsed_ms": elapsed.as_millis() as u64,
+    "url": state.url,
+    "title": state.title,
+  })
+}
+
+/// How often `wait_for` looks, and the longest it may wait.
+const WAIT_FOR_POLL: Duration = Duration::from_millis(250);
+const WAIT_FOR_DEFAULT_MS: u64 = 10_000;
+const WAIT_FOR_MAX_MS: u64 = 30_000;
+/// How long a wheel scroll takes to settle before its position is read.
+const SCROLL_SETTLE: Duration = Duration::from_millis(300);
+
+/// The check `wait_for` runs: true while the text or element is on the page.
+fn wait_for_script(text: Option<&str>, selector: Option<&str>) -> Option<String> {
+  match (text, selector) {
+    (Some(text), None) => Some(format!(
+      "(() => (document.body ? document.body.innerText : '').includes({}))()",
+      serde_json::to_string(text).ok()?
+    )),
+    (None, Some(selector)) => Some(format!(
+      "(() => {{ const el = document.querySelector({}); return !!el && el.getClientRects().length > 0; }})()",
+      serde_json::to_string(selector).ok()?
+    )),
+    _ => None,
   }
 }
 
@@ -3578,15 +3864,109 @@ impl McpServer {
             "format": {
               "type": "string",
               "enum": ["png", "jpeg", "webp"],
-              "description": "Image format (default: png)"
+              "description": "Image format (default: jpeg)"
             },
             "quality": {
               "type": "integer",
-              "description": "Image quality 0-100 for jpeg/webp (default: 80)"
+              "description": "Image quality 0-100 for jpeg/webp (default: 75)"
             },
             "full_page": {
               "type": "boolean",
               "description": "Capture the full scrollable page (default: false)"
+            },
+            "max_width": {
+              "type": "integer",
+              "description": "Widest the image may be, in pixels, 320 to 4096 (default: 1280). A wider page is scaled down, never up."
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "scroll".to_string(),
+        description: "Scroll the page with the mouse wheel at the middle of the viewport, so an inner scroll area under it scrolls too. Returns the window's new position and whether it reached the top or bottom; call get_interactive_elements again for what came into view.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["down", "up", "left", "right"],
+              "description": "Which way to scroll (default: down)"
+            },
+            "pages": {
+              "type": "number",
+              "description": "How far, in viewports, 0.1 to 10 (default: 1)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "press_key".to_string(),
+        description: "Press one key in the focused element: Enter to submit, Tab to move on, Escape to close a dialog, arrows to move in a list. With modifiers it is a shortcut (for example key 'a' with ['ctrl']). Waits for a page load the key starts, and returns where the page is.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "key": {
+              "type": "string",
+              "description": "Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, PageUp, PageDown, Home, End, or one character"
+            },
+            "modifiers": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["alt", "ctrl", "meta", "shift"] },
+              "description": "Keys held during the press"
+            }
+          },
+          "required": ["profile_id", "key"]
+        }),
+      },
+      McpTool {
+        name: "go_back".to_string(),
+        description: "Go back one page in the tab's history, as the browser's Back button does, and wait for that page. Returns where the page is.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "wait_for".to_string(),
+        description: "Wait until a text shows on the page, or an element matching a CSS selector is visible (or, with gone=true, until it is no longer there). Cheaper than polling with screenshots. Returns met=false when the time runs out; that is an answer, not an error.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "text": {
+              "type": "string",
+              "description": "Text to wait for in the page's visible text"
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector of an element to wait for"
+            },
+            "gone": {
+              "type": "boolean",
+              "description": "Wait for the text or element to go away instead (default: false)"
+            },
+            "timeout_ms": {
+              "type": "integer",
+              "description": "Longest wait in milliseconds, 100 to 30000 (default: 10000)"
             }
           },
           "required": ["profile_id"]
@@ -3692,6 +4072,10 @@ impl McpServer {
             "selector": {
               "type": "string",
               "description": "Optional CSS selector to get content of a specific element instead of the whole page"
+            },
+            "max_chars": {
+              "type": "integer",
+              "description": "Cap on the returned characters (default: 20000). A longer page says it was cut; pass a larger max_chars, or a selector, for the rest."
             }
           },
           "required": ["profile_id"]
@@ -3724,7 +4108,7 @@ impl McpServer {
             },
             "max_chars": {
               "type": "integer",
-              "description": "Cap on the serialized output length (default: 40000). The response carries a `truncated` flag if the list was cut off — narrow the viewport or scroll if you need elements past the cutoff."
+              "description": "Cap on the serialized output length (default: 12000). The response carries a `truncated` flag if the list was cut off: scroll, or pass a larger max_chars, for elements past the cutoff."
             }
           },
           "required": ["profile_id"]
@@ -4810,6 +5194,38 @@ impl McpServer {
         )
         .await?;
         self.handle_screenshot(arguments).await
+      }
+      "scroll" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_scroll(arguments).await
+      }
+      "press_key" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_press_key(arguments).await
+      }
+      "go_back" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_go_back(arguments).await
+      }
+      "wait_for" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_wait_for(arguments).await
       }
       "evaluate_javascript" => {
         Self::require_capability(
@@ -8109,6 +8525,264 @@ impl McpServer {
 
   // --- Browser interaction handlers ---
 
+  /// Where the page is now, or `None` when it cannot be read.
+  async fn page_state(&self, target: &CdpTarget) -> Option<PageState> {
+    let reply = self
+      .send_cdp(
+        target,
+        "Runtime.evaluate",
+        serde_json::json!({ "expression": PAGE_STATE_SCRIPT, "returnByValue": true }),
+      )
+      .await
+      .ok()?;
+    serde_json::from_value(reply.pointer("/result/value")?.clone()).ok()
+  }
+
+  /// `report` as the tool's text, followed by where the page is now.
+  async fn with_page_line(&self, target: &CdpTarget, report: String) -> serde_json::Value {
+    let text = match self.page_state(target).await {
+      Some(state) => format!("{report}\n{}", page_report(&state)),
+      None => report,
+    };
+    serde_json::json!({ "content": [{ "type": "text", "text": text }] })
+  }
+
+  async fn layout_metrics(&self, target: &CdpTarget) -> Result<LayoutMetrics, McpError> {
+    let reply = self
+      .send_cdp(target, "Page.getLayoutMetrics", serde_json::json!({}))
+      .await?;
+    Ok(LayoutMetrics::from_reply(&reply))
+  }
+
+  async fn handle_scroll(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    let direction = arguments
+      .get("direction")
+      .and_then(|v| v.as_str())
+      .unwrap_or("down");
+    let pages = arguments
+      .get("pages")
+      .and_then(|v| v.as_f64())
+      .unwrap_or(1.0)
+      .clamp(0.1, 10.0);
+
+    let ctx = self.agent_context(profile_id).await?;
+    let before = self.layout_metrics(&ctx.target).await?;
+    let (delta_x, delta_y) = scroll_delta(direction, pages, before.width, before.height)
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "direction must be up, down, left or right".to_string(),
+        data: None,
+      })?;
+
+    if ctx.engine.is_wayfern() {
+      vellum_wheel(&ctx.target, delta_x, delta_y)
+        .await
+        .map_err(AgentError::into_mcp)?;
+    } else {
+      self
+        .send_cdp(
+          &ctx.target,
+          "Input.dispatchMouseEvent",
+          serde_json::json!({
+            "type": "mouseWheel",
+            "x": before.width / 2.0,
+            "y": before.height / 2.0,
+            "deltaX": delta_x,
+            "deltaY": delta_y,
+          }),
+        )
+        .await?;
+    }
+    tokio::time::sleep(SCROLL_SETTLE).await;
+
+    let after = self.layout_metrics(&ctx.target).await?;
+    Self::json_content(&serde_json::json!({
+      "moved": (after.y - before.y).abs() > 1.0 || (after.x - before.x).abs() > 1.0,
+      "scroll_x": after.x.round(),
+      "scroll_y": after.y.round(),
+      "viewport_height": after.height.round(),
+      "page_height": after.page_height.round(),
+      "at_top": after.y <= 1.0,
+      "at_bottom": after.y + after.height >= after.page_height - 2.0,
+    }))
+  }
+
+  async fn handle_press_key(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    let name = Self::require_str(arguments, "key")?;
+    let stroke = key_stroke(name).ok_or_else(|| McpError {
+      code: -32602,
+      message: format!("Unknown key: {name}. Use a key name such as Enter, Tab, Escape or ArrowDown, or one character."),
+      data: None,
+    })?;
+    let modifiers: Vec<&str> = arguments
+      .get("modifiers")
+      .and_then(|v| v.as_array())
+      .map(|list| list.iter().filter_map(|m| m.as_str()).collect())
+      .unwrap_or_default();
+    let bits = modifier_bits(&modifiers).map_err(|message| McpError {
+      code: -32602,
+      message,
+      data: None,
+    })?;
+
+    let target = self.resolve_cdp_target(profile_id).await?;
+    // A shortcut (Ctrl or Meta held) types nothing.
+    let types = stroke.text.is_some() && bits & 0b0110 == 0;
+    let kind = if types { "keyDown" } else { "rawKeyDown" };
+    let mut down = serde_json::json!({
+      "type": kind,
+      "key": stroke.key,
+      "code": stroke.code,
+      "windowsVirtualKeyCode": stroke.key_code,
+      "nativeVirtualKeyCode": stroke.key_code,
+      "modifiers": bits,
+    });
+    if let Some(text) = stroke.text.as_ref().filter(|_| types) {
+      down["text"] = serde_json::json!(text);
+      down["unmodifiedText"] = serde_json::json!(text);
+    }
+    let before = self.page_state(&target).await.map(|state| state.url);
+    // The press is the step that may submit a form, so the wait watches it.
+    self
+      .send_cdp_and_wait_for_load(&target, "Input.dispatchKeyEvent", down, 10, false)
+      .await?;
+    self
+      .send_cdp(
+        &target,
+        "Input.dispatchKeyEvent",
+        serde_json::json!({
+          "type": "keyUp",
+          "key": stroke.key,
+          "code": stroke.code,
+          "windowsVirtualKeyCode": stroke.key_code,
+          "nativeVirtualKeyCode": stroke.key_code,
+          "modifiers": bits,
+        }),
+      )
+      .await?;
+
+    let state = self.page_state(&target).await;
+    let mut text = format!("Pressed {name}");
+    if let Some(state) = state {
+      if before.is_some_and(|url| url != state.url) {
+        text.push_str(" (the page changed)");
+      }
+      text.push('\n');
+      text.push_str(&page_report(&state));
+    }
+    Ok(serde_json::json!({ "content": [{ "type": "text", "text": text }] }))
+  }
+
+  async fn handle_go_back(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    let target = self.resolve_cdp_target(profile_id).await?;
+    let history = self
+      .send_cdp(&target, "Page.getNavigationHistory", serde_json::json!({}))
+      .await?;
+    let current = history
+      .get("currentIndex")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(0) as usize;
+    let previous = current
+      .checked_sub(1)
+      .and_then(|index| history.pointer(&format!("/entries/{index}/id")))
+      .and_then(|id| id.as_u64());
+    let Some(entry_id) = previous else {
+      return Ok(serde_json::json!({
+        "content": [{ "type": "text", "text": "There is no earlier page in this tab." }]
+      }));
+    };
+    self
+      .send_cdp_and_wait_for_load(
+        &target,
+        "Page.navigateToHistoryEntry",
+        serde_json::json!({ "entryId": entry_id }),
+        30,
+        true,
+      )
+      .await?;
+    Ok(self.with_page_line(&target, "Went back".to_string()).await)
+  }
+
+  async fn handle_wait_for(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_str(arguments, "profile_id")?;
+    let text = arguments
+      .get("text")
+      .and_then(|v| v.as_str())
+      .filter(|t| !t.is_empty());
+    let selector = arguments
+      .get("selector")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty());
+    let script = wait_for_script(text, selector).ok_or_else(|| McpError {
+      code: -32602,
+      message: "Pass text or selector, not both".to_string(),
+      data: None,
+    })?;
+    let gone = arguments
+      .get("gone")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let timeout_ms = arguments
+      .get("timeout_ms")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(WAIT_FOR_DEFAULT_MS)
+      .clamp(100, WAIT_FOR_MAX_MS);
+
+    let target = self.resolve_cdp_target(profile_id).await?;
+    let started = std::time::Instant::now();
+    let deadline = started + Duration::from_millis(timeout_ms);
+    let met = loop {
+      let reply = self
+        .send_cdp(
+          &target,
+          "Runtime.evaluate",
+          serde_json::json!({ "expression": script, "returnByValue": true }),
+        )
+        .await;
+      match reply {
+        Ok(reply) if reply.get("exceptionDetails").is_some() => {
+          return Err(McpError {
+            code: -32602,
+            message: "The selector is not valid CSS".to_string(),
+            data: None,
+          });
+        }
+        Ok(reply) => {
+          let present = reply
+            .pointer("/result/value")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+          if present != gone {
+            break true;
+          }
+        }
+        // A navigation in progress has no page to ask; the next look will.
+        Err(_) => {}
+      }
+      if std::time::Instant::now() >= deadline {
+        break false;
+      }
+      tokio::time::sleep(WAIT_FOR_POLL).await;
+    };
+    let state = self.page_state(&target).await.unwrap_or_default();
+    Self::json_content(&wait_report(met, started.elapsed(), &state))
+  }
+
   async fn handle_navigate(
     &self,
     arguments: &serde_json::Value,
@@ -8136,12 +8810,11 @@ impl McpServer {
       )
       .await?;
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": format!("Navigated to {url}")
-      }]
-    }))
+    Ok(
+      self
+        .with_page_line(&target, format!("Navigated to {url}"))
+        .await,
+    )
   }
 
   async fn handle_screenshot(
@@ -8156,39 +8829,49 @@ impl McpServer {
         message: "Missing profile_id".to_string(),
         data: None,
       })?;
+    // JPEG by default: an agent reads a screenshot, it does not archive one,
+    // and a JPEG is a fraction of the PNG's size in the context it fills.
     let format = arguments
       .get("format")
       .and_then(|v| v.as_str())
-      .unwrap_or("png");
-    let quality = arguments.get("quality").and_then(|v| v.as_i64());
+      .unwrap_or("jpeg");
+    let quality = arguments
+      .get("quality")
+      .and_then(|v| v.as_i64())
+      .or((format != "png").then_some(75));
     let full_page = arguments
       .get("full_page")
       .and_then(|v| v.as_bool())
       .unwrap_or(false);
+    let max_width = arguments
+      .get("max_width")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(1280)
+      .clamp(320, 4096) as f64;
 
     let target = self.resolve_cdp_target(profile_id).await?;
 
     let mut params = serde_json::json!({ "format": format });
 
-    if let Some(q) = quality {
-      params["quality"] = serde_json::json!(q);
+    if let Some(q) = quality.filter(|_| format != "png") {
+      params["quality"] = serde_json::json!(q.clamp(0, 100));
     }
 
+    let layout = self.layout_metrics(&target).await?;
+    let (x, y, width, height) = if full_page {
+      (0.0, 0.0, layout.page_width, layout.page_height)
+    } else {
+      (layout.x, layout.y, layout.width, layout.height)
+    };
+    params["clip"] = serde_json::json!({
+      "x": x,
+      "y": y,
+      "width": width,
+      "height": height,
+      "scale": screenshot_scale(width, layout.dpr, max_width),
+    });
     if full_page {
-      let layout = self
-        .send_cdp(&target, "Page.getLayoutMetrics", serde_json::json!({}))
-        .await?;
-
-      if let Some(content_size) = layout.get("contentSize") {
-        params["clip"] = serde_json::json!({
-          "x": 0,
-          "y": 0,
-          "width": content_size.get("width").and_then(|v| v.as_f64()).unwrap_or(1920.0),
-          "height": content_size.get("height").and_then(|v| v.as_f64()).unwrap_or(1080.0),
-          "scale": 1
-        });
-        params["captureBeyondViewport"] = serde_json::json!(true);
-      }
+      params["captureBeyondViewport"] = serde_json::json!(true);
     }
 
     let result = self
@@ -8310,12 +8993,14 @@ impl McpServer {
       let (_, navigated) = vellum_click(&ctx.target, point, None, None)
         .await
         .map_err(AgentError::into_mcp)?;
-      return Ok(serde_json::json!({
-        "content": [{
-          "type": "text",
-          "text": click_report(&format!("Clicked element: {selector}"), navigated)
-        }]
-      }));
+      return Ok(
+        self
+          .with_page_line(
+            &ctx.target,
+            click_report(&format!("Clicked element: {selector}"), navigated),
+          )
+          .await,
+      );
     }
 
     let js = format!(
@@ -8359,12 +9044,11 @@ impl McpServer {
       });
     }
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": format!("Clicked element: {selector}")
-      }]
-    }))
+    Ok(
+      self
+        .with_page_line(&ctx.target, format!("Clicked element: {selector}"))
+        .await,
+    )
   }
 
   async fn handle_type_text(
@@ -8548,7 +9232,7 @@ impl McpServer {
       .get("max_chars")
       .and_then(|v| v.as_u64())
       .map(|n| n as usize)
-      .unwrap_or(40_000);
+      .unwrap_or(20_000);
 
     let target = self.resolve_cdp_target(profile_id).await?;
 
@@ -8679,7 +9363,7 @@ impl McpServer {
       .get("max_chars")
       .and_then(|v| v.as_u64())
       .map(|n| n as usize)
-      .unwrap_or(40_000);
+      .unwrap_or(12_000);
 
     let target = self.resolve_cdp_target(profile_id).await?;
 
@@ -8798,12 +9482,14 @@ impl McpServer {
       let (_, navigated) = vellum_click(&ctx.target, point, None, None)
         .await
         .map_err(AgentError::into_mcp)?;
-      return Ok(serde_json::json!({
-        "content": [{
-          "type": "text",
-          "text": click_report(&format!("Clicked element at index {index}"), navigated)
-        }]
-      }));
+      return Ok(
+        self
+          .with_page_line(
+            &ctx.target,
+            click_report(&format!("Clicked element at index {index}"), navigated),
+          )
+          .await,
+      );
     }
 
     let js = format!(
@@ -8844,12 +9530,11 @@ impl McpServer {
       });
     }
 
-    Ok(serde_json::json!({
-      "content": [{
-        "type": "text",
-        "text": format!("Clicked element at index {index}")
-      }]
-    }))
+    Ok(
+      self
+        .with_page_line(&ctx.target, format!("Clicked element at index {index}"))
+        .await,
+    )
   }
 
   async fn handle_type_by_index(
@@ -10126,6 +10811,95 @@ mod tests {
   }
 
   #[test]
+  fn a_bot_check_is_named_but_a_login_form_is_not() {
+    assert_eq!(bot_wall("Just a moment...", ""), Some("a Cloudflare check"));
+    assert_eq!(
+      bot_wall("Example", "Please verify you are human to continue"),
+      Some("a human check")
+    );
+    assert_eq!(
+      bot_wall(
+        "Sign in",
+        "This site is protected by reCAPTCHA and the Google Privacy Policy"
+      ),
+      None,
+      "a CAPTCHA mentioned in a form's small print is not a wall"
+    );
+    let report = page_report(&PageState {
+      url: "https://shop.example/".into(),
+      title: "Attention Required! | Cloudflare".into(),
+      text: String::new(),
+    });
+    assert!(report.starts_with("Page: Attention Required! | Cloudflare <https://shop.example/>"));
+    assert!(report.contains("a Cloudflare block"));
+    assert_eq!(
+      page_report(&PageState {
+        url: "about:blank".into(),
+        ..Default::default()
+      }),
+      "Page: (no title) <about:blank>"
+    );
+  }
+
+  #[test]
+  fn a_screenshot_is_scaled_down_to_the_width_asked_and_never_up() {
+    assert_eq!(screenshot_scale(1280.0, 1.0, 1280.0), 1.0);
+    assert_eq!(screenshot_scale(1280.0, 2.0, 1280.0), 0.5);
+    assert_eq!(screenshot_scale(800.0, 1.0, 1280.0), 1.0);
+    assert_eq!(screenshot_scale(0.0, 1.0, 1280.0), 1.0);
+
+    let metrics = LayoutMetrics::from_reply(&serde_json::json!({
+      "cssVisualViewport": { "pageX": 0, "pageY": 600, "clientWidth": 1280, "clientHeight": 720 },
+      "visualViewport": { "clientWidth": 2560 },
+      "cssContentSize": { "width": 1280, "height": 5000 },
+    }));
+    assert_eq!(metrics.y, 600.0);
+    assert_eq!(metrics.dpr, 2.0);
+    assert_eq!(metrics.page_height, 5000.0);
+    // An older browser without the CSS metrics still gets a sane capture.
+    let bare = LayoutMetrics::from_reply(&serde_json::json!({}));
+    assert_eq!((bare.width, bare.dpr), (1280.0, 1.0));
+  }
+
+  #[test]
+  fn scrolling_moves_most_of_a_viewport_per_page() {
+    assert_eq!(scroll_delta("down", 1.0, 1000.0, 800.0), Some((0.0, 680.0)));
+    assert_eq!(scroll_delta("up", 2.0, 1000.0, 800.0), Some((0.0, -1360.0)));
+    assert_eq!(
+      scroll_delta("left", 1.0, 1000.0, 800.0),
+      Some((-850.0, 0.0))
+    );
+    assert_eq!(scroll_delta("sideways", 1.0, 1000.0, 800.0), None);
+  }
+
+  #[test]
+  fn a_key_name_becomes_the_event_a_keyboard_sends() {
+    let enter = key_stroke("Enter").unwrap();
+    assert_eq!((enter.key_code, enter.text.as_deref()), (13, Some("\r")));
+    let a = key_stroke("a").unwrap();
+    assert_eq!((a.code.as_str(), a.key_code), ("KeyA", 65));
+    assert_eq!(key_stroke("7").unwrap().code, "Digit7");
+    assert_eq!(key_stroke("Space").unwrap().text.as_deref(), Some(" "));
+    assert!(key_stroke("Enterr").is_none());
+    assert!(key_stroke("").is_none());
+    assert_eq!(modifier_bits(&["ctrl", "shift"]), Ok(10));
+    assert!(modifier_bits(&["hyper"]).is_err());
+  }
+
+  #[test]
+  fn wait_for_quotes_what_it_looks_for() {
+    let script = wait_for_script(Some("It's \"done\""), None).unwrap();
+    assert!(script.contains(r#".includes("It's \"done\"")"#), "{script}");
+    let script = wait_for_script(None, Some("#a[b='c']")).unwrap();
+    assert!(
+      script.contains(r##"querySelector("#a[b='c']")"##),
+      "{script}"
+    );
+    assert!(wait_for_script(None, None).is_none());
+    assert!(wait_for_script(Some("x"), Some("#y")).is_none());
+  }
+
+  #[test]
   fn test_mcp_tools_count() {
     let server = McpServer::new();
     let tools = server.get_tools();
@@ -10138,7 +10912,7 @@ mod tests {
     // tool was added or removed on purpose.
     assert_eq!(
       tools.len(),
-      98,
+      102,
       "the tool list is a published contract; update this number deliberately"
     );
 

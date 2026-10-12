@@ -67,6 +67,9 @@ impl NavigationWatch {
     };
     if method == "Page.loadEventFired" {
       self.loaded = true;
+    } else if method == "Page.frameNavigated" && restored_from_cache(params) {
+      // A page the back-forward cache keeps comes back whole: no load event.
+      self.loaded = true;
     } else if method == "Page.navigatedWithinDocument" && in_main_frame() {
       self.same_document = true;
     } else if STARTED.contains(&method) && in_main_frame() {
@@ -96,6 +99,15 @@ impl NavigationWatch {
       _ => deadline,
     }
   }
+}
+
+/// Whether a `Page.frameNavigated` brought back the top frame from the
+/// back-forward cache.
+fn restored_from_cache(params: Option<&Value>) -> bool {
+  params.is_some_and(|p| {
+    p.get("type").and_then(Value::as_str) == Some("BackForwardCacheRestore")
+      && p.pointer("/frame/parentId").is_none()
+  })
 }
 
 /// The top frame's id, from a `Page.getFrameTree` reply.
@@ -128,6 +140,34 @@ mod tests {
     );
     assert!(watch.done(start + NAVIGATION_GRACE));
     assert!(!watch.navigated());
+  }
+
+  #[test]
+  fn a_page_back_from_the_cache_ends_the_wait_without_a_load_event() {
+    let start = Instant::now();
+    let mut watch = NavigationWatch::new(Some("main".to_string()), true);
+    watch.on_reply(start);
+    watch.on_event(
+      "Page.frameNavigated",
+      Some(
+        &json!({ "frame": { "id": "ad", "parentId": "main" }, "type": "BackForwardCacheRestore" }),
+      ),
+    );
+    assert!(!watch.done(start), "a child frame is not the page");
+    watch.on_event(
+      "Page.frameNavigated",
+      Some(&json!({ "frame": { "id": "main" }, "type": "Navigation" })),
+    );
+    assert!(
+      !watch.done(start),
+      "a normal navigation still waits for its load"
+    );
+    watch.on_event(
+      "Page.frameNavigated",
+      Some(&json!({ "frame": { "id": "main" }, "type": "BackForwardCacheRestore" })),
+    );
+    assert!(watch.done(start));
+    assert!(watch.navigated());
   }
 
   #[test]

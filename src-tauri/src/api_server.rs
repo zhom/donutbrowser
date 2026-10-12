@@ -1045,6 +1045,8 @@ impl ApiServer {
       .port();
 
     let v1_routes = build_v1_router();
+    #[cfg(feature = "e2e")]
+    let v1_routes = v1_routes.route("/v1/e2e/mcp", axum::routing::post(e2e_mcp_message));
 
     let api = ApiDoc::openapi();
 
@@ -1098,6 +1100,29 @@ impl ApiServer {
 
     self.port = None;
     Ok(())
+  }
+}
+
+/// The suites' way into the MCP tool engine, which the app otherwise serves
+/// only over the remote bridge. Built into E2E builds only, never published.
+#[cfg(feature = "e2e")]
+async fn e2e_mcp_message(headers: HeaderMap, body: axum::body::Bytes) -> Response {
+  use crate::mcp_server::{McpOutcome, McpServer};
+  let session = headers
+    .get("mcp-session-id")
+    .and_then(|value| value.to_str().ok());
+  match McpServer::instance()
+    .handle_message_with(session, &body, None)
+    .await
+  {
+    McpOutcome::Body {
+      body,
+      new_session_id,
+    } => Json(serde_json::json!({ "session_id": new_session_id, "body": body })).into_response(),
+    McpOutcome::Accepted => StatusCode::ACCEPTED.into_response(),
+    McpOutcome::UnknownSession => StatusCode::NOT_FOUND.into_response(),
+    McpOutcome::BadRequest => StatusCode::BAD_REQUEST.into_response(),
+    McpOutcome::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS.into_response(),
   }
 }
 

@@ -411,6 +411,9 @@ function startFixtureServer(geoIpFixture, geoIpAsnFixture) {
           <p id="path">${url.pathname}</p>
           <button id="fixture-button" onclick="this.dataset.clicked='yes'; this.textContent='Clicked'">Click fixture</button>
           <a id="fixture-link" href="/linked">Open the linked page</a>
+          <input id="fixture-input" onkeydown="if (event.key === 'Enter') this.dataset.entered = 'yes'">
+          <div id="fixture-spacer" style="height: 3000px"></div>
+          <p id="fixture-end">End of the fixture</p>
           <script>window.__fixtureReady = true;</script>
         </body>
       </html>`);
