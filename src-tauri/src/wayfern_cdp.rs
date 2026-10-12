@@ -609,6 +609,16 @@ impl WayfernSession {
     id
   }
 
+  /// Send `method` without waiting for its reply: for a command that only
+  /// answers after events the caller must handle first (a navigation that a
+  /// paused request holds). Its reply, when it comes, is skipped like any
+  /// message that is not awaited.
+  pub async fn send(&mut self, method: &str, params: Value) -> Result<u64, WayfernError> {
+    let id = self.allocate_id();
+    self.connection.send_command(id, method, params).await?;
+    Ok(id)
+  }
+
   /// Send `method` and wait for its reply within the ordinary budget.
   pub async fn call(&mut self, method: &str, params: Value) -> Result<Value, WayfernError> {
     self

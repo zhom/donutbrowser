@@ -18,6 +18,8 @@ extend-exclude = [
 caf = "caf"
 DBE = "DBE"
 nd = "nd"
+# Playwright's code for a BigUint64Array in an encoded IndexedDB value.
+bui = "bui"
 
 [default.extend-identifiers]
 # Chrome Web Store extension name in the known-VPN list.

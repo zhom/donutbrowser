@@ -34,12 +34,17 @@ pub struct StorageItem {
   pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct OriginStorage {
   /// `https://example.com`, the way a page's `origin` reads.
   pub origin: String,
   #[serde(rename = "localStorage", default)]
   pub local_storage: Vec<StorageItem>,
+  /// The origin's IndexedDB databases, in Playwright's shape. Only present when
+  /// an export asked for them or an import carries them.
+  #[serde(rename = "indexedDB", default, skip_serializing_if = "Vec::is_empty")]
+  #[schema(value_type = Vec<Object>)]
+  pub indexed_db: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -56,6 +61,8 @@ pub struct StorageStateImport {
   pub cookies_replaced: usize,
   /// Codes of the cookies that could not be imported.
   pub cookie_errors: Vec<String>,
+  /// IndexedDB records written.
+  pub indexed_db_records: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -220,6 +227,7 @@ fn read_database(dir: &Path) -> Result<Vec<OriginStorage>, String> {
         _ => origins.push(OriginStorage {
           origin,
           local_storage: vec![StorageItem { name, value }],
+          indexed_db: Vec::new(),
         }),
       }
     }
@@ -411,11 +419,16 @@ fn checked_origins(origins: Vec<OriginStorage>) -> Result<Vec<OriginStorage>, St
         .to_string(),
       );
     }
+    crate::indexed_db::checked_databases(&origin.indexed_db)?;
     match merged.iter_mut().find(|o| o.origin == name) {
-      Some(existing) => existing.local_storage.extend(origin.local_storage),
+      Some(existing) => {
+        existing.local_storage.extend(origin.local_storage);
+        existing.indexed_db.extend(origin.indexed_db);
+      }
       None => merged.push(OriginStorage {
         origin: name,
         local_storage: origin.local_storage,
+        indexed_db: origin.indexed_db,
       }),
     }
   }
@@ -457,9 +470,14 @@ pub async fn import_storage_state(
     cookie_errors = result.errors;
   }
 
-  if !origins.is_empty() {
+  let with_items: Vec<OriginStorage> = origins
+    .iter()
+    .filter(|o| !o.local_storage.is_empty())
+    .cloned()
+    .collect();
+  if !with_items.is_empty() {
     let dir = database_dir(&profile);
-    let to_write = origins.clone();
+    let to_write = with_items;
     tauri::async_runtime::spawn_blocking(move || write_database(&dir, &to_write))
       .await
       .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
@@ -471,8 +489,21 @@ pub async fn import_storage_state(
         }
       })?;
   }
+  let databases: Vec<(String, Vec<serde_json::Value>)> = origins
+    .iter()
+    .filter(|o| !o.indexed_db.is_empty())
+    .map(|o| (o.origin.clone(), o.indexed_db.clone()))
+    .collect();
+  let indexed_db_records = if databases.is_empty() {
+    0
+  } else {
+    crate::indexed_db::with_headless_browser(app_handle, &profile, move |session| {
+      Box::pin(async move { crate::indexed_db::import(session, &databases).await })
+    })
+    .await?
+  };
   log::info!(
-    "Storage state imported profile={profile_id} origins={} items={items} cookies={cookies_imported}",
+    "Storage state imported profile={profile_id} origins={} items={items} cookies={cookies_imported} indexed_db_records={indexed_db_records}",
     origins.len()
   );
   Ok(StorageStateImport {
@@ -481,6 +512,7 @@ pub async fn import_storage_state(
     cookies_imported,
     cookies_replaced,
     cookie_errors,
+    indexed_db_records,
   })
 }
 
@@ -493,14 +525,80 @@ pub async fn get_profile_local_storage_stats(
     .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
 }
 
+/// The storage state, with IndexedDB when asked for: that part needs the
+/// browser, so the profile must be closed and is opened headless for a moment.
+pub async fn export_storage_state_with(
+  app_handle: &tauri::AppHandle,
+  profile_id: &str,
+  include_cookies: bool,
+  include_indexed_db: bool,
+) -> Result<String, String> {
+  let id = profile_id.to_string();
+  let content =
+    tauri::async_runtime::spawn_blocking(move || export_storage_state(&id, include_cookies))
+      .await
+      .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))??;
+  if !include_indexed_db {
+    return Ok(content);
+  }
+  let profile = readable_profile(profile_id)?;
+  let running = ProfileManager::instance()
+    .check_browser_status(app_handle.clone(), &profile)
+    .await
+    .unwrap_or(false);
+  if running {
+    return Err(code("LOCAL_STORAGE_BROWSER_RUNNING"));
+  }
+  if crate::remote_handoff::state_for(profile_id).is_some() {
+    return Err(code("LOCAL_STORAGE_REMOTE_SESSION"));
+  }
+  let origins = crate::indexed_db::origins_on_disk(
+    &profile.get_profile_data_path(&ProfileManager::instance().get_profiles_dir()),
+  );
+  if origins.is_empty() {
+    return Ok(content);
+  }
+  let exported = crate::indexed_db::with_headless_browser(app_handle, &profile, move |session| {
+    Box::pin(async move { crate::indexed_db::export(session, &origins).await })
+  })
+  .await?;
+  let mut state: serde_json::Value = serde_json::from_str(&content)
+    .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?;
+  let mut listed: Vec<OriginStorage> =
+    serde_json::from_value(state["origins"].take()).unwrap_or_default();
+  let databases: usize = exported.origins.iter().map(|(_, dbs)| dbs.len()).sum();
+  for (origin, dbs) in exported.origins {
+    match listed.iter_mut().find(|o| o.origin == origin) {
+      Some(existing) => existing.indexed_db = dbs,
+      None => listed.push(OriginStorage {
+        origin,
+        local_storage: Vec::new(),
+        indexed_db: dbs,
+      }),
+    }
+  }
+  state["origins"] = serde_json::to_value(&listed).map_err(|e| e.to_string())?;
+  log::info!(
+    "IndexedDB exported profile={profile_id} databases={databases} skipped={}",
+    exported.skipped
+  );
+  serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn export_profile_storage_state(
+  app_handle: tauri::AppHandle,
   profile_id: String,
   include_cookies: bool,
+  include_indexed_db: Option<bool>,
 ) -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(move || export_storage_state(&profile_id, include_cookies))
-    .await
-    .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
+  export_storage_state_with(
+    &app_handle,
+    &profile_id,
+    include_cookies,
+    include_indexed_db.unwrap_or(false),
+  )
+  .await
 }
 
 #[tauri::command]
@@ -558,6 +656,7 @@ mod tests {
       &[OriginStorage {
         origin: "https://shop.example".to_string(),
         local_storage: vec![item("cart", "3 items"), item("lang", "日本語")],
+        indexed_db: Vec::new(),
       }],
     )
     .unwrap();
@@ -567,10 +666,12 @@ mod tests {
         OriginStorage {
           origin: "https://shop.example".to_string(),
           local_storage: vec![item("cart", "empty")],
+          indexed_db: Vec::new(),
         },
         OriginStorage {
           origin: "https://mail.example".to_string(),
           local_storage: vec![item("session", "abc")],
+          indexed_db: Vec::new(),
         },
       ],
     )
@@ -599,6 +700,7 @@ mod tests {
         name: "k".to_string(),
         value: "v".to_string(),
       }],
+      indexed_db: Vec::new(),
     };
     let tidy = checked_origins(vec![
       origin("https://Example.com:443/path"),
@@ -619,6 +721,7 @@ mod tests {
         name: "k".to_string(),
         value: "x".repeat(6_000_000),
       }],
+      indexed_db: Vec::new(),
     };
     assert!(checked_origins(vec![huge])
       .unwrap_err()
