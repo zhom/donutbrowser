@@ -2964,6 +2964,157 @@ test("a folder with no manifest fails with the translated reason, not a raw code
   });
 });
 
+test("scheduled recipes stay behind the plan, and a schedule is built from the form", async () => {
+  await withApp(
+    "ui-agent-schedules",
+    async (app) => {
+      const profile = await createUiProfile(app, "Scheduled Profile");
+      const user = (plan) => ({
+        logged_in_at: new Date().toISOString(),
+        user: {
+          id: "ui-schedules",
+          email: "schedules@example.test",
+          plan,
+          planPeriod: "monthly",
+          subscriptionStatus: "active",
+          profileLimit: 50,
+          cloudProfilesUsed: 0,
+          proxyBandwidthLimitMb: 0,
+          proxyBandwidthUsedMb: 0,
+          proxyBandwidthExtraMb: 0,
+          isPrimaryDevice: true,
+        },
+      });
+      await stubCommand(app, "get_mcp_remote_status", {
+        enabled: true,
+        connected: true,
+        instanceId: "ui-schedules",
+        lastError: null,
+      });
+      await stubCommand(app, "get_agent_recipes", [
+        {
+          id: "r1",
+          name: "Check orders",
+          steps: [{ type: "navigate", url: "https://example.com" }],
+        },
+      ]);
+      await stubCommand(app, "list_agent_schedules", [
+        {
+          id: "s1",
+          name: "Hourly check",
+          enabled: true,
+          target: "fleet",
+          recipeId: "r1",
+          profileIds: [profile.id],
+          groupId: null,
+          cadence: "interval",
+          daysMask: 31,
+          runAtMinute: 540,
+          timezone: "UTC",
+          runOnceAt: null,
+          intervalMinutes: 60,
+          nextRunAt: new Date(Date.now() + 3_600_000).toISOString(),
+          lastRunAt: null,
+        },
+      ]);
+      await stubCommand(app, "create_agent_schedule", { id: "s2" });
+      const calls = (command) =>
+        app.execute(
+          "return (window.__donutStubbedCalls ?? []).filter((c) => c.command === arguments[0]).map((c) => c.payload);",
+          [command],
+        );
+
+      const signIn = async (plan) => {
+        await stubCommand(app, "cloud_get_user", user(plan));
+        await app.invoke("plugin:event|emit", {
+          event: "cloud-auth-changed",
+          payload: null,
+        });
+      };
+
+      // A plan without schedules never reaches the form.
+      await signIn("free");
+      await app.clickSelector(`[aria-label="${en.rail.agent}"]`);
+      await app.clickSelector('[data-testid="agent-tab-schedules"]');
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      assert.equal(
+        await app.execute(
+          `return !document.querySelector('[data-slot="agent-schedules"]');`,
+        ),
+        true,
+        "the schedules list is not shown without the plan",
+      );
+      await app.clickSelector(`[aria-label="${en.rail.profiles}"]`);
+
+      await signIn("pro");
+      // Turning paid opens the one-time welcome; close it first.
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return Boolean(document.querySelector('[role="dialog"]'));`,
+          ),
+        { description: "the paid welcome" },
+      );
+      await dismissSurface(app);
+      await app.waitFor(
+        () => app.execute(`return !document.querySelector('[role="dialog"]');`),
+        { description: "the welcome closed" },
+      );
+      await app.clickSelector(`[aria-label="${en.rail.agent}"]`);
+      await app.clickSelector('[data-testid="agent-tab-schedules"]');
+      await app.waitFor(
+        () =>
+          app.execute(
+            `return document.querySelector('[data-slot="agent-schedule"]')?.innerText ?? null;`,
+          ),
+        { description: "the stored schedule" },
+      );
+      const row = await app.execute(
+        `return document.querySelector('[data-slot="agent-schedule"]').innerText;`,
+      );
+      assert.match(row, /Hourly check/);
+      assert.match(
+        row,
+        new RegExp(
+          en.agent.schedules.summaryInterval.replace("{{minutes}}", "60"),
+        ),
+      );
+
+      await app.clickSelector('[data-slot="agent-schedule-new"]');
+      await app.fillSelector("#agent-schedule-name", "Weekday check");
+      await app.clickSelector(`#agent-schedule-profile-${profile.id}`);
+      await app.capture("agent-schedule-editor");
+      await app.clickSelector('[data-slot="agent-schedule-save"]');
+      await app.waitFor(
+        async () => (await calls("create_agent_schedule")).length === 1,
+        {
+          description: "the schedule sent to the cloud",
+        },
+      );
+      const [created] = await calls("create_agent_schedule");
+      assert.equal(created.schedule.name, "Weekday check");
+      assert.equal(created.schedule.recipeId, "r1");
+      assert.equal(created.schedule.target, "fleet");
+      assert.deepEqual(created.schedule.profileIds, [profile.id]);
+      assert.equal(created.schedule.cadence, "weekly");
+      assert.equal(
+        created.schedule.daysMask,
+        0b0011111,
+        "Monday to Friday by default",
+      );
+      assert.equal(created.schedule.runAtMinute, 9 * 60);
+      assert.ok(created.schedule.timezone);
+      assert.equal(created.schedule.enabled, true);
+      assert.equal(
+        created.schedule.intervalMinutes,
+        undefined,
+        "only the weekly fields",
+      );
+    },
+    { seedDownloadedBrowser: true },
+  );
+});
+
 test("the agent page guides setup, then shows agents, requests, notes, take-overs and the pause live", async () => {
   await withApp(
     "ui-agent",
@@ -3148,6 +3299,7 @@ test("the agent page guides setup, then shows agents, requests, notes, take-over
             en.agent.tabs.profiles,
             en.agent.tabs.activity,
             en.agent.tabs.recipes,
+            en.agent.tabs.schedules,
           ],
         );
         assert.match(await painted("agent-quota"), /1[,.\s ]?760/);

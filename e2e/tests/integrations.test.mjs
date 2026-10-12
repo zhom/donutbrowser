@@ -1602,6 +1602,52 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
         /"code":"PROFILE_NOT_FOUND"/,
       );
 
+      // Schedules live in the cloud too, which checks the plan on every save
+      // and every fire; signed out, every call refuses with a code, and what
+      // the app can check itself is checked before anything is sent.
+      const scheduleId = "00000000-0000-0000-0000-000000000000";
+      assert.match(await app.invokeError("list_agent_schedules"), notSignedIn);
+      assert.match(
+        await app.invokeError("create_agent_schedule", {
+          schedule: {
+            name: "Nightly",
+            recipeId: "r",
+            target: "fleet",
+            profileIds: ["p"],
+          },
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("create_agent_schedule", {
+          schedule: ["not", "an", "object"],
+        }),
+        /"code":"AGENT_SCHEDULE_INVALID"/,
+      );
+      assert.match(
+        await app.invokeError("update_agent_schedule", {
+          id: scheduleId,
+          patch: { enabled: false },
+        }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("update_agent_schedule", { id: "  ", patch: {} }),
+        /"code":"AGENT_SCHEDULE_NOT_FOUND"/,
+      );
+      assert.match(
+        await app.invokeError("delete_agent_schedule", { id: scheduleId }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("run_agent_schedule_now", { id: scheduleId }),
+        notSignedIn,
+      );
+      assert.match(
+        await app.invokeError("list_agent_schedule_runs", { id: scheduleId }),
+        notSignedIn,
+      );
+
       // Recipes live in the cloud; signed out, every call refuses with a code.
       assert.match(await app.invokeError("get_agent_recipes"), notSignedIn);
       assert.match(

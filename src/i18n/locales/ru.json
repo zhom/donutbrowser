@@ -2678,7 +2678,10 @@
     "localStorageImportTooLarge": "Файл больше 32 МиБ.",
     "storageStateInvalid": "Это не файл storageState.",
     "localStorageBrowserRunning": "Закройте браузер перед импортом состояния хранилища.",
-    "localStorageRemoteSession": "Этот профиль использует удалённая сессия. Дождитесь, пока её работа вернётся сюда."
+    "localStorageRemoteSession": "Этот профиль использует удалённая сессия. Дождитесь, пока её работа вернётся сюда.",
+    "scheduledAutomationNotEntitled": "Рецепты по расписанию входят в Solo, Pro, Team и Enterprise.",
+    "agentScheduleInvalid": "Облако Donut не приняло это расписание. Проверьте дни, время и профили.",
+    "agentScheduleNotFound": "Этого расписания больше нет."
   },
   "rail": {
     "profiles": "Профили",
@@ -3512,7 +3515,8 @@
       "conversation": "Разговор",
       "profiles": "Профили",
       "activity": "Активность",
-      "recipes": "Рецепты"
+      "recipes": "Рецепты",
+      "schedules": "Расписания"
     },
     "header": {
       "quota": "Осталось вызовов в этот час: {{left}} из {{limit}}",
@@ -3711,6 +3715,52 @@
       "deleteTitle": "Удалить «{{name}}»?",
       "deleteDescription": "Рецепт удалится со всех устройств.",
       "needsAutomation": "Рецепты открывают браузеры и управляют ими, поэтому для них нужен план Pro или выше. Агент по-прежнему может управлять профилями, прокси и группами."
+    },
+    "schedules": {
+      "hint": "Запускайте рецепт по расписанию — в удалённом парке или на этом компьютере.",
+      "new": "Новое расписание",
+      "empty": "Расписаний пока нет.",
+      "needsRecipe": "Сначала создайте рецепт на вкладке «Рецепты»: расписание запускает рецепт.",
+      "needsPlan": "Рецепты по расписанию запускаются по календарю — в удалённом парке или на этом компьютере. Они входят в Solo, Pro, Team и Enterprise.",
+      "name": "Название",
+      "namePlaceholder": "Ночная проверка",
+      "recipe": "Рецепт",
+      "profiles": "Профили ({{n}})",
+      "target": "Где запускать",
+      "targetFleet": "Удалённый парк",
+      "targetDesktop": "Этот компьютер",
+      "cadence": "Как часто",
+      "cadenceWeekly": "В выбранные дни",
+      "cadenceOnce": "Один раз",
+      "cadenceInterval": "С интервалом",
+      "days": "Дни",
+      "time": "Время",
+      "timezone": "Часовой пояс: {{timezone}}",
+      "runOnceAt": "Дата и время",
+      "intervalMinutes": "Минут между запусками ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} в {{time}} ({{timezone}})",
+      "summaryOnce": "Один раз, {{when}}",
+      "summaryInterval": "Каждые {{minutes}} мин",
+      "nextRun": "Следующий запуск: {{when}}",
+      "paused": "Приостановлено",
+      "enabled": "Запускать {{name}} по расписанию",
+      "runNow": "Запустить сейчас",
+      "runStarted": "Запуск начат",
+      "runs": "Запуски",
+      "noRuns": "Запусков пока нет.",
+      "created": "Расписание создано",
+      "updated": "Расписание сохранено",
+      "deleted": "Расписание удалено",
+      "deleteTitle": "Удалить {{name}}?",
+      "deleteDescription": "Расписание остановится. Рецепт и прошлые запуски останутся.",
+      "status": {
+        "pending": "Ожидает",
+        "running": "Выполняется",
+        "succeeded": "Готово",
+        "partial": "Частично готово",
+        "failed": "Ошибка",
+        "cancelled": "Отменено"
+      }
     }
   },
   "proxyDistribution": {

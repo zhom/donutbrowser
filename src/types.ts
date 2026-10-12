@@ -142,6 +142,12 @@ export interface Entitlements {
    * bridge itself never gates on it: the server decides who may send work.
    */
   remoteControl: boolean;
+  /**
+   * Recipes Donut cloud runs on a calendar. Solo, Pro, Team and Enterprise.
+   * The UI reads it to open the Schedules page; the cloud checks the plan on
+   * every save and every fire.
+   */
+  scheduledAutomation: boolean;
   profileLimit: number;
   requestsPerHour: number;
   /**
@@ -164,16 +170,24 @@ export interface Entitlements {
  *
  * `remoteControl` is optional too, but for the opposite reason: a backend that
  * omits it has no remote-control endpoint at all, so `false` is the true answer
- * rather than a gap to fill in.
+ * rather than a gap to fill in. `scheduledAutomation` is the same.
  */
 export type ServerEntitlements = Omit<
   Entitlements,
-  "cookieBot" | "remoteBrowserHours" | "remoteInteractive" | "remoteControl"
+  | "cookieBot"
+  | "remoteBrowserHours"
+  | "remoteInteractive"
+  | "remoteControl"
+  | "scheduledAutomation"
 > &
   Partial<
     Pick<
       Entitlements,
-      "cookieBot" | "remoteBrowserHours" | "remoteInteractive" | "remoteControl"
+      | "cookieBot"
+      | "remoteBrowserHours"
+      | "remoteInteractive"
+      | "remoteControl"
+      | "scheduledAutomation"
     >
   >;
 

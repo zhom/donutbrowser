@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "ファイルが 32 MiB を超えています。",
     "storageStateInvalid": "これは storageState ファイルではありません。",
     "localStorageBrowserRunning": "ストレージ状態をインポートする前にブラウザーを閉じてください。",
-    "localStorageRemoteSession": "リモートセッションがこのプロファイルを使用しています。作業がここに戻るまでお待ちください。"
+    "localStorageRemoteSession": "リモートセッションがこのプロファイルを使用しています。作業がここに戻るまでお待ちください。",
+    "scheduledAutomationNotEntitled": "スケジュールされたレシピは Solo、Pro、Team、Enterprise に含まれます。",
+    "agentScheduleInvalid": "Donut クラウドがこのスケジュールを受け付けませんでした。曜日、時刻、プロファイルを確認してください。",
+    "agentScheduleNotFound": "このスケジュールはもう存在しません。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -3426,7 +3429,8 @@
       "conversation": "会話",
       "profiles": "プロファイル",
       "activity": "アクティビティ",
-      "recipes": "レシピ"
+      "recipes": "レシピ",
+      "schedules": "スケジュール"
     },
     "header": {
       "quota": "この 1 時間の残り呼び出し: {{left}} / {{limit}}",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "{{name}} を削除しますか？",
       "deleteDescription": "レシピはすべての端末から削除されます。",
       "needsAutomation": "レシピはブラウザを開いて操作するため、Pro プラン以上が必要です。エージェントは引き続きプロファイル、プロキシ、グループを管理できます。"
+    },
+    "schedules": {
+      "hint": "レシピを予定どおりに実行します。リモートフリートまたはこのコンピューターで実行できます。",
+      "new": "新しいスケジュール",
+      "empty": "スケジュールはまだありません。",
+      "needsRecipe": "先に「レシピ」タブでレシピを作成してください。スケジュールはレシピを実行します。",
+      "needsPlan": "スケジュールされたレシピは予定どおりに、リモートフリートまたはこのコンピューターで実行されます。Solo、Pro、Team、Enterprise に含まれます。",
+      "name": "名前",
+      "namePlaceholder": "夜間チェック",
+      "recipe": "レシピ",
+      "profiles": "プロファイル ({{n}})",
+      "target": "実行場所",
+      "targetFleet": "リモートフリート",
+      "targetDesktop": "このコンピューター",
+      "cadence": "頻度",
+      "cadenceWeekly": "決まった曜日",
+      "cadenceOnce": "1 回",
+      "cadenceInterval": "一定の間隔",
+      "days": "曜日",
+      "time": "時刻",
+      "timezone": "タイムゾーン: {{timezone}}",
+      "runOnceAt": "日時",
+      "intervalMinutes": "実行の間隔 (分、{{min}}–{{max}})",
+      "summaryWeekly": "{{days}} の {{time}} ({{timezone}})",
+      "summaryOnce": "1 回、{{when}}",
+      "summaryInterval": "{{minutes}} 分ごと",
+      "nextRun": "次回の実行: {{when}}",
+      "paused": "一時停止中",
+      "enabled": "{{name}} をスケジュールどおりに実行",
+      "runNow": "今すぐ実行",
+      "runStarted": "実行を開始しました",
+      "runs": "実行履歴",
+      "noRuns": "実行履歴はまだありません。",
+      "created": "スケジュールを作成しました",
+      "updated": "スケジュールを保存しました",
+      "deleted": "スケジュールを削除しました",
+      "deleteTitle": "{{name}} を削除しますか?",
+      "deleteDescription": "スケジュールは止まります。レシピと過去の実行履歴は残ります。",
+      "status": {
+        "pending": "待機中",
+        "running": "実行中",
+        "succeeded": "完了",
+        "partial": "一部完了",
+        "failed": "失敗",
+        "cancelled": "キャンセル済み"
+      }
     }
   },
   "proxyDistribution": {

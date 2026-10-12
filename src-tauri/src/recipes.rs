@@ -1,14 +1,9 @@
 //! Client for the cloud recipe routes. Storage, validation rules and replay
 //! live in the cloud; this side only checks the shape before sending.
 
-use crate::cloud_errors::{self, BackendFailure, FailureCodes};
+use crate::cloud_errors::{BackendFailure, FailureCodes};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
-use std::time::Duration;
-
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 const RECIPE_CODES: FailureCodes = FailureCodes {
   bad_request: "AGENT_RECIPE_INVALID",
@@ -167,59 +162,12 @@ fn failure(action: &str, err: BackendFailure) -> String {
   err.to_error_json()
 }
 
-fn http() -> &'static reqwest::Client {
-  static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-  CLIENT.get_or_init(|| {
-    reqwest::Client::builder()
-      .timeout(REQUEST_TIMEOUT)
-      .connect_timeout(CONNECT_TIMEOUT)
-      .build()
-      .unwrap_or_else(|_| reqwest::Client::new())
-  })
-}
-
 async fn request<T: DeserializeOwned>(
   method: reqwest::Method,
   url: String,
   body: Option<serde_json::Value>,
 ) -> Result<T, BackendFailure> {
-  crate::cloud_auth::CLOUD_AUTH
-    .api_call_with_retry(|token| {
-      let method = method.clone();
-      let url = url.clone();
-      let body = body.clone();
-      async move {
-        let mut builder = http().request(method, &url).bearer_auth(token);
-        if let Some(payload) = body {
-          builder = builder.json(&payload);
-        }
-        let response = builder
-          .send()
-          .await
-          .map_err(|e| format!("reach backend: {e}"))?;
-        let status = response.status().as_u16();
-        if !(200..300).contains(&status) {
-          let text = response.text().await.unwrap_or_default();
-          // api_call_with_retry and classify_message read the status from this prefix.
-          return Err(format!("({status}) {text}"));
-        }
-        let bytes = response
-          .bytes()
-          .await
-          .map_err(|e| format!("decode response: {e}"))?;
-        decode_body::<T>(&bytes).map_err(|e| format!("decode response: {e}"))
-      }
-    })
-    .await
-    .map_err(|e| cloud_errors::classify_message(&e, RECIPE_CODES))
-}
-
-fn decode_body<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, serde_json::Error> {
-  if bytes.iter().all(u8::is_ascii_whitespace) {
-    serde_json::from_slice(b"null")
-  } else {
-    serde_json::from_slice(bytes)
-  }
+  crate::cloud_api::call(method, url, body, RECIPE_CODES).await
 }
 
 #[tauri::command]
@@ -252,6 +200,7 @@ pub async fn delete_agent_recipe(id: String) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::cloud_api::decode_body;
 
   #[test]
   fn a_recipe_delete_with_no_body_is_a_success() {

@@ -2658,7 +2658,10 @@
     "localStorageImportTooLarge": "O arquivo tem mais de 32 MiB.",
     "storageStateInvalid": "Este não é um arquivo storageState.",
     "localStorageBrowserRunning": "Feche o navegador antes de importar um estado de armazenamento.",
-    "localStorageRemoteSession": "Uma sessão remota está usando este perfil. Aguarde até o trabalho dela voltar para cá."
+    "localStorageRemoteSession": "Uma sessão remota está usando este perfil. Aguarde até o trabalho dela voltar para cá.",
+    "scheduledAutomationNotEntitled": "As receitas agendadas fazem parte do Solo, Pro, Team e Enterprise.",
+    "agentScheduleInvalid": "A nuvem do Donut não aceitou este agendamento. Verifique os dias, o horário e os perfis.",
+    "agentScheduleNotFound": "Este agendamento não existe mais."
   },
   "rail": {
     "profiles": "Perfis",
@@ -3469,7 +3472,8 @@
       "conversation": "Conversa",
       "profiles": "Perfis",
       "activity": "Atividade",
-      "recipes": "Receitas"
+      "recipes": "Receitas",
+      "schedules": "Agendamentos"
     },
     "header": {
       "quota": "Restam {{left}} de {{limit}} chamadas nesta hora",
@@ -3668,6 +3672,52 @@
       "deleteTitle": "Eliminar {{name}}?",
       "deleteDescription": "A receita é removida de todos os dispositivos.",
       "needsAutomation": "As receitas abrem e controlam navegadores, por isso requerem o plano Pro ou superior. O seu agente continua a poder gerir perfis, proxies e grupos."
+    },
+    "schedules": {
+      "hint": "Execute uma receita em um calendário, na frota remota ou neste computador.",
+      "new": "Novo agendamento",
+      "empty": "Ainda não há agendamentos.",
+      "needsRecipe": "Crie primeiro uma receita na aba Receitas: um agendamento executa uma.",
+      "needsPlan": "As receitas agendadas rodam em um calendário, na frota remota ou neste computador. Fazem parte do Solo, Pro, Team e Enterprise.",
+      "name": "Nome",
+      "namePlaceholder": "Verificação noturna",
+      "recipe": "Receita",
+      "profiles": "Perfis ({{n}})",
+      "target": "Onde roda",
+      "targetFleet": "Frota remota",
+      "targetDesktop": "Este computador",
+      "cadence": "Com que frequência",
+      "cadenceWeekly": "Em dias definidos",
+      "cadenceOnce": "Uma vez",
+      "cadenceInterval": "Em intervalos",
+      "days": "Dias",
+      "time": "Horário",
+      "timezone": "Fuso horário: {{timezone}}",
+      "runOnceAt": "Data e hora",
+      "intervalMinutes": "Minutos entre execuções ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} às {{time}} ({{timezone}})",
+      "summaryOnce": "Uma vez, {{when}}",
+      "summaryInterval": "A cada {{minutes}} min",
+      "nextRun": "Próxima execução: {{when}}",
+      "paused": "Pausado",
+      "enabled": "Executar {{name}} no agendamento",
+      "runNow": "Executar agora",
+      "runStarted": "Execução iniciada",
+      "runs": "Execuções",
+      "noRuns": "Ainda não há execuções.",
+      "created": "Agendamento criado",
+      "updated": "Agendamento salvo",
+      "deleted": "Agendamento excluído",
+      "deleteTitle": "Excluir {{name}}?",
+      "deleteDescription": "O agendamento para. A receita e as execuções anteriores continuam.",
+      "status": {
+        "pending": "Aguardando",
+        "running": "Em execução",
+        "succeeded": "Concluído",
+        "partial": "Concluído em parte",
+        "failed": "Falhou",
+        "cancelled": "Cancelado"
+      }
     }
   },
   "proxyDistribution": {

@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "Die Datei ist größer als 32 MiB.",
     "storageStateInvalid": "Dies ist keine storageState-Datei.",
     "localStorageBrowserRunning": "Schließen Sie den Browser, bevor Sie einen Speicherzustand importieren.",
-    "localStorageRemoteSession": "Eine Remote-Sitzung verwendet dieses Profil. Warten Sie, bis ihre Arbeit wieder hier ist."
+    "localStorageRemoteSession": "Eine Remote-Sitzung verwendet dieses Profil. Warten Sie, bis ihre Arbeit wieder hier ist.",
+    "scheduledAutomationNotEntitled": "Geplante Rezepte sind Teil von Solo, Pro, Team und Enterprise.",
+    "agentScheduleInvalid": "Donut Cloud hat diesen Zeitplan nicht angenommen. Prüfen Sie die Tage, die Uhrzeit und die Profile.",
+    "agentScheduleNotFound": "Dieser Zeitplan existiert nicht mehr."
   },
   "rail": {
     "profiles": "Profile",
@@ -3426,7 +3429,8 @@
       "conversation": "Unterhaltung",
       "profiles": "Profile",
       "activity": "Aktivität",
-      "recipes": "Rezepte"
+      "recipes": "Rezepte",
+      "schedules": "Zeitpläne"
     },
     "header": {
       "quota": "Noch {{left}} von {{limit}} Aufrufen in dieser Stunde",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "{{name}} löschen?",
       "deleteDescription": "Das Rezept wird von allen Geräten entfernt.",
       "needsAutomation": "Rezepte öffnen und steuern Browser und erfordern daher den Pro-Tarif oder höher. Ihr Agent kann weiterhin Profile, Proxys und Gruppen verwalten."
+    },
+    "schedules": {
+      "hint": "Führen Sie ein Rezept nach Zeitplan aus, auf der Remote-Flotte oder auf diesem Computer.",
+      "new": "Neuer Zeitplan",
+      "empty": "Noch keine Zeitpläne.",
+      "needsRecipe": "Erstellen Sie zuerst auf der Registerkarte Rezepte ein Rezept: Ein Zeitplan führt eines aus.",
+      "needsPlan": "Geplante Rezepte laufen nach Kalender, auf der Remote-Flotte oder auf diesem Computer. Sie sind Teil von Solo, Pro, Team und Enterprise.",
+      "name": "Name",
+      "namePlaceholder": "Nächtliche Prüfung",
+      "recipe": "Rezept",
+      "profiles": "Profile ({{n}})",
+      "target": "Wo es läuft",
+      "targetFleet": "Remote-Flotte",
+      "targetDesktop": "Dieser Computer",
+      "cadence": "Wie oft",
+      "cadenceWeekly": "An festen Tagen",
+      "cadenceOnce": "Einmal",
+      "cadenceInterval": "In Abständen",
+      "days": "Tage",
+      "time": "Uhrzeit",
+      "timezone": "Zeitzone: {{timezone}}",
+      "runOnceAt": "Datum und Uhrzeit",
+      "intervalMinutes": "Minuten zwischen den Läufen ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} um {{time}} ({{timezone}})",
+      "summaryOnce": "Einmal, {{when}}",
+      "summaryInterval": "Alle {{minutes}} Min.",
+      "nextRun": "Nächster Lauf: {{when}}",
+      "paused": "Pausiert",
+      "enabled": "{{name}} nach Zeitplan ausführen",
+      "runNow": "Jetzt ausführen",
+      "runStarted": "Lauf gestartet",
+      "runs": "Läufe",
+      "noRuns": "Noch keine Läufe.",
+      "created": "Zeitplan erstellt",
+      "updated": "Zeitplan gespeichert",
+      "deleted": "Zeitplan gelöscht",
+      "deleteTitle": "{{name}} löschen?",
+      "deleteDescription": "Der Zeitplan endet. Sein Rezept und frühere Läufe bleiben erhalten.",
+      "status": {
+        "pending": "Wartet",
+        "running": "Läuft",
+        "succeeded": "Fertig",
+        "partial": "Teilweise fertig",
+        "failed": "Fehlgeschlagen",
+        "cancelled": "Abgebrochen"
+      }
     }
   },
   "proxyDistribution": {

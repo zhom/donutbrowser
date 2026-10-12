@@ -141,6 +141,8 @@ mod wayfern_terms;
 mod window_decorations;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod agent_console;
+mod agent_schedules;
+mod cloud_api;
 pub mod cloud_auth;
 mod cloud_errors;
 mod commercial_license;
@@ -3543,6 +3545,12 @@ pub fn run_with_builder(
       local_storage::get_profile_local_storage_stats,
       local_storage::export_profile_storage_state,
       local_storage::import_profile_storage_state,
+      agent_schedules::list_agent_schedules,
+      agent_schedules::create_agent_schedule,
+      agent_schedules::update_agent_schedule,
+      agent_schedules::delete_agent_schedule,
+      agent_schedules::run_agent_schedule_now,
+      agent_schedules::list_agent_schedule_runs,
       start_mcp_remote_bridge,
       stop_mcp_remote_bridge,
       get_mcp_remote_status,

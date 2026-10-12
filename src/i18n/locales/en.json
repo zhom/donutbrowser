@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "The file is larger than 32 MiB.",
     "storageStateInvalid": "This is not a storageState file.",
     "localStorageBrowserRunning": "Close the browser before you import a storage state.",
-    "localStorageRemoteSession": "A remote session owns this profile. Wait until its work is back here."
+    "localStorageRemoteSession": "A remote session owns this profile. Wait until its work is back here.",
+    "scheduledAutomationNotEntitled": "Scheduled recipes are part of Solo, Pro, Team and Enterprise.",
+    "agentScheduleInvalid": "Donut cloud did not accept this schedule. Check the days, the time and the profiles.",
+    "agentScheduleNotFound": "This schedule no longer exists."
   },
   "rail": {
     "profiles": "Profiles",
@@ -3426,7 +3429,8 @@
       "conversation": "Conversation",
       "profiles": "Profiles",
       "activity": "Activity",
-      "recipes": "Recipes"
+      "recipes": "Recipes",
+      "schedules": "Schedules"
     },
     "header": {
       "quota": "{{left}} of {{limit}} calls left this hour",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "Delete {{name}}?",
       "deleteDescription": "The recipe is removed from every device.",
       "needsAutomation": "Recipes open and drive browsers, so they need the Pro plan or higher. Your agent can still manage profiles, proxies and groups."
+    },
+    "schedules": {
+      "hint": "Run a recipe on a calendar, on the remote fleet or on this computer.",
+      "new": "New schedule",
+      "empty": "No schedules yet.",
+      "needsRecipe": "Make a recipe on the Recipes tab first: a schedule runs one.",
+      "needsPlan": "Scheduled recipes run on a calendar, on the remote fleet or on this computer. They are part of Solo, Pro, Team and Enterprise.",
+      "name": "Name",
+      "namePlaceholder": "Nightly check",
+      "recipe": "Recipe",
+      "profiles": "Profiles ({{n}})",
+      "target": "Where it runs",
+      "targetFleet": "Remote fleet",
+      "targetDesktop": "This computer",
+      "cadence": "How often",
+      "cadenceWeekly": "On set days",
+      "cadenceOnce": "Once",
+      "cadenceInterval": "At an interval",
+      "days": "Days",
+      "time": "Time",
+      "timezone": "Time zone: {{timezone}}",
+      "runOnceAt": "Date and time",
+      "intervalMinutes": "Minutes between runs ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} at {{time}} ({{timezone}})",
+      "summaryOnce": "Once, {{when}}",
+      "summaryInterval": "Every {{minutes}} min",
+      "nextRun": "Next run: {{when}}",
+      "paused": "Paused",
+      "enabled": "Run {{name}} on its schedule",
+      "runNow": "Run now",
+      "runStarted": "Run started",
+      "runs": "Runs",
+      "noRuns": "No runs yet.",
+      "created": "Schedule created",
+      "updated": "Schedule saved",
+      "deleted": "Schedule deleted",
+      "deleteTitle": "Delete {{name}}?",
+      "deleteDescription": "The schedule stops. Its recipe and earlier runs stay.",
+      "status": {
+        "pending": "Waiting",
+        "running": "Running",
+        "succeeded": "Done",
+        "partial": "Partly done",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      }
     }
   },
   "proxyDistribution": {

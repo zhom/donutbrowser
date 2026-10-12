@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "Dosya 32 MiB'tan büyük.",
     "storageStateInvalid": "Bu bir storageState dosyası değil.",
     "localStorageBrowserRunning": "Bir depolama durumunu içe aktarmadan önce tarayıcıyı kapatın.",
-    "localStorageRemoteSession": "Bu profili uzak bir oturum kullanıyor. İşi buraya dönene kadar bekleyin."
+    "localStorageRemoteSession": "Bu profili uzak bir oturum kullanıyor. İşi buraya dönene kadar bekleyin.",
+    "scheduledAutomationNotEntitled": "Zamanlanmış tarifler Solo, Pro, Team ve Enterprise'a dahildir.",
+    "agentScheduleInvalid": "Donut bulutu bu zamanlamayı kabul etmedi. Günleri, saati ve profilleri kontrol edin.",
+    "agentScheduleNotFound": "Bu zamanlama artık yok."
   },
   "rail": {
     "profiles": "Profiller",
@@ -3426,7 +3429,8 @@
       "conversation": "Konuşma",
       "profiles": "Profiller",
       "activity": "Etkinlik",
-      "recipes": "Tarifler"
+      "recipes": "Tarifler",
+      "schedules": "Zamanlamalar"
     },
     "header": {
       "quota": "Bu saat için {{limit}} çağrıdan {{left}} kaldı",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "{{name}} silinsin mi?",
       "deleteDescription": "Tarif tüm cihazlardan silinir.",
       "needsAutomation": "Tarifler tarayıcıları açıp yönettiği için Pro veya daha üst bir plan gerektirir. Ajanınız profilleri, proxy'leri ve grupları yönetmeye devam edebilir."
+    },
+    "schedules": {
+      "hint": "Bir tarifi takvime göre uzak filoda veya bu bilgisayarda çalıştırın.",
+      "new": "Yeni zamanlama",
+      "empty": "Henüz zamanlama yok.",
+      "needsRecipe": "Önce Tarifler sekmesinde bir tarif oluşturun: bir zamanlama bir tarifi çalıştırır.",
+      "needsPlan": "Zamanlanmış tarifler takvime göre uzak filoda veya bu bilgisayarda çalışır. Solo, Pro, Team ve Enterprise'a dahildir.",
+      "name": "Ad",
+      "namePlaceholder": "Gece kontrolü",
+      "recipe": "Tarif",
+      "profiles": "Profiller ({{n}})",
+      "target": "Nerede çalışır",
+      "targetFleet": "Uzak filo",
+      "targetDesktop": "Bu bilgisayar",
+      "cadence": "Ne sıklıkla",
+      "cadenceWeekly": "Belirli günlerde",
+      "cadenceOnce": "Bir kez",
+      "cadenceInterval": "Belirli aralıklarla",
+      "days": "Günler",
+      "time": "Saat",
+      "timezone": "Saat dilimi: {{timezone}}",
+      "runOnceAt": "Tarih ve saat",
+      "intervalMinutes": "Çalıştırmalar arası dakika ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}}, {{time}} ({{timezone}})",
+      "summaryOnce": "Bir kez, {{when}}",
+      "summaryInterval": "Her {{minutes}} dk",
+      "nextRun": "Sonraki çalıştırma: {{when}}",
+      "paused": "Duraklatıldı",
+      "enabled": "{{name}} zamanlamasına göre çalışsın",
+      "runNow": "Şimdi çalıştır",
+      "runStarted": "Çalıştırma başladı",
+      "runs": "Çalıştırmalar",
+      "noRuns": "Henüz çalıştırma yok.",
+      "created": "Zamanlama oluşturuldu",
+      "updated": "Zamanlama kaydedildi",
+      "deleted": "Zamanlama silindi",
+      "deleteTitle": "{{name}} silinsin mi?",
+      "deleteDescription": "Zamanlama durur. Tarifi ve önceki çalıştırmaları kalır.",
+      "status": {
+        "pending": "Bekliyor",
+        "running": "Çalışıyor",
+        "succeeded": "Tamamlandı",
+        "partial": "Kısmen tamamlandı",
+        "failed": "Başarısız",
+        "cancelled": "İptal edildi"
+      }
     }
   },
   "proxyDistribution": {

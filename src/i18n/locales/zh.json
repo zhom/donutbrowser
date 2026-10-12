@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "文件大于 32 MiB。",
     "storageStateInvalid": "这不是 storageState 文件。",
     "localStorageBrowserRunning": "导入存储状态前请关闭浏览器。",
-    "localStorageRemoteSession": "远程会话正在使用此配置文件。请等待其工作回到这里。"
+    "localStorageRemoteSession": "远程会话正在使用此配置文件。请等待其工作回到这里。",
+    "scheduledAutomationNotEntitled": "计划配方包含在 Solo、Pro、Team 和 Enterprise 中。",
+    "agentScheduleInvalid": "Donut 云未接受此计划。请检查日期、时间和配置文件。",
+    "agentScheduleNotFound": "该计划已不存在。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -3426,7 +3429,8 @@
       "conversation": "对话",
       "profiles": "配置文件",
       "activity": "活动",
-      "recipes": "配方"
+      "recipes": "配方",
+      "schedules": "计划"
     },
     "header": {
       "quota": "本小时剩余 {{left}} / {{limit}} 次调用",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "删除 {{name}}？",
       "deleteDescription": "配方会从所有设备上删除。",
       "needsAutomation": "配方会打开并操控浏览器，因此需要 Pro 或更高方案。你的智能体仍可管理配置文件、代理和分组。"
+    },
+    "schedules": {
+      "hint": "按日程在远程机群或此电脑上运行配方。",
+      "new": "新建计划",
+      "empty": "还没有计划。",
+      "needsRecipe": "请先在“配方”标签页创建配方：计划会运行配方。",
+      "needsPlan": "计划配方会按日程在远程机群或此电脑上运行。包含在 Solo、Pro、Team 和 Enterprise 中。",
+      "name": "名称",
+      "namePlaceholder": "夜间检查",
+      "recipe": "配方",
+      "profiles": "配置文件 ({{n}})",
+      "target": "运行位置",
+      "targetFleet": "远程机群",
+      "targetDesktop": "此电脑",
+      "cadence": "频率",
+      "cadenceWeekly": "在选定的日子",
+      "cadenceOnce": "一次",
+      "cadenceInterval": "按间隔",
+      "days": "日期",
+      "time": "时间",
+      "timezone": "时区：{{timezone}}",
+      "runOnceAt": "日期和时间",
+      "intervalMinutes": "两次运行间隔的分钟数（{{min}}–{{max}}）",
+      "summaryWeekly": "{{days}} {{time}}（{{timezone}}）",
+      "summaryOnce": "一次，{{when}}",
+      "summaryInterval": "每 {{minutes}} 分钟",
+      "nextRun": "下次运行：{{when}}",
+      "paused": "已暂停",
+      "enabled": "按计划运行 {{name}}",
+      "runNow": "立即运行",
+      "runStarted": "已开始运行",
+      "runs": "运行记录",
+      "noRuns": "还没有运行记录。",
+      "created": "已创建计划",
+      "updated": "已保存计划",
+      "deleted": "已删除计划",
+      "deleteTitle": "删除 {{name}}？",
+      "deleteDescription": "计划将停止。其配方和之前的运行记录会保留。",
+      "status": {
+        "pending": "等待中",
+        "running": "运行中",
+        "succeeded": "完成",
+        "partial": "部分完成",
+        "failed": "失败",
+        "cancelled": "已取消"
+      }
     }
   },
   "proxyDistribution": {

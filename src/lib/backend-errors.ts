@@ -122,6 +122,12 @@ export type BackendErrorCode =
   | "API_PORT_UNAVAILABLE"
   | "MCP_AGENT_UNKNOWN"
   | "MCP_TOOLSET_UNKNOWN"
+  | "SCHEDULED_AUTOMATION_NOT_ENTITLED"
+  | "AGENT_SCHEDULE_INVALID"
+  | "AGENT_SCHEDULE_NOT_FOUND"
+  | "SCHEDULED_AUTOMATION_NOT_ENTITLED"
+  | "AGENT_SCHEDULE_INVALID"
+  | "AGENT_SCHEDULE_NOT_FOUND"
   | "LOCAL_STORAGE_EPHEMERAL"
   | "LOCAL_STORAGE_PROFILE_PROTECTED"
   | "LOCAL_STORAGE_UNREADABLE"
@@ -673,6 +679,18 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.localStorageBrowserRunning");
     case "LOCAL_STORAGE_REMOTE_SESSION":
       return t("backendErrors.localStorageRemoteSession");
+    case "SCHEDULED_AUTOMATION_NOT_ENTITLED":
+      return t("backendErrors.scheduledAutomationNotEntitled");
+    case "AGENT_SCHEDULE_INVALID":
+      return t("backendErrors.agentScheduleInvalid");
+    case "AGENT_SCHEDULE_NOT_FOUND":
+      return t("backendErrors.agentScheduleNotFound");
+    case "SCHEDULED_AUTOMATION_NOT_ENTITLED":
+      return t("backendErrors.scheduledAutomationNotEntitled");
+    case "AGENT_SCHEDULE_INVALID":
+      return t("backendErrors.agentScheduleInvalid");
+    case "AGENT_SCHEDULE_NOT_FOUND":
+      return t("backendErrors.agentScheduleNotFound");
     case "MCP_TOOLSET_UNKNOWN":
       return t("backendErrors.mcpToolsetUnknown");
     case "MCP_AGENT_UNKNOWN":

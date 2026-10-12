@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "파일이 32 MiB보다 큽니다.",
     "storageStateInvalid": "storageState 파일이 아닙니다.",
     "localStorageBrowserRunning": "스토리지 상태를 가져오기 전에 브라우저를 닫으세요.",
-    "localStorageRemoteSession": "원격 세션이 이 프로필을 사용 중입니다. 작업이 이곳으로 돌아올 때까지 기다리세요."
+    "localStorageRemoteSession": "원격 세션이 이 프로필을 사용 중입니다. 작업이 이곳으로 돌아올 때까지 기다리세요.",
+    "scheduledAutomationNotEntitled": "예약된 레시피는 Solo, Pro, Team, Enterprise에 포함됩니다.",
+    "agentScheduleInvalid": "Donut 클라우드가 이 일정을 받아들이지 않았습니다. 요일, 시간, 프로필을 확인하세요.",
+    "agentScheduleNotFound": "이 일정은 더 이상 없습니다."
   },
   "rail": {
     "profiles": "프로필",
@@ -3426,7 +3429,8 @@
       "conversation": "대화",
       "profiles": "프로필",
       "activity": "활동",
-      "recipes": "레시피"
+      "recipes": "레시피",
+      "schedules": "일정"
     },
     "header": {
       "quota": "이번 시간 남은 호출: {{left}}/{{limit}}",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "{{name}}을(를) 삭제할까요?",
       "deleteDescription": "레시피는 모든 기기에서 삭제됩니다.",
       "needsAutomation": "레시피는 브라우저를 열고 조작하므로 Pro 요금제 이상이 필요합니다. 에이전트는 계속해서 프로필, 프록시, 그룹을 관리할 수 있습니다."
+    },
+    "schedules": {
+      "hint": "레시피를 일정에 따라 원격 플릿이나 이 컴퓨터에서 실행합니다.",
+      "new": "새 일정",
+      "empty": "아직 일정이 없습니다.",
+      "needsRecipe": "먼저 레시피 탭에서 레시피를 만드세요. 일정은 레시피를 실행합니다.",
+      "needsPlan": "예약된 레시피는 일정에 따라 원격 플릿이나 이 컴퓨터에서 실행됩니다. Solo, Pro, Team, Enterprise에 포함됩니다.",
+      "name": "이름",
+      "namePlaceholder": "야간 점검",
+      "recipe": "레시피",
+      "profiles": "프로필 ({{n}})",
+      "target": "실행 위치",
+      "targetFleet": "원격 플릿",
+      "targetDesktop": "이 컴퓨터",
+      "cadence": "빈도",
+      "cadenceWeekly": "정한 요일",
+      "cadenceOnce": "한 번",
+      "cadenceInterval": "일정 간격",
+      "days": "요일",
+      "time": "시간",
+      "timezone": "시간대: {{timezone}}",
+      "runOnceAt": "날짜와 시간",
+      "intervalMinutes": "실행 간격(분, {{min}}–{{max}})",
+      "summaryWeekly": "{{days}} {{time}} ({{timezone}})",
+      "summaryOnce": "한 번, {{when}}",
+      "summaryInterval": "{{minutes}}분마다",
+      "nextRun": "다음 실행: {{when}}",
+      "paused": "일시 중지됨",
+      "enabled": "{{name}}을(를) 일정대로 실행",
+      "runNow": "지금 실행",
+      "runStarted": "실행을 시작했습니다",
+      "runs": "실행 기록",
+      "noRuns": "아직 실행 기록이 없습니다.",
+      "created": "일정을 만들었습니다",
+      "updated": "일정을 저장했습니다",
+      "deleted": "일정을 삭제했습니다",
+      "deleteTitle": "{{name}}을(를) 삭제할까요?",
+      "deleteDescription": "일정이 멈춥니다. 레시피와 이전 실행 기록은 남습니다.",
+      "status": {
+        "pending": "대기 중",
+        "running": "실행 중",
+        "succeeded": "완료",
+        "partial": "일부 완료",
+        "failed": "실패",
+        "cancelled": "취소됨"
+      }
     }
   },
   "proxyDistribution": {

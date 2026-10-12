@@ -2658,7 +2658,10 @@
     "localStorageImportTooLarge": "Le fichier dépasse 32 Mio.",
     "storageStateInvalid": "Ce n'est pas un fichier storageState.",
     "localStorageBrowserRunning": "Fermez le navigateur avant d'importer un état de stockage.",
-    "localStorageRemoteSession": "Une session distante utilise ce profil. Attendez que son travail soit revenu ici."
+    "localStorageRemoteSession": "Une session distante utilise ce profil. Attendez que son travail soit revenu ici.",
+    "scheduledAutomationNotEntitled": "Les recettes planifiées font partie de Solo, Pro, Team et Enterprise.",
+    "agentScheduleInvalid": "Donut cloud n'a pas accepté cette planification. Vérifiez les jours, l'heure et les profils.",
+    "agentScheduleNotFound": "Cette planification n'existe plus."
   },
   "rail": {
     "profiles": "Profils",
@@ -3469,7 +3472,8 @@
       "conversation": "Conversation",
       "profiles": "Profils",
       "activity": "Activité",
-      "recipes": "Recettes"
+      "recipes": "Recettes",
+      "schedules": "Planifications"
     },
     "header": {
       "quota": "Il reste {{left}} appels sur {{limit}} pour cette heure",
@@ -3668,6 +3672,52 @@
       "deleteTitle": "Supprimer {{name}} ?",
       "deleteDescription": "La recette est supprimée de tous les appareils.",
       "needsAutomation": "Les recettes ouvrent et pilotent des navigateurs : elles nécessitent donc le forfait Pro ou supérieur. Votre agent peut toujours gérer les profils, les proxys et les groupes."
+    },
+    "schedules": {
+      "hint": "Lancez une recette selon un calendrier, sur la flotte distante ou sur cet ordinateur.",
+      "new": "Nouvelle planification",
+      "empty": "Aucune planification pour l'instant.",
+      "needsRecipe": "Créez d'abord une recette dans l'onglet Recettes : une planification en lance une.",
+      "needsPlan": "Les recettes planifiées se lancent selon un calendrier, sur la flotte distante ou sur cet ordinateur. Elles font partie de Solo, Pro, Team et Enterprise.",
+      "name": "Nom",
+      "namePlaceholder": "Vérification nocturne",
+      "recipe": "Recette",
+      "profiles": "Profils ({{n}})",
+      "target": "Où elle s'exécute",
+      "targetFleet": "Flotte distante",
+      "targetDesktop": "Cet ordinateur",
+      "cadence": "À quelle fréquence",
+      "cadenceWeekly": "Certains jours",
+      "cadenceOnce": "Une fois",
+      "cadenceInterval": "À intervalle",
+      "days": "Jours",
+      "time": "Heure",
+      "timezone": "Fuseau horaire : {{timezone}}",
+      "runOnceAt": "Date et heure",
+      "intervalMinutes": "Minutes entre deux exécutions ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} à {{time}} ({{timezone}})",
+      "summaryOnce": "Une fois, {{when}}",
+      "summaryInterval": "Toutes les {{minutes}} min",
+      "nextRun": "Prochaine exécution : {{when}}",
+      "paused": "En pause",
+      "enabled": "Lancer {{name}} selon sa planification",
+      "runNow": "Lancer maintenant",
+      "runStarted": "Exécution lancée",
+      "runs": "Exécutions",
+      "noRuns": "Aucune exécution pour l'instant.",
+      "created": "Planification créée",
+      "updated": "Planification enregistrée",
+      "deleted": "Planification supprimée",
+      "deleteTitle": "Supprimer {{name}} ?",
+      "deleteDescription": "La planification s'arrête. Sa recette et les exécutions passées restent.",
+      "status": {
+        "pending": "En attente",
+        "running": "En cours",
+        "succeeded": "Terminé",
+        "partial": "Terminé en partie",
+        "failed": "Échec",
+        "cancelled": "Annulé"
+      }
     }
   },
   "proxyDistribution": {

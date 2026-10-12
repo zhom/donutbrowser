@@ -2658,7 +2658,10 @@
     "localStorageImportTooLarge": "El archivo supera los 32 MiB.",
     "storageStateInvalid": "Este no es un archivo storageState.",
     "localStorageBrowserRunning": "Cierra el navegador antes de importar un estado de almacenamiento.",
-    "localStorageRemoteSession": "Una sesión remota usa este perfil. Espera a que su trabajo vuelva aquí."
+    "localStorageRemoteSession": "Una sesión remota usa este perfil. Espera a que su trabajo vuelva aquí.",
+    "scheduledAutomationNotEntitled": "Las recetas programadas forman parte de Solo, Pro, Team y Enterprise.",
+    "agentScheduleInvalid": "Donut cloud no aceptó esta programación. Revisa los días, la hora y los perfiles.",
+    "agentScheduleNotFound": "Esta programación ya no existe."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -3469,7 +3472,8 @@
       "conversation": "Conversación",
       "profiles": "Perfiles",
       "activity": "Actividad",
-      "recipes": "Recetas"
+      "recipes": "Recetas",
+      "schedules": "Programaciones"
     },
     "header": {
       "quota": "Quedan {{left}} de {{limit}} llamadas esta hora",
@@ -3668,6 +3672,52 @@
       "deleteTitle": "¿Eliminar {{name}}?",
       "deleteDescription": "La receta se elimina de todos los dispositivos.",
       "needsAutomation": "Las recetas abren y controlan navegadores, por eso requieren el plan Pro o superior. Tu agente puede seguir gestionando perfiles, proxies y grupos."
+    },
+    "schedules": {
+      "hint": "Ejecuta una receta según un calendario, en la flota remota o en este ordenador.",
+      "new": "Nueva programación",
+      "empty": "Aún no hay programaciones.",
+      "needsRecipe": "Primero crea una receta en la pestaña Recetas: una programación ejecuta una.",
+      "needsPlan": "Las recetas programadas se ejecutan según un calendario, en la flota remota o en este ordenador. Forman parte de Solo, Pro, Team y Enterprise.",
+      "name": "Nombre",
+      "namePlaceholder": "Revisión nocturna",
+      "recipe": "Receta",
+      "profiles": "Perfiles ({{n}})",
+      "target": "Dónde se ejecuta",
+      "targetFleet": "Flota remota",
+      "targetDesktop": "Este ordenador",
+      "cadence": "Con qué frecuencia",
+      "cadenceWeekly": "En días fijos",
+      "cadenceOnce": "Una vez",
+      "cadenceInterval": "Cada cierto tiempo",
+      "days": "Días",
+      "time": "Hora",
+      "timezone": "Zona horaria: {{timezone}}",
+      "runOnceAt": "Fecha y hora",
+      "intervalMinutes": "Minutos entre ejecuciones ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} a las {{time}} ({{timezone}})",
+      "summaryOnce": "Una vez, {{when}}",
+      "summaryInterval": "Cada {{minutes}} min",
+      "nextRun": "Próxima ejecución: {{when}}",
+      "paused": "En pausa",
+      "enabled": "Ejecutar {{name}} según su programación",
+      "runNow": "Ejecutar ahora",
+      "runStarted": "Ejecución iniciada",
+      "runs": "Ejecuciones",
+      "noRuns": "Aún no hay ejecuciones.",
+      "created": "Programación creada",
+      "updated": "Programación guardada",
+      "deleted": "Programación eliminada",
+      "deleteTitle": "¿Eliminar {{name}}?",
+      "deleteDescription": "La programación se detiene. Su receta y las ejecuciones anteriores se conservan.",
+      "status": {
+        "pending": "En espera",
+        "running": "En curso",
+        "succeeded": "Hecho",
+        "partial": "Hecho en parte",
+        "failed": "Falló",
+        "cancelled": "Cancelado"
+      }
     }
   },
   "proxyDistribution": {

@@ -365,6 +365,18 @@ export const commandCoverage = {
       "recipes::delete_agent_recipe",
     ],
   },
+  schedules: {
+    suite: "integrations",
+    level: "contract",
+    commands: [
+      "agent_schedules::list_agent_schedules",
+      "agent_schedules::create_agent_schedule",
+      "agent_schedules::update_agent_schedule",
+      "agent_schedules::delete_agent_schedule",
+      "agent_schedules::run_agent_schedule_now",
+      "agent_schedules::list_agent_schedule_runs",
+    ],
+  },
   feedback: {
     suite: "ui",
     level: "integration",

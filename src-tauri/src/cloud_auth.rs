@@ -133,6 +133,11 @@ pub struct Entitlements {
   /// cycle out of date must not be what refuses a customer their own machine.
   #[serde(rename = "remoteControl", default)]
   pub remote_control: bool,
+  /// Recipes Donut cloud runs on a calendar. Read only by the UI: the cloud
+  /// checks the plan when a schedule is saved and again at every fire, so a
+  /// stale or edited copy here can open a screen but never run anything.
+  #[serde(rename = "scheduledAutomation", default)]
+  pub scheduled_automation: bool,
   #[serde(rename = "profileLimit", default)]
   pub profile_limit: i64,
   #[serde(rename = "requestsPerHour", default)]
@@ -163,6 +168,7 @@ fn derive_entitlements(
       cookie_bot: false,
       remote_interactive: false,
       remote_control: false,
+      scheduled_automation: false,
       profile_limit: 0,
       requests_per_hour: 0,
       remote_browser_hours: 0,
@@ -205,6 +211,8 @@ fn derive_entitlements(
     cookie_bot,
     remote_interactive,
     remote_control,
+    // Every plan that is sold with it; an unknown one waits for the server.
+    scheduled_automation: matches!(plan, "solo" | "pro" | "team" | "enterprise"),
     profile_limit,
     requests_per_hour: if browser_automation {
       DEFAULT_REQUESTS_PER_HOUR
@@ -2163,6 +2171,25 @@ mod tests {
     assert!(
       !solo.cross_os_fingerprints,
       "solo is sold without fingerprint editing"
+    );
+  }
+
+  #[test]
+  fn scheduled_automation_is_paid_only_and_not_guessed_for_an_unknown_plan() {
+    for plan in ["solo", "pro", "team", "enterprise"] {
+      assert!(
+        derive_entitlements(plan, Some("monthly"), "active", 20).scheduled_automation,
+        "{plan}"
+      );
+    }
+    assert!(!derive_entitlements("free", None, "active", 3).scheduled_automation);
+    assert!(!derive_entitlements("pro", Some("monthly"), "canceled", 20).scheduled_automation);
+    assert!(!derive_entitlements("mystery", Some("monthly"), "active", 20).scheduled_automation);
+    let older_backend: Entitlements =
+      serde_json::from_str(r#"{"active":true,"browserAutomation":true}"#).unwrap();
+    assert!(
+      !older_backend.scheduled_automation,
+      "a backend that does not send the key does not open the feature"
     );
   }
 

@@ -2638,7 +2638,10 @@
     "localStorageImportTooLarge": "Tệp lớn hơn 32 MiB.",
     "storageStateInvalid": "Đây không phải tệp storageState.",
     "localStorageBrowserRunning": "Hãy đóng trình duyệt trước khi nhập trạng thái lưu trữ.",
-    "localStorageRemoteSession": "Một phiên từ xa đang dùng profile này. Hãy đợi đến khi công việc của nó trở lại đây."
+    "localStorageRemoteSession": "Một phiên từ xa đang dùng profile này. Hãy đợi đến khi công việc của nó trở lại đây.",
+    "scheduledAutomationNotEntitled": "Công thức theo lịch có trong Solo, Pro, Team và Enterprise.",
+    "agentScheduleInvalid": "Đám mây Donut không chấp nhận lịch chạy này. Hãy kiểm tra ngày, giờ và profile.",
+    "agentScheduleNotFound": "Lịch chạy này không còn tồn tại."
   },
   "rail": {
     "profiles": "Profile",
@@ -3426,7 +3429,8 @@
       "conversation": "Hội thoại",
       "profiles": "Hồ sơ",
       "activity": "Hoạt động",
-      "recipes": "Công thức"
+      "recipes": "Công thức",
+      "schedules": "Lịch chạy"
     },
     "header": {
       "quota": "Còn {{left}}/{{limit}} lượt gọi trong giờ này",
@@ -3625,6 +3629,52 @@
       "deleteTitle": "Xoá {{name}}?",
       "deleteDescription": "Công thức bị xoá trên mọi thiết bị.",
       "needsAutomation": "Công thức mở và điều khiển trình duyệt nên cần gói Pro trở lên. Tác nhân của bạn vẫn có thể quản lý hồ sơ, proxy và nhóm."
+    },
+    "schedules": {
+      "hint": "Chạy một công thức theo lịch, trên đội máy từ xa hoặc trên máy tính này.",
+      "new": "Lịch chạy mới",
+      "empty": "Chưa có lịch chạy nào.",
+      "needsRecipe": "Hãy tạo một công thức ở thẻ Công thức trước: lịch chạy sẽ chạy công thức đó.",
+      "needsPlan": "Công thức theo lịch chạy theo thời gian biểu, trên đội máy từ xa hoặc trên máy tính này. Có trong Solo, Pro, Team và Enterprise.",
+      "name": "Tên",
+      "namePlaceholder": "Kiểm tra ban đêm",
+      "recipe": "Công thức",
+      "profiles": "Profile ({{n}})",
+      "target": "Chạy ở đâu",
+      "targetFleet": "Đội máy từ xa",
+      "targetDesktop": "Máy tính này",
+      "cadence": "Tần suất",
+      "cadenceWeekly": "Vào các ngày đã chọn",
+      "cadenceOnce": "Một lần",
+      "cadenceInterval": "Theo khoảng thời gian",
+      "days": "Ngày",
+      "time": "Giờ",
+      "timezone": "Múi giờ: {{timezone}}",
+      "runOnceAt": "Ngày và giờ",
+      "intervalMinutes": "Số phút giữa các lần chạy ({{min}}–{{max}})",
+      "summaryWeekly": "{{days}} lúc {{time}} ({{timezone}})",
+      "summaryOnce": "Một lần, {{when}}",
+      "summaryInterval": "Mỗi {{minutes}} phút",
+      "nextRun": "Lần chạy tiếp theo: {{when}}",
+      "paused": "Đã tạm dừng",
+      "enabled": "Chạy {{name}} theo lịch",
+      "runNow": "Chạy ngay",
+      "runStarted": "Đã bắt đầu chạy",
+      "runs": "Các lần chạy",
+      "noRuns": "Chưa có lần chạy nào.",
+      "created": "Đã tạo lịch chạy",
+      "updated": "Đã lưu lịch chạy",
+      "deleted": "Đã xóa lịch chạy",
+      "deleteTitle": "Xóa {{name}}?",
+      "deleteDescription": "Lịch chạy dừng lại. Công thức và các lần chạy trước vẫn còn.",
+      "status": {
+        "pending": "Đang chờ",
+        "running": "Đang chạy",
+        "succeeded": "Xong",
+        "partial": "Xong một phần",
+        "failed": "Thất bại",
+        "cancelled": "Đã hủy"
+      }
     }
   },
   "proxyDistribution": {
