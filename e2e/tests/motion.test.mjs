@@ -223,10 +223,32 @@ test("first-run profile cutaway is interactive, isolated, and readable at both w
     "motion-first-run",
     async (app) => {
       await app.waitForText(en.welcome.title);
+      const assertLayoutCentered = async () => {
+        const geometry = await app.execute(`
+          const dialog = document.querySelector('[data-slot="dialog-content"]');
+          const rect = dialog.getBoundingClientRect();
+          return {
+            translate: getComputedStyle(dialog).translate,
+            x: rect.x + rect.width / 2,
+            y: rect.y + rect.height / 2,
+            viewportX: innerWidth / 2,
+            viewportY: innerHeight / 2,
+          };
+        `);
+        assert.equal(
+          geometry.translate,
+          "none",
+          "centering must not translate the dialog's rendered text layer",
+        );
+        assert.ok(Math.abs(geometry.x - geometry.viewportX) <= 1);
+        assert.ok(Math.abs(geometry.y - geometry.viewportY) <= 1);
+      };
       await resize(app, 1080, 900);
+      await assertLayoutCentered();
       await exerciseIsolation(app);
       await app.capture("onboarding-isolation-wide");
       await resize(app, 640, 480);
+      await assertLayoutCentered();
       await assertContained(app, '[role="dialog"]');
       await app.clickSelector(`${slot("welcome-features")} summary`);
       await app.waitFor(

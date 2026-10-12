@@ -224,60 +224,64 @@ function DialogContent({
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay key="dialog-overlay" />
-      <DialogPrimitive.Content
-        key="dialog-content"
-        asChild
-        forceMount
-        onOpenAutoFocus={onOpenAutoFocus}
-        onCloseAutoFocus={onCloseAutoFocus}
-        onEscapeKeyDown={(event) => {
-          if (!dismissible) event.preventDefault();
-          onEscapeKeyDown?.(event);
-        }}
-        onPointerDownOutside={onPointerDownOutside}
-        onInteractOutside={(event) => {
-          if (!dismissible) {
-            event.preventDefault();
-            return;
-          }
-          const target = event.target as HTMLElement | null;
-          if (target?.closest('[data-window-drag-area="true"]')) {
-            event.preventDefault();
-          }
-          onInteractOutside?.(event);
-        }}
-      >
-        <motion.div
+      {/* Layout centering avoids a fractional translated compositing layer,
+          which blurs dialog text on some WebKitGTK renderers. */}
+      <div className="pointer-events-none fixed inset-0 z-10000 grid place-items-center">
+        <DialogPrimitive.Content
           key="dialog-content"
-          data-slot="dialog-content"
-          // Content is readable on the first frame, even in an occluded webview.
-          // Keyboard navigation skips the settle; closing unmounts immediately.
-          style={{ transformOrigin: "center" }}
-          initial={animateEntry ? { scale: 0.985 } : false}
-          animate={{ scale: 1 }}
-          transition={
-            animateEntry
-              ? (transition ?? { duration: 0.2, ease: MOTION_EASE_OUT })
-              : { duration: 0 }
-          }
-          className={cn(
-            // w-[calc(100%-2rem)] (not w-full + max-w) keeps the 1rem window
-            // gutter even when callers override max-w-*: tailwind-merge drops
-            // a base max-w in favor of the caller's, but leaves width alone.
-            "fixed top-[50%] left-[50%] z-10000 grid max-h-[calc(100vh-3rem)] w-[calc(100%-2rem)] max-w-lg -translate-[50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6",
-            className,
-          )}
-          {...props}
+          asChild
+          forceMount
+          onOpenAutoFocus={onOpenAutoFocus}
+          onCloseAutoFocus={onCloseAutoFocus}
+          onEscapeKeyDown={(event) => {
+            if (!dismissible) event.preventDefault();
+            onEscapeKeyDown?.(event);
+          }}
+          onPointerDownOutside={onPointerDownOutside}
+          onInteractOutside={(event) => {
+            if (!dismissible) {
+              event.preventDefault();
+              return;
+            }
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('[data-window-drag-area="true"]')) {
+              event.preventDefault();
+            }
+            onInteractOutside?.(event);
+          }}
         >
-          {children}
-          {!hideClose && dismissible && (
-            <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-              <RxCross2 />
-              <span className="sr-only">{t("common.buttons.close")}</span>
-            </DialogPrimitive.Close>
-          )}
-        </motion.div>
-      </DialogPrimitive.Content>
+          <motion.div
+            key="dialog-content"
+            data-slot="dialog-content"
+            // Content is readable on the first frame, even in an occluded webview.
+            // Keyboard navigation skips the settle; closing unmounts immediately.
+            style={{ transformOrigin: "center" }}
+            initial={animateEntry ? { scale: 0.985 } : false}
+            animate={{ scale: 1 }}
+            transition={
+              animateEntry
+                ? (transition ?? { duration: 0.2, ease: MOTION_EASE_OUT })
+                : { duration: 0 }
+            }
+            className={cn(
+              // w-[calc(100%-2rem)] (not w-full + max-w) keeps the 1rem window
+              // gutter even when callers override max-w-*: tailwind-merge drops
+              // a base max-w in favor of the caller's, but leaves width alone.
+              "pointer-events-auto relative grid max-h-[calc(100vh-3rem)] w-[calc(100%-2rem)] max-w-lg gap-4 overflow-y-auto rounded-lg border bg-background p-6",
+              className,
+            )}
+            {...props}
+          >
+            {children}
+            {!hideClose && dismissible && (
+              <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+                <RxCross2 />
+                <span className="sr-only">{t("common.buttons.close")}</span>
+              </DialogPrimitive.Close>
+            )}
+          </motion.div>
+        </DialogPrimitive.Content>
+      </div>
     </DialogPortal>
   );
 }
