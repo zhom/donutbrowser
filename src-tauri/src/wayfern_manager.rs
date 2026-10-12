@@ -2709,7 +2709,6 @@ impl WayfernManager {
       "--no-default-browser-check".to_string(),
       "--disable-background-mode".to_string(),
       "--disable-component-update".to_string(),
-      "--disable-background-timer-throttling".to_string(),
       "--crash-server-url=".to_string(),
       "--disable-updater".to_string(),
       "--hide-crash-restore-bubble".to_string(),
