@@ -15,6 +15,7 @@ import {
   LuTriangleAlert,
   LuUser,
 } from "react-icons/lu";
+import { AccountSyncServer } from "@/components/account-sync-server";
 import {
   formatDate,
   formatHours,
@@ -136,12 +137,11 @@ export function AccountPage({
     useState<ConnectionStatus>("unknown");
 
   const hasConfig = Boolean(serverUrl && token);
-  // Self-hosted and cloud are mutually exclusive — both share the same sync
-  // engine and a profile can't be sync'd to two backends. The tab trigger is
-  // disabled here AND the backend rejects mixed state (see `save_sync_settings`
-  // / `cloud_logout`), so even if someone bypasses the UI we don't end up
-  // with split-brain.
-  const selfHostedDisabled = isLoggedIn || isCloudLoading;
+  // Signed out, a server takes its shared token. Signed in, the account signs
+  // in to its own server instead (`AccountSyncServer`); the backend refuses a
+  // shared token then (`save_sync_settings`), so one device never syncs one
+  // profile to two places.
+  const selfHostedDisabled = isCloudLoading;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -358,11 +358,6 @@ export function AccountPage({
                 <AnimatedTabsTrigger
                   value="self-hosted"
                   disabled={selfHostedDisabled}
-                  title={
-                    selfHostedDisabled
-                      ? t("account.selfHosted.disabledWhileLoggedIn")
-                      : undefined
-                  }
                 >
                   {t("account.tabs.selfHosted")}
                 </AnimatedTabsTrigger>
@@ -582,16 +577,12 @@ export function AccountPage({
                 value="self-hosted"
                 className="@container mt-4"
               >
-                {selfHostedDisabled ? (
-                  // Defensive: the tab trigger is disabled while the user is
-                  // logged in, so this branch shouldn't be reachable via UI —
-                  // but if state flips mid-render (e.g. a cloud login finishes
-                  // while the tab is open), show the explanation instead of
-                  // a silent empty card.
-                  <p className="text-sm text-muted-foreground">
-                    {t("account.selfHosted.disabledWhileLoggedIn")}
-                  </p>
-                ) : (
+                {isLoggedIn && user ? (
+                  <AccountSyncServer
+                    paid={getEntitlements(user).cloudBackup}
+                    teamSeat={Boolean(user.teamId)}
+                  />
+                ) : selfHostedDisabled ? null : (
                   <SettingsPanel className="flex flex-col gap-4">
                     <div className="flex items-start gap-3">
                       <FeatureIcon active={connectionStatus === "connected"}>

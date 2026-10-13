@@ -113,7 +113,7 @@ async-socks5 = "0.6"
 # Wayfern CDP integration
 tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
-serde_yaml = "0.9"
+yaml-rust2 = { version = "0.13", default-features = false }
 thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"

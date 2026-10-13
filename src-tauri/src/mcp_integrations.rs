@@ -32,6 +32,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml_edit::{DocumentMut, Item, Table};
+use yaml_rust2::yaml::Hash as YamlMap;
+use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};
 
 pub const SERVER_NAME: &str = "donut-browser";
 const REMOTE_MCP_PATH: &str = "/api/mcp";
@@ -745,14 +747,67 @@ fn toml_item_to_json(item: &Item) -> serde_json::Value {
   }
 }
 
-fn entry_to_yaml(entry: &Entry) -> Result<serde_yaml::Value, String> {
-  let mut mapping = serde_yaml::Mapping::new();
-  for (key, value) in entry {
-    let yaml =
-      serde_yaml::to_value(value).map_err(|e| format!("Failed to convert to YAML: {e}"))?;
-    mapping.insert(serde_yaml::Value::String(key.to_string()), yaml);
+fn json_to_yaml(value: &serde_json::Value) -> Yaml {
+  match value {
+    serde_json::Value::Null => Yaml::Null,
+    serde_json::Value::Bool(b) => Yaml::Boolean(*b),
+    serde_json::Value::Number(n) => match n.as_i64() {
+      Some(i) => Yaml::Integer(i),
+      None => Yaml::Real(n.to_string()),
+    },
+    serde_json::Value::String(s) => Yaml::String(s.clone()),
+    serde_json::Value::Array(items) => Yaml::Array(items.iter().map(json_to_yaml).collect()),
+    serde_json::Value::Object(map) => Yaml::Hash(
+      map
+        .iter()
+        .map(|(k, v)| (Yaml::String(k.clone()), json_to_yaml(v)))
+        .collect(),
+    ),
   }
-  Ok(serde_yaml::Value::Mapping(mapping))
+}
+
+/// A YAML value as plain JSON, for inspection. Keys that are not strings and
+/// values JSON cannot hold (aliases, bad values) read as null.
+fn yaml_to_json(value: &Yaml) -> serde_json::Value {
+  match value {
+    Yaml::Boolean(b) => serde_json::Value::Bool(*b),
+    Yaml::Integer(i) => serde_json::Value::from(*i),
+    Yaml::Real(text) => text
+      .parse::<f64>()
+      .ok()
+      .and_then(serde_json::Number::from_f64)
+      .map(serde_json::Value::Number)
+      .unwrap_or(serde_json::Value::Null),
+    Yaml::String(s) => serde_json::Value::String(s.clone()),
+    Yaml::Array(items) => serde_json::Value::Array(items.iter().map(yaml_to_json).collect()),
+    Yaml::Hash(map) => serde_json::Value::Object(
+      map
+        .iter()
+        .filter_map(|(k, v)| Some((k.as_str()?.to_string(), yaml_to_json(v))))
+        .collect(),
+    ),
+    _ => serde_json::Value::Null,
+  }
+}
+
+fn entry_to_yaml(entry: &Entry) -> Yaml {
+  Yaml::Hash(
+    entry
+      .iter()
+      .map(|(key, value)| (Yaml::String(key.to_string()), json_to_yaml(value)))
+      .collect(),
+  )
+}
+
+/// The mapping at `key` in a YAML mapping, if it is one.
+fn yaml_child<'a>(root: &'a mut Yaml, key: &str) -> Option<&'a mut YamlMap> {
+  match root {
+    Yaml::Hash(map) => match map.get_mut(&Yaml::String(key.to_string())) {
+      Some(Yaml::Hash(child)) => Some(child),
+      _ => None,
+    },
+    _ => None,
+  }
 }
 
 /// A parsed config file that can be edited without disturbing what the user
@@ -760,7 +815,7 @@ fn entry_to_yaml(entry: &Entry) -> Result<serde_yaml::Value, String> {
 enum Document {
   Json(CstRootNode),
   Toml(DocumentMut),
-  Yaml(serde_yaml::Value),
+  Yaml(Yaml),
 }
 
 impl Document {
@@ -771,12 +826,11 @@ impl Document {
       ),
       ConfigFormat::Toml => Self::Toml(content.parse::<DocumentMut>().map_err(|e| e.to_string())?),
       ConfigFormat::Yaml => {
-        let value = if content.trim().is_empty() {
-          serde_yaml::Value::Null
-        } else {
-          serde_yaml::from_str(content).map_err(|e| e.to_string())?
-        };
-        Self::Yaml(value)
+        let mut documents = YamlLoader::load_from_str(content).map_err(|e| e.to_string())?;
+        if documents.len() > 1 {
+          return Err("the file holds more than one YAML document".to_string());
+        }
+        Self::Yaml(documents.pop().unwrap_or(Yaml::Null))
       }
     })
   }
@@ -816,20 +870,13 @@ impl Document {
             .collect()
         })
         .unwrap_or_default(),
-      Self::Yaml(root) => root
-        .get(key)
-        .and_then(serde_yaml::Value::as_mapping)
-        .map(|servers| {
-          servers
-            .iter()
-            .filter_map(|(name, value)| {
-              let name = name.as_str()?.to_string();
-              let value = serde_json::to_value(value).ok()?;
-              Some((name, value))
-            })
-            .collect()
-        })
-        .unwrap_or_default(),
+      Self::Yaml(root) => match &root[key] {
+        Yaml::Hash(servers) => servers
+          .iter()
+          .filter_map(|(name, value)| Some((name.as_str()?.to_string(), yaml_to_json(value))))
+          .collect(),
+        _ => Vec::new(),
+      },
     }
   }
 
@@ -869,24 +916,21 @@ impl Document {
       }
       Self::Yaml(root) => {
         if root.is_null() {
-          *root = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+          *root = Yaml::Hash(YamlMap::new());
         }
-        let root_map = root
-          .as_mapping_mut()
-          .ok_or("the file's top level is not a YAML mapping")?;
+        let Yaml::Hash(root_map) = root else {
+          return Err("the file's top level is not a YAML mapping".to_string());
+        };
         let servers = root_map
-          .entry(serde_yaml::Value::String(key.to_string()))
-          .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+          .entry(Yaml::String(key.to_string()))
+          .or_insert_with(|| Yaml::Hash(YamlMap::new()));
         if servers.is_null() {
-          *servers = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+          *servers = Yaml::Hash(YamlMap::new());
         }
-        servers
-          .as_mapping_mut()
-          .ok_or_else(|| format!("\"{key}\" is not a YAML mapping"))?
-          .insert(
-            serde_yaml::Value::String(SERVER_NAME.to_string()),
-            entry_to_yaml(entry)?,
-          );
+        let Yaml::Hash(servers) = servers else {
+          return Err(format!("\"{key}\" is not a YAML mapping"));
+        };
+        servers.insert(Yaml::String(SERVER_NAME.to_string()), entry_to_yaml(entry));
       }
     }
     Ok(())
@@ -911,12 +955,9 @@ impl Document {
         }
       }
       Self::Yaml(root) => {
-        if let Some(servers) = root
-          .get_mut(key)
-          .and_then(serde_yaml::Value::as_mapping_mut)
-        {
+        if let Some(servers) = yaml_child(root, key) {
           for name in names {
-            servers.remove(name.as_str());
+            servers.remove(&Yaml::String(name.clone()));
           }
         }
       }
@@ -928,7 +969,13 @@ impl Document {
       Self::Json(root) => Ok(root.to_string()),
       Self::Toml(doc) => Ok(doc.to_string()),
       Self::Yaml(root) => {
-        serde_yaml::to_string(root).map_err(|e| format!("Failed to serialize YAML: {e}"))
+        let mut text = String::new();
+        YamlEmitter::new(&mut text)
+          .dump(root)
+          .map_err(|e| format!("Failed to serialize YAML: {e}"))?;
+        // The emitter opens with a document marker the file never had.
+        let body = text.strip_prefix("---\n").unwrap_or(&text);
+        Ok(format!("{body}\n"))
       }
     }
   }

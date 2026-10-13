@@ -452,6 +452,10 @@
     "license": "MIT"
   },
   {
+    "name": "arraydeque",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
     "name": "arrayref",
     "license": "BSD-2-Clause"
   },
@@ -2520,10 +2524,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "serde_yaml",
-    "license": "Apache-2.0 OR MIT"
-  },
-  {
     "name": "serialize-to-javascript",
     "license": "Apache-2.0 OR MIT"
   },
@@ -2984,10 +2984,6 @@
     "license": "Apache-2.0 OR MIT"
   },
   {
-    "name": "unsafe-libyaml",
-    "license": "MIT"
-  },
-  {
     "name": "untrusted",
     "license": "ISC"
   },
@@ -3262,6 +3258,10 @@
   {
     "name": "y4m",
     "license": "MIT"
+  },
+  {
+    "name": "yaml-rust2",
+    "license": "Apache-2.0 OR MIT"
   },
   {
     "name": "yoke",
