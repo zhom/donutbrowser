@@ -74,9 +74,7 @@ Start any profile from the local REST API on `127.0.0.1:10108`, then connect Pla
 <!-- install-links-start -->
 ### macOS
 
-| | Apple Silicon | Intel |
-|---|---|---|
-| **DMG** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.33.0/Donut_0.33.0_aarch64.dmg) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.33.0/Donut_0.33.0_x64.dmg) |
+[Download DMG (Apple Silicon)](https://github.com/zhom/donutbrowser/releases/download/v0.33.0/Donut_0.33.0_aarch64.dmg)
 
 Or install via Homebrew:
 
