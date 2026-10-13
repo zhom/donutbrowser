@@ -85,11 +85,6 @@ jobs:
             arch: "aarch64"
             target: "aarch64-apple-darwin"
             pkg_target: "latest-macos-arm64"
-          - platform: "macos-latest"
-            args: "--target x86_64-apple-darwin --verbose"
-            arch: "x86_64"
-            target: "x86_64-apple-darwin"
-            pkg_target: "latest-macos-x64"
           - platform: "ubuntu-22.04"
             args: "--target x86_64-unknown-linux-gnu --verbose"
             arch: "x86_64"
@@ -422,7 +417,6 @@ jobs:
 
           # Rename versioned filenames to stable nightly names
           for f in Donut_*_aarch64.dmg; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.dmg; done
-          for f in Donut_*_x64.dmg; do [ -f "$f" ] && mv "$f" Donut_nightly_x64.dmg; done
           for f in Donut_*_x64-setup.exe; do [ -f "$f" ] && mv "$f" Donut_nightly_x64-setup.exe; done
           for f in Donut_*_aarch64.AppImage; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.AppImage; done
           for f in Donut_*_amd64.AppImage; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.AppImage; done
@@ -431,13 +425,12 @@ jobs:
           for f in Donut-*.x86_64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_x86_64.rpm; done
           for f in Donut-*.aarch64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.rpm; done
           for f in Donut_*_aarch64.app.tar.gz; do [ -f "$f" ] && mv "$f" Donut_aarch64.app.tar.gz; done
-          for f in Donut_*_x64.app.tar.gz; do [ -f "$f" ] && mv "$f" Donut_x64.app.tar.gz; done
           for f in Donut_*_x86_64.flatpak; do [ -f "$f" ] && mv "$f" Donut_nightly_x86_64.flatpak; done
           for f in Donut_*_amd64.snap; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.snap; done
 
           # Checksums for the rolling release (renamed filenames), restricted
           # to exactly the assets uploaded below.
-          sha256sum Donut_nightly_* Donut_aarch64.app.tar.gz Donut_x64.app.tar.gz > SHA256SUMS.txt
+          sha256sum Donut_nightly_* Donut_aarch64.app.tar.gz > SHA256SUMS.txt
           cd "$GITHUB_WORKSPACE"
 
           # Delete existing rolling nightly release and tag
@@ -448,7 +441,6 @@ jobs:
           gh release create nightly \
             "$ASSETS_DIR"/Donut_nightly_* \
             "$ASSETS_DIR"/Donut_aarch64.app.tar.gz \
-            "$ASSETS_DIR"/Donut_x64.app.tar.gz \
             "$ASSETS_DIR"/SHA256SUMS.txt \
             --title "Donut Browser Nightly" \
             --notes-file /tmp/nightly-notes.md \
