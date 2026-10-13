@@ -603,6 +603,15 @@ pub struct CookieBotUsage {
 
 // --- Client-side preconditions ---------------------------------------------
 
+/// [`bot_precondition`] for this device as it is now: also refused while the
+/// account syncs with its own server, which the bot's hosts cannot reach.
+pub fn run_precondition(profile: &BrowserProfile) -> Result<(), String> {
+  if let Some(refusal) = crate::sync::account_server::cloud_run_refusal() {
+    return Err(refusal);
+  }
+  bot_precondition(profile, &exit_reachability(profile))
+}
+
 /// Whether this profile could ever be warmed by the bot.
 ///
 /// The server is authoritative — it re-checks all of this and owns the parts

@@ -1160,3 +1160,63 @@ test("the connection check fails a server whose storage host this device cannot 
     await app.close();
   }
 });
+
+// A paid account syncs with its own server only while signed in, with a token
+// the Donut API binds to that server's address. The suites cannot sign in, so
+// this covers what a device sees on its own: the address the server names on
+// /readyz, and the refusals that keep a signed-out device from storing one.
+test("an own sync server is read from /readyz and needs a signed-in account", async () => {
+  const app = appFromEnvironment("sync-account-server");
+  const accountServer = createServer((request, response) => {
+    if (request.url === "/readyz") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          status: "ready",
+          s3: true,
+          accountUrl: "https://sync.example.test",
+        }),
+      );
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise((resolve) => accountServer.listen(0, "127.0.0.1", resolve));
+  const accountServerUrl = `http://127.0.0.1:${accountServer.address().port}`;
+
+  try {
+    await app.start();
+
+    const check = await app.invoke("check_sync_server_connection", {
+      serverUrl: accountServerUrl,
+    });
+    assert.equal(check.server_reachable, true);
+    assert.equal(check.account_url, "https://sync.example.test");
+
+    assert.equal(await app.invoke("get_account_sync_server"), null);
+    const refused = await app.invokeError("set_account_sync_server", {
+      serverUrl: accountServerUrl,
+    });
+    assert.match(refused, /"code":"ACCOUNT_SYNC_SIGN_IN_REQUIRED"/);
+    // Going back to Donut cloud is always allowed, and stores nothing.
+    assert.equal(
+      await app.invoke("set_account_sync_server", { serverUrl: null }),
+      null,
+    );
+    assert.equal(await app.invoke("get_account_sync_server"), null);
+
+    // A settings save from the frontend never writes the field.
+    const settings = await app.invoke("get_app_settings");
+    await app.invoke("save_app_settings", {
+      settings: { ...settings, account_sync_server_url: accountServerUrl },
+    });
+    assert.equal(await app.invoke("get_account_sync_server"), null);
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    await new Promise((resolve) => accountServer.close(resolve));
+    await app.close();
+  }
+});

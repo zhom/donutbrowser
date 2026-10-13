@@ -574,12 +574,23 @@ impl SyncEngine {
   pub async fn create_from_settings(app_handle: &tauri::AppHandle) -> Result<Self, String> {
     // Cloud auth takes priority
     if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
-      let url = crate::cloud_auth::CLOUD_SYNC_URL.to_string();
-      let token = crate::cloud_auth::CLOUD_AUTH
-        .get_or_refresh_sync_token()
-        .await
-        .map_err(|e| format!("Failed to get cloud sync token: {e}"))?
-        .ok_or_else(|| "Cloud sync token not available".to_string())?;
+      let (url, token) = match super::account_server::configured().await {
+        Some(server) => {
+          let token = crate::cloud_auth::CLOUD_AUTH
+            .server_sync_token(&server)
+            .await
+            .map_err(|e| format!("Failed to get own server sync token: {e}"))?;
+          (server, token)
+        }
+        None => {
+          let token = crate::cloud_auth::CLOUD_AUTH
+            .get_or_refresh_sync_token()
+            .await
+            .map_err(|e| format!("Failed to get cloud sync token: {e}"))?
+            .ok_or_else(|| "Cloud sync token not available".to_string())?;
+          (crate::cloud_auth::CLOUD_SYNC_URL.to_string(), token)
+        }
+      };
       let mut engine = Self::new(url, token);
       engine.read_only = crate::team_roles::is_read_only();
       return Ok(engine);
@@ -3923,7 +3934,10 @@ async fn apply_profile_sync_mode(
     );
   }
 
-  if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
+  // The cloud counts what it stores; an own server counts for itself.
+  if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await
+    && super::account_server::configured().await.is_none()
+  {
     let sync_count = profile_manager
       .list_profiles()
       .map(|profiles| profiles.iter().filter(|p| p.is_sync_enabled()).count())

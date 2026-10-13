@@ -2117,7 +2117,7 @@ async fn save_cookie_bot_schedule(
   // Refused here rather than when the run is due: a profile that can never be
   // warmed should never reach an enrolment, an hour of quota or a leased host.
   let profile = cookie_bot_profile(&profile_id)?;
-  cookie_bot::bot_precondition(&profile, &cookie_bot::exit_reachability(&profile))?;
+  cookie_bot::run_precondition(&profile)?;
   // The frontend sends the user's choices; the profile facts the server refuses
   // a run on are stamped here, from the profile itself, so a caller cannot
   // assert them.
@@ -2178,7 +2178,7 @@ async fn run_cookie_bot_now(
   max_minutes: Option<u32>,
 ) -> Result<cookie_bot::CookieBotRunStarted, String> {
   let profile = cookie_bot_profile(&profile_id)?;
-  cookie_bot::bot_precondition(&profile, &cookie_bot::exit_reachability(&profile))?;
+  cookie_bot::run_precondition(&profile)?;
   cookie_bot::run_now(&profile_id, max_minutes)
     .await
     .map_err(|e| cookie_bot_error("run start", e))
@@ -3541,6 +3541,8 @@ pub fn run_with_builder(
       get_sync_settings,
       save_sync_settings,
       check_sync_server_connection,
+      sync::account_server::get_account_sync_server,
+      sync::account_server::set_account_sync_server,
       set_profile_sync_mode,
       cancel_profile_sync,
       request_profile_sync,

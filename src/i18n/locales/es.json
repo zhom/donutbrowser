@@ -830,7 +830,8 @@
       "logout": "Cerrar Sesión",
       "logoutConfirm": "¿Estás seguro de que deseas cerrar sesión? La sincronización en la nube se detendrá.",
       "loginSuccess": "¡Sesión iniciada exitosamente!",
-      "logoutSuccess": "Sesión cerrada exitosamente."
+      "logoutSuccess": "Sesión cerrada exitosamente.",
+      "server": "Servidor"
     },
     "team": {
       "title": "Equipo",
@@ -2684,7 +2685,16 @@
     "snapshotNotFound": "Este punto de restauración ya no existe.",
     "restorePointsUnsupported": "El servidor de sincronización es demasiado antiguo para los puntos de restauración. Actualízalo.",
     "restorePointFailed": "El punto de restauración falló: {{detail}}",
-    "restorePointsNeedSync": "Los puntos de restauración necesitan la sincronización activada en este perfil."
+    "restorePointsNeedSync": "Los puntos de restauración necesitan la sincronización activada en este perfil.",
+    "accountSyncSignInRequired": "Inicia sesión en tu cuenta de Donut para usar tu propio servidor de sincronización.",
+    "accountSyncPlanRequired": "Tu propio servidor de sincronización requiere un plan de pago.",
+    "syncServerUrlInvalid": "Introduce la dirección completa del servidor, por ejemplo https://sync.example.com.",
+    "syncServerUnreachable": "No se pudo conectar con el servidor de sincronización.",
+    "syncServerStorageUnreachable": "El servidor de sincronización responde, pero este equipo no puede conectarse a su almacenamiento en {{endpoint}}.",
+    "syncServerNoAccounts": "Este servidor no acepta cuentas de Donut. Define SYNC_PUBLIC_URL en el servidor.",
+    "syncServerAddressMismatch": "La dirección del servidor es {{address}}. Introduce esa dirección.",
+    "remoteNeedsDonutSync": "Las sesiones remotas y Cookie Bot obtienen los perfiles de la sincronización con Donut cloud. Este equipo se sincroniza con tu propio servidor.",
+    "accountSyncUnavailable": "Donut todavía no puede iniciar sesión en tu propio servidor. Inténtalo más tarde."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -2780,7 +2790,6 @@
     "selfHosted": {
       "title": "Servidor de sincronización autoalojado",
       "description": "Conecta Donut a tu propio servidor donut-sync para sincronizar perfiles, proxies, grupos y extensiones sin usar la nube alojada.",
-      "disabledWhileLoggedIn": "La sincronización autoalojada no está disponible mientras estás conectado a tu cuenta de Donut. Cierra sesión para usar un servidor personalizado.",
       "connectionStatus": "Conexión:",
       "statusUnknown": "Sin probar",
       "testConnection": "Probar conexión",
@@ -2789,7 +2798,20 @@
     "deviceOrdinal": "{{ordinal}} de {{count}}",
     "automationPrimaryOnly": "La automatización del navegador solo funciona en tu dispositivo principal (Dispositivo 1). Cierra sesión allí para usarla aquí.",
     "automationActiveHere": "La automatización del navegador está activa en este dispositivo.",
-    "viewTeamUsage": "Ver el uso del equipo"
+    "viewTeamUsage": "Ver el uso del equipo",
+    "ownServer": {
+      "title": "Tu propio servidor de sincronización",
+      "description": "Sincroniza esta cuenta con un servidor donut-sync que gestionas tú, no con Donut cloud. El límite de perfiles de tu plan y los roles y el acceso por grupos de tu equipo no cambian.",
+      "current": "Sincronizando con {{server}}",
+      "currentCloud": "Sincronizando con Donut cloud",
+      "donutCloud": "Donut cloud",
+      "useDonutCloud": "Usar Donut cloud",
+      "accountsOn": "Este servidor acepta cuentas de Donut.",
+      "cloudOnly": "Las sesiones remotas y Cookie Bot necesitan la sincronización con Donut cloud.",
+      "teamNote": "Todos los miembros de tu equipo deben usar el mismo servidor.",
+      "saved": "Servidor de sincronización guardado.",
+      "backToCloud": "Sincronizando de nuevo con Donut cloud."
+    }
   },
   "shortcutsPage": {
     "title": "Atajos de teclado",

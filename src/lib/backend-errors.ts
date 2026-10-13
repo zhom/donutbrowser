@@ -56,6 +56,15 @@ export type BackendErrorCode =
   | "COOKIE_IMPORT_REMOTE_SESSION"
   | "COOKIE_IMPORT_NO_COOKIES"
   | "SELF_HOSTED_REQUIRES_LOGOUT"
+  | "ACCOUNT_SYNC_SIGN_IN_REQUIRED"
+  | "ACCOUNT_SYNC_PLAN_REQUIRED"
+  | "ACCOUNT_SYNC_UNAVAILABLE"
+  | "SYNC_SERVER_URL_INVALID"
+  | "SYNC_SERVER_UNREACHABLE"
+  | "SYNC_SERVER_STORAGE_UNREACHABLE"
+  | "SYNC_SERVER_NO_ACCOUNTS"
+  | "SYNC_SERVER_ADDRESS_MISMATCH"
+  | "REMOTE_NEEDS_DONUT_SYNC"
   | "PROXY_NOT_FOUND"
   | "GROUP_NOT_FOUND"
   | "GROUP_ALREADY_EXISTS"
@@ -487,6 +496,28 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.cookieImportNoCookies");
     case "SELF_HOSTED_REQUIRES_LOGOUT":
       return t("backendErrors.selfHostedRequiresLogout");
+    case "ACCOUNT_SYNC_SIGN_IN_REQUIRED":
+      return t("backendErrors.accountSyncSignInRequired");
+    case "ACCOUNT_SYNC_PLAN_REQUIRED":
+      return t("backendErrors.accountSyncPlanRequired");
+    case "ACCOUNT_SYNC_UNAVAILABLE":
+      return t("backendErrors.accountSyncUnavailable");
+    case "SYNC_SERVER_URL_INVALID":
+      return t("backendErrors.syncServerUrlInvalid");
+    case "SYNC_SERVER_UNREACHABLE":
+      return t("backendErrors.syncServerUnreachable");
+    case "SYNC_SERVER_STORAGE_UNREACHABLE":
+      return t("backendErrors.syncServerStorageUnreachable", {
+        endpoint: parsed.params?.endpoint ?? "",
+      });
+    case "SYNC_SERVER_NO_ACCOUNTS":
+      return t("backendErrors.syncServerNoAccounts");
+    case "SYNC_SERVER_ADDRESS_MISMATCH":
+      return t("backendErrors.syncServerAddressMismatch", {
+        address: parsed.params?.address ?? "",
+      });
+    case "REMOTE_NEEDS_DONUT_SYNC":
+      return t("backendErrors.remoteNeedsDonutSync");
     case "PROXY_NOT_FOUND":
       return t("backendErrors.proxyNotFound");
     case "GROUP_NOT_FOUND":

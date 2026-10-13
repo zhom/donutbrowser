@@ -76,6 +76,7 @@ export function SyncConfigDialog({
   } = useCloudAuth();
 
   const [activeTab, setActiveTab] = useState<string>("cloud");
+  const [accountServer, setAccountServer] = useState<string | null>(null);
   const [, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<
@@ -146,6 +147,11 @@ export function SyncConfigDialog({
     if (isOpen) {
       setConnectionStatus("unknown");
       void loadSettings();
+      void invoke<string | null>("get_account_sync_server")
+        .then(setAccountServer)
+        .catch(() => {
+          setAccountServer(null);
+        });
       void invoke<ProxyUsage | null>("cloud_get_proxy_usage")
         .then(setLiveProxyUsage)
         .catch(() => {
@@ -307,6 +313,14 @@ export function SyncConfigDialog({
                 <span className="capitalize">
                   {effectivePlanOf(user)}
                   {user.planPeriod ? ` (${user.planPeriod})` : ""}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">
+                  {t("sync.cloud.server")}
+                </span>
+                <span className="truncate">
+                  {accountServer ?? t("account.ownServer.donutCloud")}
                 </span>
               </div>
               <div className="flex justify-between">

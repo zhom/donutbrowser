@@ -41,6 +41,10 @@ pub struct SyncServerCheck {
   pub storage_reachable: Option<bool>,
   /// Why the storage probe failed, for the log and the error surface.
   pub storage_error: Option<String>,
+  /// The address Donut accounts sign in to the server with, when it lets
+  /// them (`SYNC_PUBLIC_URL`).
+  #[serde(default)]
+  pub account_url: Option<String>,
 }
 
 impl SyncServerCheck {
@@ -62,6 +66,8 @@ struct ReadyzBody {
   s3: Option<bool>,
   #[serde(default, rename = "storageEndpoint")]
   storage_endpoint: Option<String>,
+  #[serde(default, rename = "accountUrl")]
+  account_url: Option<String>,
 }
 
 fn probe_client() -> reqwest::Client {
@@ -113,6 +119,7 @@ pub async fn check_sync_server(server_url: &str) -> SyncServerCheck {
 
   let body = readyz.json::<ReadyzBody>().await.ok();
   check.storage_ready = body.as_ref().and_then(|b| b.s3);
+  check.account_url = body.as_ref().and_then(|b| b.account_url.clone());
   check.storage_endpoint = body.and_then(|b| b.storage_endpoint);
 
   if let Some(endpoint) = check.storage_endpoint.clone() {
@@ -226,6 +233,7 @@ mod tests {
       storage_endpoint: Some("http://minio:9000".to_string()),
       storage_reachable: Some(false),
       storage_error: Some("connection failed: dns error".to_string()),
+      account_url: None,
     };
     assert!(!check.is_usable());
   }
@@ -238,6 +246,7 @@ mod tests {
       storage_endpoint: Some("http://localhost:9101".to_string()),
       storage_reachable: Some(true),
       storage_error: None,
+      account_url: None,
     };
     assert!(check.is_usable());
   }
@@ -253,6 +262,7 @@ mod tests {
       storage_endpoint: None,
       storage_reachable: None,
       storage_error: None,
+      account_url: None,
     };
     assert!(check.is_usable());
   }
@@ -265,6 +275,20 @@ mod tests {
       ..Default::default()
     };
     assert!(!check.is_usable());
+  }
+
+  #[test]
+  fn readyz_names_the_account_address() {
+    let body: ReadyzBody = serde_json::from_str(
+      r#"{"status":"ready","s3":true,"accountUrl":"https://sync.example.com"}"#,
+    )
+    .unwrap();
+    assert_eq!(
+      body.account_url.as_deref(),
+      Some("https://sync.example.com")
+    );
+    let older: ReadyzBody = serde_json::from_str(r#"{"status":"ready","s3":true}"#).unwrap();
+    assert_eq!(older.account_url, None);
   }
 
   #[test]

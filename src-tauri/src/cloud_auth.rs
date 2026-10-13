@@ -27,6 +27,13 @@ const MAX_RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
 
 static ACCESS_TOKEN_REFRESH: Streak = Streak::new(module_path!(), "Access token refresh");
 static SYNC_TOKEN_FETCH: Streak = Streak::new(module_path!(), "Sync token fetch");
+static SERVER_SYNC_TOKEN_FETCH: Streak = Streak::new(module_path!(), "Own server sync token fetch");
+
+/// Tokens for the customer's own sync server, by address. In memory only:
+/// they last minutes and cost one request to replace.
+static SERVER_SYNC_TOKENS: std::sync::LazyLock<
+  std::sync::Mutex<std::collections::HashMap<String, String>>,
+> = std::sync::LazyLock::new(Default::default);
 static PROFILE_REFRESH: Streak = Streak::new(module_path!(), "Cloud profile refresh");
 static PROXY_CONFIG_FETCH: Streak = Streak::new(module_path!(), "Cloud proxy config fetch");
 static PROXY_USAGE_FETCH: Streak = Streak::new(module_path!(), "Cloud proxy usage fetch");
@@ -557,7 +564,8 @@ impl CloudAuthManager {
 
   // --- JWT expiry check ---
 
-  fn jwt_expiry(token: &str) -> Option<i64> {
+  /// A JWT's claims, unverified.
+  fn jwt_claims(token: &str) -> Option<serde_json::Value> {
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
       return None;
@@ -572,8 +580,21 @@ impl CloudAuthManager {
       }
     };
 
-    let json: serde_json::Value = serde_json::from_slice(&payload).ok()?;
-    json.get("exp").and_then(|v| v.as_i64())
+    serde_json::from_slice(&payload).ok()
+  }
+
+  fn jwt_expiry(token: &str) -> Option<i64> {
+    Self::jwt_claims(token)?.get("exp").and_then(|v| v.as_i64())
+  }
+
+  /// Whether `token` is one the Donut API bound to `server`. Anything else,
+  /// such as a token for Donut cloud from an API that does not know the
+  /// `server` field yet, must never be sent to a third party's server.
+  fn is_server_sync_token_for(token: &str, server: &str) -> bool {
+    Self::jwt_claims(token).is_some_and(|claims| {
+      claims.get("scope").and_then(|v| v.as_str()) == Some("server-sync")
+        && claims.get("aud").and_then(|v| v.as_str()) == Some(server)
+    })
   }
 
   fn jwt_expires_within(token: &str, margin_secs: i64, now: i64) -> bool {
@@ -1148,7 +1169,86 @@ impl CloudAuthManager {
     Ok(Some(sync_token))
   }
 
+  /// A token for the customer's own donut-sync at `server`, which the Donut
+  /// API binds to that one address (`sync::account_server`).
+  pub async fn server_sync_token(&self, server: &str) -> Result<String, String> {
+    if !self.is_logged_in().await {
+      return Err(crate::backend_error("ACCOUNT_SYNC_SIGN_IN_REQUIRED"));
+    }
+    let cached = SERVER_SYNC_TOKENS
+      .lock()
+      .ok()
+      .and_then(|tokens| tokens.get(server).cloned());
+    if let Some(token) = cached.filter(|token| !Self::is_jwt_expiring_soon(token)) {
+      return Ok(token);
+    }
+
+    let fetched = self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/auth/sync-token");
+        let client = self.client.clone();
+        let body = serde_json::json!({ "server": server });
+        async move {
+          let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to get sync token: {e}"))?;
+          let status = response.status();
+          if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(crate::backend_error("ACCOUNT_SYNC_PLAN_REQUIRED"));
+          }
+          if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Sync token request failed ({status}): {body}"));
+          }
+          let result: SyncTokenResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse sync token response: {e}"))?;
+          Ok(result.sync_token)
+        }
+      })
+      .await;
+    let fetched = fetched.and_then(|token| {
+      if Self::is_server_sync_token_for(&token, server) {
+        Ok(token)
+      } else {
+        Err(crate::backend_error("ACCOUNT_SYNC_UNAVAILABLE"))
+      }
+    });
+    match fetched {
+      Ok(token) => {
+        SERVER_SYNC_TOKEN_FETCH.succeeded();
+        if let Ok(mut tokens) = SERVER_SYNC_TOKENS.lock() {
+          tokens.insert(server.to_string(), token.clone());
+        }
+        Ok(token)
+      }
+      Err(e) => {
+        SERVER_SYNC_TOKEN_FETCH.failed(&e);
+        Err(e)
+      }
+    }
+  }
+
+  /// Forget a token the own server refused, so the next request fetches one.
+  pub(crate) fn discard_server_sync_token(refused: &str) {
+    if let Ok(mut tokens) = SERVER_SYNC_TOKENS.lock() {
+      tokens.retain(|_, token| token != refused);
+    }
+  }
+
   pub async fn logout(&self) -> Result<(), String> {
+    if let Ok(mut tokens) = SERVER_SYNC_TOKENS.lock() {
+      tokens.clear();
+    }
+    // The own server is this account's choice; the next account starts on
+    // Donut cloud.
+    crate::sync::account_server::clear();
+
     // Clear wayfern token
     self.clear_wayfern_token().await;
     self.set_wayfern_device_refusal(None);
@@ -2149,6 +2249,36 @@ pub async fn restart_sync_service(app_handle: tauri::AppHandle) -> Result<(), St
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  fn jwt_with(claims: serde_json::Value) -> String {
+    use base64::{engine::general_purpose, Engine as _};
+    let encode =
+      |value: &serde_json::Value| general_purpose::URL_SAFE_NO_PAD.encode(value.to_string());
+    format!(
+      "{}.{}.signature",
+      encode(&serde_json::json!({ "alg": "RS256" })),
+      encode(&claims)
+    )
+  }
+
+  #[test]
+  fn only_a_token_bound_to_the_server_goes_to_it() {
+    let server = "https://sync.example.com";
+    let bound = jwt_with(serde_json::json!({ "scope": "server-sync", "aud": server }));
+    assert!(CloudAuthManager::is_server_sync_token_for(&bound, server));
+    // An API that ignores `server` answers with a token for Donut cloud, which
+    // must never reach someone else's server.
+    let cloud = jwt_with(serde_json::json!({ "scope": "sync", "prefix": "users/u1/" }));
+    assert!(!CloudAuthManager::is_server_sync_token_for(&cloud, server));
+    assert!(!CloudAuthManager::is_server_sync_token_for(
+      &bound,
+      "https://other.example.com"
+    ));
+    assert!(!CloudAuthManager::is_server_sync_token_for(
+      "not-a-jwt",
+      server
+    ));
+  }
 
   #[test]
   fn a_refused_token_request_yields_the_servers_message() {

@@ -117,6 +117,9 @@ const GROUP_CACHE_MAX = 10_000;
 const LAUNCHER_WRITABLE =
   /^(teams\/[^/]+\/)?profiles\/[^/]+\/(files\/.+|manifest\.json)$/;
 
+/** A key inside a profile that counts against the plan, relative to the namespace. */
+const COUNTED_PROFILE_KEY = /^profiles\/([^/]+)\//;
+
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
@@ -579,10 +582,7 @@ export class SyncService implements OnModuleInit {
     const metadata = sanitizeMetadata(dto.metadata);
     await this.assertGroupWrite(ctx, key, metadata);
 
-    // Check profile limit for cloud users
-    if (ctx.mode === "cloud" && ctx.profileLimit > 0) {
-      await this.checkProfileLimit(ctx);
-    }
+    await this.checkProfileLimit(ctx, [key]);
 
     const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
@@ -764,10 +764,10 @@ export class SyncService implements OnModuleInit {
         `items must be an array of at most ${SyncService.MAX_BATCH_ITEMS} entries`,
       );
     }
-    // Check profile limit for cloud users
-    if (ctx.mode === "cloud" && ctx.profileLimit > 0) {
-      await this.checkProfileLimit(ctx);
-    }
+    await this.checkProfileLimit(
+      ctx,
+      dto.items.map((item) => this.scopeKey(ctx, item.key)),
+    );
 
     const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
@@ -1119,7 +1119,7 @@ export class SyncService implements OnModuleInit {
     // refuse an empty scoped prefix (which would match the whole scope).
     this.validateWriteAccess(ctx, prefix);
     await this.assertGroupWrite(ctx, prefix);
-    if (ctx.mode === "cloud" && prefix.length === 0) {
+    if (ctx.mode !== "self-hosted" && prefix.length === 0) {
       throw new ForbiddenException("Refusing to delete an empty prefix");
     }
     const scopedTombstoneKey = dto.tombstoneKey
@@ -1503,39 +1503,47 @@ export class SyncService implements OnModuleInit {
   }
 
   /**
-   * Check if the user has reached their profile limit.
-   * Counts objects in the profiles/ prefix.
+   * Refuse writes that would store more profiles than the plan allows.
+   *
+   * Only a new profile counts. A stored profile keeps syncing at the limit,
+   * and proxies, groups and other settings never count: refusing every write
+   * at the limit stopped a full plan from syncing any change at all. Over the
+   * limit (after a downgrade), nothing under profiles/ is written until
+   * profiles are removed.
+   *
+   * ctx.prefix is the effective namespace (the team owner's, for a team
+   * member) and ctx.profileLimit the effective (team) limit, so this covers
+   * personal and team accounts alike.
    */
-  private async checkProfileLimit(ctx: UserContext): Promise<void> {
-    if (ctx.profileLimit <= 0) return; // 0 = unlimited
+  private async checkProfileLimit(
+    ctx: UserContext,
+    scopedKeys: string[],
+  ): Promise<void> {
+    if (ctx.mode === "self-hosted" || ctx.profileLimit <= 0) return; // 0 = unlimited
 
-    let count = 0;
+    const written = new Set<string>();
+    for (const key of scopedKeys) {
+      const match = COUNTED_PROFILE_KEY.exec(key.slice(ctx.prefix.length));
+      if (match) written.add(match[1]);
+    }
+    if (written.size === 0) return;
 
-    const userResult = await this.s3Client.send(
-      new ListObjectsV2Command({
-        Bucket: this.bucket,
-        Prefix: `${ctx.prefix}profiles/`,
-        Delimiter: "/",
-      }),
-    );
-    count += userResult.CommonPrefixes?.length || 0;
-
-    // ctx.prefix is already the effective namespace (the team owner's, for a
-    // team member) and ctx.profileLimit the effective (team) limit, so this
-    // single check covers both personal and team accounts.
-    if (count >= ctx.profileLimit) {
+    const stored = await this.storedProfileIds(ctx);
+    let total = stored.size;
+    for (const id of written) {
+      if (!stored.has(id)) total += 1;
+    }
+    if (total > ctx.profileLimit) {
       throw new ForbiddenException(
         `Profile limit reached (${ctx.profileLimit}). Upgrade your plan for more profiles.`,
       );
     }
   }
 
-  /**
-   * Count the number of distinct profile directories for a user.
-   */
-  private async countProfiles(ctx: UserContext): Promise<number> {
+  /** The ids of the profiles stored in the user's namespace. */
+  private async storedProfileIds(ctx: UserContext): Promise<Set<string>> {
     const profilePrefix = `${ctx.prefix}profiles/`;
-    let count = 0;
+    const ids = new Set<string>();
     let continuationToken: string | undefined;
 
     do {
@@ -1548,11 +1556,21 @@ export class SyncService implements OnModuleInit {
           ContinuationToken: continuationToken,
         }),
       );
-      count += result.CommonPrefixes?.length || 0;
+      for (const common of result.CommonPrefixes ?? []) {
+        const id = common.Prefix?.slice(profilePrefix.length, -1);
+        if (id) ids.add(id);
+      }
       continuationToken = result.NextContinuationToken;
     } while (continuationToken);
 
-    return count;
+    return ids;
+  }
+
+  /**
+   * Count the number of distinct profile directories for a user.
+   */
+  private async countProfiles(ctx: UserContext): Promise<number> {
+    return (await this.storedProfileIds(ctx)).size;
   }
 
   /**

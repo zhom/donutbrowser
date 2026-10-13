@@ -109,6 +109,8 @@ export interface SyncServerCheck {
   storage_endpoint: string | null;
   storage_reachable: boolean | null;
   storage_error: string | null;
+  /** The address Donut accounts sign in to the server with, when allowed. */
+  account_url?: string | null;
 }
 
 /**

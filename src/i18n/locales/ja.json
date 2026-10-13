@@ -825,7 +825,8 @@
       "logout": "ログアウト",
       "logoutConfirm": "ログアウトしてもよろしいですか？クラウド同期が停止します。",
       "loginSuccess": "ログインに成功しました！",
-      "logoutSuccess": "ログアウトしました。"
+      "logoutSuccess": "ログアウトしました。",
+      "server": "サーバー"
     },
     "team": {
       "title": "チーム",
@@ -2664,7 +2665,16 @@
     "snapshotNotFound": "この復元ポイントはもう存在しません。",
     "restorePointsUnsupported": "同期サーバーが古いため、復元ポイントを使えません。更新してください。",
     "restorePointFailed": "復元ポイントの処理に失敗しました: {{detail}}",
-    "restorePointsNeedSync": "復元ポイントには、このプロファイルの同期をオンにする必要があります。"
+    "restorePointsNeedSync": "復元ポイントには、このプロファイルの同期をオンにする必要があります。",
+    "accountSyncSignInRequired": "独自の同期サーバーを使用するには、Donut アカウントにサインインしてください。",
+    "accountSyncPlanRequired": "独自の同期サーバーには有料プランが必要です。",
+    "syncServerUrlInvalid": "サーバーの完全なアドレスを入力してください（例: https://sync.example.com）。",
+    "syncServerUnreachable": "同期サーバーに接続できませんでした。",
+    "syncServerStorageUnreachable": "同期サーバーは応答していますが、このコンピューターは {{endpoint}} のストレージに接続できません。",
+    "syncServerNoAccounts": "このサーバーは Donut アカウントを受け付けません。サーバーで SYNC_PUBLIC_URL を設定してください。",
+    "syncServerAddressMismatch": "サーバーのアドレスは {{address}} です。そのアドレスを入力してください。",
+    "remoteNeedsDonutSync": "リモートセッションと Cookie Bot は Donut クラウド同期からプロファイルを取得します。このコンピューターは独自のサーバーと同期しています。",
+    "accountSyncUnavailable": "Donut はまだ独自のサーバーにサインインできません。後でもう一度お試しください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -2760,7 +2770,6 @@
     "selfHosted": {
       "title": "セルフホスト同期サーバー",
       "description": "Donut を独自の donut-sync サーバーに接続して、ホスト型クラウドを使わずにプロファイル、プロキシ、グループ、拡張機能を同期します。",
-      "disabledWhileLoggedIn": "Donut アカウントにサインインしている間はセルフホスト同期を利用できません。カスタムサーバーを使うにはサインアウトしてください。",
       "connectionStatus": "接続:",
       "statusUnknown": "未テスト",
       "testConnection": "接続をテスト",
@@ -2769,7 +2778,20 @@
     "deviceOrdinal": "{{count}} 台中 {{ordinal}} 台目",
     "automationPrimaryOnly": "ブラウザの自動化はプライマリデバイス（デバイス1）でのみ実行できます。ここで使用するには、そのデバイスでサインアウトしてください。",
     "automationActiveHere": "ブラウザの自動化はこのデバイスで有効です。",
-    "viewTeamUsage": "チームの使用状況を表示"
+    "viewTeamUsage": "チームの使用状況を表示",
+    "ownServer": {
+      "title": "独自の同期サーバー",
+      "description": "このアカウントを Donut クラウドではなく、自分で運用する donut-sync サーバーと同期します。プランのプロファイル上限と、チームのロールおよびグループアクセスは変わりません。",
+      "current": "{{server}} と同期中",
+      "currentCloud": "Donut クラウドと同期中",
+      "donutCloud": "Donut クラウド",
+      "useDonutCloud": "Donut クラウドを使用",
+      "accountsOn": "このサーバーは Donut アカウントを受け付けます。",
+      "cloudOnly": "リモートセッションと Cookie Bot には Donut クラウド同期が必要です。",
+      "teamNote": "チームの全メンバーが同じサーバーを使用する必要があります。",
+      "saved": "同期サーバーを保存しました。",
+      "backToCloud": "再び Donut クラウドと同期しています。"
+    }
   },
   "shortcutsPage": {
     "title": "キーボードショートカット",

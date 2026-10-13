@@ -5559,3 +5559,86 @@ test("feedback goes from the More menu to the team, with the logs the person pre
     await capture.close();
   }
 });
+
+test("a signed-in paid account picks its own sync server on the account page", async () => {
+  await withApp("ui-account-sync-server", async (app) => {
+    await app.waitForText("No profiles yet");
+    const own = en.account.ownServer;
+    const server = "https://sync.example.test";
+    try {
+      await stubCommand(app, "get_account_sync_server", null);
+      await stubCommand(app, "check_sync_server_connection", {
+        server_reachable: true,
+        storage_ready: true,
+        storage_endpoint: null,
+        storage_reachable: null,
+        storage_error: null,
+        account_url: server,
+      });
+      await stubCommand(app, "set_account_sync_server", server);
+      await stubCommand(app, "restart_sync_service", null);
+      await stubCommand(app, "cloud_get_user", {
+        logged_in_at: new Date().toISOString(),
+        user: {
+          id: "ui-account-sync-server",
+          email: "solo@example.test",
+          plan: "solo",
+          planPeriod: "monthly",
+          subscriptionStatus: "active",
+          profileLimit: 20,
+          cloudProfilesUsed: 0,
+          proxyBandwidthLimitMb: 0,
+          proxyBandwidthUsedMb: 0,
+          proxyBandwidthExtraMb: 0,
+          isPrimaryDevice: true,
+        },
+      });
+      await app.invoke("plugin:event|emit", {
+        event: "cloud-auth-changed",
+        payload: null,
+      });
+      // A paid account opens the one-time welcome; close it when it comes.
+      const welcomed = await app
+        .waitFor(
+          () =>
+            app.execute(
+              `return Boolean(document.querySelector('[role="dialog"]'));`,
+            ),
+          { timeoutMs: 4000, description: "the paid welcome" },
+        )
+        .catch(() => false);
+      if (welcomed) await dismissSurface(app);
+
+      await app.clickSelector(`[aria-label="${en.rail.account}"]`);
+      await app.clickText(en.account.tabs.selfHosted, { roles: ["tab"] });
+      await app.waitForText(own.title);
+      assert.ok(await app.visibleTextIncludes(own.currentCloud));
+      assert.ok(await app.visibleTextIncludes(own.cloudOnly));
+      // Signed in, the shared-token form is not offered.
+      assert.equal(
+        await app.execute(
+          `return Boolean(document.querySelector('#self-hosted-token'));`,
+        ),
+        false,
+      );
+
+      await app.fillSelector("#account-sync-server-url", `${server}/`);
+      await app.clickText(en.account.selfHosted.testConnection, {
+        roles: ["button"],
+      });
+      await app.waitForText(own.accountsOn);
+      await app.clickText(en.common.buttons.save, { roles: ["button"] });
+      await app.waitForText(own.current.replace("{{server}}", server));
+      assert.ok(await app.visibleTextIncludes(own.useDonutCloud));
+      await app.capture("account-sync-server");
+
+      const calls = await app.execute(
+        `return (window.__donutStubbedCalls ?? []).filter((call) => call.command === "set_account_sync_server");`,
+      );
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].payload.serverUrl, `${server}/`);
+    } finally {
+      await restoreStubs(app);
+    }
+  });
+});

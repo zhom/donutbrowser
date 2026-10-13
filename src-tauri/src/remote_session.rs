@@ -259,6 +259,9 @@ pub async fn start_remote_session(
     .to_string();
   let profile_id = profile.id.to_string();
 
+  if let Some(refusal) = crate::sync::account_server::cloud_run_refusal() {
+    return Err(RemoteSessionError::Other(refusal));
+  }
   if let Some(refusal) = local_launch_refusal(profile, &platform) {
     return Err(refusal);
   }

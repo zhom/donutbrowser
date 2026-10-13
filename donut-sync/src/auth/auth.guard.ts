@@ -4,11 +4,13 @@ import {
   type ExecutionContext,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 import * as jwt from "jsonwebtoken";
+import { type DonutAccounts, donutAccountsFromEnv } from "./donut-accounts.js";
 import type { UserContext } from "./user-context.interface.js";
 
 /** Constant-time string compare; false on length mismatch (no early return). */
@@ -36,12 +38,60 @@ function teamRoleOf(role: unknown): TeamRole {
   return TEAM_ROLES.includes(role as TeamRole) ? (role as TeamRole) : "member";
 }
 
+/**
+ * A user's effective namespace: their own, or for a team member the shared
+ * owner namespace with the team's role, group access and limit.
+ */
+function scopedContext(
+  mode: "cloud" | "account",
+  sub: string,
+  profileLimit: number,
+  scope: TeamScope | null,
+): UserContext {
+  let prefix = `users/${sub}/`;
+  let teamRole: TeamRole | undefined;
+  let groupIds: string[] | undefined;
+  let limit = profileLimit;
+  if (
+    scope &&
+    typeof scope.ownerId === "string" &&
+    /^[^/]+$/.test(scope.ownerId)
+  ) {
+    prefix = `users/${scope.ownerId}/`;
+    teamRole = teamRoleOf(scope.role);
+    // A malformed id cannot name a group, so it grants nothing; it never
+    // turns a limited member into an unlimited one.
+    if (Array.isArray(scope.groupIds)) {
+      groupIds = scope.groupIds.filter(
+        (id): id is string => typeof id === "string" && GROUP_ID.test(id),
+      );
+    }
+    if (scope.teamProfileLimit > 0) {
+      limit = scope.teamProfileLimit;
+    }
+  }
+  return {
+    mode,
+    prefix,
+    profileLimit: limit,
+    sub,
+    ...(teamRole ? { teamRole } : {}),
+    ...(groupIds ? { groupIds } : {}),
+  };
+}
+
+/** Only a JWT can be a Donut account token; anything else skips the API. */
+function looksLikeJwt(token: string): boolean {
+  return /^[\w-]+\.[\w-]+\.[\w-]+$/.test(token);
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
   private jwtPublicKey: string | null = null;
   private readonly backendInternalUrl: string | undefined;
   private readonly backendInternalKey: string | undefined;
+  private readonly accounts: DonutAccounts | null;
 
   // Short-lived cache of the per-user team scope so membership revocation takes
   // effect quickly (within TTL) without a backend round-trip on every request.
@@ -63,6 +113,14 @@ export class AuthGuard implements CanActivate {
     this.backendInternalKey = this.configService.get<string>(
       "BACKEND_INTERNAL_KEY",
     );
+    this.accounts = donutAccountsFromEnv((key) =>
+      this.configService.get<string>(key),
+    );
+    if (this.accounts) {
+      this.logger.log(
+        `Donut account sign-in enabled for ${this.accounts.publicUrl}`,
+      );
+    }
   }
 
   /**
@@ -154,28 +212,11 @@ export class AuthGuard implements CanActivate {
         // to the shared team owner namespace. The JWT carries no team data — the
         // backend is the sole authority. On any resolver error we fail CLOSED:
         // fall back to the user's own namespace, never widening to a team one.
-        let effectivePrefix = ownPrefix;
-        let teamRole: TeamRole | undefined;
-        let groupIds: string[] | undefined;
-        let effectiveProfileLimit =
+        const ownProfileLimit =
           typeof decoded.profileLimit === "number" ? decoded.profileLimit : 0;
+        let scope: TeamScope | null = null;
         try {
-          const scope = sub ? await this.resolveTeamScope(sub) : null;
-          if (scope && /^[^/]+$/.test(scope.ownerId)) {
-            effectivePrefix = `users/${scope.ownerId}/`;
-            teamRole = teamRoleOf(scope.role);
-            // A malformed id cannot name a group, so it grants nothing; it
-            // never turns a limited member into an unlimited one.
-            if (Array.isArray(scope.groupIds)) {
-              groupIds = scope.groupIds.filter(
-                (id): id is string =>
-                  typeof id === "string" && GROUP_ID.test(id),
-              );
-            }
-            if (scope.teamProfileLimit > 0) {
-              effectiveProfileLimit = scope.teamProfileLimit;
-            }
-          }
+          scope = sub ? await this.resolveTeamScope(sub) : null;
         } catch (err) {
           this.logger.warn(
             `Team scope resolution failed for ${sub}; using own namespace: ${
@@ -184,14 +225,10 @@ export class AuthGuard implements CanActivate {
           );
         }
 
-        (request as unknown as Record<string, unknown>).user = {
-          mode: "cloud",
-          prefix: effectivePrefix,
-          profileLimit: effectiveProfileLimit,
-          sub,
-          ...(teamRole ? { teamRole } : {}),
-          ...(groupIds ? { groupIds } : {}),
-        } satisfies UserContext;
+        const user = scopedContext("cloud", sub, ownProfileLimit, scope);
+        // The prefix claim, already checked above, names the own namespace.
+        if (!scope) user.prefix = ownPrefix;
+        (request as unknown as Record<string, unknown>).user = user;
         return true;
       } catch (err) {
         this.logger.warn(
@@ -200,10 +237,34 @@ export class AuthGuard implements CanActivate {
       }
     }
 
+    // A Donut account on this server: the API says whose the token is.
+    if (this.accounts && looksLikeJwt(token)) {
+      let account: Awaited<ReturnType<DonutAccounts["resolve"]>>;
+      try {
+        account = await this.accounts.resolve(token);
+      } catch (err) {
+        this.logger.warn(
+          `Donut account check failed: ${err instanceof Error ? err.message : err}`,
+        );
+        throw new ServiceUnavailableException(
+          "The Donut account service could not be reached",
+        );
+      }
+      if (account) {
+        (request as unknown as Record<string, unknown>).user = scopedContext(
+          "account",
+          account.sub,
+          account.profileLimit,
+          account.team,
+        );
+        return true;
+      }
+    }
+
     // If SYNC_TOKEN is configured but didn't match, or JWT failed
-    if (!expectedToken && !this.jwtPublicKey) {
+    if (!expectedToken && !this.jwtPublicKey && !this.accounts) {
       throw new UnauthorizedException(
-        "No auth method configured on server (set SYNC_TOKEN or SYNC_JWT_PUBLIC_KEY)",
+        "No auth method configured on server (set SYNC_TOKEN, SYNC_PUBLIC_URL or SYNC_JWT_PUBLIC_KEY)",
       );
     }
 

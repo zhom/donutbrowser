@@ -825,7 +825,8 @@
       "logout": "Đăng xuất",
       "logoutConfirm": "Bạn có chắc muốn đăng xuất? Đồng bộ đám mây sẽ dừng lại.",
       "loginSuccess": "Đăng nhập thành công!",
-      "logoutSuccess": "Đăng xuất thành công."
+      "logoutSuccess": "Đăng xuất thành công.",
+      "server": "Máy chủ"
     },
     "team": {
       "title": "Nhóm",
@@ -2664,7 +2665,16 @@
     "snapshotNotFound": "Điểm khôi phục này không còn nữa.",
     "restorePointsUnsupported": "Máy chủ đồng bộ quá cũ để dùng điểm khôi phục. Hãy cập nhật.",
     "restorePointFailed": "Điểm khôi phục thất bại: {{detail}}",
-    "restorePointsNeedSync": "Điểm khôi phục cần bật đồng bộ cho hồ sơ này."
+    "restorePointsNeedSync": "Điểm khôi phục cần bật đồng bộ cho hồ sơ này.",
+    "accountSyncSignInRequired": "Hãy đăng nhập tài khoản Donut để dùng máy chủ đồng bộ riêng.",
+    "accountSyncPlanRequired": "Máy chủ đồng bộ riêng cần gói trả phí.",
+    "syncServerUrlInvalid": "Nhập địa chỉ đầy đủ của máy chủ, ví dụ https://sync.example.com.",
+    "syncServerUnreachable": "Không kết nối được tới máy chủ đồng bộ.",
+    "syncServerStorageUnreachable": "Máy chủ đồng bộ có phản hồi, nhưng máy tính này không kết nối được tới bộ lưu trữ tại {{endpoint}}.",
+    "syncServerNoAccounts": "Máy chủ này không chấp nhận tài khoản Donut. Hãy đặt SYNC_PUBLIC_URL trên máy chủ.",
+    "syncServerAddressMismatch": "Địa chỉ của máy chủ là {{address}}. Hãy nhập địa chỉ đó.",
+    "remoteNeedsDonutSync": "Phiên từ xa và Cookie Bot lấy hồ sơ từ đồng bộ Donut cloud. Máy tính này đồng bộ với máy chủ riêng của bạn.",
+    "accountSyncUnavailable": "Donut chưa thể đăng nhập vào máy chủ riêng của bạn. Hãy thử lại sau."
   },
   "rail": {
     "profiles": "Profile",
@@ -2760,7 +2770,6 @@
     "selfHosted": {
       "title": "Máy chủ đồng bộ tự lưu trữ",
       "description": "Trỏ Donut đến máy chủ donut-sync của riêng bạn để đồng bộ profile, proxy, nhóm và tiện ích mà không cần sử dụng đám mây.",
-      "disabledWhileLoggedIn": "Đồng bộ tự lưu trữ không khả dụng khi bạn đã đăng nhập vào tài khoản Donut. Đăng xuất để sử dụng máy chủ tùy chỉnh.",
       "connectionStatus": "Kết nối:",
       "statusUnknown": "Chưa kiểm tra",
       "testConnection": "Kiểm tra kết nối",
@@ -2769,7 +2778,20 @@
     "deviceOrdinal": "{{ordinal}} trên {{count}}",
     "automationPrimaryOnly": "Tự động hóa trình duyệt chỉ chạy trên thiết bị chính của bạn (Thiết bị 1). Đăng xuất ở đó để sử dụng tại đây.",
     "automationActiveHere": "Tự động hóa trình duyệt đang hoạt động trên thiết bị này.",
-    "viewTeamUsage": "Xem mức dùng của nhóm"
+    "viewTeamUsage": "Xem mức dùng của nhóm",
+    "ownServer": {
+      "title": "Máy chủ đồng bộ riêng của bạn",
+      "description": "Đồng bộ tài khoản này với máy chủ donut-sync do bạn vận hành, thay vì Donut cloud. Giới hạn hồ sơ của gói và vai trò, quyền truy cập nhóm của đội bạn vẫn giữ nguyên.",
+      "current": "Đang đồng bộ với {{server}}",
+      "currentCloud": "Đang đồng bộ với Donut cloud",
+      "donutCloud": "Donut cloud",
+      "useDonutCloud": "Dùng Donut cloud",
+      "accountsOn": "Máy chủ này chấp nhận tài khoản Donut.",
+      "cloudOnly": "Phiên từ xa và Cookie Bot cần đồng bộ với Donut cloud.",
+      "teamNote": "Tất cả thành viên trong đội phải dùng cùng một máy chủ.",
+      "saved": "Đã lưu máy chủ đồng bộ.",
+      "backToCloud": "Đang đồng bộ lại với Donut cloud."
+    }
   },
   "shortcutsPage": {
     "title": "Phím tắt",

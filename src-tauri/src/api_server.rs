@@ -3746,6 +3746,9 @@ fn sync_mode_error_response(err: String) -> (StatusCode, String) {
 pub async fn remote_launch_precondition(
   profile: &crate::profile::types::BrowserProfile,
 ) -> Result<(), String> {
+  if let Some(refusal) = crate::sync::account_server::cloud_run_refusal() {
+    return Err(refusal);
+  }
   remote_launch_profile_rules(profile)?;
 
   // The manifest is written last, so a host pulling mid-upload gets files
@@ -4219,7 +4222,7 @@ fn cookie_bot_eligible_profile(
     .find(|p| p.id.to_string() == profile_id)
     .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
 
-  crate::cookie_bot::bot_precondition(&profile, &crate::cookie_bot::exit_reachability(&profile))
+  crate::cookie_bot::run_precondition(&profile)
     .map_err(|reason| (StatusCode::BAD_REQUEST, reason))?;
   Ok(profile)
 }

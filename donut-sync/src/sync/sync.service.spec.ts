@@ -415,3 +415,110 @@ describe("SyncService restore points", () => {
     }
   });
 });
+
+describe("SyncService profile limit", () => {
+  const ACCOUNT: UserContext = {
+    mode: "account",
+    prefix: OWNER_PREFIX,
+    profileLimit: 2,
+    sub: "u1",
+  };
+
+  function withStoredProfiles(...ids: string[]) {
+    const { service, send } = serviceWithStubbedS3();
+    send.mockImplementation(
+      async (command: { input?: { Prefix?: string } }) => {
+        if (command.input?.Prefix === `${OWNER_PREFIX}profiles/`) {
+          return {
+            CommonPrefixes: ids.map((id) => ({
+              Prefix: `${OWNER_PREFIX}profiles/${id}/`,
+            })),
+          };
+        }
+        return {};
+      },
+    );
+    return service;
+  }
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("keeps a full plan syncing its profiles and settings, but adds none", async () => {
+    const service = withStoredProfiles("p1", "p2");
+
+    for (const key of [
+      "profiles/p1/files/Default/Cookies",
+      "profiles/p2/metadata.json",
+      "proxies/x.json",
+      "groups/g.json",
+    ]) {
+      await expect(
+        service.presignUpload({ key }, ACCOUNT),
+      ).resolves.toHaveProperty("url");
+    }
+    await expect(
+      service.presignUpload({ key: "profiles/p3/metadata.json" }, ACCOUNT),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.presignUploadBatch(
+        {
+          items: [
+            { key: "profiles/p1/files/a" },
+            { key: "profiles/p3/files/a" },
+          ],
+        },
+        ACCOUNT,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("counts a batch's new profiles together", async () => {
+    const service = withStoredProfiles("p1");
+
+    await expect(
+      service.presignUploadBatch(
+        {
+          items: [
+            { key: "profiles/p2/files/a" },
+            { key: "profiles/p2/files/b" },
+          ],
+        },
+        ACCOUNT,
+      ),
+    ).resolves.toHaveProperty("items");
+    await expect(
+      service.presignUploadBatch(
+        {
+          items: [
+            { key: "profiles/p2/files/a" },
+            { key: "profiles/p3/files/a" },
+          ],
+        },
+        ACCOUNT,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("writes no profile over the limit, and never limits the shared token", async () => {
+    const service = withStoredProfiles("p1", "p2", "p3");
+
+    await expect(
+      service.presignUpload({ key: "profiles/p1/files/a" }, ACCOUNT),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.presignUpload({ key: "proxies/x.json" }, ACCOUNT),
+    ).resolves.toHaveProperty("url");
+    await expect(
+      service.presignUpload(
+        { key: "profiles/p9/files/a" },
+        { mode: "self-hosted", prefix: "", profileLimit: 0 },
+      ),
+    ).resolves.toHaveProperty("url");
+  });
+});

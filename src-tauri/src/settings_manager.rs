@@ -152,6 +152,11 @@ pub struct AppSettings {
   pub api_token: Option<String>, // Displayed token for user to copy
   #[serde(default)]
   pub sync_server_url: Option<String>, // URL of the sync server
+  /// The customer's own donut-sync a signed-in paid account syncs with,
+  /// instead of Donut cloud (`sync::account_server`). Owned by
+  /// `set_account_sync_server`, never by a settings save.
+  #[serde(default)]
+  pub account_sync_server_url: Option<String>,
   #[serde(default)]
   pub first_launch_timestamp: Option<u64>, // Unix epoch seconds when app was first launched
   #[serde(default)]
@@ -302,6 +307,7 @@ impl Default for AppSettings {
       api_port: 10108,
       api_token: None,
       sync_server_url: None,
+      account_sync_server_url: None,
       first_launch_timestamp: None,
       commercial_trial_acknowledged: false,
       mcp_remote_enabled: false,
@@ -711,10 +717,12 @@ pub async fn save_app_settings(
       settings.mcp_remote_enabled = current.mcp_remote_enabled;
       settings.mcp_remote_key_id = current.mcp_remote_key_id;
       settings.feedback_sent_at = current.feedback_sent_at;
+      settings.account_sync_server_url = current.account_sync_server_url;
     }
   } else {
     settings.mcp_remote_enabled = false;
     settings.mcp_remote_key_id = None;
+    settings.account_sync_server_url = None;
   }
 
   let mut persist_settings = settings.clone();
@@ -893,6 +901,16 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
 #[tauri::command]
 pub async fn get_sync_settings(app_handle: tauri::AppHandle) -> Result<SyncSettings, String> {
   // Cloud auth takes priority over self-hosted settings
+  if let Some(server) = crate::sync::account_server::configured().await {
+    let sync_token = crate::cloud_auth::CLOUD_AUTH
+      .server_sync_token(&server)
+      .await
+      .ok();
+    return Ok(SyncSettings {
+      sync_server_url: Some(server),
+      sync_token,
+    });
+  }
   if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
     let sync_token = crate::cloud_auth::CLOUD_AUTH
       .get_or_refresh_sync_token()
@@ -1449,6 +1467,7 @@ mod tests {
       api_port: 10108,
       api_token: None,
       sync_server_url: None,
+      account_sync_server_url: None,
       first_launch_timestamp: None,
       commercial_trial_acknowledged: false,
       mcp_remote_enabled: false,

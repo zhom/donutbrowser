@@ -825,7 +825,8 @@
       "logout": "退出登录",
       "logoutConfirm": "您确定要退出登录吗？云同步将会停止。",
       "loginSuccess": "登录成功！",
-      "logoutSuccess": "已成功退出登录。"
+      "logoutSuccess": "已成功退出登录。",
+      "server": "服务器"
     },
     "team": {
       "title": "团队",
@@ -2664,7 +2665,16 @@
     "snapshotNotFound": "此还原点已不存在。",
     "restorePointsUnsupported": "同步服务器版本太旧，无法使用还原点。请更新它。",
     "restorePointFailed": "还原点操作失败：{{detail}}",
-    "restorePointsNeedSync": "使用还原点需要为此配置文件开启同步。"
+    "restorePointsNeedSync": "使用还原点需要为此配置文件开启同步。",
+    "accountSyncSignInRequired": "请登录 Donut 账户以使用你自己的同步服务器。",
+    "accountSyncPlanRequired": "使用你自己的同步服务器需要付费套餐。",
+    "syncServerUrlInvalid": "请输入服务器的完整地址，例如 https://sync.example.com。",
+    "syncServerUnreachable": "无法连接到同步服务器。",
+    "syncServerStorageUnreachable": "同步服务器有响应，但此计算机无法连接到其位于 {{endpoint}} 的存储。",
+    "syncServerNoAccounts": "此服务器不接受 Donut 账户。请在服务器上设置 SYNC_PUBLIC_URL。",
+    "syncServerAddressMismatch": "服务器的地址是 {{address}}。请输入该地址。",
+    "remoteNeedsDonutSync": "远程会话和 Cookie Bot 从 Donut 云同步获取配置文件。此计算机正在与你自己的服务器同步。",
+    "accountSyncUnavailable": "Donut 暂时无法登录你自己的服务器。请稍后重试。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -2760,7 +2770,6 @@
     "selfHosted": {
       "title": "自托管同步服务器",
       "description": "将 Donut 连接到您自己的 donut-sync 服务器，无需使用托管云即可同步配置文件、代理、组和扩展程序。",
-      "disabledWhileLoggedIn": "登录 Donut 账户时无法使用自托管同步。请先退出登录以使用自定义服务器。",
       "connectionStatus": "连接：",
       "statusUnknown": "未测试",
       "testConnection": "测试连接",
@@ -2769,7 +2778,20 @@
     "deviceOrdinal": "第 {{ordinal}} 台，共 {{count}} 台",
     "automationPrimaryOnly": "浏览器自动化仅在您的主设备（设备 1）上运行。请在该设备上退出登录，才能在此设备上使用。",
     "automationActiveHere": "浏览器自动化已在此设备上启用。",
-    "viewTeamUsage": "查看团队用量"
+    "viewTeamUsage": "查看团队用量",
+    "ownServer": {
+      "title": "你自己的同步服务器",
+      "description": "将此账户与你自己运行的 donut-sync 服务器同步，而不是与 Donut 云同步。你的套餐配置文件上限以及团队的角色和分组访问权限保持不变。",
+      "current": "正在与 {{server}} 同步",
+      "currentCloud": "正在与 Donut 云同步",
+      "donutCloud": "Donut 云",
+      "useDonutCloud": "使用 Donut 云",
+      "accountsOn": "此服务器接受 Donut 账户。",
+      "cloudOnly": "远程会话和 Cookie Bot 需要 Donut 云同步。",
+      "teamNote": "团队的所有成员必须使用同一台服务器。",
+      "saved": "同步服务器已保存。",
+      "backToCloud": "已重新与 Donut 云同步。"
+    }
   },
   "shortcutsPage": {
     "title": "键盘快捷键",

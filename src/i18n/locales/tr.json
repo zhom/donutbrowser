@@ -825,7 +825,8 @@
       "logout": "Çıkış Yap",
       "logoutConfirm": "Çıkış yapmak istediğinizden emin misiniz? Bulut eşitlemesi duracak.",
       "loginSuccess": "Başarıyla giriş yapıldı!",
-      "logoutSuccess": "Başarıyla çıkış yapıldı."
+      "logoutSuccess": "Başarıyla çıkış yapıldı.",
+      "server": "Sunucu"
     },
     "team": {
       "title": "Ekip",
@@ -2664,7 +2665,16 @@
     "snapshotNotFound": "Bu geri yükleme noktası artık yok.",
     "restorePointsUnsupported": "Eşitleme sunucusu geri yükleme noktaları için çok eski. Güncelle.",
     "restorePointFailed": "Geri yükleme noktası başarısız oldu: {{detail}}",
-    "restorePointsNeedSync": "Geri yükleme noktaları için bu profilde eşitleme açık olmalı."
+    "restorePointsNeedSync": "Geri yükleme noktaları için bu profilde eşitleme açık olmalı.",
+    "accountSyncSignInRequired": "Kendi eşitleme sunucunuzu kullanmak için Donut hesabınızla oturum açın.",
+    "accountSyncPlanRequired": "Kendi eşitleme sunucunuz için ücretli bir plan gerekir.",
+    "syncServerUrlInvalid": "Sunucunun tam adresini girin, örneğin https://sync.example.com.",
+    "syncServerUnreachable": "Eşitleme sunucusuna bağlanılamadı.",
+    "syncServerStorageUnreachable": "Eşitleme sunucusu yanıt veriyor, ancak bu bilgisayar {{endpoint}} adresindeki depolamaya bağlanamıyor.",
+    "syncServerNoAccounts": "Bu sunucu Donut hesaplarını kabul etmiyor. Sunucuda SYNC_PUBLIC_URL değerini ayarlayın.",
+    "syncServerAddressMismatch": "Sunucunun adresi {{address}}. Bu adresi girin.",
+    "remoteNeedsDonutSync": "Uzak oturumlar ve Cookie Bot profilleri Donut cloud eşitlemesinden alır. Bu bilgisayar kendi sunucunuzla eşitleniyor.",
+    "accountSyncUnavailable": "Donut henüz kendi sunucunuzda oturum açamıyor. Daha sonra tekrar deneyin."
   },
   "rail": {
     "profiles": "Profiller",
@@ -2760,7 +2770,6 @@
     "selfHosted": {
       "title": "Kendi eşitleme sunucunuz",
       "description": "Barındırılan bulutu kullanmadan profilleri, proxy'leri, grupları ve uzantıları eşitlemek için Donut'u kendi donut-sync sunucunuza yönlendirin.",
-      "disabledWhileLoggedIn": "Donut hesabınızda oturum açıkken kendi sunucunuzla eşitleme kullanılamaz. Özel bir sunucu kullanmak için çıkış yapın.",
       "connectionStatus": "Bağlantı:",
       "statusUnknown": "Test edilmedi",
       "testConnection": "Bağlantıyı test et",
@@ -2769,7 +2778,20 @@
     "deviceOrdinal": "{{ordinal}} / {{count}}",
     "automationPrimaryOnly": "Tarayıcı otomasyonu yalnızca birincil cihazınızda (Cihaz 1) çalışır. Burada kullanmak için oradaki oturumu kapatın.",
     "automationActiveHere": "Tarayıcı otomasyonu bu cihazda etkin.",
-    "viewTeamUsage": "Ekip kullanımını görüntüle"
+    "viewTeamUsage": "Ekip kullanımını görüntüle",
+    "ownServer": {
+      "title": "Kendi eşitleme sunucunuz (hesapla)",
+      "description": "Bu hesabı Donut cloud yerine kendi çalıştırdığınız bir donut-sync sunucusuyla eşitleyin. Planınızın profil sınırı ve ekibinizin rolleri ile grup erişimi aynı kalır.",
+      "current": "{{server}} ile eşitleniyor",
+      "currentCloud": "Donut cloud ile eşitleniyor",
+      "donutCloud": "Donut cloud",
+      "useDonutCloud": "Donut cloud'u kullan",
+      "accountsOn": "Bu sunucu Donut hesaplarını kabul ediyor.",
+      "cloudOnly": "Uzak oturumlar ve Cookie Bot, Donut cloud eşitlemesi gerektirir.",
+      "teamNote": "Ekibinizin tüm üyeleri aynı sunucuyu kullanmalıdır.",
+      "saved": "Eşitleme sunucusu kaydedildi.",
+      "backToCloud": "Yeniden Donut cloud ile eşitleniyor."
+    }
   },
   "shortcutsPage": {
     "title": "Klavye kısayolları",

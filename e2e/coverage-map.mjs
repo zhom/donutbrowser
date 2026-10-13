@@ -280,6 +280,8 @@ export const commandCoverage = {
       "get_sync_settings",
       "save_sync_settings",
       "check_sync_server_connection",
+      "sync::account_server::get_account_sync_server",
+      "sync::account_server::set_account_sync_server",
       "cloud_auth::restart_sync_service",
       "set_profile_sync_mode",
       "cancel_profile_sync",

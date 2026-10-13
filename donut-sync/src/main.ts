@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module.js";
+import { normalizeSyncServerUrl } from "./auth/donut-accounts.js";
 
 const INSECURE_DEFAULT_TOKENS = new Set([
   "secret-sync-token",
@@ -10,8 +11,17 @@ const INSECURE_DEFAULT_TOKENS = new Set([
 
 function validateEnv() {
   const token = process.env.SYNC_TOKEN;
-  if (!token && !process.env.SYNC_JWT_PUBLIC_KEY) {
-    console.error("Either SYNC_TOKEN or SYNC_JWT_PUBLIC_KEY must be set");
+  const publicUrl = process.env.SYNC_PUBLIC_URL;
+  if (publicUrl && !normalizeSyncServerUrl(publicUrl)) {
+    console.error(
+      "SYNC_PUBLIC_URL must be the http(s) address Donut Browser uses for this server, e.g. https://sync.example.com",
+    );
+    process.exit(1);
+  }
+  if (!token && !publicUrl && !process.env.SYNC_JWT_PUBLIC_KEY) {
+    console.error(
+      "Set SYNC_TOKEN, SYNC_PUBLIC_URL (Donut account sign-in), or both",
+    );
     process.exit(1);
   }
   // A static SYNC_TOKEN is the only credential on a self-hosted server that is

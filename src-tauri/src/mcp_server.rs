@@ -10878,12 +10878,11 @@ impl McpServer {
         data: None,
       })?;
 
-    crate::cookie_bot::bot_precondition(&profile, &crate::cookie_bot::exit_reachability(&profile))
-      .map_err(|message| McpError {
-        code: -32000,
-        message,
-        data: None,
-      })?;
+    crate::cookie_bot::run_precondition(&profile).map_err(|message| McpError {
+      code: -32000,
+      message,
+      data: None,
+    })?;
     Ok(profile)
   }
 

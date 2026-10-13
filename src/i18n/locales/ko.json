@@ -825,7 +825,8 @@
       "logout": "로그아웃",
       "logoutConfirm": "정말 로그아웃하시겠습니까? 클라우드 동기화가 중지됩니다.",
       "loginSuccess": "로그인 성공!",
-      "logoutSuccess": "로그아웃되었습니다."
+      "logoutSuccess": "로그아웃되었습니다.",
+      "server": "서버"
     },
     "team": {
       "title": "팀",
@@ -2664,7 +2665,16 @@
     "snapshotNotFound": "이 복원 지점은 더 이상 없습니다.",
     "restorePointsUnsupported": "동기화 서버가 너무 오래되어 복원 지점을 쓸 수 없습니다. 업데이트하세요.",
     "restorePointFailed": "복원 지점 작업이 실패했습니다: {{detail}}",
-    "restorePointsNeedSync": "복원 지점을 쓰려면 이 프로필의 동기화를 켜야 합니다."
+    "restorePointsNeedSync": "복원 지점을 쓰려면 이 프로필의 동기화를 켜야 합니다.",
+    "accountSyncSignInRequired": "자체 동기화 서버를 사용하려면 Donut 계정에 로그인하세요.",
+    "accountSyncPlanRequired": "자체 동기화 서버에는 유료 플랜이 필요합니다.",
+    "syncServerUrlInvalid": "서버의 전체 주소를 입력하세요. 예: https://sync.example.com",
+    "syncServerUnreachable": "동기화 서버에 연결할 수 없습니다.",
+    "syncServerStorageUnreachable": "동기화 서버는 응답하지만 이 컴퓨터가 {{endpoint}}의 저장소에 연결할 수 없습니다.",
+    "syncServerNoAccounts": "이 서버는 Donut 계정을 허용하지 않습니다. 서버에서 SYNC_PUBLIC_URL을 설정하세요.",
+    "syncServerAddressMismatch": "서버 주소는 {{address}}입니다. 그 주소를 입력하세요.",
+    "remoteNeedsDonutSync": "원격 세션과 Cookie Bot은 Donut 클라우드 동기화에서 프로필을 가져옵니다. 이 컴퓨터는 자체 서버와 동기화합니다.",
+    "accountSyncUnavailable": "Donut이 아직 자체 서버에 로그인할 수 없습니다. 나중에 다시 시도하세요."
   },
   "rail": {
     "profiles": "프로필",
@@ -2760,7 +2770,6 @@
     "selfHosted": {
       "title": "자체 호스팅 동기화 서버",
       "description": "호스팅 클라우드를 사용하지 않고 프로필, 프록시, 그룹 및 확장 프로그램을 동기화하려면 Donut을 자체 donut-sync 서버로 연결하세요.",
-      "disabledWhileLoggedIn": "Donut 계정에 로그인되어 있는 동안에는 자체 호스팅 동기화를 사용할 수 없습니다. 사용자 지정 서버를 사용하려면 로그아웃하세요.",
       "connectionStatus": "연결:",
       "statusUnknown": "테스트 안 됨",
       "testConnection": "연결 테스트",
@@ -2769,7 +2778,20 @@
     "deviceOrdinal": "{{count}}대 중 {{ordinal}}번째",
     "automationPrimaryOnly": "브라우저 자동화는 기본 기기(기기 1)에서만 실행됩니다. 여기서 사용하려면 해당 기기에서 로그아웃하세요.",
     "automationActiveHere": "이 기기에서 브라우저 자동화가 활성화되어 있습니다.",
-    "viewTeamUsage": "팀 사용량 보기"
+    "viewTeamUsage": "팀 사용량 보기",
+    "ownServer": {
+      "title": "자체 동기화 서버",
+      "description": "이 계정을 Donut 클라우드가 아니라 직접 운영하는 donut-sync 서버와 동기화합니다. 플랜의 프로필 한도와 팀의 역할 및 그룹 접근 권한은 그대로 유지됩니다.",
+      "current": "{{server}}와(과) 동기화 중",
+      "currentCloud": "Donut 클라우드와 동기화 중",
+      "donutCloud": "Donut 클라우드",
+      "useDonutCloud": "Donut 클라우드 사용",
+      "accountsOn": "이 서버는 Donut 계정을 허용합니다.",
+      "cloudOnly": "원격 세션과 Cookie Bot에는 Donut 클라우드 동기화가 필요합니다.",
+      "teamNote": "팀의 모든 구성원이 같은 서버를 사용해야 합니다.",
+      "saved": "동기화 서버를 저장했습니다.",
+      "backToCloud": "다시 Donut 클라우드와 동기화합니다."
+    }
   },
   "shortcutsPage": {
     "title": "키보드 단축키",

@@ -825,7 +825,8 @@
       "logout": "Log Out",
       "logoutConfirm": "Are you sure you want to log out? Cloud sync will stop.",
       "loginSuccess": "Successfully logged in!",
-      "logoutSuccess": "Successfully logged out."
+      "logoutSuccess": "Successfully logged out.",
+      "server": "Server"
     },
     "team": {
       "title": "Team",
@@ -2664,7 +2665,16 @@
     "snapshotNotFound": "This restore point no longer exists.",
     "restorePointsUnsupported": "The sync server is too old for restore points. Update it.",
     "restorePointFailed": "The restore point failed: {{detail}}",
-    "restorePointsNeedSync": "Restore points need sync on for this profile."
+    "restorePointsNeedSync": "Restore points need sync on for this profile.",
+    "accountSyncSignInRequired": "Sign in to your Donut account to use your own sync server.",
+    "accountSyncPlanRequired": "Your own sync server needs a paid plan.",
+    "syncServerUrlInvalid": "Enter the full server address, for example https://sync.example.com.",
+    "syncServerUnreachable": "Could not connect to the sync server.",
+    "syncServerStorageUnreachable": "The sync server answers, but this computer cannot connect to its storage at {{endpoint}}.",
+    "syncServerNoAccounts": "This server does not accept Donut accounts. Set SYNC_PUBLIC_URL on the server.",
+    "syncServerAddressMismatch": "The server's address is {{address}}. Enter that address.",
+    "remoteNeedsDonutSync": "Remote sessions and Cookie Bot get profiles from Donut cloud sync. This computer syncs with your own server.",
+    "accountSyncUnavailable": "Donut cannot sign in to your own server yet. Try again later."
   },
   "rail": {
     "profiles": "Profiles",
@@ -2760,7 +2770,6 @@
     "selfHosted": {
       "title": "Self-hosted sync server",
       "description": "Point Donut at your own donut-sync server to sync profiles, proxies, groups, and extensions without using the hosted cloud.",
-      "disabledWhileLoggedIn": "Self-hosted sync is unavailable while you're signed into your Donut account. Sign out to use a custom server.",
       "connectionStatus": "Connection:",
       "statusUnknown": "Untested",
       "testConnection": "Test connection",
@@ -2769,7 +2778,20 @@
     "deviceOrdinal": "{{ordinal}} of {{count}}",
     "automationPrimaryOnly": "Browser automation runs only on your primary device (Device 1). Sign out there to use it here.",
     "automationActiveHere": "Browser automation is active on this device.",
-    "viewTeamUsage": "View team usage"
+    "viewTeamUsage": "View team usage",
+    "ownServer": {
+      "title": "Your own sync server",
+      "description": "Sync this account with a donut-sync server that you run, not with Donut cloud. Your plan's profile limit and your team's roles and group access stay the same.",
+      "current": "Syncing with {{server}}",
+      "currentCloud": "Syncing with Donut cloud",
+      "donutCloud": "Donut cloud",
+      "useDonutCloud": "Use Donut cloud",
+      "accountsOn": "This server accepts Donut accounts.",
+      "cloudOnly": "Remote sessions and Cookie Bot need Donut cloud sync.",
+      "teamNote": "All members of your team must use the same server.",
+      "saved": "Sync server saved.",
+      "backToCloud": "Syncing with Donut cloud again."
+    }
   },
   "shortcutsPage": {
     "title": "Keyboard shortcuts",

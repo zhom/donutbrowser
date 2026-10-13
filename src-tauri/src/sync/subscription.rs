@@ -36,6 +36,8 @@ pub enum SyncWorkItem {
 #[derive(Clone, Copy)]
 enum TokenSource {
   Cloud,
+  /// The customer's own server, with a token the Donut API binds to it.
+  Account,
   SelfHosted,
 }
 
@@ -134,6 +136,18 @@ impl SyncSubscription {
     app_handle: &tauri::AppHandle,
     work_tx: mpsc::UnboundedSender<SyncWorkItem>,
   ) -> Result<Option<Self>, String> {
+    if let Some(server) = super::account_server::configured().await {
+      let token = crate::cloud_auth::CLOUD_AUTH
+        .server_sync_token(&server)
+        .await?;
+      return Ok(Some(Self::new(
+        server,
+        token,
+        TokenSource::Account,
+        work_tx,
+      )));
+    }
+
     // Cloud auth takes priority
     if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
       let url = crate::cloud_auth::CLOUD_SYNC_URL.to_string();
@@ -221,8 +235,14 @@ impl SyncSubscription {
             }
             Err(StreamFailure::Refused(status)) => {
               log::warn!("Sync subscription refused status={status}");
-              if matches!(source, TokenSource::Cloud) {
-                crate::cloud_auth::CloudAuthManager::discard_cloud_sync_token(&current);
+              match source {
+                TokenSource::Cloud => {
+                  crate::cloud_auth::CloudAuthManager::discard_cloud_sync_token(&current)
+                }
+                TokenSource::Account => {
+                  crate::cloud_auth::CloudAuthManager::discard_server_sync_token(&current)
+                }
+                TokenSource::SelfHosted => {}
               }
               refused = Some(current);
               token = None;
@@ -289,6 +309,13 @@ impl SyncSubscription {
           .get_or_refresh_sync_token()
           .await
       }
+      TokenSource::Account => match super::account_server::configured().await {
+        Some(server) => crate::cloud_auth::CLOUD_AUTH
+          .server_sync_token(&server)
+          .await
+          .map(Some),
+        None => Ok(None),
+      },
       TokenSource::SelfHosted => SettingsManager::instance()
         .get_sync_token(app_handle)
         .await

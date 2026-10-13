@@ -1,3 +1,4 @@
+pub mod account_server;
 mod client;
 pub mod config_entities;
 pub mod encryption;

@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import {
   type ExecutionContext,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
@@ -259,5 +260,160 @@ describe("AuthGuard", () => {
       prefix: "",
       profileLimit: 0,
     });
+  });
+});
+
+describe("AuthGuard with Donut account sign-in", () => {
+  const PUBLIC_URL = "https://sync.example.com";
+  const OWNER_ID = "99999999-8888-7777-6666-555555555555";
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function accountGuard(): AuthGuard {
+    return guardWith({
+      SYNC_TOKEN: SELF_HOSTED_TOKEN,
+      SYNC_PUBLIC_URL: `${PUBLIC_URL}/`,
+      DONUT_API_URL: "http://api.test",
+    });
+  }
+
+  // Signed with a key this server never sees: only the Donut API can say
+  // whose a token is. The claims only decide whether to ask.
+  const accountToken = (n = 1, claims: Record<string, unknown> = {}) =>
+    sign(
+      { sub: USER_ID, n, scope: "server-sync", aud: PUBLIC_URL, ...claims },
+      otherKeys.privateKey,
+    );
+
+  function answering(...answers: unknown[]): jest.SpyInstance {
+    return jest.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const answer = answers.shift();
+      if (answer instanceof Response) return answer;
+      return new Response(JSON.stringify(answer));
+    });
+  }
+
+  it("gives an account the API vouches for its own namespace and plan limit", async () => {
+    const fetchSpy = answering({
+      active: true,
+      sub: USER_ID,
+      profileLimit: 20,
+      team: null,
+    });
+    const token = accountToken();
+    const { context, request } = contextFor(token);
+
+    await expect(accountGuard().canActivate(context)).resolves.toBe(true);
+    expect(request.user).toEqual({
+      mode: "account",
+      prefix: `users/${USER_ID}/`,
+      profileLimit: 20,
+      sub: USER_ID,
+    });
+    // The API is asked about this server's own address, never the caller's.
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("http://api.test/api/auth/server-sync/introspect");
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      token,
+      server: PUBLIC_URL,
+    });
+  });
+
+  it("puts a team member in the owner namespace with the team's rules", async () => {
+    answering({
+      active: true,
+      sub: USER_ID,
+      profileLimit: 0,
+      team: {
+        ownerId: OWNER_ID,
+        teamId: "team-1",
+        teamProfileLimit: 100,
+        role: "launcher",
+        groupIds: ["g1", "bad/id"],
+      },
+    });
+    const { context, request } = contextFor(accountToken());
+
+    await expect(accountGuard().canActivate(context)).resolves.toBe(true);
+    expect(request.user).toEqual({
+      mode: "account",
+      prefix: `users/${OWNER_ID}/`,
+      profileLimit: 100,
+      sub: USER_ID,
+      teamRole: "launcher",
+      groupIds: ["g1"],
+    });
+  });
+
+  it("refuses what the API does not vouch for, and asks once per token", async () => {
+    // Refused, then active without a limit: 0 is unlimited, so no limit
+    // refuses rather than reads as 0.
+    const fetchSpy = answering(
+      { active: false },
+      { active: true, sub: USER_ID },
+      { active: false },
+    );
+    const token = accountToken();
+
+    for (let i = 0; i < 2; i++) {
+      await expect(
+        accountGuard().canActivate(contextFor(token).context),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    const guard = accountGuard();
+    const other = accountToken(2);
+    await expect(
+      guard.canActivate(contextFor(other).context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      guard.canActivate(contextFor(other).context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("fails closed when the API cannot be asked", async () => {
+    answering(new Response("down", { status: 502 }));
+    const { context, request } = contextFor(accountToken());
+
+    await expect(accountGuard().canActivate(context)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(request.user).toBeUndefined();
+  });
+
+  it("never asks about a token that is not for this server", async () => {
+    const fetchSpy = answering();
+    for (const token of [
+      accountToken(1, { aud: "https://other.example.com" }),
+      accountToken(2, { scope: "sync" }),
+      sign(
+        { sub: USER_ID, scope: "server-sync", aud: PUBLIC_URL },
+        otherKeys.privateKey,
+        -10,
+      ),
+    ]) {
+      await expect(
+        accountGuard().canActivate(contextFor(token).context),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("never sends the shared token or other strings to the API", async () => {
+    const fetchSpy = answering();
+    await expect(
+      accountGuard().canActivate(contextFor(SELF_HOSTED_TOKEN).context),
+    ).resolves.toBe(true);
+    await expect(
+      accountGuard().canActivate(contextFor("not a token").context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
