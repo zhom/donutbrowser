@@ -1793,6 +1793,58 @@ impl WayfernManager {
     Some(serde_json::Value::Object(document))
   }
 
+  /// The `Wayfern.setIdentity` parameters that rebuild an identity-backed
+  /// profile's device: the id, the claimed OS, the user's edits and the stored
+  /// location. `None` for a profile that stores a device payload or no id.
+  fn identity_params(
+    config: &WayfernConfig,
+    native_os: &str,
+  ) -> Option<serde_json::Map<String, serde_json::Value>> {
+    if config.fingerprint.is_some() {
+      return None;
+    }
+    let identity_id = config
+      .identity_id
+      .as_deref()
+      .map(str::trim)
+      .filter(|id| !id.is_empty())?;
+    let os = Self::claimed_operating_system(config, None).unwrap_or(native_os);
+    let mut params = serde_json::Map::new();
+    params.insert("identityId".to_string(), json!(identity_id));
+    params.insert("operatingSystem".to_string(), json!(os));
+    let overrides = Self::stored_object(config.identity_overrides.as_deref());
+    if !overrides.is_empty() {
+      params.insert(
+        "overrides".to_string(),
+        serde_json::Value::Object(overrides),
+      );
+    }
+    params.extend(Self::geo_params(&Self::stored_object(
+      config.location.as_deref(),
+    )));
+    Some(params)
+  }
+
+  /// The device in an identity answer, with the stored location filling the
+  /// location fields the answer leaves out. `None` when the answer carries no
+  /// device.
+  fn identity_view(
+    answer: &serde_json::Value,
+    location: &serde_json::Map<String, serde_json::Value>,
+  ) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let mut view = answer
+      .get("identity")?
+      .as_object()
+      .filter(|device| !device.is_empty())?
+      .clone();
+    for key in LOCALE_CARRY_OVER_KEYS {
+      if let Some(value) = location.get(key).filter(|_| !view.contains_key(key)) {
+        view.insert(key.to_string(), value.clone());
+      }
+    }
+    Some(view)
+  }
+
   /// Write the launch identity into the profile directory and return the
   /// absolute path the browser is given. Private to the user on Unix: the
   /// document names the identity and the user's overrides.
@@ -2590,6 +2642,59 @@ impl WayfernManager {
       identity_id,
       geolocation_applied,
     })
+  }
+
+  /// The device a profile presents, as a JSON object string: the stored
+  /// payload of a legacy profile, or the device the browser derives from an
+  /// identity-backed profile's id, edits and location. Nothing is stored.
+  /// `None` when the profile has neither, or the browser does not return the
+  /// device to this account.
+  pub async fn profile_fingerprint(
+    &self,
+    profile: &BrowserProfile,
+  ) -> Result<Option<String>, String> {
+    let config = profile.wayfern_config.clone().unwrap_or_default();
+    if config.fingerprint.is_some() {
+      return Ok(config.fingerprint);
+    }
+    let Some(mut params) = Self::identity_params(&config, &profile.native_os())
+      .filter(|_| supports_identity_api(&profile.version))
+    else {
+      return Ok(None);
+    };
+    let claimed_os = params["operatingSystem"].as_str().map(str::to_string);
+    let failure = |e: Box<dyn std::error::Error + Send + Sync>| {
+      wayfern_failure(
+        &e.to_string(),
+        "WAYFERN_FINGERPRINT_APPLY_FAILED",
+        claimed_os.as_deref(),
+      )
+    };
+    let token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+    if let Some(token) = &token {
+      params.insert("wayfernToken".to_string(), json!(token));
+    }
+    let session = HeadlessWayfern::start(
+      self,
+      profile,
+      token.as_deref(),
+      &format!("purpose=fingerprint_view profile={}", profile.id),
+    )
+    .await
+    .map_err(failure)?;
+    let answer = session
+      .call(
+        self,
+        "Wayfern.setIdentity",
+        serde_json::Value::Object(params),
+      )
+      .await;
+    session.stop().await;
+    let location = Self::stored_object(config.location.as_deref());
+    Ok(
+      Self::identity_view(&answer.map_err(failure)?, &location)
+        .map(|view| serde_json::Value::Object(view).to_string()),
+    )
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -4503,6 +4608,73 @@ mod tests {
       }),
       "a lone latitude, an absent language and empty overrides must not travel"
     );
+  }
+
+  #[test]
+  fn the_device_is_read_from_the_stored_identity_edits_and_location() {
+    let params = WayfernManager::identity_params(&identity_config(None), "macos")
+      .expect("an identity profile is read through its identity");
+    assert_eq!(
+      serde_json::Value::Object(params),
+      json!({
+        "identityId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "operatingSystem": "windows",
+        "language": "de-DE",
+        "latitude": 52.52,
+        "longitude": 13.405,
+        "overrides": {"hardwareConcurrency": 8}
+      }),
+      "the edits travel, and a location without a timezone still does"
+    );
+
+    let mut no_os = identity_config(Some("Europe/Berlin"));
+    no_os.os = None;
+    assert_eq!(
+      WayfernManager::identity_params(&no_os, "linux").unwrap()["operatingSystem"],
+      json!("linux")
+    );
+
+    let mut legacy = identity_config(Some("Europe/Berlin"));
+    legacy.fingerprint = Some("{}".into());
+    assert!(WayfernManager::identity_params(&legacy, "windows").is_none());
+    let mut no_identity = identity_config(Some("Europe/Berlin"));
+    no_identity.identity_id = None;
+    assert!(WayfernManager::identity_params(&no_identity, "windows").is_none());
+  }
+
+  #[test]
+  fn the_device_view_is_the_answer_with_the_stored_location_filled_in() {
+    let location = obj(
+      r#"{"timezone":"Europe/Berlin","timezoneOffset":-60,"languages":["de-DE","de"],"accuracy":20}"#,
+    );
+    let answer = json!({
+      "identity": {
+        "platform": "Win32",
+        "hardwareConcurrency": 8,
+        "timezone": "Europe/Berlin",
+        "languages": ["de-DE"]
+      }
+    });
+    let view = WayfernManager::identity_view(&answer, &location).unwrap();
+    assert_eq!(view["hardwareConcurrency"], json!(8));
+    assert_eq!(view["timezoneOffset"], json!(-60));
+    assert_eq!(view["accuracy"], json!(20));
+    assert_eq!(
+      view["languages"],
+      json!(["de-DE"]),
+      "what the browser answers wins over the stored location"
+    );
+
+    for withheld in [
+      json!({"identity": {}}),
+      json!({}),
+      json!({"identity": null}),
+    ] {
+      assert!(
+        WayfernManager::identity_view(&withheld, &location).is_none(),
+        "{withheld}: an answer without a device is no device, location or not"
+      );
+    }
   }
 
   #[test]

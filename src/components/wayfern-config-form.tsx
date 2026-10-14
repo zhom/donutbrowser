@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -296,6 +296,13 @@ export function WayfernConfigForm({
   const [currentOS] = useState<WayfernOS>(getCurrentOS);
   const [isGeneratingFingerprint, setIsGeneratingFingerprint] = useState(false);
   const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
+  // The device an identity-backed profile presents, read from the browser,
+  // and the identity it was read for. Shown, never stored.
+  const [device, setDevice] = useState<{
+    identityId: string;
+    fields: WayfernFingerprintConfig;
+  } | null>(null);
+  const ownEditRef = useRef<{ json: string | undefined } | null>(null);
 
   const handleGenerateFingerprint = async () => {
     if (!profileVersion) return;
@@ -324,6 +331,12 @@ export function WayfernConfigForm({
         result.identity_id ? undefined : result.fingerprint,
       );
       onConfigChange("identity_overrides", undefined);
+      if (result.identity_id && !limitedMode) {
+        setDevice({
+          identityId: result.identity_id,
+          fields: JSON.parse(result.fingerprint) as WayfernFingerprintConfig,
+        });
+      }
     } catch (error) {
       console.error("Failed to generate fingerprint:", error);
     } finally {
@@ -376,31 +389,67 @@ export function WayfernConfigForm({
   const editedJson = config.identity_id
     ? config.identity_overrides
     : config.fingerprint;
+  const identityId = config.identity_id;
+  const shownDevice =
+    device && device.identityId === identityId ? device.fields : null;
+
   useEffect(() => {
+    if (
+      !profileId ||
+      !identityId ||
+      limitedMode ||
+      device?.identityId === identityId
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void invoke<string | null>("get_profile_fingerprint", { profileId })
+      .then((json) => {
+        if (!cancelled && json) {
+          setDevice({
+            identityId,
+            fields: JSON.parse(json) as WayfernFingerprintConfig,
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to read fingerprint:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, identityId, limitedMode, device?.identityId]);
+
+  useEffect(() => {
+    // The form's own edit: what it shows already matches, including a field
+    // the user is in the middle of clearing.
+    if (ownEditRef.current && ownEditRef.current.json === editedJson) {
+      ownEditRef.current = null;
+      return;
+    }
+    ownEditRef.current = null;
+    let edited: WayfernFingerprintConfig = {};
     if (editedJson) {
       try {
-        const parsed = JSON.parse(editedJson) as WayfernFingerprintConfig;
-        setFingerprintConfig(parsed);
+        edited = JSON.parse(editedJson) as WayfernFingerprintConfig;
       } catch (error) {
         console.error("Failed to parse fingerprint config:", error);
-        setFingerprintConfig({});
       }
-    } else {
-      setFingerprintConfig({});
     }
-  }, [editedJson]);
+    setFingerprintConfig(shownDevice ? { ...shownDevice, ...edited } : edited);
+  }, [editedJson, shownDevice]);
 
   const updateFingerprintConfig = (
     key: keyof WayfernFingerprintConfig,
     value: unknown,
   ) => {
     const newConfig = { ...fingerprintConfig };
-
-    if (
+    const cleared =
       value === undefined ||
       value === "" ||
-      (Array.isArray(value) && value.length === 0)
-    ) {
+      (Array.isArray(value) && value.length === 0);
+
+    if (cleared) {
       delete newConfig[key];
     } else {
       (newConfig as Record<string, unknown>)[key] = value;
@@ -409,13 +458,30 @@ export function WayfernConfigForm({
     setFingerprintConfig(newConfig);
 
     try {
-      const jsonString = JSON.stringify(newConfig);
-      onConfigChange(
-        config.identity_id ? "identity_overrides" : "fingerprint",
-        Object.keys(newConfig).length === 0 && config.identity_id
-          ? undefined
-          : jsonString,
-      );
+      if (config.identity_id) {
+        // Only the user's edits are stored. A value equal to the device the
+        // identity presents is not an edit.
+        const edits: Record<string, unknown> = config.identity_overrides
+          ? JSON.parse(config.identity_overrides)
+          : {};
+        if (
+          cleared ||
+          (!(key in edits) &&
+            JSON.stringify(value) === JSON.stringify(shownDevice?.[key]))
+        ) {
+          delete edits[key];
+        } else {
+          edits[key] = value;
+        }
+        const json =
+          Object.keys(edits).length === 0 ? undefined : JSON.stringify(edits);
+        if (json !== editedJson) ownEditRef.current = { json };
+        onConfigChange("identity_overrides", json);
+      } else {
+        const json = JSON.stringify(newConfig);
+        if (json !== editedJson) ownEditRef.current = { json };
+        onConfigChange("fingerprint", json);
+      }
     } catch (error) {
       console.error("Failed to serialize fingerprint config:", error);
     }

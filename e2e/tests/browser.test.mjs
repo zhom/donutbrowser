@@ -750,6 +750,33 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
       clientInfo: { name: "Donut E2E", version: "1" },
     });
 
+    // The device the profile presents, through each way it is read: the
+    // fingerprint form, REST and MCP. An identity-backed profile stores no
+    // device, so every read derives it, and it is what the running page reports.
+    const shown = JSON.parse(
+      await app.invoke("get_profile_fingerprint", { profileId: profile.id }),
+    );
+    assert.ok(Object.keys(shown).length >= 10, JSON.stringify(shown));
+    assert.equal(shown.platform, await cdp.evaluate("navigator.platform"));
+    assert.equal(
+      shown.hardwareConcurrency,
+      await cdp.evaluate("navigator.hardwareConcurrency"),
+    );
+    const restFingerprint = await request(
+      `${base}/v1/profiles/${profile.id}/fingerprint`,
+      { token: saved.api_token },
+    );
+    assert.equal(
+      restFingerprint.response.status,
+      200,
+      JSON.stringify(restFingerprint.value),
+    );
+    assert.deepEqual(JSON.parse(restFingerprint.value.fingerprint), shown);
+    assert.deepEqual(
+      JSON.parse((await toolJson("get_profile_fingerprint")).fingerprint),
+      shown,
+    );
+
     const back = await tool("go_back");
     assert.match(back.text, /^Went back/);
     assert.match(back.text, /Page: Donut E2E Browser Fixture <.*\/wayfern>/);

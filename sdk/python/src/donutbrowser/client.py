@@ -24,6 +24,7 @@ from .models import (
     AgentTyping,
     ApiBulkCreateResponse,
     ApiGroupResponse,
+    ApiProfileFingerprintResponse,
     ApiProfileResponse,
     ApiProfilesResponse,
     ApiProxyResponse,
@@ -281,6 +282,14 @@ class DonutClient:
     def get_profile(self, profile_id: str) -> ApiProfileResponse:
         """GET /v1/profiles/{id}"""
         return self._request("GET", f"/v1/profiles/{_segment(profile_id)}")
+
+    def get_profile_fingerprint(self, profile_id: str) -> ApiProfileFingerprintResponse:
+        """GET /v1/profiles/{id}/fingerprint
+
+        The device the profile presents. May start the profile's browser
+        version headless for a moment.
+        """
+        return self._request("GET", f"/v1/profiles/{_segment(profile_id)}/fingerprint")
 
     def create_profile(
         self,

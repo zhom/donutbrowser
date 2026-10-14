@@ -1957,6 +1957,21 @@ async fn generate_sample_fingerprint(
   }
 }
 
+/// The device the fingerprint form shows for a saved profile, as a JSON
+/// object string, or `None` when there is none to show.
+#[tauri::command]
+async fn get_profile_fingerprint(profile_id: String) -> Result<Option<String>, String> {
+  let profile = crate::profile::ProfileManager::instance()
+    .list_profiles()
+    .map_err(|e| crate::backend_error_with_detail("INTERNAL_ERROR", e))?
+    .into_iter()
+    .find(|profile| profile.id.to_string() == profile_id)
+    .ok_or_else(|| crate::backend_error("PROFILE_NOT_FOUND"))?;
+  crate::wayfern_manager::WayfernManager::instance()
+    .profile_fingerprint(&profile)
+    .await
+}
+
 // --- Remote sessions --------------------------------------------------------
 //
 // Everything below is transport only. The session state machine, the schedule,
@@ -3506,6 +3521,7 @@ pub fn run_with_builder(
       import_proxies_from_parsed,
       update_wayfern_config,
       generate_sample_fingerprint,
+      get_profile_fingerprint,
       get_profile_groups,
       get_groups_with_profile_counts,
       create_profile_group,

@@ -59,6 +59,7 @@ export const OPERATIONS: ReadonlyMap<OperationKey, string> = new Map([
   ["GET /v1/profiles/import/detect", "detectImportProfiles"],
   ["DELETE /v1/profiles/{id}", "deleteProfile"],
   ["GET /v1/profiles/{id}", "getProfile"],
+  ["GET /v1/profiles/{id}/fingerprint", "getProfileFingerprint"],
   ["PUT /v1/profiles/{id}", "updateProfile"],
   ["POST /v1/profiles/{id}/agent/click", "agentClick"],
   ["POST /v1/profiles/{id}/agent/extract", "agentExtract"],

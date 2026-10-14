@@ -23,6 +23,7 @@ __all__ = [
     "ApiProfile",
     "ApiProfilesResponse",
     "ApiProfileResponse",
+    "ApiProfileFingerprintResponse",
     "ApiGroupResponse",
     "ApiStatusResponse",
     "ProfilePatch",
@@ -143,6 +144,13 @@ class ApiProfilesResponse(TypedDict):
 
 class ApiProfileResponse(TypedDict):
     profile: ApiProfile
+
+
+class ApiProfileFingerprintResponse(TypedDict, total=False):
+    #: The device the profile presents, as a JSON-encoded object: the shape
+    #: ``wayfern_config.fingerprint`` takes on create. ``None`` when there is
+    #: none to show.
+    fingerprint: Optional[str]
 
 
 class ApiGroupResponse(TypedDict):

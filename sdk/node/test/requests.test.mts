@@ -52,6 +52,14 @@ const CASES: Case[] = [
     operation: "GET /v1/profiles/{id}",
   },
   {
+    method: "getProfileFingerprint",
+    args: ["p1"],
+    verb: "GET",
+    path: "/v1/profiles/p1/fingerprint",
+    body: null,
+    operation: "GET /v1/profiles/{id}/fingerprint",
+  },
+  {
     method: "createProfile",
     args: [{ name: "Shopper", browser: "wayfern", tags: ["eu"], ephemeral: true }],
     verb: "POST",

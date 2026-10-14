@@ -3552,7 +3552,7 @@ impl McpServer {
       // Fingerprint management tools
       McpTool {
         name: "get_profile_fingerprint".to_string(),
-        description: "Get the fingerprint configuration for a Wayfern profile"
+        description: "Get the fingerprint configuration for a Wayfern profile. `fingerprint` is the device the profile presents, as a JSON string, or null when there is none to show."
           .to_string(),
         input_schema: serde_json::json!({
           "type": "object",
@@ -7898,9 +7898,17 @@ impl McpServer {
     let fingerprint_info = match profile.browser.as_str() {
       "wayfern" => {
         let config = profile.wayfern_config.as_ref().cloned().unwrap_or_default();
+        let fingerprint = crate::wayfern_manager::WayfernManager::instance()
+          .profile_fingerprint(profile)
+          .await
+          .map_err(|e| McpError {
+            code: -32000,
+            message: format!("Failed to read the fingerprint: {e}"),
+            data: None,
+          })?;
         serde_json::json!({
           "browser": "wayfern",
-          "fingerprint": config.fingerprint,
+          "fingerprint": fingerprint,
           "identity_id": config.identity_id,
           "identity_overrides": config.identity_overrides,
           "location": config.location,

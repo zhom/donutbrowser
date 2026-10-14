@@ -134,6 +134,14 @@ pub struct ApiProfileResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ApiProfileFingerprintResponse {
+  /// The device the profile presents, as a JSON-encoded object: the shape
+  /// `wayfern_config.fingerprint` takes on create. `null` when there is none
+  /// to show.
+  pub fingerprint: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateProfileRequest {
   pub name: String,
   /// Browser engine. Must be `"wayfern"` (anti-detect Chromium). Any other
@@ -757,6 +765,7 @@ struct ImportProxiesResponse {
   paths(
     get_profiles,
     get_profile,
+    get_profile_fingerprint_api,
     create_profile,
     update_profile,
     delete_profile,
@@ -844,6 +853,7 @@ struct ImportProxiesResponse {
     ApiProfile,
     ApiProfilesResponse,
     ApiProfileResponse,
+    ApiProfileFingerprintResponse,
     CreateProfileRequest,
     UpdateProfileRequest,
     ApiGroupResponse,
@@ -1146,6 +1156,7 @@ fn build_v1_router() -> Router<ApiServerState> {
   let (routes, _) = OpenApiRouter::new()
     .routes(routes!(get_profiles, create_profile))
     .routes(routes!(get_profile, update_profile, delete_profile))
+    .routes(routes!(get_profile_fingerprint_api))
     .routes(routes!(run_profile))
     .routes(routes!(run_profile_remote))
     // One `routes!` per PATH, not per handler: the GET and the DELETE share
@@ -1653,6 +1664,44 @@ async fn get_profile(
     }
     Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
   }
+}
+
+/// The device a Wayfern profile presents. Reading it starts the profile's
+/// browser version headless for a moment; nothing is launched for a profile
+/// that stores its device.
+#[utoipa::path(
+  get,
+  path = "/v1/profiles/{id}/fingerprint",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 200, description = "The device the profile presents", body = ApiProfileFingerprintResponse),
+    (status = 400, description = "The browser could not rebuild the device"),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "The profile's fingerprint OS needs a paid plan"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn get_profile_fingerprint_api(
+  Path(id): Path<String>,
+) -> Result<Json<ApiProfileFingerprintResponse>, (StatusCode, String)> {
+  let profile = ProfileManager::instance()
+    .list_profiles()
+    .map_err(manager_error_response)?
+    .into_iter()
+    .find(|p| p.id.to_string() == id)
+    .ok_or((StatusCode::NOT_FOUND, "profile not found".to_string()))?;
+  crate::wayfern_manager::WayfernManager::instance()
+    .profile_fingerprint(&profile)
+    .await
+    .map(|fingerprint| Json(ApiProfileFingerprintResponse { fingerprint }))
+    .map_err(manager_error_response)
 }
 
 /// Create a profile.
@@ -6353,6 +6402,23 @@ mod tests {
   }
 
   #[test]
+  fn openapi_documents_the_profile_fingerprint() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let get = &spec["paths"]["/v1/profiles/{id}/fingerprint"]["get"];
+    for status in ["200", "404"] {
+      assert!(get["responses"][status].is_object(), "{status} documented");
+    }
+    let fingerprint =
+      &spec["components"]["schemas"]["ApiProfileFingerprintResponse"]["properties"]["fingerprint"];
+    assert_eq!(
+      fingerprint["type"],
+      serde_json::json!(["string", "null"]),
+      "the device is a JSON-encoded string, or null when there is none to show"
+    );
+    assert!(schema_required(&spec, "ApiProfileFingerprintResponse").is_empty());
+  }
+
+  #[test]
   fn openapi_documents_the_storage_state() {
     let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
     let path = &spec["paths"]["/v1/profiles/{id}/storage-state"];
@@ -7507,3 +7573,7 @@ mod tests {
     }
   }
 }
+
+#[cfg(all(test, feature = "e2e"))]
+#[path = "api_server_fingerprint_browser_tests.rs"]
+mod fingerprint_browser_tests;

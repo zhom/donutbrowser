@@ -76,6 +76,15 @@ export interface ApiProfileResponse {
   profile: ApiProfile;
 }
 
+export interface ApiProfileFingerprintResponse {
+  /**
+   * The device the profile presents, as a JSON-encoded object: the shape
+   * `wayfern_config.fingerprint` takes on create. `null` when there is none
+   * to show.
+   */
+  fingerprint?: string | null;
+}
+
 export interface ApiGroupResponse {
   id: string;
   name: string;

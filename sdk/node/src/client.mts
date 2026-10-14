@@ -14,6 +14,7 @@ import type {
   AgentTyping,
   ApiBulkCreateResponse,
   ApiGroupResponse,
+  ApiProfileFingerprintResponse,
   ApiProfileResponse,
   ApiProfilesResponse,
   ApiProxyResponse,
@@ -263,6 +264,21 @@ export class DonutClient {
   /** GET /v1/profiles/{id} */
   getProfile(profileId: string): Promise<ApiProfileResponse> {
     return this.#request("GET", `/v1/profiles/${segment(profileId)}`);
+  }
+
+  /**
+   * GET /v1/profiles/{id}/fingerprint
+   *
+   * The device the profile presents. May start the profile's browser version
+   * headless for a moment.
+   */
+  getProfileFingerprint(
+    profileId: string,
+  ): Promise<ApiProfileFingerprintResponse> {
+    return this.#request(
+      "GET",
+      `/v1/profiles/${segment(profileId)}/fingerprint`,
+    );
   }
 
   /**

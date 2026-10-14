@@ -45,6 +45,16 @@ CASES: List[Case] = [
     ("list_profiles", (), {}, "GET", "/v1/profiles", None, {}, "/v1/profiles"),
     ("get_profile", ("p1",), {}, "GET", "/v1/profiles/p1", None, {}, "/v1/profiles/{id}"),
     (
+        "get_profile_fingerprint",
+        ("p1",),
+        {},
+        "GET",
+        "/v1/profiles/p1/fingerprint",
+        None,
+        {},
+        "/v1/profiles/{id}/fingerprint",
+    ),
+    (
         "create_profile",
         (),
         {"name": "Shopper", "browser": "wayfern", "tags": ["eu"], "ephemeral": True},

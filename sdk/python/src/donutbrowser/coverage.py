@@ -66,6 +66,7 @@ OPERATIONS: Dict[Operation, str] = {
     ("GET", "/v1/profiles/import/detect"): "detect_import_profiles",
     ("DELETE", "/v1/profiles/{id}"): "delete_profile",
     ("GET", "/v1/profiles/{id}"): "get_profile",
+    ("GET", "/v1/profiles/{id}/fingerprint"): "get_profile_fingerprint",
     ("PUT", "/v1/profiles/{id}"): "update_profile",
     ("POST", "/v1/profiles/{id}/agent/click"): "agent_click",
     ("POST", "/v1/profiles/{id}/agent/extract"): "agent_extract",

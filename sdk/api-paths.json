@@ -2,7 +2,7 @@
   "source": "src-tauri/src/api_server.rs",
   "regenerate_with": "python3 sdk/tools/extract-api-paths.py",
   "description": "Every operation the desktop app publishes in its /openapi.json. The SDK test suites assert this list and their own coverage tables match exactly, so an endpoint added to the app fails the SDK tests until it is either wrapped or deliberately listed as omitted.",
-  "operation_count": 84,
+  "operation_count": 85,
   "operations": [
     {
       "operation_id": "download_browser_api",
@@ -248,6 +248,11 @@
       "operation_id": "import_profile_cookies",
       "method": "POST",
       "path": "/v1/profiles/{id}/cookies/import"
+    },
+    {
+      "operation_id": "get_profile_fingerprint_api",
+      "method": "GET",
+      "path": "/v1/profiles/{id}/fingerprint"
     },
     {
       "operation_id": "kill_profile",
