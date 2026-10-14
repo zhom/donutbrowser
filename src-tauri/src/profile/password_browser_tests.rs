@@ -76,7 +76,8 @@ async fn cdp(ws_url: &str, method: &str, params: Value) -> Value {
 /// button does. Returns the names of the cookies the browser had on start.
 async fn browser_session(user_data_dir: &Path, new_cookie: &str) -> Vec<String> {
   let port = WayfernManager::find_free_port().await.unwrap();
-  let mut child = tokio::process::Command::new(wayfern_executable())
+  let mut command = tokio::process::Command::new(wayfern_executable());
+  command
     .arg(format!("--remote-debugging-port={port}"))
     .arg("--remote-debugging-address=127.0.0.1")
     .arg(format!("--user-data-dir={}", user_data_dir.display()))
@@ -89,9 +90,15 @@ async fn browser_session(user_data_dir: &Path, new_cookie: &str) -> Vec<String> 
     .arg("--headless=new")
     .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .spawn()
-    .expect("the browser starts");
+    .stderr(std::process::Stdio::null());
+  // As a launch does on Linux, where the browser aborts without them.
+  #[cfg(target_os = "linux")]
+  command.args([
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+  ]);
+  let mut child = command.spawn().expect("the browser starts");
   let pid = child.id().unwrap();
   // Reaped as soon as it exits, or the stop below sees a zombie as running.
   let reaper = tokio::spawn(async move { child.wait().await });
