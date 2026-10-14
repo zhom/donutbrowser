@@ -1508,7 +1508,7 @@
       "extensionGroup": "Nhóm tiện ích",
       "totalSessions": "Tổng số phiên",
       "syncMode": "Chế độ đồng bộ",
-      "proxy": "PROXY",
+      "proxy": "Proxy",
       "vpn": "VPN",
       "cookieCount": "Cookie đã lưu",
       "localDataTransfer": "Truyền dữ liệu cục bộ",
@@ -1576,7 +1576,7 @@
     "sectionDesc": {
       "fingerprint": "Cấu hình cách profile này hiển thị với các script vân tay.",
       "network": "Quản lý proxy hoặc VPN mà profile này sử dụng để truy cập internet và máy chủ DNS dùng để phân giải tên miền.",
-      "cookies": "Nhập, sao chép hoặc xóa cookie cho profile này.",
+      "cookies": "Nhập, xuất hoặc sao chép cookie của profile này.",
       "extensions": "Chọn tiện ích nào được tải khi profile này khởi chạy.",
       "sync": "Cấu hình cách profile này được phản chiếu sang các thiết bị khác của bạn.",
       "automation": "Chạy lệnh hoặc script mỗi khi profile này khởi chạy.",

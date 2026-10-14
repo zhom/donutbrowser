@@ -76,6 +76,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SoftFields } from "@/components/ui/field-variant";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -190,7 +191,7 @@ function ClearOnCloseToggle({
   };
 
   return (
-    <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
+    <div className="flex items-center gap-3 rounded-lg bg-foreground/4 px-3 py-2">
       <LuEraser className="size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{t("clearOnClose.label")}</p>
@@ -225,14 +226,14 @@ function InfoCard({
         type="button"
         disabled={disabled}
         onClick={onClick}
-        className="min-w-0 rounded-md bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+        className="min-w-0 rounded-lg bg-foreground/4 px-3 py-2.5 text-left transition-colors hover:bg-foreground/7 focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
       >
         <span className="block text-xs text-muted-foreground">{label}</span>
         <span className="mt-0.5 block break-words text-sm">{value}</span>
       </button>
     );
   return (
-    <div className="rounded-md border bg-muted/50 px-3 py-2.5">
+    <div className="rounded-lg bg-foreground/4 px-3 py-2.5">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-0.5 break-words text-sm">{value}</p>
     </div>
@@ -1166,7 +1167,7 @@ function ProfileInfoLayout({
     : "overview";
 
   return (
-    <>
+    <SoftFields>
       {/* Top bar */}
       <div className="flex min-h-11 shrink-0 items-center gap-2 px-3 py-2">
         <LuUsers className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1181,7 +1182,7 @@ function ProfileInfoLayout({
         </div>
         {onCloneProfile && (
           <Button
-            variant="ghost"
+            variant="subtle"
             size="sm"
             className="h-7 gap-1.5 px-2 text-xs"
             disabled={isDisabled}
@@ -1193,7 +1194,7 @@ function ProfileInfoLayout({
         )}
         {saveTemplateAction && (
           <Button
-            variant="ghost"
+            variant="subtle"
             size="sm"
             className="h-7 gap-1.5 px-2 text-xs"
             data-slot="profile-info-save-template"
@@ -1203,12 +1204,26 @@ function ProfileInfoLayout({
             {saveTemplateAction.label}
           </Button>
         )}
+        {deleteAction && (
+          <Button
+            variant="subtle"
+            size="icon"
+            data-slot="profile-info-delete"
+            aria-label={t("profileInfo.sections.delete")}
+            title={t("profileInfo.sections.delete")}
+            className="size-7 text-destructive-text hover:bg-destructive/10 hover:text-destructive-text"
+            onClick={deleteAction.onClick}
+            disabled={deleteAction.disabled}
+          >
+            <LuTrash2 className="size-3.5" />
+          </Button>
+        )}
         <button
           type="button"
           data-slot="profile-info-close"
           aria-label={t("common.buttons.close")}
           onClick={onClose}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <LuX className="size-3.5" />
         </button>
@@ -1238,8 +1253,8 @@ function ProfileInfoLayout({
                   className={cn(
                     "flex min-h-8 max-w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     active
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      ? "bg-foreground/8 text-foreground"
+                      : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                   )}
                 >
                   <span className="shrink-0">{it.icon}</span>
@@ -1258,20 +1273,6 @@ function ProfileInfoLayout({
                 </button>
               );
             })}
-          {deleteAction && (
-            <button
-              type="button"
-              data-slot="profile-info-delete"
-              onClick={deleteAction.onClick}
-              disabled={deleteAction.disabled}
-              className="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-destructive-text transition-colors duration-100 hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 @[40rem]/profile-info:mt-2"
-            >
-              <LuTrash2 className="size-3.5 shrink-0" />
-              <span className="flex-1 text-left">
-                {t("profileInfo.sections.delete")}
-              </span>
-            </button>
-          )}
         </nav>
 
         {/* Main */}
@@ -1314,8 +1315,8 @@ function ProfileInfoLayout({
               />
 
               {/* ID */}
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
-                <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
+              <div className="flex items-center gap-2 rounded-lg bg-foreground/4 px-3 py-2">
+                <span className="shrink-0 text-xs font-medium text-muted-foreground">
                   {t("profiles.table.profileId")}
                 </span>
                 <span
@@ -1367,7 +1368,7 @@ function ProfileInfoLayout({
 
               {/* Activity */}
               <div className="mt-1 flex flex-col gap-1.5">
-                <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                <span className="text-xs font-medium text-muted-foreground">
                   {t("profileInfo.sections.activity")}
                 </span>
                 <div className="grid grid-cols-2 gap-2">
@@ -1401,8 +1402,8 @@ function ProfileInfoLayout({
               )}
 
               {profile.created_by_email && (
-                <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-                  <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                <div className="rounded-lg bg-foreground/4 px-3 py-2">
+                  <p className="text-xs font-medium text-muted-foreground">
                     {t("sync.team.title")}
                   </p>
                   <p className="mt-0.5 text-sm">
@@ -1500,7 +1501,7 @@ function ProfileInfoLayout({
               {synchronizerAction && (
                 <Button
                   data-slot="profile-start-synchronizer"
-                  variant="secondary"
+                  variant="soft"
                   size="sm"
                   className="h-auto min-h-8 self-start whitespace-normal"
                   onClick={synchronizerAction.onClick}
@@ -1513,7 +1514,15 @@ function ProfileInfoLayout({
             </div>
           )}
 
-          {section === "transfer" && <ExportProfileSection profile={profile} />}
+          {section === "transfer" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <LuDownload className="size-4" />
+                {t("profileInfo.sections.transfer")}
+              </div>
+              <ExportProfileSection profile={profile} />
+            </div>
+          )}
 
           {section === "security" && (
             <SecuritySectionInline
@@ -1534,7 +1543,7 @@ function ProfileInfoLayout({
           )}
         </div>
       </div>
-    </>
+    </SoftFields>
   );
 }
 
@@ -1563,7 +1572,7 @@ function _SectionPlaceholder({
       </div>
       <p className="text-xs text-muted-foreground">{description}</p>
       {hint && (
-        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+        <div className="rounded-lg bg-foreground/4 px-3 py-2 text-xs">
           {hint}
         </div>
       )}
@@ -1831,8 +1840,8 @@ function SyncSectionInline({
       <p className="text-xs text-muted-foreground">
         {t("profileInfo.sectionDesc.sync")}
       </p>
-      <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">
           {t("profileInfo.fields.syncMode")}
         </span>
         <Select
@@ -1842,7 +1851,7 @@ function SyncSectionInline({
             void onChangeMode(v);
           }}
         >
-          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
+          <SelectTrigger className="h-8 w-full text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1855,8 +1864,8 @@ function SyncSectionInline({
         </Select>
       </div>
       {syncStatus && (
-        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-          <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+        <div className="rounded-lg bg-foreground/4 px-3 py-2">
+          <p className="text-xs font-medium text-muted-foreground">
             {t("profileInfo.fields.syncStatus")}
           </p>
           <p className="mt-0.5 text-sm">
@@ -1991,7 +2000,7 @@ function NetworkSectionInline({
       </p>
 
       <div className="flex items-center gap-2">
-        <span className="w-12 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
+        <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">
           {t("profileInfo.fields.proxy")}
         </span>
         <Select
@@ -2001,7 +2010,7 @@ function NetworkSectionInline({
             void onProxyChange(v);
           }}
         >
-          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
+          <SelectTrigger className="h-8 min-w-0 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -2019,7 +2028,8 @@ function NetworkSectionInline({
           <Button
             type="button"
             variant="soft"
-            className="shrink-0"
+            size="sm"
+            className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
             data-slot="profile-proxy-rotate"
             title={t("proxies.rotation.actionTooltip")}
             disabled={isSaving}
@@ -2032,7 +2042,7 @@ function NetworkSectionInline({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="w-12 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
+        <span className="w-12 shrink-0 text-xs font-medium text-muted-foreground">
           {t("profileInfo.fields.vpn")}
         </span>
         <Select
@@ -2042,7 +2052,7 @@ function NetworkSectionInline({
             void onVpnChange(v);
           }}
         >
-          <SelectTrigger className="h-7 min-w-0 flex-1 text-xs">
+          <SelectTrigger className="h-8 min-w-0 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -2067,7 +2077,7 @@ function NetworkSectionInline({
       >
         <label
           htmlFor={dnsServerId}
-          className="w-12 shrink-0 pt-2.5 text-[10px] tracking-wide text-muted-foreground uppercase"
+          className="w-12 shrink-0 pt-2.5 text-xs font-medium text-muted-foreground"
         >
           {t("profileInfo.fields.dns")}
         </label>
@@ -2110,7 +2120,7 @@ function EphemeralSectionNotice({
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-lg bg-foreground/4 p-6 text-center">
       <LuTimer className="size-4 shrink-0 text-muted-foreground" />
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       <p className="max-w-[48ch] text-sm text-pretty text-muted-foreground">
@@ -2196,8 +2206,8 @@ function ExtensionsSectionInline({
       <p className="text-xs text-muted-foreground">
         {t("profileInfo.sectionDesc.extensions")}
       </p>
-      <div className="flex items-center gap-2">
-        <span className="w-16 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">
           {t("profileInfo.fields.extensionGroup")}
         </span>
         <Select
@@ -2207,7 +2217,7 @@ function ExtensionsSectionInline({
             void onChange(v);
           }}
         >
-          <SelectTrigger className="h-7 flex-1 text-xs">
+          <SelectTrigger className="h-8 w-full text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -2327,7 +2337,7 @@ function CookiesSectionInline({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="outline"
+                variant="soft"
                 size="sm"
                 className="h-7 gap-1.5"
                 disabled={
@@ -2361,7 +2371,7 @@ function CookiesSectionInline({
           </DropdownMenu>
           {onImportCookies && (
             <Button
-              variant="outline"
+              variant="soft"
               size="sm"
               className="h-7 gap-1.5"
               disabled={isDisabled || isRunning}
@@ -2373,7 +2383,7 @@ function CookiesSectionInline({
           )}
           {onCopyCookies && (
             <Button
-              variant="outline"
+              variant="soft"
               size="sm"
               className="h-7 gap-1.5"
               disabled={isDisabled}
@@ -2389,15 +2399,15 @@ function CookiesSectionInline({
         {t("profileInfo.sectionDesc.cookies")}
       </p>
       {isRunning ? (
-        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <div className="rounded-lg bg-foreground/4 px-3 py-2">
           <p className="text-xs text-muted-foreground">
             {t("profileInfo.cookies.runningNotice")}
           </p>
         </div>
       ) : (
         <>
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-            <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+          <div className="rounded-lg bg-foreground/4 px-3 py-2">
+            <p className="text-xs font-medium text-muted-foreground">
               {t("profileInfo.fields.cookieCount")}
             </p>
             <p className="mt-0.5 text-sm">
@@ -2416,8 +2426,8 @@ function CookiesSectionInline({
             />
           )}
           {domains.length > 0 && (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-muted/40">
-              <p className="shrink-0 border-b border-border px-3 py-2 text-[10px] tracking-wide text-muted-foreground uppercase">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-foreground/4">
+              <p className="shrink-0 border-b border-foreground/6 px-3 py-2 text-xs font-medium text-muted-foreground">
                 {t("profileInfo.cookies.domainsHeader", {
                   count: domains.length,
                 })}
@@ -2542,10 +2552,10 @@ function StorageStateBlock({
   return (
     <div
       data-slot="profile-storage-state"
-      className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/40 px-3 py-2"
+      className="flex items-center justify-between gap-3 rounded-lg bg-foreground/4 px-3 py-2"
     >
       <div className="min-w-0">
-        <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+        <p className="text-xs font-medium text-muted-foreground">
           {t("profileInfo.localStorage.title")}
         </p>
         <p className="mt-0.5 text-sm" data-slot="profile-local-storage-stats">
@@ -2582,7 +2592,7 @@ function StorageStateBlock({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <Button
-          variant="outline"
+          variant="soft"
           size="sm"
           className="h-7 gap-1.5"
           data-slot="storage-state-export"
@@ -2593,7 +2603,7 @@ function StorageStateBlock({
           {t("common.buttons.export")}
         </Button>
         <Button
-          variant="outline"
+          variant="soft"
           size="sm"
           className="h-7 gap-1.5"
           data-slot="storage-state-import"
@@ -2707,7 +2717,7 @@ function FingerprintSectionInline({
         />
       ) : (
         <>
-          <div className="flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-lg bg-foreground/4 p-6 text-center">
             <LuLock className="size-4 shrink-0 text-muted-foreground" />
             <h3 className="text-sm font-medium text-foreground">
               {t("profileInfo.fingerprint.lockedTitle")}
@@ -2729,7 +2739,7 @@ function FingerprintSectionInline({
         <p className="text-xs text-success-text">{success}</p>
       )}
 
-      <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+      <div className="mt-3 flex items-center gap-2 border-t border-foreground/6 pt-3">
         <Button
           size="sm"
           className="h-7 text-xs"
@@ -2898,8 +2908,7 @@ function SecuritySectionInline({
               setIsVerifyOpen(true);
             }}
             className={cn(
-              "min-h-7 flex-1 rounded-md border px-2 py-1 text-xs transition-colors",
-              "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              "h-8 flex-1 rounded-lg bg-foreground/5 px-2 text-xs text-muted-foreground transition-colors hover:bg-foreground/8 hover:text-foreground",
             )}
           >
             {t("profilePassword.modes.validate")}
@@ -2911,10 +2920,10 @@ function SecuritySectionInline({
               reset();
             }}
             className={cn(
-              "min-h-7 flex-1 rounded-md border px-2 py-1 text-xs transition-colors",
+              "h-8 flex-1 rounded-lg px-2 text-xs transition-colors",
               mode === "change"
-                ? "border-transparent bg-accent text-accent-foreground"
-                : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                ? "bg-foreground/10 text-foreground"
+                : "bg-foreground/5 text-muted-foreground hover:bg-foreground/8 hover:text-foreground",
             )}
           >
             {t("profilePassword.modes.change")}
@@ -2926,10 +2935,10 @@ function SecuritySectionInline({
               reset();
             }}
             className={cn(
-              "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
+              "h-8 flex-1 rounded-lg px-2 text-xs transition-colors",
               mode === "remove"
-                ? "border-transparent bg-destructive/10 text-destructive-text"
-                : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                ? "bg-destructive/10 text-destructive-text"
+                : "bg-foreground/5 text-muted-foreground hover:bg-foreground/8 hover:text-foreground",
             )}
           >
             {t("profilePassword.modes.remove")}

@@ -93,7 +93,7 @@ export function ProfileHandoffStatus({
       data-profile-id={profileId}
       data-handoff-state={phase}
       aria-label={t("profileMotion.handoffTitle")}
-      className="flex flex-col gap-3 rounded-md bg-muted/40 p-3"
+      className="flex flex-col gap-3 rounded-lg bg-foreground/4 p-3"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

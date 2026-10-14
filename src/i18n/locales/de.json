@@ -1508,7 +1508,7 @@
       "extensionGroup": "Erweiterungsgruppe",
       "totalSessions": "Sitzungen insgesamt",
       "syncMode": "Sync-Modus",
-      "proxy": "PROXY",
+      "proxy": "Proxy",
       "vpn": "VPN",
       "cookieCount": "Gespeicherte Cookies",
       "localDataTransfer": "Lokale Datenübertragung",
@@ -1576,7 +1576,7 @@
     "sectionDesc": {
       "fingerprint": "Legen Sie fest, wie dieses Profil für Fingerprinting-Skripte erscheint.",
       "network": "Verwalten Sie den Proxy oder das VPN, über das dieses Profil ins Internet geht, und den DNS-Server, mit dem es Namen auflöst.",
-      "cookies": "Cookies für dieses Profil importieren, kopieren oder löschen.",
+      "cookies": "Cookies dieses Profils importieren, exportieren oder kopieren.",
       "extensions": "Legen Sie fest, welche Erweiterungen beim Start dieses Profils geladen werden.",
       "sync": "Legen Sie fest, wie dieses Profil auf Ihre anderen Geräte gespiegelt wird.",
       "automation": "Bei jedem Start dieses Profils einen Befehl oder ein Skript ausführen.",

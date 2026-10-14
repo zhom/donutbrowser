@@ -1576,7 +1576,7 @@
     "sectionDesc": {
       "fingerprint": "配置此配置文件如何对指纹脚本显示。",
       "network": "管理此配置文件使用的代理或 VPN，以及用于解析域名的 DNS 服务器。",
-      "cookies": "导入、复制或清除此配置文件的 Cookie。",
+      "cookies": "导入、导出或复制此配置文件的 Cookie。",
       "extensions": "选择启动此配置文件时加载的扩展。",
       "sync": "配置此配置文件如何在设备间同步。",
       "automation": "在启动此配置文件时运行命令。",

@@ -90,7 +90,7 @@ export function ProfileMetadataCard({
           type="button"
           disabled={disabled}
           data-slot={`profile-edit-${field}`}
-          className="min-w-0 rounded-md bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+          className="min-w-0 rounded-lg bg-foreground/4 px-3 py-2.5 text-left transition-colors hover:bg-foreground/7 focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
         >
           <span className="block text-xs text-muted-foreground">{label}</span>
           <span className="mt-0.5 block break-words text-sm">

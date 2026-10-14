@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SoftFields } from "@/components/ui/field-variant";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProBadge } from "@/components/ui/pro-badge";
@@ -510,8 +511,9 @@ export function WayfernConfigForm({
       isLoading={isGeneratingFingerprint}
       onClick={handleRegenerateClick}
       disabled={readOnly}
-      variant="outline"
+      variant="soft"
       size="sm"
+      className="h-8 rounded-lg px-3 text-xs"
     >
       {isCreating
         ? t("fingerprint.generateFingerprint")
@@ -641,7 +643,7 @@ export function WayfernConfigForm({
         <Label>{t("fingerprint.cameraLabel")}</Label>
         <div className="flex flex-wrap items-center gap-2">
           <RippleButton
-            variant="outline"
+            variant="soft"
             size="sm"
             disabled={readOnly}
             onClick={() => {
@@ -1583,271 +1585,280 @@ export function WayfernConfigForm({
   );
 
   return (
-    <div className={`@container space-y-6 ${className}`}>
-      {/* Rendered outside the tabs so the confirmation survives whichever
+    <SoftFields>
+      <div className={`@container space-y-6 ${className}`}>
+        {/* Rendered outside the tabs so the confirmation survives whichever
           panel the button was pressed from. */}
-      <Dialog
-        open={isRegenerateConfirmOpen}
-        onOpenChange={setIsRegenerateConfirmOpen}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("fingerprint.regenerateConfirmTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("fingerprint.regenerateConfirmDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <RippleButton
-              variant="outline"
-              onClick={() => {
-                setIsRegenerateConfirmOpen(false);
-              }}
-            >
-              {t("common.buttons.cancel")}
-            </RippleButton>
-            <RippleButton
-              variant="destructive"
-              onClick={handleConfirmRegenerate}
-            >
-              {t("fingerprint.regenerateFingerprint")}
-            </RippleButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {forceAdvanced ? (
-        renderAdvancedForm()
-      ) : (
-        <Tabs
-          value={activeTab}
-          onValueChange={readOnly ? undefined : setActiveTab}
-          className="w-full"
+        <Dialog
+          open={isRegenerateConfirmOpen}
+          onOpenChange={setIsRegenerateConfirmOpen}
         >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="automatic" disabled={readOnly}>
-              {t("fingerprint.automatic")}
-            </TabsTrigger>
-            <TabsTrigger value="manual" disabled={readOnly}>
-              {t("fingerprint.manual")}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="automatic" className="space-y-6">
-            {/* Operating System Selection */}
-            <div className="mt-4 space-y-3">
-              <Label>{t("fingerprint.osLabel")}</Label>
-              <Select
-                value={selectedOS}
-                onValueChange={(value: WayfernOS) => {
-                  onConfigChange("os", value);
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {t("fingerprint.regenerateConfirmTitle")}
+              </DialogTitle>
+              <DialogDescription>
+                {t("fingerprint.regenerateConfirmDescription")}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <RippleButton
+                variant="soft"
+                onClick={() => {
+                  setIsRegenerateConfirmOpen(false);
                 }}
-                disabled={readOnly}
               >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={t("fingerprint.selectOSPlaceholder")}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {(
-                    [
-                      "windows",
-                      "macos",
-                      "linux",
-                      "android",
-                      "ios",
-                    ] as WayfernOS[]
-                  ).map((os) => {
-                    const isDisabled = os !== currentOS && !crossOsUnlocked;
-                    return (
-                      <SelectItem key={os} value={os} disabled={isDisabled}>
-                        <span className="flex items-center gap-2">
-                          {osLabels[os]}
-                          {isDisabled && <ProBadge />}
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {selectedOS !== currentOS && crossOsUnlocked && (
-                <Alert className="mt-2">
-                  <AlertDescription>
-                    {t("fingerprint.crossOsLimitations")}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
+                {t("common.buttons.cancel")}
+              </RippleButton>
+              <RippleButton
+                variant="destructive"
+                onClick={handleConfirmRegenerate}
+              >
+                {t("fingerprint.regenerateFingerprint")}
+              </RippleButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {forceAdvanced ? (
+          renderAdvancedForm()
+        ) : (
+          <Tabs
+            value={activeTab}
+            onValueChange={readOnly ? undefined : setActiveTab}
+            className="w-full"
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="automatic" disabled={readOnly}>
+                {t("fingerprint.automatic")}
+              </TabsTrigger>
+              <TabsTrigger value="manual" disabled={readOnly}>
+                {t("fingerprint.manual")}
+              </TabsTrigger>
+            </TabsList>
 
-            {/* Randomize Fingerprint Option */}
-            <div className="space-y-3 rounded-lg bg-foreground/4 p-4">
-              <div className="flex items-center gap-x-2">
-                <Checkbox
-                  id="randomize-fingerprint-auto"
-                  checked={config.randomize_fingerprint_on_launch ?? false}
-                  onCheckedChange={(checked) => {
-                    onConfigChange("randomize_fingerprint_on_launch", checked);
+            <TabsContent value="automatic" className="space-y-6">
+              {/* Operating System Selection */}
+              <div className="mt-4 space-y-3">
+                <Label>{t("fingerprint.osLabel")}</Label>
+                <Select
+                  value={selectedOS}
+                  onValueChange={(value: WayfernOS) => {
+                    onConfigChange("os", value);
                   }}
                   disabled={readOnly}
-                />
-                <Label
-                  htmlFor="randomize-fingerprint-auto"
-                  className="font-medium"
                 >
-                  {t("fingerprint.generateRandomOnLaunch")}
-                </Label>
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={t("fingerprint.selectOSPlaceholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      [
+                        "windows",
+                        "macos",
+                        "linux",
+                        "android",
+                        "ios",
+                      ] as WayfernOS[]
+                    ).map((os) => {
+                      const isDisabled = os !== currentOS && !crossOsUnlocked;
+                      return (
+                        <SelectItem key={os} value={os} disabled={isDisabled}>
+                          <span className="flex items-center gap-2">
+                            {osLabels[os]}
+                            {isDisabled && <ProBadge />}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {selectedOS !== currentOS && crossOsUnlocked && (
+                  <Alert className="mt-2">
+                    <AlertDescription>
+                      {t("fingerprint.crossOsLimitations")}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
-              <p className="ml-6 text-sm text-muted-foreground">
-                {t("fingerprint.generateRandomDescription")}
-              </p>
-            </div>
 
-            <SessionRestoreOption
-              checked={config.restore_session ?? true}
-              onChange={(checked) => {
-                onConfigChange("restore_session", checked);
-              }}
-              readOnly={readOnly}
-            />
-
-            {/* Automatic Location Configuration */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-x-2">
-                <Checkbox
-                  id="auto-location"
-                  checked={isAutoLocationEnabled}
-                  onCheckedChange={handleAutoLocationToggle}
-                  disabled={isEditingDisabled}
-                />
-                <Label htmlFor="auto-location">
-                  {t("fingerprint.autoLocationDescription")}
-                </Label>
-              </div>
-            </div>
-
-            {/* Screen Resolution */}
-            <div
-              className={
-                limitedMode ? "relative overflow-hidden rounded-lg" : undefined
-              }
-            >
-              <fieldset
-                disabled={isEditingDisabled || limitedMode}
-                className="space-y-3"
-              >
-                <Label>{t("fingerprint.screenResolution")}</Label>
-                <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="screen-max-width">
-                      {t("fingerprint.maxWidth")}
-                    </Label>
-                    <Input
-                      id="screen-max-width"
-                      type="number"
-                      value={config.screen_max_width ?? ""}
-                      onChange={(e) => {
-                        onConfigChange(
-                          "screen_max_width",
-                          e.target.value
-                            ? parseInt(e.target.value, 10)
-                            : undefined,
-                        );
-                      }}
-                      placeholder={t("common.placeholders.example", {
-                        value: "1920",
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="screen-max-height">
-                      {t("fingerprint.maxHeight")}
-                    </Label>
-                    <Input
-                      id="screen-max-height"
-                      type="number"
-                      value={config.screen_max_height ?? ""}
-                      onChange={(e) => {
-                        onConfigChange(
-                          "screen_max_height",
-                          e.target.value
-                            ? parseInt(e.target.value, 10)
-                            : undefined,
-                        );
-                      }}
-                      placeholder={t("common.placeholders.example", {
-                        value: "1080",
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="screen-min-width">
-                      {t("fingerprint.minWidth")}
-                    </Label>
-                    <Input
-                      id="screen-min-width"
-                      type="number"
-                      value={config.screen_min_width ?? ""}
-                      onChange={(e) => {
-                        onConfigChange(
-                          "screen_min_width",
-                          e.target.value
-                            ? parseInt(e.target.value, 10)
-                            : undefined,
-                        );
-                      }}
-                      placeholder={t("common.placeholders.example", {
-                        value: "800",
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="screen-min-height">
-                      {t("fingerprint.minHeight")}
-                    </Label>
-                    <Input
-                      id="screen-min-height"
-                      type="number"
-                      value={config.screen_min_height ?? ""}
-                      onChange={(e) => {
-                        onConfigChange(
-                          "screen_min_height",
-                          e.target.value
-                            ? parseInt(e.target.value, 10)
-                            : undefined,
-                        );
-                      }}
-                      placeholder={t("common.placeholders.example", {
-                        value: "600",
-                      })}
-                    />
-                  </div>
+              {/* Randomize Fingerprint Option */}
+              <div className="space-y-3 rounded-lg bg-foreground/4 p-4">
+                <div className="flex items-center gap-x-2">
+                  <Checkbox
+                    id="randomize-fingerprint-auto"
+                    checked={config.randomize_fingerprint_on_launch ?? false}
+                    onCheckedChange={(checked) => {
+                      onConfigChange(
+                        "randomize_fingerprint_on_launch",
+                        checked,
+                      );
+                    }}
+                    disabled={readOnly}
+                  />
+                  <Label
+                    htmlFor="randomize-fingerprint-auto"
+                    className="font-medium"
+                  >
+                    {t("fingerprint.generateRandomOnLaunch")}
+                  </Label>
                 </div>
-              </fieldset>
-              {limitedMode && (
-                <>
-                  <div className="absolute inset-0 z-1 bg-background/30 backdrop-blur-[6px]" />
-                  <div className="absolute inset-y-0 left-0 z-2 w-6 bg-linear-to-r from-background to-transparent" />
-                  <div className="absolute inset-y-0 right-0 z-2 w-6 bg-linear-to-l from-background to-transparent" />
-                  <div className="absolute inset-x-0 top-0 z-2 h-6 bg-linear-to-b from-background to-transparent" />
-                  <div className="absolute inset-x-0 bottom-0 z-2 h-6 bg-linear-to-t from-background to-transparent" />
-                  <div className="absolute inset-0 z-3 flex items-center justify-center">
-                    <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
-                      <ProBadge />
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {t("fingerprint.proFeature")}
-                      </span>
+                <p className="ml-6 text-sm text-muted-foreground">
+                  {t("fingerprint.generateRandomDescription")}
+                </p>
+              </div>
+
+              <SessionRestoreOption
+                checked={config.restore_session ?? true}
+                onChange={(checked) => {
+                  onConfigChange("restore_session", checked);
+                }}
+                readOnly={readOnly}
+              />
+
+              {/* Automatic Location Configuration */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-x-2">
+                  <Checkbox
+                    id="auto-location"
+                    checked={isAutoLocationEnabled}
+                    onCheckedChange={handleAutoLocationToggle}
+                    disabled={isEditingDisabled}
+                  />
+                  <Label htmlFor="auto-location">
+                    {t("fingerprint.autoLocationDescription")}
+                  </Label>
+                </div>
+              </div>
+
+              {/* Screen Resolution */}
+              <div
+                className={
+                  limitedMode
+                    ? "relative overflow-hidden rounded-lg"
+                    : undefined
+                }
+              >
+                <fieldset
+                  disabled={isEditingDisabled || limitedMode}
+                  className="space-y-3"
+                >
+                  <Label>{t("fingerprint.screenResolution")}</Label>
+                  <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="screen-max-width">
+                        {t("fingerprint.maxWidth")}
+                      </Label>
+                      <Input
+                        id="screen-max-width"
+                        type="number"
+                        value={config.screen_max_width ?? ""}
+                        onChange={(e) => {
+                          onConfigChange(
+                            "screen_max_width",
+                            e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined,
+                          );
+                        }}
+                        placeholder={t("common.placeholders.example", {
+                          value: "1920",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="screen-max-height">
+                        {t("fingerprint.maxHeight")}
+                      </Label>
+                      <Input
+                        id="screen-max-height"
+                        type="number"
+                        value={config.screen_max_height ?? ""}
+                        onChange={(e) => {
+                          onConfigChange(
+                            "screen_max_height",
+                            e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined,
+                          );
+                        }}
+                        placeholder={t("common.placeholders.example", {
+                          value: "1080",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="screen-min-width">
+                        {t("fingerprint.minWidth")}
+                      </Label>
+                      <Input
+                        id="screen-min-width"
+                        type="number"
+                        value={config.screen_min_width ?? ""}
+                        onChange={(e) => {
+                          onConfigChange(
+                            "screen_min_width",
+                            e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined,
+                          );
+                        }}
+                        placeholder={t("common.placeholders.example", {
+                          value: "800",
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="screen-min-height">
+                        {t("fingerprint.minHeight")}
+                      </Label>
+                      <Input
+                        id="screen-min-height"
+                        type="number"
+                        value={config.screen_min_height ?? ""}
+                        onChange={(e) => {
+                          onConfigChange(
+                            "screen_min_height",
+                            e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined,
+                          );
+                        }}
+                        placeholder={t("common.placeholders.example", {
+                          value: "600",
+                        })}
+                      />
                     </div>
                   </div>
-                </>
-              )}
-            </div>
-          </TabsContent>
+                </fieldset>
+                {limitedMode && (
+                  <>
+                    <div className="absolute inset-0 z-1 bg-background/30 backdrop-blur-[6px]" />
+                    <div className="absolute inset-y-0 left-0 z-2 w-6 bg-linear-to-r from-background to-transparent" />
+                    <div className="absolute inset-y-0 right-0 z-2 w-6 bg-linear-to-l from-background to-transparent" />
+                    <div className="absolute inset-x-0 top-0 z-2 h-6 bg-linear-to-b from-background to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 z-2 h-6 bg-linear-to-t from-background to-transparent" />
+                    <div className="absolute inset-0 z-3 flex items-center justify-center">
+                      <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
+                        <ProBadge />
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {t("fingerprint.proFeature")}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </TabsContent>
 
-          <TabsContent value="manual" className="space-y-6">
-            {renderAdvancedForm()}
-          </TabsContent>
-        </Tabs>
-      )}
-    </div>
+            <TabsContent value="manual" className="space-y-6">
+              {renderAdvancedForm()}
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
+    </SoftFields>
   );
 }

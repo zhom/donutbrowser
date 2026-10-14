@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LuDownload } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -80,8 +81,8 @@ export function ExportProfileSection({ profile }: { profile: BrowserProfile }) {
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-muted-foreground">
         {t("profileTransfer.exportDescription")}
       </p>
       <div className="flex items-center gap-x-2">
@@ -98,22 +99,26 @@ export function ExportProfileSection({ profile }: { profile: BrowserProfile }) {
         </Label>
       </div>
       {profile.password_protected && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t("profileTransfer.protectedNotice")}
         </p>
       )}
       {isRunning && (
-        <p className="text-sm text-warning-text">
+        <p className="text-xs text-warning-text">
           {t("profileTransfer.runningNotice")}
         </p>
       )}
       <LoadingButton
+        variant="soft"
+        size="sm"
+        className="h-8 gap-1.5 self-start rounded-lg px-2.5 text-xs"
         isLoading={isExporting}
         disabled={isRunning}
         onClick={() => {
           void handleExport();
         }}
       >
+        <LuDownload className="size-3.5" />
         {t("profileTransfer.exportButton")}
       </LoadingButton>
     </div>
