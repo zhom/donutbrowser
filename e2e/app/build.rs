@@ -16,5 +16,25 @@ fn main() {
         println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg=/MANIFESTINPUT:{manifest}");
         println!("cargo:rerun-if-changed={manifest}");
+
+        // Donut links the C runtime statically, and tauri-build puts a stub
+        // msvcrt.lib on the library path every dependent sees. Its link
+        // arguments stay with Donut, so without these the stub hides the real
+        // runtime and the link fails with unresolved CRT symbols.
+        for lib in [
+            "libvcruntimed.lib",
+            "vcruntime.lib",
+            "vcruntimed.lib",
+            "libcmtd.lib",
+            "msvcrt.lib",
+            "msvcrtd.lib",
+            "libucrt.lib",
+            "libucrtd.lib",
+        ] {
+            println!("cargo:rustc-link-arg=/NODEFAULTLIB:{lib}");
+        }
+        for lib in ["libcmt.lib", "libvcruntime.lib", "ucrt.lib"] {
+            println!("cargo:rustc-link-arg=/DEFAULTLIB:{lib}");
+        }
     }
 }
