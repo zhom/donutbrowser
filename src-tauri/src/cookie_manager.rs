@@ -746,6 +746,21 @@ impl CookieManager {
       .find(|p| p.id.to_string() == profile_id)
       .ok_or_else(|| serde_json::json!({ "code": "PROFILE_NOT_FOUND" }).to_string())?;
 
+    // A profile that has never run has no cookie store yet, which is no
+    // cookies rather than a failure. A protected profile's store is sealed,
+    // so its absence there says nothing.
+    if profile.browser == "wayfern"
+      && !profile.password_protected
+      && !Self::wayfern_cookie_path(&profile.get_profile_data_path(&profiles_dir)).exists()
+    {
+      return Ok(CookieStats {
+        profile_id: profile_id.to_string(),
+        browser_type: profile.browser.clone(),
+        total_count: 0,
+        domains: Vec::new(),
+      });
+    }
+
     let db_path = Self::get_cookie_db_path(profile, &profiles_dir).map_err(|e| {
       serde_json::json!({
         "code": "COOKIE_DB_UNAVAILABLE",
@@ -1212,6 +1227,32 @@ impl CookieManager {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  #[serial_test::serial]
+  fn a_profile_that_never_ran_has_no_cookies_rather_than_an_error() {
+    let data = tempfile::TempDir::new().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(data.path().to_path_buf());
+    let profile = BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: "never ran".to_string(),
+      browser: "wayfern".to_string(),
+      ..Default::default()
+    };
+    ProfileManager::instance().save_profile(&profile).unwrap();
+
+    let stats = CookieManager::read_stats(&profile.id.to_string()).unwrap();
+    assert_eq!(stats.total_count, 0);
+    assert!(stats.domains.is_empty());
+
+    let sealed = BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      password_protected: true,
+      ..profile
+    };
+    ProfileManager::instance().save_profile(&sealed).unwrap();
+    assert!(CookieManager::read_stats(&sealed.id.to_string()).is_err());
+  }
 
   // Known-answer vectors, sealed outside this code base from the plaintext
   // SHA-256(SYNTHETIC_COOKIE_HOST) || SYNTHETIC_COOKIE_VALUE. They hold for
