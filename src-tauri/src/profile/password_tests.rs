@@ -49,13 +49,86 @@ fn parse_err_param(err: &str, key: &str) -> Option<String> {
 
 fn fresh_test_state(id: &uuid::Uuid) {
   drop_cached_key(id);
-  let _ = LAUNCH_SNAPSHOTS.lock().map(|mut g| g.remove(id));
-  let _ = POPULATED_EPHEMERAL.lock().map(|mut g| g.remove(id));
   crate::ephemeral_dirs::remove_ephemeral_dir(&id.to_string());
 }
 
 fn profile_full_path(profile: &BrowserProfile, profiles_dir: &Path) -> PathBuf {
   profiles_dir.join(profile.id.to_string()).join("profile")
+}
+
+/// Scratch data and decrypted-copy directories, seen by this thread and by
+/// the threads a seal runs on. The thread-local override alone would send a
+/// seal on another thread to the real data directory.
+struct Scratch {
+  _data: TempDir,
+  _ephemeral: TempDir,
+  _guard: crate::app_dirs::TestDirGuard,
+}
+
+impl Scratch {
+  fn new() -> Self {
+    let data = TempDir::new().unwrap();
+    let ephemeral = TempDir::new().unwrap();
+    std::env::set_var("DONUTBROWSER_DATA_DIR", data.path());
+    std::env::set_var("DONUTBROWSER_EPHEMERAL_ROOT", ephemeral.path());
+    let guard = crate::app_dirs::set_test_data_dir(data.path().to_path_buf());
+    Self {
+      _data: data,
+      _ephemeral: ephemeral,
+      _guard: guard,
+    }
+  }
+}
+
+impl Drop for Scratch {
+  fn drop(&mut self) {
+    std::env::remove_var("DONUTBROWSER_EPHEMERAL_ROOT");
+    std::env::remove_var("DONUTBROWSER_DATA_DIR");
+  }
+}
+
+const PASSWORD: &str = "hunter2!";
+
+/// A protected profile with `populate_plaintext_dir` content, unlocked.
+fn protected_profile(name: &str) -> (BrowserProfile, PathBuf) {
+  let profile = make_profile(name);
+  let store = profile_full_path(&profile, &ProfileManager::instance().get_profiles_dir());
+  populate_plaintext_dir(&store);
+  ProfileManager::instance().save_profile(&profile).unwrap();
+  fresh_test_state(&profile.id);
+  tokio::runtime::Runtime::new()
+    .unwrap()
+    .block_on(set_profile_password(
+      profile.id.to_string(),
+      PASSWORD.into(),
+    ))
+    .unwrap();
+  (load_profile(&profile.id).unwrap(), store)
+}
+
+/// Write as a browser does, which is never in the same file-time tick as the
+/// decrypt before it (on NTFS a tick is about 15 ms).
+fn browser_writes(path: &Path, contents: impl AsRef<[u8]>) {
+  std::thread::sleep(Duration::from_millis(50));
+  std::fs::write(path, contents).unwrap();
+}
+
+/// What the sealed copy decrypts to, by relpath.
+fn sealed_files(profile: &BrowserProfile, store: &Path) -> HashMap<String, Vec<u8>> {
+  let key = derive_profile_key(PASSWORD, profile.encryption_salt.as_deref().unwrap()).unwrap();
+  let out = TempDir::new().unwrap();
+  let decrypted = crate::profile::encryption::decrypt_profile_dir(&key, store, out.path()).unwrap();
+  assert_eq!(decrypted.unreadable, 0, "the sealed copy has damaged files");
+  decrypted
+    .baseline
+    .keys()
+    .map(|relpath| {
+      (
+        relpath.clone(),
+        std::fs::read(out.path().join(relpath)).unwrap(),
+      )
+    })
+    .collect()
 }
 
 #[test]
@@ -376,9 +449,14 @@ fn integration_empty_profile_session_survives_restart() {
 
   // Launch — ephemeral starts empty (only the verifier in encrypted, which is skipped)
   let ephemeral = prepare_for_launch(&profile).unwrap();
-  assert!(
-    std::fs::read_dir(&ephemeral).unwrap().next().is_none(),
-    "ephemeral should start empty for a fresh encrypted profile"
+  let names: Vec<_> = std::fs::read_dir(&ephemeral)
+    .unwrap()
+    .map(|entry| entry.unwrap().file_name())
+    .collect();
+  assert_eq!(
+    names,
+    [crate::profile::encryption::BASELINE_FILE_NAME],
+    "ephemeral should hold only its baseline for a fresh encrypted profile"
   );
 
   // Simulate the browser writing a session
@@ -620,5 +698,299 @@ fn integration_lock_drops_key() {
     .block_on(is_profile_locked(profile.id.to_string()))
     .unwrap());
 
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn a_quit_both_callers_seal_is_sealed_once_and_intact() {
+  let _scratch = Scratch::new();
+  let (profile, store) = protected_profile("test-race");
+
+  for round in 0..5u8 {
+    if !has_cached_key(&profile.id) {
+      tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(unlock_profile(profile.id.to_string(), PASSWORD.into()))
+        .unwrap();
+    }
+    let copy = prepare_for_launch(&profile).unwrap();
+    // Enough files that one seal is still running when the other starts.
+    std::fs::create_dir_all(copy.join("Default/IndexedDB")).unwrap();
+    browser_writes(&copy.join("Default/Cookies"), [round + 1; 64]);
+    for i in 0..300 {
+      let file = copy.join("Default/IndexedDB").join(format!("{i:04}.ldb"));
+      std::fs::write(&file, vec![round + 1; 16 * 1024]).unwrap();
+    }
+
+    let callers: Vec<_> = (0..2)
+      .map(|_| {
+        let store = store.clone();
+        std::thread::spawn(move || seal_after_quit(profile.id, &store, false))
+      })
+      .collect();
+    let results: Vec<Option<usize>> = callers.into_iter().map(|c| c.join().unwrap()).collect();
+
+    assert_eq!(
+      results.iter().filter(|r| r.is_some()).count(),
+      1,
+      "exactly one caller seals, got {results:?}"
+    );
+    assert!(crate::ephemeral_dirs::get_ephemeral_dir(&profile.id.to_string()).is_none());
+    assert!(!has_cached_key(&profile.id));
+    let sealed = sealed_files(&profile, &store);
+    assert_eq!(sealed["Default/Cookies"], vec![round + 1; 64]);
+    for i in 0..300 {
+      assert_eq!(
+        sealed[&format!("Default/IndexedDB/{i:04}.ldb")],
+        vec![round + 1; 16 * 1024],
+        "round {round} file {i}"
+      );
+    }
+  }
+  fresh_test_state(&profile.id);
+}
+
+#[cfg(unix)]
+#[test]
+#[serial_test::serial]
+fn a_seal_that_fails_keeps_the_copy_for_the_next_launch_to_seal() {
+  use std::os::unix::fs::PermissionsExt;
+  let _scratch = Scratch::new();
+  let (profile, store) = protected_profile("test-failed-seal");
+
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("Default/Cookies"), b"logged-in");
+
+  std::fs::set_permissions(&store, std::fs::Permissions::from_mode(0o555)).unwrap();
+  let sealed = complete_after_quit_blocking(&profile, false);
+  std::fs::set_permissions(&store, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+  assert_eq!(sealed, None);
+  assert!(has_cached_key(&profile.id), "the key stays to seal later");
+  assert_eq!(
+    std::fs::read(copy.join("Default/Cookies")).unwrap(),
+    b"logged-in",
+    "the only copy of the session must survive a failed seal"
+  );
+  assert_eq!(
+    sealed_files(&profile, &store)["Default/Cookies"],
+    b"sqlite-data"
+  );
+
+  let relaunched = prepare_for_launch(&profile).unwrap();
+  assert_eq!(relaunched, copy);
+  assert_eq!(
+    std::fs::read(relaunched.join("Default/Cookies")).unwrap(),
+    b"logged-in"
+  );
+  assert_eq!(
+    sealed_files(&profile, &store)["Default/Cookies"],
+    b"logged-in"
+  );
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn changes_from_a_quit_without_the_key_are_sealed_after_unlock() {
+  let _scratch = Scratch::new();
+  let (profile, store) = protected_profile("test-no-key");
+
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("Default/Cookies"), b"logged-in");
+  // The app restarted while the browser ran: the copy is there, the key is not.
+  drop_cached_key(&profile.id);
+
+  assert_eq!(complete_after_quit_blocking(&profile, false), None);
+  assert_eq!(
+    std::fs::read(copy.join("Default/Cookies")).unwrap(),
+    b"logged-in"
+  );
+
+  tokio::runtime::Runtime::new()
+    .unwrap()
+    .block_on(unlock_profile(profile.id.to_string(), PASSWORD.into()))
+    .unwrap();
+  let relaunched = prepare_for_launch(&profile).unwrap();
+  assert_eq!(
+    std::fs::read(relaunched.join("Default/Cookies")).unwrap(),
+    b"logged-in"
+  );
+  assert_eq!(
+    sealed_files(&profile, &store)["Default/Cookies"],
+    b"logged-in"
+  );
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn debris_of_an_interrupted_erase_is_not_launched_on() {
+  let _scratch = Scratch::new();
+  let (profile, _store) = protected_profile("test-debris");
+
+  let copy = crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string()).unwrap();
+  std::fs::create_dir_all(copy.join("Default")).unwrap();
+  // A hot journal next to a freshly decrypted database would roll it back.
+  std::fs::write(copy.join("Default/Cookies-journal"), [0u8; 512]).unwrap();
+  std::fs::write(copy.join("Default/Cookies"), [0u8; 512]).unwrap();
+
+  let launched = prepare_for_launch(&profile).unwrap();
+  assert!(!launched.join("Default/Cookies-journal").exists());
+  assert_eq!(
+    std::fs::read(launched.join("Default/Cookies")).unwrap(),
+    b"sqlite-data"
+  );
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn a_launch_stopped_before_its_quit_was_sealed_keeps_its_changes() {
+  let _scratch = Scratch::new();
+  let (profile, store) = protected_profile("test-relaunch");
+
+  // A launch whose browser wrote and was then killed, with no quit sealed.
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("os_crypt_key"), [7u8; 32]);
+  browser_writes(&copy.join("Default/Cookies"), b"under-key-7");
+
+  // The retry reuses the copy and must not take those files as sealed.
+  let retry = prepare_for_launch(&profile).unwrap();
+  assert_eq!(retry, copy);
+  assert_eq!(complete_after_quit_blocking(&profile, false), Some(0));
+
+  let sealed = sealed_files(&profile, &store);
+  assert_eq!(sealed["os_crypt_key"], [7u8; 32]);
+  assert_eq!(sealed["Default/Cookies"], b"under-key-7");
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn lock_and_password_removal_seal_a_pending_copy_first() {
+  let _scratch = Scratch::new();
+  let rt = tokio::runtime::Runtime::new().unwrap();
+  let (profile, store) = protected_profile("test-pending");
+
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("Default/Cookies"), b"before-lock");
+  rt.block_on(lock_profile(profile.id.to_string())).unwrap();
+  assert!(!has_cached_key(&profile.id));
+  assert!(crate::ephemeral_dirs::get_ephemeral_dir(&profile.id.to_string()).is_none());
+  assert_eq!(
+    sealed_files(&profile, &store)["Default/Cookies"],
+    b"before-lock"
+  );
+
+  rt.block_on(unlock_profile(profile.id.to_string(), PASSWORD.into()))
+    .unwrap();
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("Default/Cookies"), b"before-removal");
+  rt.block_on(remove_profile_password(
+    profile.id.to_string(),
+    PASSWORD.into(),
+  ))
+  .unwrap();
+  assert!(crate::ephemeral_dirs::get_ephemeral_dir(&profile.id.to_string()).is_none());
+  assert!(!copy.exists(), "no plaintext copy may outlive the password");
+  assert_eq!(
+    std::fs::read(store.join("Default/Cookies")).unwrap(),
+    b"before-removal"
+  );
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn a_password_change_seals_a_pending_copy_with_the_old_key() {
+  let _scratch = Scratch::new();
+  let rt = tokio::runtime::Runtime::new().unwrap();
+  let (profile, store) = protected_profile("test-change-pending");
+
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("Default/Cookies"), b"pending");
+  rt.block_on(change_profile_password(
+    profile.id.to_string(),
+    PASSWORD.into(),
+    "another password".into(),
+  ))
+  .unwrap();
+
+  let profile = load_profile(&profile.id).unwrap();
+  let key = derive_profile_key(
+    "another password",
+    profile.encryption_salt.as_deref().unwrap(),
+  )
+  .unwrap();
+  let out = TempDir::new().unwrap();
+  crate::profile::encryption::decrypt_profile_dir(&key, &store, out.path()).unwrap();
+  assert_eq!(
+    std::fs::read(out.path().join("Default/Cookies")).unwrap(),
+    b"pending"
+  );
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn the_sealed_copy_keeps_database_journals_and_drops_caches() {
+  let _scratch = Scratch::new();
+  let (profile, store) = protected_profile("test-journals");
+
+  let copy = prepare_for_launch(&profile).unwrap();
+  browser_writes(&copy.join("Default/Cookies-journal"), b"hot-journal");
+  browser_writes(&copy.join("Default/History-wal"), b"wal-frames");
+  browser_writes(&copy.join("Default/Secure Preferences"), b"{}");
+  std::fs::create_dir_all(copy.join("Default/Code Cache/js")).unwrap();
+  browser_writes(&copy.join("Default/Code Cache/js/index"), b"cache");
+  complete_after_quit_blocking(&profile, false).unwrap();
+
+  let sealed = sealed_files(&profile, &store);
+  assert_eq!(sealed["Default/Cookies-journal"], b"hot-journal");
+  assert_eq!(sealed["Default/History-wal"], b"wal-frames");
+  assert_eq!(sealed["Default/Secure Preferences"], b"{}");
+  assert!(!sealed.contains_key("Default/Code Cache/js/index"));
+  assert!(!sealed.contains_key(crate::profile::encryption::BASELINE_FILE_NAME));
+  fresh_test_state(&profile.id);
+}
+
+#[test]
+#[serial_test::serial]
+fn a_kept_copy_gives_way_to_a_newer_sealed_profile_from_sync() {
+  let _scratch = Scratch::new();
+  let (profile, store) = protected_profile("test-kept-sync");
+
+  let copy = prepare_for_launch(&profile).unwrap();
+  complete_after_quit_blocking(&profile, true).unwrap();
+  assert!(copy.join("Default/Cookies").exists(), "the copy is kept");
+
+  // Another device's session arrives through sync.
+  let key = get_cached_key(&profile.id).unwrap();
+  let elsewhere = TempDir::new().unwrap();
+  crate::profile::encryption::decrypt_profile_dir(&key, &store, elsewhere.path()).unwrap();
+  browser_writes(
+    &elsewhere.path().join("Default/Cookies"),
+    b"from-the-other-device",
+  );
+  crate::profile::encryption::encrypt_profile_dir(
+    &key,
+    elsewhere.path(),
+    &store,
+    crate::profile::encryption::SEALED_EXCLUDE_PATTERNS,
+  )
+  .unwrap();
+
+  let relaunched = prepare_for_launch(&profile).unwrap();
+  assert_eq!(
+    std::fs::read(relaunched.join("Default/Cookies")).unwrap(),
+    b"from-the-other-device"
+  );
+  complete_after_quit_blocking(&profile, false).unwrap();
+  assert_eq!(
+    sealed_files(&profile, &store)["Default/Cookies"],
+    b"from-the-other-device"
+  );
   fresh_test_state(&profile.id);
 }

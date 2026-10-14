@@ -857,10 +857,7 @@ impl ProfileManager {
     // to. The running-browser guard above only rejects a live process, and
     // the keep-decrypted path deliberately clears process_id while leaving
     // the plaintext tree populated. No-ops when there is no ephemeral dir.
-    crate::ephemeral_dirs::remove_ephemeral_dir(profile_id);
-    if profile.password_protected {
-      crate::profile::encryption::drop_cached_key(&profile.id);
-    }
+    crate::profile::password::discard_copy(&profile.id);
 
     let was_sync_enabled = profile.is_sync_enabled();
     let profiles_dir = self.get_profiles_dir();
@@ -1067,9 +1064,11 @@ impl ProfileManager {
     &self,
     profile_id: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    crate::ephemeral_dirs::remove_ephemeral_dir(profile_id);
-    if let Ok(uuid) = uuid::Uuid::parse_str(profile_id) {
-      crate::profile::encryption::drop_cached_key(&uuid);
+    match uuid::Uuid::parse_str(profile_id) {
+      Ok(uuid) => crate::profile::password::discard_copy(&uuid),
+      Err(_) => {
+        crate::ephemeral_dirs::remove_ephemeral_dir(profile_id);
+      }
     }
     self.forget_profile_side_state(profile_id);
     let profiles_dir = self.get_profiles_dir();

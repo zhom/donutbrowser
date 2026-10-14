@@ -3194,6 +3194,25 @@ pub fn run_with_builder(
                   last_state != is_running || (!is_running && had_pid);
 
                 if should_emit {
+                  // A Stop seals its own quit and a launch makes the profile
+                  // run again; this exit is handled once neither is under way.
+                  let _launch_guard = if is_running {
+                    None
+                  } else {
+                    let Some(guard) =
+                      crate::browser_runner::try_lock_profile_launch(&profile_id).await
+                    else {
+                      continue;
+                    };
+                    if runner
+                      .check_browser_status(app_handle_status.clone(), &profile)
+                      .await
+                      .unwrap_or(false)
+                    {
+                      continue;
+                    }
+                    Some(guard)
+                  };
                   log::debug!(
                     "Browser running state changed profile={profile_id} running={is_running} was={last_state}"
                   );

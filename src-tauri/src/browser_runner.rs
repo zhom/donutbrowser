@@ -667,18 +667,29 @@ impl BrowserRunner {
       // `match_profile_fingerprint_to_exit`.
 
       // Create ephemeral dir for ephemeral or password-protected profiles
-      if profile.password_protected {
-        crate::profile::password::prepare_for_launch(profile)
-          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
-      } else if profile.ephemeral {
-        crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
-          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
-      }
+      let decrypted_copy = if profile.password_protected {
+        let protected = profile.clone();
+        let prepared = tokio::task::spawn_blocking(move || {
+          crate::profile::password::prepare_for_launch(&protected)
+        })
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })?
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+        Some(prepared)
+      } else {
+        if profile.ephemeral {
+          crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+        }
+        None
+      };
 
-      // Get profile path for Wayfern
+      // Get profile path for Wayfern. A protected profile runs only on its
+      // decrypted copy, never on the sealed directory.
       let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path =
-        crate::ephemeral_dirs::get_effective_profile_path(&updated_profile, &profiles_dir);
+      let profile_data_path = decrypted_copy.unwrap_or_else(|| {
+        crate::ephemeral_dirs::get_effective_profile_path(&updated_profile, &profiles_dir)
+      });
 
       // Profiles imported by builds before the layout fix have their content at
       // the user-data-dir root instead of under `Default/`, so the browser has

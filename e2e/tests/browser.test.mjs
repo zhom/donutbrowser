@@ -2417,3 +2417,130 @@ test("custom launch arguments reach only their Wayfern profile", async () => {
     await app.close();
   }
 });
+
+test("a password-protected profile keeps what each session saved", async () => {
+  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
+  const app = appFromEnvironment("browser-sealed", {
+    seedVersionCache:
+      cachedFixtureVersion(process.env.DONUT_E2E_PROJECT_ROOT) ?? false,
+    wayfernTermsAccepted: false,
+  });
+  const password = "sealed-sessions";
+  let cdp;
+  let browserPid;
+  try {
+    const prepared = await prepareWayfern(
+      app,
+      process.env.DONUT_E2E_PROJECT_ROOT,
+    );
+    if (!app.session) await app.start();
+    await app.invoke("accept_wayfern_terms");
+    const profile = await createRealProfile(
+      app,
+      prepared.version,
+      "Sealed Sessions",
+    );
+    await app.invoke("set_profile_password", {
+      profileId: profile.id,
+      password,
+    });
+    const sealedDir = path.join(
+      app.dataRoot,
+      "data",
+      "profiles",
+      profile.id,
+      "profile",
+    );
+    const current = async () =>
+      (await app.invoke("list_browser_profiles")).find(
+        (p) => p.id === profile.id,
+      );
+
+    const saved = [];
+    for (let session = 0; session < 3; session++) {
+      if (await app.invoke("is_profile_locked", { profileId: profile.id })) {
+        await app.invoke("unlock_profile", { profileId: profile.id, password });
+      }
+      const launched = await app.invoke("launch_browser_profile", {
+        profile: await current(),
+        url: `${fixtureUrl}/sealed`,
+      });
+      browserPid = launched.process_id;
+      const port = Number(
+        processCommandLine(browserPid).match(
+          /--remote-debugging-port=(\d+)/,
+        )[1],
+      );
+      cdp = await CdpClient.connect(port);
+      await cdp.waitFor(`document.title === "Donut E2E Browser Fixture"`, {
+        description: "fixture page title",
+      });
+      const cookies = await cdp.evaluate("document.cookie");
+      for (const name of saved) {
+        assert.match(
+          cookies,
+          new RegExp(`${name}=kept`),
+          `session ${session} lost the cookie session ${name} saved`,
+        );
+      }
+      const name = `sealed_${session}`;
+      await cdp.evaluate(
+        `document.cookie = "${name}=kept; Max-Age=86400; Path=/"`,
+      );
+      saved.push(name);
+      cdp.close();
+      cdp = null;
+
+      // The cookie store commits every 30 s or at a clean shutdown, and a
+      // browser asked to close in its first seconds does not shut down.
+      await new Promise((resolve) => setTimeout(resolve, 32_000));
+      await app.invoke("kill_browser_profile", { profile: await current() });
+      await waitForProcessExit(app, browserPid);
+      browserPid = null;
+      assert.equal(
+        await app.invoke("is_profile_locked", { profileId: profile.id }),
+        true,
+        "a quit is sealed and its key forgotten before Stop returns",
+      );
+      const names = await readdir(sealedDir);
+      assert.ok(
+        names.every((n) => /^[\w-]{32}$/.test(n) || n === ".donut-pw-verify"),
+        `only sealed files belong in the profile directory: ${names}`,
+      );
+    }
+
+    const logDir = path.join(app.dataRoot, "logs");
+    const logText = (
+      await Promise.all(
+        (
+          await readdir(logDir)
+        )
+          .filter((n) => n.endsWith(".log"))
+          .map((n) => readFile(path.join(logDir, n), "utf8")),
+      )
+    ).join("\n");
+    assert.doesNotMatch(logText, /Cookie decryption check failed/);
+    assert.doesNotMatch(logText, /Profile re-encryption failed/);
+    assert.equal(
+      logText.match(
+        new RegExp(`Profile re-encrypted profile=${profile.id} `, "g"),
+      )?.length,
+      3,
+      "each quit is sealed exactly once",
+    );
+    await app.invoke("delete_profile", { profileId: profile.id });
+  } catch (error) {
+    await app.capture("failure");
+    throw error;
+  } finally {
+    cdp?.close();
+    if (app.session && browserPid && processExists(browserPid)) {
+      const profile = (
+        await app.invoke("list_browser_profiles").catch(() => [])
+      ).find((item) => item.process_id === browserPid);
+      if (profile)
+        await app.invoke("kill_browser_profile", { profile }).catch(() => {});
+    }
+    await app.close();
+  }
+});

@@ -88,8 +88,9 @@ fn test_dir_roundtrip() {
   assert!(enc.join(VERIFY_FILE_NAME).exists());
 
   let restored = work.path().join("restored");
-  let mtimes = decrypt_profile_dir(&key, &enc, &restored).unwrap();
-  assert_eq!(mtimes.len(), 3);
+  let decrypted = decrypt_profile_dir(&key, &enc, &restored).unwrap();
+  assert_eq!(decrypted.baseline.len(), 3);
+  assert_eq!(decrypted.unreadable, 0);
 
   assert_eq!(
     std::fs::read(restored.join("Default/Cookies")).unwrap(),
@@ -118,11 +119,11 @@ fn test_dir_excludes() {
   encrypt_profile_dir(&key, &plain, &enc, &["**/Cache/**"]).unwrap();
 
   let restored = work.path().join("restored");
-  let mtimes = decrypt_profile_dir(&key, &enc, &restored).unwrap();
+  let baseline = decrypt_profile_dir(&key, &enc, &restored).unwrap().baseline;
 
   // Only Cookies (1 file) should be present, not Cache contents
-  assert_eq!(mtimes.len(), 1);
-  assert!(mtimes.contains_key("Default/Cookies"));
+  assert_eq!(baseline.len(), 1);
+  assert!(baseline.contains_key("Default/Cookies"));
   assert!(restored.join("Default/Cookies").exists());
   assert!(!restored.join("Default/Cache/data").exists());
 }
@@ -156,7 +157,7 @@ fn test_reencrypt_skips_unchanged() {
   encrypt_profile_dir(&key, &plain, &enc, &[]).unwrap();
 
   let restored = work.path().join("restored");
-  let snapshot = decrypt_profile_dir(&key, &enc, &restored).unwrap();
+  let snapshot = decrypt_profile_dir(&key, &enc, &restored).unwrap().baseline;
 
   // Capture pre-rewrite ciphertext bytes
   let name_a = hmac_filename(&key, "a");
@@ -168,8 +169,14 @@ fn test_reencrypt_skips_unchanged() {
   std::thread::sleep(std::time::Duration::from_millis(1100));
   std::fs::write(restored.join("a"), b"AAA-CHANGED").unwrap();
 
-  let rewrote = reencrypt_changed_files(&key, &restored, &enc, &[], &snapshot).unwrap();
+  let (rewrote, sealed) = reencrypt_changed_files(&key, &restored, &enc, &[], &snapshot).unwrap();
   assert_eq!(rewrote, 1);
+  assert_eq!(sealed["b"], snapshot["b"]);
+  assert_ne!(sealed["a"], snapshot["a"]);
+
+  // Sealed again from the new baseline, nothing has changed.
+  let (rewrote, _) = reencrypt_changed_files(&key, &restored, &enc, &[], &sealed).unwrap();
+  assert_eq!(rewrote, 0);
 
   let cipher_a_after = std::fs::read(enc.join(&name_a)).unwrap();
   let cipher_b_after = std::fs::read(enc.join(&name_b)).unwrap();
@@ -195,7 +202,7 @@ fn test_reencrypt_handles_added_and_removed() {
   encrypt_profile_dir(&key, &plain, &enc, &[]).unwrap();
 
   let restored = work.path().join("restored");
-  let snapshot = decrypt_profile_dir(&key, &enc, &restored).unwrap();
+  let snapshot = decrypt_profile_dir(&key, &enc, &restored).unwrap().baseline;
 
   std::fs::remove_file(restored.join("delete")).unwrap();
   std::fs::write(restored.join("new"), b"n").unwrap();
@@ -288,4 +295,64 @@ fn test_unlock_helper() {
   assert!(unlock(id, "correct horse", &salt, &enc).is_ok());
   assert!(has_cached_key(&id));
   drop_cached_key(&id);
+}
+
+#[test]
+fn decrypt_checks_the_key_and_skips_damaged_and_unfinished_files() {
+  let key = make_key();
+  let work = TempDir::new().unwrap();
+  let plain = work.path().join("plain");
+  let enc = work.path().join("enc");
+  std::fs::create_dir_all(&plain).unwrap();
+  std::fs::write(plain.join("good"), b"good").unwrap();
+  encrypt_profile_dir(&key, &plain, &enc, &[]).unwrap();
+  std::fs::write(enc.join("damaged"), b"not ciphertext at all").unwrap();
+  // What a crash in the middle of atomic_write leaves.
+  std::fs::write(
+    enc
+      .join(hmac_filename(&key, "good"))
+      .with_extension("donut-tmp"),
+    b"partial",
+  )
+  .unwrap();
+
+  let out = work.path().join("out");
+  assert!(matches!(
+    decrypt_profile_dir(&make_key(), &enc, &out),
+    Err(PasswordError::WrongPassword)
+  ));
+  assert!(!out.exists(), "a wrong key must write nothing");
+
+  let decrypted = decrypt_profile_dir(&key, &enc, &out).unwrap();
+  assert_eq!(decrypted.unreadable, 1);
+  assert_eq!(decrypted.baseline.len(), 1);
+  assert_eq!(std::fs::read(out.join("good")).unwrap(), b"good");
+}
+
+#[test]
+fn the_sealed_exclusions_keep_what_a_database_needs() {
+  let excludes = build_excludes(SEALED_EXCLUDE_PATTERNS);
+  for kept in [
+    "Default/Network/Cookies",
+    "Default/Network/Cookies-journal",
+    "Default/History-wal",
+    "Default/Secure Preferences",
+    "Default/Session Storage/000003.log",
+    "Local State",
+    "os_crypt_key",
+  ] {
+    assert!(!excludes.is_match(kept), "{kept} must be sealed");
+  }
+  for dropped in [
+    "Default/Cache/Cache_Data/index",
+    "Default/Code Cache/js/index",
+    "Default/History-shm",
+    "Default/Local Storage/leveldb/LOCK",
+    "SingletonLock",
+    "wayfern-identity.json",
+    BASELINE_FILE_NAME,
+    "Default/x.donut-tmp",
+  ] {
+    assert!(excludes.is_match(dropped), "{dropped} must not be sealed");
+  }
 }

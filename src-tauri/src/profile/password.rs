@@ -9,16 +9,17 @@
 use crate::events;
 use crate::profile::encryption::{
   cache_key, decrypt_profile_dir, drop_cached_key, encrypt_profile_dir, fresh_salt, get_cached_key,
-  has_cached_key, rekey_profile_dir, unlock as unlock_dir, verify_key_against_dir,
+  has_cached_key, has_changes, reencrypt_changed_files, rekey_profile_dir, sealed_stamp,
+  unlock as unlock_dir, verify_key_against_dir, Baseline, FileStamp, PasswordError,
+  BASELINE_FILE_NAME, SEALED_EXCLUDE_PATTERNS,
 };
 use crate::profile::ProfileManager;
 use crate::sync::encryption::derive_profile_key;
-use crate::sync::manifest::DEFAULT_EXCLUDE_PATTERNS;
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 /// Build a JSON error payload with just a code.
 fn err_code(code: &'static str) -> String {
@@ -40,16 +41,23 @@ fn err_internal(detail: impl std::fmt::Display) -> String {
   err_with("INTERNAL_ERROR", &[("detail", detail.to_string())])
 }
 
-/// Per-profile snapshot of plaintext file mtimes captured at launch time.
-/// Used by `complete_after_quit` to skip re-encrypting unchanged files.
-static LAUNCH_SNAPSHOTS: std::sync::LazyLock<
-  Mutex<HashMap<uuid::Uuid, HashMap<String, SystemTime>>>,
-> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
-/// Profile IDs whose ephemeral dir is currently populated and matches the
-/// on-disk encrypted state, so we can skip re-decrypting on the next launch
-/// when `keep_decrypted_profiles_in_ram` is enabled.
-static POPULATED_EPHEMERAL: std::sync::LazyLock<Mutex<HashSet<uuid::Uuid>>> =
-  std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
+/// The error a password command returns when the decrypted copy it must seal
+/// first cannot be sealed. The key is the one the command just verified, so
+/// `NoKey` cannot happen here.
+fn seal_error(error: SealError) -> String {
+  match error {
+    SealError::InUse(_) => err_code("PROFILE_RUNNING"),
+    SealError::NoKey => err_code("PROFILE_LOCKED"),
+    SealError::Failed(e) => err_internal(e),
+  }
+}
+
+/// Per-profile lock around everything that touches a profile's decrypted copy
+/// or rewrites its sealed one. A quit is sealed by both the Stop button and the
+/// exit watcher; unserialized, one of them read files the other was already
+/// zeroing, and the sealed copy kept the zeros.
+static COPY_LOCKS: std::sync::LazyLock<Mutex<HashMap<uuid::Uuid, Arc<Mutex<()>>>>> =
+  std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 /// Per-profile failed unlock attempt tracking for rate-limiting.
 static FAILED_ATTEMPTS: std::sync::LazyLock<Mutex<HashMap<uuid::Uuid, FailureRecord>>> =
   std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -78,6 +86,16 @@ fn attempt_lock(profile_id: &uuid::Uuid) -> Arc<tokio::sync::Mutex<()>> {
     .entry(*profile_id)
     .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
     .clone()
+}
+
+/// The copy lock for one profile. Held only on blocking threads: preparing a
+/// launch, sealing after a quit, and the password commands.
+fn copy_lock(profile_id: &uuid::Uuid) -> Arc<Mutex<()>> {
+  let mut guard = COPY_LOCKS
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  guard.retain(|_, lock| Arc::strong_count(lock) > 1);
+  guard.entry(*profile_id).or_default().clone()
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -290,7 +308,7 @@ pub async fn set_profile_password(profile_id: String, password: String) -> Resul
   if staging.exists() {
     let _ = std::fs::remove_dir_all(&staging);
   }
-  encrypt_profile_dir(&key, &plaintext_dir, &staging, DEFAULT_EXCLUDE_PATTERNS)
+  encrypt_profile_dir(&key, &plaintext_dir, &staging, SEALED_EXCLUDE_PATTERNS)
     .map_err(err_internal)?;
 
   // Move plaintext aside, swap in encrypted, then delete plaintext.
@@ -405,9 +423,24 @@ pub async fn lock_profile(profile_id: String) -> Result<(), String> {
   {
     return Err(err_code("PROFILE_RUNNING"));
   }
+  {
+    let lock = copy_lock(&id);
+    let _copy = lock
+      .lock()
+      .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = get_cached_key(&id);
+    match seal_copy(&id, &profile_data_dir(&profile), key.as_ref(), false) {
+      // Sealed and erased, or changes that wait for the next unlock.
+      Ok(Some(_)) | Err(SealError::NoKey) => {}
+      // Debris or nothing: either way there is nothing to keep.
+      Ok(None) => {
+        crate::ephemeral_dirs::remove_ephemeral_dir(&id.to_string());
+      }
+      Err(SealError::InUse(_)) => return Err(err_code("PROFILE_RUNNING")),
+      Err(SealError::Failed(e)) => return Err(err_internal(e)),
+    }
+  }
   drop_cached_key(&id);
-  // Purge any leftover ephemeral dir in case keep_decrypted_profiles_in_ram was on.
-  crate::ephemeral_dirs::remove_ephemeral_dir(&id.to_string());
   emit_profiles_changed();
   Ok(())
 }
@@ -459,7 +492,19 @@ pub async fn change_profile_password(
 
   let new_salt = fresh_salt();
   let new_key = derive_profile_key(&new_password, &new_salt).map_err(err_internal)?;
-  rekey_profile_dir(&old_key, &new_key, &dir).map_err(err_internal)?;
+  {
+    let lock = copy_lock(&id);
+    let _copy = lock
+      .lock()
+      .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // A copy with changes the old key has not sealed yet would otherwise keep
+    // them out of the sealed profile for good.
+    seal_copy(&id, &dir, Some(&old_key), true).map_err(seal_error)?;
+    let damaged = rekey_profile_dir(&old_key, &new_key, &dir).map_err(err_internal)?;
+    if damaged > 0 {
+      log::error!("Damaged sealed files dropped on password change profile={id} count={damaged}");
+    }
+  }
 
   profile.encryption_salt = Some(new_salt);
   ProfileManager::instance()
@@ -512,11 +557,26 @@ pub async fn remove_profile_password(profile_id: String, password: String) -> Re
   }
   clear_failed_attempts(&id);
 
+  let lock = copy_lock(&id);
+  let _copy = lock
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  seal_copy(&id, &encrypted_dir, Some(&key), false).map_err(seal_error)?;
+  // Debris an earlier erase left; the profile is about to be plaintext where
+  // it lives, and no copy of it may linger elsewhere.
+  crate::ephemeral_dirs::remove_ephemeral_dir(&id.to_string());
+
   let staging = encrypted_dir.with_extension("decrypting");
   if staging.exists() {
     let _ = std::fs::remove_dir_all(&staging);
   }
-  decrypt_profile_dir(&key, &encrypted_dir, &staging).map_err(err_internal)?;
+  let decrypted = decrypt_profile_dir(&key, &encrypted_dir, &staging).map_err(err_internal)?;
+  if decrypted.unreadable > 0 {
+    log::error!(
+      "Damaged sealed files dropped on password removal profile={id} count={}",
+      decrypted.unreadable
+    );
+  }
 
   let backup = encrypted_dir.with_extension("encrypted-backup");
   if backup.exists() {
@@ -546,105 +606,272 @@ pub async fn remove_profile_password(profile_id: String, password: String) -> Re
   Ok(())
 }
 
-// ---------- helpers used by browser_runner ----------
+// ---------- the decrypted copy a launch runs on ----------
+//
+// A launch decrypts the sealed profile into a copy the browser runs on, and the
+// quit seals the copy's changes back. The copy holds `BASELINE_FILE_NAME`, the
+// stamps of its files as of the last time the sealed copy matched it, from the
+// moment it is complete until just before it is erased. So a copy with a
+// baseline is a whole profile whose newer files still need sealing, and a copy
+// without one is debris from an interrupted decrypt or erase.
 
-/// Capture a per-file mtime snapshot of the given decrypted dir.
-fn snapshot_mtimes(plaintext_dir: &Path) -> HashMap<String, SystemTime> {
-  let mut out: HashMap<String, SystemTime> = HashMap::new();
-  fn walk(
-    base: &Path,
-    current: &Path,
-    out: &mut HashMap<String, SystemTime>,
-  ) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(current)? {
-      let entry = entry?;
-      let path = entry.path();
-      let meta = entry.metadata()?;
-      if meta.is_dir() {
-        walk(base, &path, out)?;
-      } else if meta.is_file() {
-        let rel = path
-          .strip_prefix(base)
-          .map(|p| p.to_string_lossy().replace('\\', "/"))
-          .unwrap_or_default();
-        if let Ok(m) = meta.modified() {
-          out.insert(rel, m);
-        }
-      }
-    }
-    Ok(())
-  }
-  let _ = walk(plaintext_dir, plaintext_dir, &mut out);
-  out
+/// What `BASELINE_FILE_NAME` holds.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CopyRecord {
+  files: Baseline,
+  /// The sealed copy's stamp when it last matched this copy.
+  sealed: Option<FileStamp>,
 }
 
-/// Decrypt a password-protected profile's encrypted dir into an ephemeral
-/// dir, take a mtime snapshot for diff-on-quit, and return the ephemeral
-/// path the browser should launch from.
+/// How long a seal waits for the browser's processes to let go of the copy.
+const RELEASE_WAIT: Duration = Duration::from_secs(10);
+/// How many times a failed seal is retried, a little later each time.
+const SEAL_ATTEMPTS: u32 = 3;
+
+fn read_record(dir: &Path) -> Option<CopyRecord> {
+  let bytes = std::fs::read(dir.join(BASELINE_FILE_NAME)).ok()?;
+  serde_json::from_slice(&bytes).ok()
+}
+
+/// Record that the copy in `dir` matches the sealed copy in `store` as of now.
+fn write_record(dir: &Path, files: Baseline, store: &Path) -> std::io::Result<()> {
+  let record = CopyRecord {
+    files,
+    sealed: sealed_stamp(store),
+  };
+  let json = serde_json::to_vec(&record).map_err(std::io::Error::other)?;
+  crate::profile::encryption::atomic_write(&dir.join(BASELINE_FILE_NAME), &json)
+}
+
+/// Processes started on `dir` as their user data dir, child processes
+/// included: on Windows the network service still holds the cookie database
+/// for a moment after the browser process has exited.
+fn processes_using(dir: &Path) -> Vec<u32> {
+  use sysinfo::{ProcessRefreshKind, RefreshKind, System, UpdateKind};
+
+  let Ok(dir) = dir.canonicalize() else {
+    return Vec::new();
+  };
+  let system = System::new_with_specifics(
+    RefreshKind::nothing()
+      .with_processes(ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always)),
+  );
+  system
+    .processes()
+    .iter()
+    .filter(|(_, process)| {
+      process.cmd().iter().any(|arg| {
+        arg
+          .to_str()
+          .and_then(|arg| arg.strip_prefix("--user-data-dir="))
+          .and_then(|value| Path::new(value.trim_matches('"')).canonicalize().ok())
+          .is_some_and(|value| value == dir)
+      })
+    })
+    .map(|(pid, _)| pid.as_u32())
+    .collect()
+}
+
+/// Wait until no process runs on `dir`. Returns the ones still there at the
+/// limit.
+fn wait_until_released(dir: &Path) -> Result<(), Vec<u32>> {
+  let started = Instant::now();
+  loop {
+    let pids = processes_using(dir);
+    if pids.is_empty() {
+      return Ok(());
+    }
+    if started.elapsed() >= RELEASE_WAIT {
+      return Err(pids);
+    }
+    std::thread::sleep(Duration::from_millis(250));
+  }
+}
+
+/// Seal the copy's changes into `store` and record the new baseline.
+fn seal(key: &[u8; 32], dir: &Path, store: &Path, baseline: &Baseline) -> Result<usize, String> {
+  let mut attempt = 1;
+  loop {
+    let sealed = reencrypt_changed_files(key, dir, store, SEALED_EXCLUDE_PATTERNS, baseline)
+      .map_err(|e| e.to_string())
+      .and_then(|(rewrote, sealed)| {
+        write_record(dir, sealed, store)
+          .map(|()| rewrote)
+          .map_err(|e| e.to_string())
+      });
+    match sealed {
+      Err(_) if attempt < SEAL_ATTEMPTS => {
+        std::thread::sleep(Duration::from_millis(500) * attempt);
+        attempt += 1;
+      }
+      result => return result,
+    }
+  }
+}
+
+/// Mark the copy as no longer a profile. Done before every erase, so an erase
+/// that stops halfway leaves debris rather than something taken for one.
+fn forget_record(dir: &Path) -> std::io::Result<()> {
+  match std::fs::remove_file(dir.join(BASELINE_FILE_NAME)) {
+    Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+    _ => Ok(()),
+  }
+}
+
+/// Erase the copy and forget the key.
+fn erase_copy(profile_id: &uuid::Uuid, dir: &Path) {
+  if let Err(e) = forget_record(dir) {
+    log::error!(
+      "Decrypted copy kept, its baseline could not be removed profile={profile_id} err=\"{e}\""
+    );
+    return;
+  }
+  drop_cached_key(profile_id);
+  crate::ephemeral_dirs::remove_ephemeral_dir(&profile_id.to_string());
+}
+
+/// Erase a profile's decrypted copy, sealed or not, and forget its key: the
+/// profile is being deleted.
+pub fn discard_copy(profile_id: &uuid::Uuid) {
+  let lock = copy_lock(profile_id);
+  let _copy = lock
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  let id = profile_id.to_string();
+  if let Some(dir) = crate::ephemeral_dirs::get_ephemeral_dir(&id) {
+    if let Err(e) = forget_record(&dir) {
+      log::error!(
+        "Decrypted copy baseline not removed before erase profile={profile_id} err=\"{e}\""
+      );
+    }
+  }
+  drop_cached_key(profile_id);
+  crate::ephemeral_dirs::remove_ephemeral_dir(&id);
+}
+
+/// Why a copy was not sealed.
+enum SealError {
+  /// The profile is locked; the copy waits for the next unlock.
+  NoKey,
+  /// A browser still runs on the copy.
+  InUse(Vec<u32>),
+  Failed(String),
+}
+
+/// Seal the profile's decrypted copy, if it has one with changes to seal, then
+/// erase it unless `keep`. `Ok(None)` means there was no copy to seal: none was
+/// made, or another caller already sealed and erased it. Hold the copy lock.
+fn seal_copy(
+  profile_id: &uuid::Uuid,
+  store: &Path,
+  key: Option<&[u8; 32]>,
+  keep: bool,
+) -> Result<Option<usize>, SealError> {
+  let Some(dir) = crate::ephemeral_dirs::get_ephemeral_dir(&profile_id.to_string()) else {
+    return Ok(None);
+  };
+  let Some(record) = read_record(&dir) else {
+    return Ok(None);
+  };
+  let key = key.ok_or(SealError::NoKey)?;
+  wait_until_released(&dir).map_err(SealError::InUse)?;
+  let started = Instant::now();
+  let rewrote = seal(key, &dir, store, &record.files).map_err(SealError::Failed)?;
+  log::info!(
+    "Profile re-encrypted profile={profile_id} changed_files={rewrote} keep_decrypted={keep} elapsed_ms={}",
+    started.elapsed().as_millis()
+  );
+  if !keep {
+    erase_copy(profile_id, &dir);
+  }
+  Ok(Some(rewrote))
+}
+
+/// Make the decrypted copy a launch runs on, and return its path.
+///
+/// A copy that is still there with a baseline is the newest state of the
+/// profile, kept in RAM by the setting or left by a quit that could not seal
+/// it: it is sealed and used as it is. Anything else is decrypted afresh.
 ///
 /// Returns an error if the profile isn't unlocked yet — the frontend should
 /// prompt for the password and call `unlock_profile` first.
 pub fn prepare_for_launch(profile: &crate::profile::BrowserProfile) -> Result<PathBuf, String> {
   let id = profile.id;
   let key = get_cached_key(&id).ok_or_else(|| err_code("PROFILE_LOCKED"))?;
+  let store = profile_data_dir(profile);
+  let lock = copy_lock(&id);
+  let _copy = lock
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
 
   let id_str = id.to_string();
-  let ephemeral = match crate::ephemeral_dirs::get_ephemeral_dir(&id_str) {
-    Some(p) => p,
+  let mut dir = match crate::ephemeral_dirs::get_ephemeral_dir(&id_str) {
+    Some(dir) => dir,
     None => crate::ephemeral_dirs::create_ephemeral_dir(&id_str).map_err(err_internal)?,
   };
-
-  let already_populated = POPULATED_EPHEMERAL
-    .lock()
-    .map(|g| g.contains(&id))
-    .unwrap_or(false);
-
-  let encrypted_dir = profile_data_dir(profile);
-
-  let snapshot = if already_populated && ephemeral_has_files(&ephemeral) {
-    // Reusing a kept-in-RAM copy from the previous session; just snapshot.
-    snapshot_mtimes(&ephemeral)
-  } else {
-    // Wipe any stale contents and re-decrypt.
-    if let Err(e) = clear_dir_contents(&ephemeral) {
-      log::warn!("Stale decrypted copy clear failed profile={id} err=\"{e}\"");
-    }
-    decrypt_profile_dir(&key, &encrypted_dir, &ephemeral).map_err(|e| match e {
-      crate::profile::encryption::PasswordError::WrongPassword => err_code("INCORRECT_PASSWORD"),
-      other => err_internal(other),
-    })?
-  };
-
-  if let Ok(mut guard) = LAUNCH_SNAPSHOTS.lock() {
-    guard.insert(id, snapshot);
-  }
-  if let Ok(mut guard) = POPULATED_EPHEMERAL.lock() {
-    guard.insert(id);
+  if let Err(pids) = wait_until_released(&dir) {
+    log::warn!(
+      "Launch refused, a browser still runs on the decrypted copy profile={id} pids={pids:?}"
+    );
+    return Err(err_code("PROFILE_RUNNING"));
   }
 
-  Ok(ephemeral)
-}
-
-fn ephemeral_has_files(dir: &Path) -> bool {
-  std::fs::read_dir(dir)
-    .map(|mut iter| iter.next().is_some())
-    .unwrap_or(false)
-}
-
-fn clear_dir_contents(dir: &Path) -> std::io::Result<()> {
-  if !dir.exists() {
-    return Ok(());
-  }
-  for entry in std::fs::read_dir(dir)? {
-    let entry = entry?;
-    let path = entry.path();
-    if path.is_dir() {
-      std::fs::remove_dir_all(&path)?;
+  if let Some(record) = read_record(&dir) {
+    let replaced = record.sealed != sealed_stamp(&store);
+    if replaced && !has_changes(&dir, SEALED_EXCLUDE_PATTERNS, &record.files).unwrap_or(true) {
+      // Sync brought a newer sealed profile while this copy waited, unused.
+      log::info!("Kept decrypted copy replaced by a newer sealed profile profile={id}");
     } else {
-      std::fs::remove_file(&path)?;
+      if replaced {
+        log::warn!(
+          "Sealed profile changed while its decrypted copy had changes, the copy's files win profile={id}"
+        );
+      }
+      // The copy is the newest state either way; a failed seal only means
+      // the quit seals more.
+      match seal(&key, &dir, &store, &record.files) {
+        Ok(0) => {}
+        Ok(rewrote) => {
+          log::info!("Unsealed profile changes re-encrypted profile={id} changed_files={rewrote}")
+        }
+        Err(e) => {
+          log::error!("Profile re-encryption before launch failed profile={id} err=\"{e}\"")
+        }
+      }
+      return Ok(dir);
     }
   }
-  Ok(())
+
+  if std::fs::read_dir(&dir).is_ok_and(|mut entries| entries.next().is_some()) {
+    if forget_record(&dir).is_err() || !crate::ephemeral_dirs::remove_ephemeral_dir(&id_str) {
+      return Err(err_internal(
+        "the previous decrypted copy could not be erased",
+      ));
+    }
+    dir = crate::ephemeral_dirs::create_ephemeral_dir(&id_str).map_err(err_internal)?;
+  }
+
+  let decrypted = decrypt_profile_dir(&key, &store, &dir)
+    .map_err(|e| match e {
+      PasswordError::WrongPassword => err_code("INCORRECT_PASSWORD"),
+      other => err_internal(other),
+    })
+    .and_then(|decrypted| {
+      write_record(&dir, decrypted.baseline, &store)
+        .map(|()| decrypted.unreadable)
+        .map_err(err_internal)
+    });
+  let unreadable = match decrypted {
+    Ok(unreadable) => unreadable,
+    Err(e) => {
+      crate::ephemeral_dirs::remove_ephemeral_dir(&id_str);
+      return Err(e);
+    }
+  };
+  if unreadable > 0 {
+    log::error!("Damaged sealed files skipped profile={id} count={unreadable}");
+  }
+  Ok(dir)
 }
 
 fn read_keep_decrypted_setting() -> bool {
@@ -654,72 +881,54 @@ fn read_keep_decrypted_setting() -> bool {
     .unwrap_or(false)
 }
 
-/// Synchronous core of `complete_after_quit`: re-encrypts ephemeral → disk
-/// and (unless `keep_decrypted` is true) drops cached key + purges ephemeral.
-/// Returns the number of files re-encrypted, or `None` if there was nothing
-/// to do. Public for testability.
+/// Seal the copy the browser just quit, then erase it unless `keep_decrypted`.
+/// Returns the number of files re-encrypted, or `None` when nothing was sealed:
+/// no copy, already sealed by the other caller of the same quit, or a failure,
+/// in which case the copy and the key stay for the next launch to seal.
+fn seal_after_quit(profile_id: uuid::Uuid, store: &Path, keep_decrypted: bool) -> Option<usize> {
+  let lock = copy_lock(&profile_id);
+  let _copy = lock
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+  let key = get_cached_key(&profile_id);
+  match seal_copy(&profile_id, store, key.as_ref(), keep_decrypted) {
+    Ok(rewrote) => rewrote,
+    Err(SealError::NoKey) => {
+      log::warn!("Profile changes kept until the profile is unlocked profile={profile_id}");
+      None
+    }
+    Err(SealError::InUse(pids)) => {
+      log::warn!(
+        "Profile not re-encrypted, a browser still runs on it profile={profile_id} pids={pids:?}"
+      );
+      None
+    }
+    Err(SealError::Failed(e)) => {
+      log::error!(
+        "Profile re-encryption failed, decrypted copy kept profile={profile_id} err=\"{e}\""
+      );
+      None
+    }
+  }
+}
+
+/// `complete_after_quit_and_wait` on the calling thread, for tests.
+#[cfg(test)]
 pub fn complete_after_quit_blocking(
   profile: &crate::profile::BrowserProfile,
   keep_decrypted: bool,
 ) -> Option<usize> {
-  use crate::profile::encryption::reencrypt_changed_files;
-
-  let id = profile.id;
   if !profile.password_protected {
     return None;
   }
-
-  // Snapshot is an optimization (skip re-encrypting unchanged files). When
-  // it's missing — e.g. natural-exit detection firing twice, or status
-  // checker firing for a profile whose snapshot was already consumed — we
-  // fall back to treating every ephemeral file as new. Empty `before`
-  // forces all files through encrypt, which is slower but correct.
-  let snapshot = LAUNCH_SNAPSHOTS
-    .lock()
-    .ok()
-    .and_then(|mut g| g.remove(&id))
-    .unwrap_or_default();
-
-  let id_str = id.to_string();
-  let ephemeral = crate::ephemeral_dirs::get_ephemeral_dir(&id_str)?;
-  let encrypted = profile_data_dir(profile);
-  let key = get_cached_key(&id)?;
-
-  let result = match reencrypt_changed_files(
-    &key,
-    &ephemeral,
-    &encrypted,
-    DEFAULT_EXCLUDE_PATTERNS,
-    &snapshot,
-  ) {
-    Ok(n) => {
-      log::info!(
-        "Profile re-encrypted profile={id} changed_files={n} keep_decrypted={keep_decrypted}"
-      );
-      Some(n)
-    }
-    Err(e) => {
-      log::error!("Profile re-encryption failed profile={id} err=\"{e}\"");
-      None
-    }
-  };
-
-  if !keep_decrypted {
-    drop_cached_key(&id);
-    if let Ok(mut guard) = POPULATED_EPHEMERAL.lock() {
-      guard.remove(&id);
-    }
-    crate::ephemeral_dirs::remove_ephemeral_dir(&id_str);
-  }
-
-  result
+  seal_after_quit(profile.id, &profile_data_dir(profile), keep_decrypted)
 }
 
-/// Re-encrypt a password-protected profile's ephemeral dir back to the
-/// on-disk encrypted dir after the browser process exits. Optionally purges
-/// the ephemeral dir + cached key based on the global setting. Returns the
-/// number of files re-encrypted (`None` when nothing to do or the profile
-/// isn't protected).
+/// Re-encrypt a password-protected profile's decrypted copy back to the
+/// on-disk encrypted dir after the browser process exits. Purges the copy and
+/// the cached key unless the global setting keeps them. Returns the number of
+/// files re-encrypted (`None` when nothing was sealed or the profile isn't
+/// protected).
 ///
 /// Callers that release a queued sync run after a browser quit MUST await
 /// this future — releasing sync while re-encryption is still in-flight
@@ -732,9 +941,10 @@ pub async fn complete_after_quit_and_wait(
     return None;
   }
   let keep_decrypted = read_keep_decrypted_setting();
-  let profile = profile.clone();
+  let store = profile_data_dir(profile);
+  let profile_id = profile.id;
 
-  tokio::task::spawn_blocking(move || complete_after_quit_blocking(&profile, keep_decrypted))
+  tokio::task::spawn_blocking(move || seal_after_quit(profile_id, &store, keep_decrypted))
     .await
     .unwrap_or_else(|e| {
       log::error!("Profile re-encryption task panicked err=\"{e}\"");
@@ -745,3 +955,7 @@ pub async fn complete_after_quit_and_wait(
 #[cfg(test)]
 #[path = "password_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "password_browser_tests.rs"]
+mod browser_tests;
