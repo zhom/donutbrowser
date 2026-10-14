@@ -89,7 +89,12 @@ fn test_salt_generation_unique() {
 }
 
 #[test]
+#[serial_test::serial]
 fn test_password_storage_roundtrip() {
+  // A scratch settings dir: the real one holds the developer's own sync
+  // password, which this test would otherwise overwrite and then delete.
+  let data = tempfile::TempDir::new().unwrap();
+  let _guard = crate::app_dirs::set_test_data_dir(data.path().to_path_buf());
   let password = "test_password_12345";
   store_e2e_password(password).unwrap();
   assert!(has_e2e_password());
