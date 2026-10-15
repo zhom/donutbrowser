@@ -1,6 +1,84 @@
 # Changelog
 
 
+## v0.34.0 (2026-10-15)
+
+### Features
+
+- own sync server
+- agent takeover, batches
+- IndexedDB transfer
+- restore points
+- group access, notices
+- faster MCP browsing
+- team roles and log
+- scheduled recipes
+- SDK for new routes
+- Local Storage transfer
+- leaner MCP and clients
+- interface sounds
+- profile templates
+- bulk edit profiles
+- 2FA codes per profile
+- profile start pages
+- proxy change-IP link
+- profile statuses
+- per-profile DNS server
+- cross-OS profile sync
+
+### Bug Fixes
+
+- rpm duplicate sidecar
+- stream tar.xz extraction
+- zero cookies before run
+- update rustls
+- read identity devices
+- clippy as_chunks lint
+- drop serde_yaml
+- keep camera file set
+- drop refused overrides
+- bundle fonts
+- keep timer throttling
+- cache CLDR, steady tests
+- clone keeps source OS
+- read any os_crypt format
+
+### Refactoring
+
+- cleanup
+- cleanup
+- proxy lifecycle management
+
+### Performance
+
+- end clicks without load
+
+### Documentation
+
+- drop macOS Intel
+
+### Maintenance
+
+- chore: version bump
+- test: isolate sync password
+- test: link e2e on windows
+- test: tauri-wd 0.2.2
+- test: linux sandbox flags
+- ci: drop macOS Intel builds
+- chore: git rm
+- chore: linting
+- chore: log proxy start steps
+- chore: cleanup
+- ci(deps): bump the github-actions group with 6 updates
+- chore: update flake.nix for v0.33.0 [skip ci] (#652)
+
+### Other
+
+- style: soft profile dialog
+- deps(rust)(deps): bump the rust-dependencies group (#656)
+- deps(deps): bump the frontend-dependencies group with 80 updates (#655)
+
+
 ## v0.33.0 (2026-10-09)
 
 ### Features
