@@ -955,3 +955,7 @@ mod tests {
     ));
   }
 }
+
+#[cfg(test)]
+#[path = "wayfern_identity_storage_browser_tests.rs"]
+mod browser_tests;
