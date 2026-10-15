@@ -30,7 +30,7 @@
     "active": true,
     "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
     "category": "Productivity",
-    "externalBin": ["binaries/donut-proxy", "binaries/xray"],
+    "externalBin": ["binaries/xray"],
     "resources": {
       "binaries/xray-LICENSE.txt": "licenses/Xray-core-LICENSE.txt"
     },

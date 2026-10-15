@@ -100,19 +100,15 @@ fn external_binaries_exist() -> bool {
 
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
-  // Check for all required external binaries (must match tauri.conf.json externalBin)
-  let donut_proxy_name = if target.contains("windows") {
-    format!("donut-proxy-{}.exe", target)
-  } else {
-    format!("donut-proxy-{}", target)
-  };
+  // Must match tauri.conf.json externalBin. donut-proxy is a cargo bin of this
+  // crate, which the bundler packages on its own.
   let xray_name = if target.contains("windows") {
     format!("xray-{}.exe", target)
   } else {
     format!("xray-{}", target)
   };
 
-  binaries_dir.join(&donut_proxy_name).exists() && binaries_dir.join(&xray_name).exists()
+  binaries_dir.join(&xray_name).exists()
 }
 
 fn ensure_dist_folder_exists() {
