@@ -97,12 +97,6 @@ impl ExtractionReporter {
     self.report((done as f64 / total as f64) * 100.0, done, Some(total));
   }
 
-  /// Report a pre-computed percentage (multi-phase extractions where byte
-  /// counts don't map linearly onto overall progress).
-  pub fn report_percentage(&self, percentage: f64) {
-    self.report(percentage, 0, None);
-  }
-
   /// Force a final 100% event so the bar lands full before the next stage.
   pub fn finish(&self) {
     self.emit(100.0, 0, None);
@@ -871,39 +865,10 @@ impl Extractor {
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
-    let mut buf_reader = BufReader::new(file);
-
-    // Read the entire file into memory for lzma-rs
-    let mut compressed_data = Vec::new();
-    buf_reader.read_to_end(&mut compressed_data)?;
-    let compressed_total = compressed_data.len() as u64;
-
-    // Two phases with no shared byte scale: CPU-bound LZMA decompression
-    // dominates, so compressed bytes consumed map to 0–80%, and the tar
-    // unpack of the decompressed data to 80–100%.
-    let mut decompressed_data = Vec::new();
-    let counted_input = ProgressReader::new(std::io::Cursor::new(compressed_data), |read| {
-      if let Some(reporter) = progress {
-        if compressed_total > 0 {
-          reporter
-            .report_percentage(80.0 * read.min(compressed_total) as f64 / compressed_total as f64);
-        }
-      }
-    });
-    lzma_rs::xz_decompress(&mut BufReader::new(counted_input), &mut decompressed_data)?;
-
-    // Create tar archive from decompressed data
-    let decompressed_total = decompressed_data.len() as u64;
-    let counted_tar = ProgressReader::new(std::io::Cursor::new(decompressed_data), |read| {
-      if let Some(reporter) = progress {
-        if decompressed_total > 0 {
-          reporter.report_percentage(
-            80.0 + 20.0 * read.min(decompressed_total) as f64 / decompressed_total as f64,
-          );
-        }
-      }
-    });
-    let mut archive = tar::Archive::new(counted_tar);
+    let counted = progress_file_reader(file, progress)?;
+    // Streams: memory stays near the xz dictionary size, not the unpacked browser size.
+    let xz_decoder = lzma_rust2::XzReader::new(BufReader::new(counted), true);
+    let mut archive = tar::Archive::new(xz_decoder);
 
     archive.unpack(dest_dir)?;
 
@@ -1911,10 +1876,13 @@ mod tests {
       // Then compress with xz
       let tar_xz_file =
         std::fs::File::create(&tar_xz_path).expect("Failed to create test tar.xz file");
-      let mut compressed_data = Vec::new();
-      lzma_rs::xz_compress(&mut std::io::Cursor::new(tar_data), &mut compressed_data)
-        .expect("Failed to compress with xz");
-      std::io::Write::write_all(&mut std::io::BufWriter::new(tar_xz_file), &compressed_data)
+      let mut writer = lzma_rust2::XzWriter::new(
+        std::io::BufWriter::new(tar_xz_file),
+        lzma_rust2::XzOptions::default(),
+      )
+      .expect("Failed to create xz writer");
+      std::io::Write::write_all(&mut writer, &tar_data).expect("Failed to compress with xz");
+      std::io::Write::flush(&mut writer.finish().expect("Failed to finish xz stream"))
         .expect("Failed to write compressed data");
     }
 

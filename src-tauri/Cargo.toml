@@ -74,7 +74,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 tar = "0"
 bzip2 = "0"
 flate2 = "1"
-lzma-rs = "0"
+lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "optimization", "xz"] }
 msi-extract = "0"
 
 uuid = { version = "1.27", features = ["v4", "serde"] }
@@ -192,6 +192,7 @@ tower = "0.5"
 tower-http = { version = "0.7", features = ["fs", "trace"] }
 futures-util = "0.3"
 serial_test = "4"
+lzma-rust2 = { version = "0.22", features = ["encoder"] }
 
 # Integration test configuration
 [[test]]
