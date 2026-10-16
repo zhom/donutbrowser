@@ -18,7 +18,7 @@ env:
 
 jobs:
   security-scan:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Security Vulnerability Scan
     uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc" # v2.6.0
     with:
@@ -34,21 +34,21 @@ jobs:
       actions: read
 
   lint-js:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
     permissions:
       contents: read
 
   lint-rust:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
     permissions:
       contents: read
 
   codeql:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: CodeQL
     uses: ./.github/workflows/codeql.yml
     permissions:
@@ -58,14 +58,14 @@ jobs:
       actions: read
 
   spellcheck:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Spell Check
     uses: ./.github/workflows/spellcheck.yml
     permissions:
       contents: read
 
   release:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
     permissions:
       contents: write
@@ -286,7 +286,7 @@ jobs:
   # The Flatpak and the Snap, repackaged from this release's .deb and attached
   # to it before the checksums are taken, so SHA256SUMS.txt covers them.
   linux-packages:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [release]
     uses: ./.github/workflows/linux-packages.yml
     permissions:
@@ -296,7 +296,7 @@ jobs:
 
   checksums:
     # A failed Flatpak or Snap never holds back the checksums.
-    if: ${{ !cancelled() && github.repository == 'zhom/donutbrowser' && needs.release.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'donutbrowser/donutbrowser' && needs.release.result == 'success' }}
     needs: [release, linux-packages]
     runs-on: ubuntu-latest
     permissions:
@@ -316,7 +316,7 @@ jobs:
           gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
 
   changelog:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [release]
     runs-on: ubuntu-latest
     permissions:
@@ -412,7 +412,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="${TAG#v}"
-          BASE="https://github.com/zhom/donutbrowser/releases/download/${TAG}"
+          BASE="https://github.com/donutbrowser/donutbrowser/releases/download/${TAG}"
 
           # Generate the new install section between markers
           cat > /tmp/install-links.md << LINKS
@@ -483,7 +483,7 @@ jobs:
           gh release edit "$TAG" --notes-file /tmp/release-changelog.md
 
   notify-discord:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [release, changelog]
     runs-on: ubuntu-latest
     steps:
@@ -561,7 +561,7 @@ jobs:
           curl -fsSL -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
 
   deploy-website:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [release]
     runs-on: ubuntu-latest
     steps:
@@ -571,7 +571,7 @@ jobs:
         run: curl -fsSL -X POST "$DEPLOYMENT_HOOK"
 
   docker:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [release]
     uses: ./.github/workflows/docker-sync.yml
     with:
@@ -581,7 +581,7 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   update-flake:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [release, changelog]
     runs-on: ubuntu-latest
     permissions:
@@ -600,8 +600,8 @@ jobs:
           VERSION="${TAG#v}"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
-          AMD64_URL="https://github.com/zhom/donutbrowser/releases/download/${TAG}/Donut_${VERSION}_amd64.AppImage"
-          AARCH64_URL="https://github.com/zhom/donutbrowser/releases/download/${TAG}/Donut_${VERSION}_aarch64.AppImage"
+          AMD64_URL="https://github.com/donutbrowser/donutbrowser/releases/download/${TAG}/Donut_${VERSION}_amd64.AppImage"
+          AARCH64_URL="https://github.com/donutbrowser/donutbrowser/releases/download/${TAG}/Donut_${VERSION}_aarch64.AppImage"
 
           echo "Downloading x86_64 AppImage..."
           curl -fsSL -o /tmp/amd64.AppImage "$AMD64_URL" || { echo "x86_64 AppImage not found"; exit 1; }
@@ -627,11 +627,11 @@ jobs:
           sed -i "s/releaseVersion = \"[^\"]*\"/releaseVersion = \"${VERSION}\"/" flake.nix
 
           # Update x86_64 URL and hash
-          sed -i "s|url = \"https://github.com/zhom/donutbrowser/releases/download/v[^\"]*_amd64.AppImage\"|url = \"${AMD64_URL}\"|" flake.nix
+          sed -i "s|url = \"https://github.com/donutbrowser/donutbrowser/releases/download/v[^\"]*_amd64.AppImage\"|url = \"${AMD64_URL}\"|" flake.nix
           sed -i "/amd64.AppImage/{ n; s|hash = \"[^\"]*\"|hash = \"${AMD64_HASH}\"|; }" flake.nix
 
           # Update aarch64 URL and hash
-          sed -i "s|url = \"https://github.com/zhom/donutbrowser/releases/download/v[^\"]*_aarch64.AppImage\"|url = \"${AARCH64_URL}\"|" flake.nix
+          sed -i "s|url = \"https://github.com/donutbrowser/donutbrowser/releases/download/v[^\"]*_aarch64.AppImage\"|url = \"${AARCH64_URL}\"|" flake.nix
           sed -i "/aarch64.AppImage/{ n; s|hash = \"[^\"]*\"|hash = \"${AARCH64_HASH}\"|; }" flake.nix
 
           echo "Updated flake.nix:"

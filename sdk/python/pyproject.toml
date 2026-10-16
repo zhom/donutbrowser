@@ -31,7 +31,7 @@ dev = ["pytest>=7"]
 
 [project.urls]
 Homepage = "https://donutbrowser.com"
-Source = "https://github.com/zhom/donutbrowser"
+Source = "https://github.com/donutbrowser/donutbrowser"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/donutbrowser"]

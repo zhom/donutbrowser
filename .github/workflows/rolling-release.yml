@@ -25,7 +25,7 @@ env:
 
 jobs:
   security-scan:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Security Vulnerability Scan
     uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc" # v2.6.0
     with:
@@ -41,21 +41,21 @@ jobs:
       actions: read
 
   lint-js:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
     permissions:
       contents: read
 
   lint-rust:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
     permissions:
       contents: read
 
   codeql:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: CodeQL
     uses: ./.github/workflows/codeql.yml
     permissions:
@@ -65,14 +65,14 @@ jobs:
       actions: read
 
   spellcheck:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     name: Spell Check
     uses: ./.github/workflows/spellcheck.yml
     permissions:
       contents: read
 
   rolling-release:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
     permissions:
       contents: write
@@ -301,7 +301,7 @@ jobs:
   # The Flatpak and the Snap, repackaged from this build's .deb and attached to
   # its release before the nightly is assembled from it.
   nightly-tag:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [rolling-release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -327,7 +327,7 @@ jobs:
   update-nightly-release:
     # A failed Flatpak or Snap never holds back the nightly; it only goes out
     # without them.
-    if: ${{ !cancelled() && github.repository == 'zhom/donutbrowser' && needs.rolling-release.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'donutbrowser/donutbrowser' && needs.rolling-release.result == 'success' }}
     needs: [rolling-release, linux-packages]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -447,7 +447,7 @@ jobs:
             --prerelease
 
   deploy-website:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [update-nightly-release]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -458,7 +458,7 @@ jobs:
         run: curl -fsSL -X POST "$DEPLOYMENT_HOOK"
 
   notify-discord:
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     needs: [update-nightly-release]
     runs-on: ubuntu-latest
     timeout-minutes: 10

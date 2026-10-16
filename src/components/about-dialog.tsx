@@ -290,7 +290,9 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      void openUrl("https://github.com/zhom/donutbrowser")
+                      void openUrl(
+                        "https://github.com/donutbrowser/donutbrowser",
+                      )
                     }
                   >
                     {t("about.github")}

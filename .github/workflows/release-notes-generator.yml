@@ -14,7 +14,7 @@ jobs:
   generate-release-notes:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: github.repository == 'zhom/donutbrowser' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
+    if: github.repository == 'donutbrowser/donutbrowser' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - name: Checkout repository

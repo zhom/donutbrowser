@@ -8,16 +8,16 @@
 <br>
 
 <p align="center">
-  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/zhom/donutbrowser">
+  <a style="text-decoration: none;" href="https://github.com/donutbrowser/donutbrowser/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/donutbrowser/donutbrowser">
   </a>
-  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/issues" target="_blank">
+  <a style="text-decoration: none;" href="https://github.com/donutbrowser/donutbrowser/issues" target="_blank">
     <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs Welcome">
   </a>
-  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/blob/main/LICENSE" target="_blank">
+  <a style="text-decoration: none;" href="https://github.com/donutbrowser/donutbrowser/blob/main/LICENSE" target="_blank">
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License">
   </a>
-  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/network/members" target="_blank">
-    <img src="https://img.shields.io/github/forks/zhom/donutbrowser?style=social" alt="GitHub forks">
+  <a style="text-decoration: none;" href="https://github.com/donutbrowser/donutbrowser/network/members" target="_blank">
+    <img src="https://img.shields.io/github/forks/donutbrowser/donutbrowser?style=social" alt="GitHub forks">
   </a>
 </p>
 
@@ -74,7 +74,7 @@ Start any profile from the local REST API on `127.0.0.1:10108`, then connect Pla
 <!-- install-links-start -->
 ### macOS
 
-[Download DMG (Apple Silicon)](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_aarch64.dmg)
+[Download DMG (Apple Silicon)](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_aarch64.dmg)
 
 Or install via Homebrew:
 
@@ -84,15 +84,15 @@ brew install --cask donut
 
 ### Windows
 
-[Download Windows Installer (x64)](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_x64-setup.exe) · [Portable (x64)](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_x64-portable.zip)
+[Download Windows Installer (x64)](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_x64-setup.exe) · [Portable (x64)](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_x64-portable.zip)
 
 ### Linux
 
 | Format | x86_64 | ARM64 |
 |---|---|---|
-| **deb** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_amd64.deb) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_arm64.deb) |
-| **rpm** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut-0.34.0-1.x86_64.rpm) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut-0.34.0-1.aarch64.rpm) |
-| **AppImage** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_amd64.AppImage) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_aarch64.AppImage) |
+| **deb** | [Download](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_amd64.deb) | [Download](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_arm64.deb) |
+| **rpm** | [Download](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut-0.34.0-1.x86_64.rpm) | [Download](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut-0.34.0-1.aarch64.rpm) |
+| **AppImage** | [Download](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_amd64.AppImage) | [Download](https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_aarch64.AppImage) |
 <!-- install-links-end -->
 
 Or install via package manager:
@@ -116,7 +116,7 @@ If that gives an EGL display error, add `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `G
 
 ### Flatpak and Snap
 
-Releases include an x86_64 Flatpak bundle and a Snap, built from the `.deb` and tested in their sandboxes by the [Linux Packages](https://github.com/zhom/donutbrowser/actions/workflows/linux-packages.yml) workflow. Download `Donut_*_x86_64.flatpak` or `Donut_*_amd64.snap` from the [releases](https://github.com/zhom/donutbrowser/releases) (the nightly has them already) and install it:
+Releases include an x86_64 Flatpak bundle and a Snap, built from the `.deb` and tested in their sandboxes by the [Linux Packages](https://github.com/donutbrowser/donutbrowser/actions/workflows/linux-packages.yml) workflow. Download `Donut_*_x86_64.flatpak` or `Donut_*_amd64.snap` from the [releases](https://github.com/donutbrowser/donutbrowser/releases) (the nightly has them already) and install it:
 
 ```bash
 flatpak install --user Donut_*_x86_64.flatpak
@@ -128,7 +128,7 @@ The Snap leaves the microphone, the camera and the keyring (used by profile impo
 ### Nix
 
 ```bash
-nix run github:zhom/donutbrowser#release-start
+nix run github:donutbrowser/donutbrowser#release-start
 ```
 
 ## Self-Hosting Sync
@@ -140,27 +140,27 @@ Run your own sync server to sync profiles, proxies, and groups across devices fo
 Donut Browser is built by the people who use it, and plenty of the most useful help involves no code at all.
 
 - Tell other people about Donut. Word of mouth is how most users find the project, so talking about it is a real contribution.
-- Report bugs and request features in [GitHub Issues](https://github.com/zhom/donutbrowser/issues).
-- Answer questions in [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions).
+- Report bugs and request features in [GitHub Issues](https://github.com/donutbrowser/donutbrowser/issues).
+- Answer questions in [GitHub Discussions](https://github.com/donutbrowser/donutbrowser/discussions).
 - Fix and improve translations in `src/i18n/locales`.
 - Write code. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 - Star the repo so more people see it.
 
 ## Star History
 
-<a href="https://gitdebt.com/zhom/donutbrowser?ref=readme">
+<a href="https://gitdebt.com/donutbrowser/donutbrowser?ref=readme">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.svg?theme=dark&animate=1" />
-    <img alt="Cumulative GitHub stars for zhom/donutbrowser over time" src="https://api.gitdebt.com/api/repos/zhom/donutbrowser/chart.svg?theme=light&animate=1" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/donutbrowser/donutbrowser/chart.svg?theme=dark&animate=1" />
+    <img alt="Cumulative GitHub stars for donutbrowser/donutbrowser over time" src="https://api.gitdebt.com/api/repos/donutbrowser/donutbrowser/chart.svg?theme=light&animate=1" />
   </picture>
 </a>
 
 ## Contributors
 
-<a href="https://gitdebt.com/zhom/donutbrowser?ref=readme">
+<a href="https://gitdebt.com/donutbrowser/donutbrowser?ref=readme">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/zhom/donutbrowser/stats/contributors.svg?theme=dark&animate=1" />
-    <img alt="Everyone who has landed commits in zhom/donutbrowser, ranked by commit count" src="https://api.gitdebt.com/api/repos/zhom/donutbrowser/stats/contributors.svg?theme=light&animate=1" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.gitdebt.com/api/repos/donutbrowser/donutbrowser/stats/contributors.svg?theme=dark&animate=1" />
+    <img alt="Everyone who has landed commits in donutbrowser/donutbrowser, ranked by commit count" src="https://api.gitdebt.com/api/repos/donutbrowser/donutbrowser/stats/contributors.svg?theme=light&animate=1" />
   </picture>
 </a>
 

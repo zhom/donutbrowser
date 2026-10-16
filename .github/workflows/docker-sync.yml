@@ -77,7 +77,7 @@ jobs:
   build-and-push:
     needs: test
     # Forks have no Docker Hub credentials; skip instead of failing there.
-    if: github.repository == 'zhom/donutbrowser'
+    if: github.repository == 'donutbrowser/donutbrowser'
     runs-on: ubuntu-latest
     # A normal build takes 4 to 6 minutes. The emulated arm64 `npm install`
     # hung four times since August and burned the 6-hour default each time.

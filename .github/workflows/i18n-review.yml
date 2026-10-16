@@ -36,7 +36,7 @@ env:
 jobs:
   review:
     if: >-
-      github.repository == 'zhom/donutbrowser' &&
+      github.repository == 'donutbrowser/donutbrowser' &&
       (github.event_name == 'push' ||
        (github.event.pull_request.draft == false &&
         github.event.pull_request.user.type != 'Bot'))

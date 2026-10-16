@@ -18,7 +18,7 @@ permissions:
 jobs:
   publish-repos:
     if: >
-      github.repository == 'zhom/donutbrowser' &&
+      github.repository == 'donutbrowser/donutbrowser' &&
       (github.event_name == 'workflow_dispatch' ||
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest

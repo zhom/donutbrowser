@@ -33,13 +33,13 @@
   </provides>
 
   <url type="homepage">https://donutbrowser.com</url>
-  <url type="bugtracker">https://github.com/zhom/donutbrowser/issues</url>
-  <url type="vcs-browser">https://github.com/zhom/donutbrowser</url>
-  <url type="contribute">https://github.com/zhom/donutbrowser/blob/main/CONTRIBUTING.md</url>
+  <url type="bugtracker">https://github.com/donutbrowser/donutbrowser/issues</url>
+  <url type="vcs-browser">https://github.com/donutbrowser/donutbrowser</url>
+  <url type="contribute">https://github.com/donutbrowser/donutbrowser/blob/main/CONTRIBUTING.md</url>
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/zhom/donutbrowser/main/assets/donut-preview.png</image>
+      <image>https://raw.githubusercontent.com/donutbrowser/donutbrowser/main/assets/donut-preview.png</image>
       <caption>The profile list</caption>
     </screenshot>
   </screenshots>
@@ -61,7 +61,7 @@
 
   <releases>
     <release version="0.31.2" date="2026-09-23">
-      <url type="details">https://github.com/zhom/donutbrowser/releases/tag/v0.31.2</url>
+      <url type="details">https://github.com/donutbrowser/donutbrowser/releases/tag/v0.31.2</url>
     </release>
   </releases>
 </component>

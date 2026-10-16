@@ -32,7 +32,7 @@
   "homepage": "https://donutbrowser.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zhom/donutbrowser.git",
+    "url": "git+https://github.com/donutbrowser/donutbrowser.git",
     "directory": "sdk/node"
   },
   "devDependencies": {

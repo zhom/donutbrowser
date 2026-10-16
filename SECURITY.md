@@ -44,5 +44,5 @@ For urgent security matters, contact me at [contact@donutbrowser.com](mailto:con
 
 For general questions about this security policy, you can also reach out through:
 
-- [GitHub Issues](https://github.com/zhom/donutbrowser/issues) (for non-security questions only)
-- [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
+- [GitHub Issues](https://github.com/donutbrowser/donutbrowser/issues) (for non-security questions only)
+- [GitHub Discussions](https://github.com/donutbrowser/donutbrowser/discussions)

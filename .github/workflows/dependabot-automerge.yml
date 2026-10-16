@@ -12,7 +12,7 @@ permissions:
 jobs:
   dependabot-automerge:
     name: Dependabot Automerge
-    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
+    if: github.repository == 'donutbrowser/donutbrowser' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     # Never execute pull-request code in this privileged workflow. Auto-merge
     # remains gated by the unprivileged PR checks and branch protection.

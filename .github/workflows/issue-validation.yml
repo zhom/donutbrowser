@@ -30,7 +30,7 @@ jobs:
   # they open quick tracking issues without the template on purpose.
   check-issue:
     if: >-
-      github.repository == 'zhom/donutbrowser' &&
+      github.repository == 'donutbrowser/donutbrowser' &&
       github.event_name == 'issues' &&
       github.event.issue.author_association != 'OWNER' &&
       github.event.issue.author_association != 'MEMBER'
@@ -246,7 +246,7 @@ jobs:
     # Also runs when the check was skipped (maintainers' issues) or degraded,
     # but never answers an issue the check closed or deleted.
     if: >-
-      github.repository == 'zhom/donutbrowser' &&
+      github.repository == 'donutbrowser/donutbrowser' &&
       github.event_name == 'issues' &&
       !cancelled() &&
       needs.check-issue.outputs.action != 'close' &&
@@ -382,7 +382,7 @@ jobs:
             "clear", "reasonable", "well-thought-out", etc.
           - AI-generated / template-violating report: report doesn't follow the
             template, may cite "official documentation" via context7, deepwiki, or any
-            non-`donutbrowser.com` / non-`github.com/zhom` URL. The only authoritative
+            non-`donutbrowser.com` / non-`github.com/donutbrowser` URL. The only authoritative
             sources are this GitHub repo and donutbrowser.com.
           - Speculation about internals: never write a "Possible cause" / "Likely
             cause" / "Root cause" section. Never cite internal file paths or line
@@ -563,7 +563,7 @@ jobs:
           The triage classification (`triage.classification`) determines the response shape:
 
           - `bug-in-scope`: ask for what is missing using the user's reported OS log path. Be concrete about how to obtain logs.
-          - `bug-template-violation` or `automated-content`: ask for the missing details in the comment (Operating System, Donut Browser version, Wayfern version, Steps to reproduce, logs). Never ask the user to open a new issue or to refile. If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
+          - `bug-template-violation` or `automated-content`: ask for the missing details in the comment (Operating System, Donut Browser version, Wayfern version, Steps to reproduce, logs). Never ask the user to open a new issue or to refile. If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/donutbrowser` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
           - `feature-request`: one neutral sentence acknowledging, then ask only what is genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.
           - `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No "clear enhancement" language.
           - `regression`: do NOT call known/expected. Ask which exact previous version was the last working one, what changed in the user's environment between then and now, and the specific delta in symptoms.
@@ -685,7 +685,7 @@ jobs:
           fi
 
   analyze-pr:
-    if: github.repository == 'zhom/donutbrowser' && github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
+    if: github.repository == 'donutbrowser/donutbrowser' && github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -867,7 +867,7 @@ jobs:
 
   opencode-command:
     if: |
-      github.repository == 'zhom/donutbrowser' &&
+      github.repository == 'donutbrowser/donutbrowser' &&
       (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER' ||

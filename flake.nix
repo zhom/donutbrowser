@@ -107,12 +107,12 @@
         releaseAppImage =
           if system == "x86_64-linux" then
             pkgs.fetchurl {
-              url = "https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_amd64.AppImage";
+              url = "https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_amd64.AppImage";
               hash = "sha256-4qtj/mBGxRUWxpY1BaFID/u4Ipry7ujw08lSqeyFrTc=";
             }
           else if system == "aarch64-linux" then
             pkgs.fetchurl {
-              url = "https://github.com/zhom/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_aarch64.AppImage";
+              url = "https://github.com/donutbrowser/donutbrowser/releases/download/v0.34.0/Donut_0.34.0_aarch64.AppImage";
               hash = "sha256-ILAMa2QJoWKEt6XLloy6BQnlsf+bpcodJ9h2qRS4rbA=";
             }
           else
