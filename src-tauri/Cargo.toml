@@ -70,7 +70,7 @@ base64 = { version = "0.23", default-features = false, features = ["std"] }
 libc = "0.2"
 async-trait = "0.1"
 futures-util = "0.3"
-zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 tar = "0"
 bzip2 = "0"
 flate2 = "1"
